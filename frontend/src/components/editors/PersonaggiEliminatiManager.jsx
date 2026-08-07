@@ -5,6 +5,11 @@ import {
   staffRestorePersonaggioEliminato,
   staffHardDeletePersonaggioEliminato,
 } from '../../api';
+import {
+  StaffToolPageTitle,
+  StaffToolShell,
+  staffSecondaryBtnClass,
+} from '../../staff/StaffToolShell';
 
 const formatDate = (iso) => {
   if (!iso) return '—';
@@ -68,25 +73,17 @@ const PersonaggiEliminatiManager = ({ onLogout }) => {
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-4 text-gray-100 md:p-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 pb-4">
-        <div className="flex items-center gap-3">
-          <Skull className="h-8 w-8 text-red-400" />
-          <div>
-            <h1 className="text-2xl font-bold">Personaggi eliminati</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Archivio soft-delete: i dati restano nel database finché non li elimini definitivamente.
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={load}
-          className="flex items-center gap-2 rounded-lg bg-gray-800 px-4 py-2 text-sm hover:bg-gray-700"
-        >
+    <StaffToolShell maxWidth="6xl">
+      <StaffToolPageTitle
+        icon={<Skull className="h-7 w-7 text-red-400" />}
+        title="Personaggi eliminati"
+        description="Archivio soft-delete: i dati restano nel database finché non li elimini definitivamente."
+        actions={
+        <button type="button" onClick={load} className={staffSecondaryBtnClass}>
           <RefreshCw size={16} /> Aggiorna
         </button>
-      </div>
+        }
+      />
 
       {error && (
         <div className="mb-4 rounded-lg border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-200">
@@ -192,7 +189,7 @@ const PersonaggiEliminatiManager = ({ onLogout }) => {
           </div>
         </div>
       )}
-    </div>
+    </StaffToolShell>
   );
 };
 

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, memo } from 'react';
+import { StaffToolShell } from '../../staff/StaffToolShell';
 import InfusioneList from './InfusioneList';
 import InfusioneEditor from './InfusioneEditor';
 import StaffQrTab from '../StaffQrTab';
@@ -45,11 +46,13 @@ const InfusioneManager = ({ onBack, onLogout }) => {
   }, []);
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <StaffToolShell maxWidth="6xl">
       <div className="mb-6">
-        <button onClick={onBack} className="text-amber-500 hover:text-amber-400 text-sm font-bold flex items-center gap-1">
-          ← TORNA AGLI STRUMENTI MASTER
-        </button>
+        {view === 'edit' && (
+          <button onClick={handleEditorBack} className="text-amber-500 hover:text-amber-400 text-sm font-bold flex items-center gap-1 mb-2">
+            ← Torna alla lista
+          </button>
+        )}
         {qrStatus.message && (
           <div className={`mt-3 text-xs border rounded-md px-3 py-1 inline-block ${
             qrStatus.type === 'error'
@@ -146,7 +149,7 @@ const InfusioneManager = ({ onBack, onLogout }) => {
         ) : null}
       </ConfirmDialog>
       {minigiocoModal}
-    </div>
+    </StaffToolShell>
   );
 };
 

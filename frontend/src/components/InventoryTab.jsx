@@ -11,6 +11,7 @@ import ModuloDetailModal from './ModuloDetailModal';
 import PunteggioDisplay from './PunteggioDisplay';
 import { useOptimisticEquip, useOptimisticRecharge, useOptimisticDamage, useOptimisticRepair, useOptimisticDiscard } from '../hooks/useGameData';
 import { emitToast } from '../utils/toastBus';
+import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 
 // --- UTILS ---
 const formatDuration = (seconds) => {
@@ -1128,13 +1129,16 @@ const InventoryTab = ({ onLogout }) => {
   if (!characterData) return <div className="p-4 text-center text-red-400">Nessun personaggio selezionato.</div>;
 
   return (
-    <div className="pb-safe-tab px-1 space-y-6 animate-fadeIn">
-      <div className="flex justify-between items-center p-3 rounded-lg border border-gray-700 shadow-sm mb-4 sticky top-0 z-20 backdrop-blur-md bg-gray-800/90">
-         <h2 className="text-xl font-bold text-white flex items-center gap-2"><Box className="text-indigo-400" /> Inventario</h2>
+    <PlayerTabShell width="wide" animate className="space-y-6">
+      <PlayerTabHeader
+        icon={<Box className="text-indigo-400" />}
+        title="Inventario"
+        actions={
          <button onClick={() => setShowShop(true)} className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-1.5 rounded-lg font-bold shadow-lg shadow-yellow-900/20 transition-all active:scale-95 text-xs sm:text-sm border border-yellow-500">
             <ShoppingBag size={16} /><span>Negozio</span>
          </button>
-      </div>
+        }
+      />
 
       <CapacityDashboard 
         capacityUsed={capacityUsed} 
@@ -1373,7 +1377,7 @@ const InventoryTab = ({ onLogout }) => {
       )}
       {showAssembly && assemblyHost && <ItemAssemblyModal hostItem={assemblyHost} inventory={items} onClose={() => { setShowAssembly(false); setAssemblyHost(null); }} onRefresh={handleAssemblyComplete} />}
       {showModuloDetail && selectedModuloId && <ModuloDetailModal moduloId={selectedModuloId} onClose={() => { setShowModuloDetail(false); setSelectedModuloId(null); }} onLogout={onLogout} />}
-    </div>
+    </PlayerTabShell>
   );
 };
 

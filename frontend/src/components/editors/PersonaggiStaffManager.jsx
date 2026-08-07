@@ -13,6 +13,7 @@ import InstafameNicknameInput from '../InstafameNicknameInput';
 import ProfileImageField from '../ProfileImageField';
 import { prepareProfileImageForUpload } from '../../utils/profileImage';
 import { useStaffQrAssociation } from '../../hooks/useStaffQrAssociation';
+import { StaffToolHeader, StaffToolShell } from '../../staff/StaffToolShell';
 import {
   staffGetPersonaggi,
   staffGetPersonaggioDetail,
@@ -462,13 +463,12 @@ const PersonaggiStaffManager = ({ onLogout }) => {
   const totalPages = Math.max(1, Math.ceil((listData.count || 0) / 40));
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 text-white">
-      <div className="p-4 border-b border-gray-800 space-y-3">
-        <h2 className="text-xl font-bold flex items-center gap-2">
-          <Users size={22} className="text-teal-400" />
-          Personaggi
-        </h2>
-        <div className="flex flex-wrap gap-2 items-end">
+    <StaffToolShell fill>
+      <StaffToolHeader
+        icon={<Users size={22} className="text-teal-400" />}
+        title="Personaggi"
+      >
+        <div className="mt-3 flex flex-wrap gap-2 items-end">
           <div className="flex-1 min-w-[180px]">
             <label className="text-xs text-gray-500 block mb-1">Cerca</label>
             <div className="relative">
@@ -540,11 +540,11 @@ const PersonaggiStaffManager = ({ onLogout }) => {
           </button>
         </div>
         {message && !selected && (
-          <p className="text-sm text-teal-300">{message}</p>
+          <p className="mt-2 text-sm text-teal-300">{message}</p>
         )}
-      </div>
+      </StaffToolHeader>
 
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto min-h-0">
         {loading ? (
           <div className="p-8 text-center text-gray-400">Caricamento…</div>
         ) : (
@@ -1530,7 +1530,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
           </div>
         </div>
       )}
-    </div>
+    </StaffToolShell>
   );
 };
 

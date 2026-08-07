@@ -6,6 +6,7 @@ import { associaQrDiretto, staffGetTessituraDetail } from '../../api';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
+import { StaffToolShell } from '../../staff/StaffToolShell';
 
 const TessituraManager = ({ onBack, onLogout }) => {
   const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
@@ -55,16 +56,9 @@ const TessituraManager = ({ onBack, onLogout }) => {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <button 
-          onClick={onBack}
-          className="text-gray-400 hover:text-white flex items-center gap-2 mb-4 transition-colors"
-        >
-          ← Torna agli Strumenti Master
-        </button>
-        {qrStatus.message && (
-          <div className={`text-xs border rounded-md px-3 py-1 inline-block ${
+    <StaffToolShell>
+      {qrStatus.message && (
+          <div className={`mb-4 text-xs border rounded-md px-3 py-1 inline-block ${
             qrStatus.type === 'error'
               ? 'text-red-200 bg-red-900/20 border-red-700/40'
               : 'text-emerald-300 bg-emerald-900/20 border-emerald-700/40'
@@ -72,7 +66,6 @@ const TessituraManager = ({ onBack, onLogout }) => {
             {qrStatus.message}
           </div>
         )}
-      </div>
       
       <TessituraList 
         onAdd={handleAdd} 
@@ -149,7 +142,7 @@ const TessituraManager = ({ onBack, onLogout }) => {
         ) : null}
       </ConfirmDialog>
       {minigiocoModal}
-    </div>
+    </StaffToolShell>
   );
 };
 

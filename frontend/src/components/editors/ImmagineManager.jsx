@@ -1,5 +1,6 @@
 import React, { useState, useCallback, memo } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { StaffToolShell } from '../../staff/StaffToolShell';
 import ImmagineList from './ImmagineList';
 import ImmagineEditor from './ImmagineEditor';
 
@@ -23,14 +24,16 @@ const ImmagineManager = ({ onBack, onLogout }) => {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <StaffToolShell className="space-y-4">
+      {view !== 'list' && (
       <button 
-        onClick={view === 'list' ? onBack : handleBackToList}
+        onClick={handleBackToList}
         className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm font-bold uppercase"
       >
-        <ArrowLeft size={16} /> 
-        {view === 'list' ? 'Torna agli Strumenti' : 'Annulla e Torna alla Lista'}
+        <ArrowLeft size={16} />
+        Annulla e Torna alla Lista
       </button>
+      )}
 
       {view === 'list' ? (
         <ImmagineList 
@@ -45,7 +48,7 @@ const ImmagineManager = ({ onBack, onLogout }) => {
           onLogout={onLogout} 
         />
       )}
-    </div>
+    </StaffToolShell>
   );
 };
 

@@ -14,6 +14,7 @@ import { updatePersonaggio, resolveMediaUrl } from '../api';
 // --- NUOVI COMPONENTI ---
 import LogViewer from './LogViewer';
 import TransazioniViewer from './TransazioniViewer';
+import { PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 
 // --- Componenti Helper ---
 
@@ -425,7 +426,7 @@ const CharacterSheet = memo(({ data, onLogout }) => {
   };
 
   return (
-    <div className="p-4 max-w-4xl mx-auto">
+    <PlayerTabShell width="sheet">
       <div className="flex items-center gap-4 mb-6 pb-4 border-b border-gray-700/80">
         <div className="h-20 w-20 rounded-full border-2 border-indigo-500/35 bg-gray-800 overflow-hidden shrink-0 flex items-center justify-center">
           {avatarUrl ? (
@@ -822,7 +823,7 @@ const CharacterSheet = memo(({ data, onLogout }) => {
           onLogout={onLogout}
         />
       )}
-    </div>
+    </PlayerTabShell>
   );
 });
 

@@ -28,6 +28,12 @@ import {
   ItalianTimeInput,
 } from '../ItalianDateTimeInputs';
 import { localDateTimeToApiIso } from '../../utils/italianDateTime';
+import {
+  StaffToolBody,
+  StaffToolHeader,
+  StaffToolShell,
+  StaffToolSubnav,
+} from '../../staff/StaffToolShell';
 
 const toList = (data) => (Array.isArray(data) ? data : data?.results || []);
 
@@ -294,28 +300,17 @@ const ScommesseManager = ({ onBack, onLogout }) => {
   }
 
   return (
-    <div className="flex h-full flex-col bg-gray-900 text-gray-100">
-      <div className="border-b border-gray-700 bg-gray-800 px-4 py-3">
-        <div className="flex items-center gap-3">
-          {onBack && (
-            <button type="button" onClick={onBack} className="text-sm text-indigo-400 hover:underline">← Indietro</button>
-          )}
-          <Trophy className="text-amber-400" size={22} />
-          <h1 className="text-lg font-bold">Gestione scommesse</h1>
-        </div>
-        <div className="mt-3 flex gap-2">
-          {['sport', 'squadre', 'calendari', 'programmazione', 'classifiche', 'parametri'].map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setSubTab(t)}
-              className={`rounded px-3 py-1 text-xs font-bold uppercase ${subTab === t ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300'}`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
+    <StaffToolShell fill>
+      <StaffToolHeader
+        icon={<Trophy className="text-amber-400" size={22} />}
+        title="Gestione scommesse"
+      >
+        <StaffToolSubnav
+          tabs={['sport', 'squadre', 'calendari', 'programmazione', 'classifiche', 'parametri']}
+          active={subTab}
+          onChange={setSubTab}
+        />
+      </StaffToolHeader>
 
       {status.message && (
         <div className={`mx-4 mt-3 rounded px-3 py-2 text-sm ${status.type === 'error' ? 'bg-red-900/50 text-red-200' : status.type === 'success' ? 'bg-emerald-900/50 text-emerald-200' : 'bg-amber-900/50 text-amber-200'}`}>
@@ -323,7 +318,7 @@ const ScommesseManager = ({ onBack, onLogout }) => {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <StaffToolBody>
         {subTab === 'sport' && (
           <div>
             <button type="button" onClick={() => setFormSport({ nome: '', descrizione: '', attivo: true, tipo_risultato: 'calcio' })} className="mb-4 flex items-center gap-2 rounded bg-emerald-700 px-3 py-2 text-sm font-bold">
@@ -619,7 +614,7 @@ const ScommesseManager = ({ onBack, onLogout }) => {
             </button>
           </div>
         )}
-      </div>
+      </StaffToolBody>
 
       {(formSport || formSquadra || formCalendario || formProgrammazione) && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4">
@@ -764,7 +759,7 @@ const ScommesseManager = ({ onBack, onLogout }) => {
         onConfirm={handleDelete}
         onCancel={() => setPendingDelete(null)}
       />
-    </div>
+    </StaffToolShell>
   );
 };
 

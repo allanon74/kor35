@@ -14,6 +14,7 @@ import ForgingModal from './ForgingModal'; // <--- NUOVO MODALE IMPORTATO
 
 // --- API & HOOKS ---
 import { useForgingQueue, useOptimisticAcquireInfusione, useRevokeInfusione } from '../hooks/useGameData'; 
+import { PlayerResourceStrip, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ');
@@ -280,16 +281,16 @@ const InfusioniTab = ({ onLogout }) => {
 
   return (
     <>
-      <div className="w-full p-4 max-w-6xl mx-auto pb-safe-tab">
+      <PlayerTabShell width="wide">
         {/* Header Crediti */}
-        <div className="mb-4 flex justify-between items-center bg-gray-800 p-3 rounded-lg border border-gray-700 shadow-sm max-w-3xl mx-auto">
+        <PlayerResourceStrip className="mb-4">
             <div className="text-sm text-gray-400">Disponibilità:</div>
             <div className="flex gap-4">
                 <div className="flex items-center gap-1 text-yellow-400 font-bold">
                     <span>{char.crediti}</span> <span className="text-xs font-normal text-gray-400">CR</span>
                 </div>
             </div>
-        </div>
+        </PlayerResourceStrip>
 
         {/* Coda di Forgiatura Attiva */}
         <div className="max-w-3xl mx-auto">
@@ -356,7 +357,7 @@ const InfusioniTab = ({ onLogout }) => {
                 {AcquirableList}
             </div>
         </div>
-      </div>
+      </PlayerTabShell>
       
       {/* Modale Dettagli Infusione */}
       {modalItem && (

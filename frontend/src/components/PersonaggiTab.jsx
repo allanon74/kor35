@@ -24,6 +24,7 @@ import {
 import RichTextEditor from './RichTextEditor';
 import BuildVersions from './BuildVersions';
 import StaffCostumePhotosSection from './StaffCostumePhotosSection';
+import { PlayerTabHeader } from './personaggi/layout/PlayerTabShell';
 
 const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     const navigate = useNavigate();
@@ -508,15 +509,11 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     }, [hasMultipleEre, ere, formData.era]);
 
     return (
-        <div className="h-full flex flex-col bg-gray-900 text-white p-4 overflow-hidden">
-            <div className="flex justify-between items-center mb-6 shrink-0">
-                <div className="min-w-0">
-                    <h2 className="text-2xl font-black uppercase italic tracking-wider text-indigo-500">
-                        Seleziona Personaggio
-                    </h2>
-                    <BuildVersions className="mt-1" />
-                </div>
-                
+        <div className="h-full flex flex-col bg-gray-900 text-white px-4 pt-4 overflow-hidden pb-safe-tab">
+            <PlayerTabHeader
+                className="mb-2 shrink-0"
+                title="Seleziona Personaggio"
+                actions={
                 <div className="flex gap-2">
                     <button
                         onClick={() => navigate('/app/social')}
@@ -542,6 +539,10 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                         <Plus size={16}/> Nuovo PG
                     </button>
                 </div>
+                }
+            />
+            <div className="mb-4 shrink-0">
+                <BuildVersions />
             </div>
 
             {staffFeedback && (
@@ -565,7 +566,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                 </div>
             )}
 
-            <div className="flex-1 overflow-y-auto space-y-4 pb-20 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto space-y-4 pb-4 custom-scrollbar">
                 {/* Controllo di sicurezza: mappa solo se è un array */}
                 {groupedPersonaggi.map(group => (
                   <div key={group.key} className="space-y-2">

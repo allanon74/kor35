@@ -1,5 +1,6 @@
 import React, { useState, useCallback, memo } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { StaffToolShell } from '../../staff/StaffToolShell';
 import OggettoBaseList from './OggettoBaseList';
 import OggettoBaseEditor from './OggettoBaseEditor';
 import StaffQrTab from '../StaffQrTab';
@@ -36,16 +37,17 @@ const OggettoBaseManager = ({ onBack, onLogout }) => {
   }, []);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <button 
-          onClick={view === 'list' ? onBack : handleBackToList}
+    <StaffToolShell className="space-y-4">
+      {view !== 'list' && (
+        <button
+          onClick={handleBackToList}
           className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm font-bold uppercase"
         >
-          <ArrowLeft size={16} /> 
-          {view === 'list' ? 'Torna agli Strumenti' : 'Annulla e Torna alla Lista'}
+          <ArrowLeft size={16} />
+          Annulla e Torna alla Lista
         </button>
-        {qrStatus.message && (
+      )}
+      {qrStatus.message && (
           <div className={`mt-3 text-xs border rounded-md px-3 py-1 inline-block ${
             qrStatus.type === 'error'
               ? 'text-red-200 bg-red-900/20 border-red-700/40'
@@ -54,7 +56,6 @@ const OggettoBaseManager = ({ onBack, onLogout }) => {
             {qrStatus.message}
           </div>
         )}
-      </div>
 
       {view === 'list' ? (
         <OggettoBaseList 
@@ -133,7 +134,7 @@ const OggettoBaseManager = ({ onBack, onLogout }) => {
         ) : null}
       </ConfirmDialog>
       {minigiocoModal}
-    </div>
+    </StaffToolShell>
   );
 };
 

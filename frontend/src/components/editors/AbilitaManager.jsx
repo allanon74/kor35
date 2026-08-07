@@ -1,5 +1,6 @@
 import React, { useState, useCallback, memo } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { StaffToolShell } from '../../staff/StaffToolShell';
 import AbilitaList from './AbilitaList';
 import AbilitaEditor from './AbilitaEditor';
 
@@ -23,21 +24,23 @@ const AbilitaManager = ({ onBack, onLogout }) => {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <StaffToolShell className="space-y-4">
+      {view !== 'list' && (
       <button 
-        onClick={view === 'list' ? onBack : handleBackToList}
+        onClick={handleBackToList}
         className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm font-bold uppercase"
       >
         <ArrowLeft size={16} />
-        {view === 'list' ? 'Torna agli Strumenti' : 'Annulla e Torna alla Lista'}
+        Annulla e Torna alla Lista
       </button>
+      )}
 
       {view === 'list' ? (
         <AbilitaList onAdd={handleAdd} onEdit={handleEdit} onLogout={onLogout} />
       ) : (
         <AbilitaEditor initialData={selectedItem} onBack={handleBackToList} onLogout={onLogout} />
       )}
-    </div>
+    </StaffToolShell>
   );
 };
 

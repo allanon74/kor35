@@ -20,6 +20,7 @@ import { evaluateActivationCosts } from '../lib/activationCostUtils';
 import ActivationCostPreview from './ActivationCostPreview';
 
 import ActiveItemWidget from './ActiveItemWidget';
+import { PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 
 /** Etichetta rango difesa: resa visiva stabile in base al livello */
 const RankDefLabel = ({ x, y, rankValue, fill, fontSize = '11', textAnchor = 'middle' }) => {
@@ -713,7 +714,7 @@ const GameTab = ({ onNavigate }) => {
     const heavyUsed = heavyConsumers.length;
 
     return (
-        <div className="pb-safe-tab px-2 space-y-6 animate-fadeIn text-gray-100 pt-2">
+        <PlayerTabShell width="hud" animate className="space-y-6">
             {readOnlyGame && (
                 <div
                     className="rounded-lg border border-amber-600/50 bg-amber-950/40 px-3 py-2 text-[11px] text-amber-100/95 text-center"
@@ -1145,7 +1146,7 @@ const GameTab = ({ onNavigate }) => {
                     </div>
                 </div>
             )}
-        </div>
+        </PlayerTabShell>
     );
 };
 

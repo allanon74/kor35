@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { StaffToolShell, StaffToolPageTitle } from '../../staff/StaffToolShell';
 import { Tab } from '@headlessui/react';
 import { fetchAuthenticated, getPersonaggiList } from '../../api';
 import { Loader2, Plus, Pencil, Trash2, X } from 'lucide-react';
@@ -285,15 +286,8 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <button
-        onClick={onBack}
-        className="text-gray-400 hover:text-white flex items-center gap-2 mb-4 transition-colors"
-      >
-        ← Torna agli Strumenti Master
-      </button>
-
-      <h2 className="text-xl font-bold text-white">Effetti Casuali</h2>
+    <StaffToolShell className="space-y-6">
+      <StaffToolPageTitle title="Effetti Casuali" />
       {status.message && (
         <div className={`text-xs border rounded-md px-3 py-1 inline-block ${
           status.type === 'error'
@@ -635,7 +629,7 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
           if (action) await action();
         }}
       />
-    </div>
+    </StaffToolShell>
   );
 };
 

@@ -6,6 +6,7 @@ import AdminMessageTab from './AdminMessageTab';
 import JobRequestsWidget from './JobRequestsWidget'; // <--- 1. Importa il Widget
 import { getMessageUnreadCounts } from '../api';
 import { Mail } from 'lucide-react';
+import { PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ');
@@ -90,7 +91,7 @@ const MessaggiTab = ({ onLogout, composeTarget, onComposeTargetConsumed }) => {
   const staffUnreadTotal = Number(unreadBuckets?.totals?.staff || 0);
 
   return (
-    <div className="w-full p-2 sm:p-4 pb-20">
+    <PlayerTabShell width="wide" className="!px-2 sm:!px-4">
       
       {/* --- 2. INSERISCI QUI IL WIDGET LAVORI --- */}
       {/* Apparirà sopra le tab, visibile subito se ci sono richieste */}
@@ -219,7 +220,7 @@ const MessaggiTab = ({ onLogout, composeTarget, onComposeTargetConsumed }) => {
           )}
         </Tab.Panels>
       </Tab.Group>
-    </div>
+    </PlayerTabShell>
   );
 };
 

@@ -3,6 +3,7 @@ import { useCharacter } from './CharacterContext';
 import { Loader2, Info, Zap, Calendar, X, Timer, PackageCheck } from 'lucide-react';
 import RichTextDisplay from './RichTextDisplay';
 import { consumaConsumabile, completaCreazioneConsumabile } from '../api';
+import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 
 const ConsumabiliTab = ({ onLogout }) => {
   const { selectedCharacterData: char, selectedCharacterId, refreshCharacterData } = useCharacter();
@@ -107,14 +108,12 @@ const ConsumabiliTab = ({ onLogout }) => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Zap className="w-6 h-6 text-amber-400" />
-        <h2 className="text-xl font-bold text-gray-200">Consumabili</h2>
-        <span className="text-sm text-gray-500">
-          (Occupano 1 slot COG se ne hai almeno uno)
-        </span>
-      </div>
+    <PlayerTabShell width="wide" className="space-y-6">
+      <PlayerTabHeader
+        icon={<Zap className="w-6 h-6 text-amber-400" />}
+        title="Consumabili"
+        subtitle="Occupano 1 slot COG se ne hai almeno uno"
+      />
 
       {/* Creazioni in corso: timer e pronte da aggiungere */}
       {(creazioniInCorso.length > 0 || creazioniPronte.length > 0) && (
@@ -276,7 +275,7 @@ const ConsumabiliTab = ({ onLogout }) => {
           </div>
         </div>
       )}
-    </div>
+    </PlayerTabShell>
   );
 };
 

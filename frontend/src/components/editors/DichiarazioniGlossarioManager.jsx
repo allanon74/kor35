@@ -1,5 +1,6 @@
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { StaffToolShell } from '../../staff/StaffToolShell';
 import MasterGenericList from './MasterGenericList';
 import EditorSaveActions from './EditorSaveActions';
 import RichTextEditor from '../RichTextEditor';
@@ -48,7 +49,7 @@ const DichiarazioneFormPanel = ({ value, onClose, onSave, isGlossario, statusMes
   };
 
   return (
-    <div className="h-full p-4 space-y-4 animate-in fade-in slide-in-from-bottom-4">
+    <StaffToolShell className="h-full p-4 space-y-4 animate-in fade-in slide-in-from-bottom-4">
       <button
         onClick={onClose}
         className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm font-bold uppercase"
@@ -103,7 +104,7 @@ const DichiarazioneFormPanel = ({ value, onClose, onSave, isGlossario, statusMes
           <EditorSaveActions {...actionProps} />
         </div>
       </div>
-    </div>
+    </StaffToolShell>
   );
 };
 
@@ -192,14 +193,7 @@ const DichiarazioniGlossarioManager = ({ onBack, onLogout }) => {
   }
 
   return (
-    <div className="h-full p-4 space-y-4">
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm font-bold uppercase"
-      >
-        <ArrowLeft size={16} /> Torna agli Strumenti
-      </button>
-
+    <StaffToolShell className="space-y-4" fill>
       <div className="bg-gray-900/70 border border-gray-700 rounded-xl p-2">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <button
@@ -237,7 +231,7 @@ const DichiarazioniGlossarioManager = ({ onBack, onLogout }) => {
           emptyMessage="Nessuna voce presente."
         />
       </div>
-    </div>
+    </StaffToolShell>
   );
 };
 

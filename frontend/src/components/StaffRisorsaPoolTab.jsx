@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { Sparkles, Plus, RefreshCw } from 'lucide-react';
 import { staffGetRisorsePool, staffIncrementaRisorsaPool } from '../api';
+import {
+  StaffToolPageTitle,
+  StaffToolShell,
+  staffSecondaryBtnClass,
+} from '../staff/StaffToolShell';
 
 const StaffRisorsaPoolTab = ({ onLogout }) => {
     const [data, setData] = useState(null);
@@ -61,26 +66,17 @@ const StaffRisorsaPoolTab = ({ onLogout }) => {
     const statMeta = data?.statistiche || [];
 
     return (
-        <div className="p-4 md:p-8 max-w-6xl mx-auto text-gray-100">
-            <div className="flex items-center justify-between mb-6 border-b border-gray-800 pb-4">
-                <div className="flex items-center gap-3">
-                    <Sparkles className="w-8 h-8 text-amber-400" />
-                    <div>
-                        <h1 className="text-2xl font-bold">Risorse a pool</h1>
-                        <p className="text-sm text-gray-500 mt-1">
-                            Personaggi con almeno una statistica configurata come risorsa (es. Fortuna). +1 aumenta il
-                            totale attuale senza superare il massimo di scheda.
-                        </p>
-                    </div>
-                </div>
-                <button
-                    type="button"
-                    onClick={load}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm"
-                >
+        <StaffToolShell maxWidth="6xl">
+            <StaffToolPageTitle
+                icon={<Sparkles className="w-7 h-7 text-amber-400" />}
+                title="Risorse a pool"
+                description="Personaggi con almeno una statistica configurata come risorsa (es. Fortuna). +1 aumenta il totale attuale senza superare il massimo di scheda."
+                actions={
+                <button type="button" onClick={load} className={staffSecondaryBtnClass}>
                     <RefreshCw size={16} /> Aggiorna
                 </button>
-            </div>
+                }
+            />
 
             {statMeta.length === 0 && (
                 <p className="text-gray-500 text-sm">
@@ -135,7 +131,7 @@ const StaffRisorsaPoolTab = ({ onLogout }) => {
                     <p className="p-6 text-gray-500 text-center">Nessun personaggio con massimo &gt; 0 sulle risorse pool.</p>
                 )}
             </div>
-        </div>
+        </StaffToolShell>
     );
 };
 

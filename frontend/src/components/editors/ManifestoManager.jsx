@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { StaffToolShell } from '../../staff/StaffToolShell';
 import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
@@ -103,14 +103,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
   };
 
   return (
-    <div className="space-y-4 text-white max-w-4xl mx-auto">
-      <button
-        type="button"
-        onClick={onBack}
-        className="flex items-center gap-2 text-gray-400 hover:text-white text-sm font-bold uppercase"
-      >
-        <ArrowLeft size={16} /> Torna agli strumenti
-      </button>
+    <StaffToolShell maxWidth="4xl" className="space-y-4">
       {msg && (
         <div className="text-xs text-amber-200 border border-amber-800/40 rounded px-2 py-1">{msg}</div>
       )}
@@ -282,7 +275,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
         ) : null}
       </ConfirmDialog>
       {minigiocoModal}
-    </div>
+    </StaffToolShell>
   );
 };
 

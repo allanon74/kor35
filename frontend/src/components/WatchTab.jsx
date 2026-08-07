@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Watch } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import { watchPairConfirm, watchDisconnect, watchWearManifest } from '../api';
+import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 
 /** Allineato al default backend `WATCH_WEAR_APK_PATH` (nginx: react_build/watch-apps/...). */
 const WEAR_DEFAULT_APK_PATH = '/watch-apps/wearos-kor35/app-release.apk';
@@ -114,16 +115,12 @@ const WatchTab = () => {
     };
 
     return (
-        <div className="animate-fadeIn space-y-5 px-3 py-4 pb-safe-tab text-gray-100">
-            <header className="space-y-1">
-                <div className="flex items-center gap-2 text-sky-400">
-                    <Watch className="h-6 w-6 shrink-0" aria-hidden />
-                    <h1 className="text-sm font-black uppercase tracking-widest">Smartwatch (Wear OS)</h1>
-                </div>
-                <p className="text-[11px] text-gray-500 leading-snug">
-                    Pairing e connessione al personaggio selezionato: fuori dalla scheda di gioco in campo.
-                </p>
-            </header>
+        <PlayerTabShell width="narrow" animate className="space-y-5">
+            <PlayerTabHeader
+                icon={<Watch className="h-6 w-6 shrink-0 text-sky-400" aria-hidden />}
+                title="Smartwatch (Wear OS)"
+                subtitle="Pairing e connessione al personaggio selezionato: fuori dalla scheda di gioco in campo."
+            />
 
             <div className="rounded-xl border border-sky-800/50 bg-gray-900/70 p-4 space-y-3">
                 <p className="text-[11px] text-gray-400">
@@ -212,7 +209,7 @@ const WatchTab = () => {
                     </div>
                 )}
             </div>
-        </div>
+        </PlayerTabShell>
     );
 };
 

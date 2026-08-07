@@ -18,6 +18,7 @@ import {
   StaffSection,
   staffInputClass,
 } from '../../staff/StaffCrudUi';
+import { StaffToolShell } from '../../staff/StaffToolShell';
 import SearchableSelect from './SearchableSelect';
 
 const TIPO_OPTS = [
@@ -210,7 +211,7 @@ export default function MissioniManager({ onLogout }) {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-950 p-4 text-gray-100">
+    <StaffToolShell>
       <StaffListToolbar title="Tasks (missioni)" count={items.length} onAdd={openCreate} />
       {error ? <p className="mb-3 text-sm text-red-400">{error}</p> : null}
       {loading ? (
@@ -312,6 +313,6 @@ export default function MissioniManager({ onLogout }) {
           </div>
         </StaffSection>
       </StaffModal>
-    </div>
+    </StaffToolShell>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, memo } from 'react';
-import { ArrowLeft, BookOpen, Download, RefreshCw, Save, Eye, AlertTriangle, History, Package, ListOrdered, ServerCog } from 'lucide-react';
+import { StaffToolShell } from '../../staff/StaffToolShell';
+import { BookOpen, Download, RefreshCw, Save, Eye, AlertTriangle, History, Package, ListOrdered, ServerCog } from 'lucide-react';
 import ManualePdfPagineModal from './ManualePdfPagineModal';
 import {
   getStaffManualePdfList,
@@ -305,15 +306,7 @@ const ManualePdfManager = ({ onBack, onLogout }) => {
   };
 
   return (
-    <div className="space-y-6 p-4 md:p-6 text-white">
-      <button
-        type="button"
-        onClick={onBack}
-        className="flex items-center gap-2 text-gray-400 hover:text-white text-sm font-bold uppercase"
-      >
-        <ArrowLeft size={16} /> Torna agli strumenti
-      </button>
-
+    <StaffToolShell className="space-y-6 p-4 md:p-6 text-white">
       <div className="flex items-center gap-3">
         <BookOpen className="text-rose-400" size={28} />
         <div>
@@ -711,7 +704,7 @@ const ManualePdfManager = ({ onBack, onLogout }) => {
           onLogout={onLogout}
         />
       )}
-    </div>
+    </StaffToolShell>
   );
 };
 

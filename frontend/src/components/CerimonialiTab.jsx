@@ -12,6 +12,7 @@ import ProposalEditorModal from './ProposalEditorModal';
 
 // --- API & HOOKS ---
 import { useOptimisticAcquireCerimoniale, useRevokeCerimoniale } from '../hooks/useGameData';
+import { PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ');
@@ -168,7 +169,7 @@ const CerimonialiTab = ({ onLogout }) => {
   );
 
   return (
-    <div className="w-full p-4 max-w-6xl mx-auto pb-safe-tab">
+    <PlayerTabShell width="wide">
       <div className="mb-6 flex justify-between items-center bg-gray-800 p-4 rounded-xl border border-purple-500/20 shadow-lg max-w-3xl mx-auto">
           <div className="flex items-center gap-3">
             <Users className="text-purple-400" size={24}/>
@@ -255,7 +256,7 @@ const CerimonialiTab = ({ onLogout }) => {
       )}
 
       {showProposals && <ProposalManager type="Cerimoniale" onClose={() => setShowProposals(false)} />}
-    </div>
+    </PlayerTabShell>
   );
 };
 
