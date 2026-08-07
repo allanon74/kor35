@@ -1,6 +1,6 @@
 import React, { memo, useState } from 'react';
 import { ArrowRightLeft, Coins, Star, Wallet } from 'lucide-react';
-import { useCharacter } from '../context/CharacterContext';
+import { useCharacter } from './CharacterContext';
 import {
   fetchEconomiaMovimenti,
   postTrasferimentoDeposito,

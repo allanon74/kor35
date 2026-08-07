@@ -241,8 +241,6 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
                   {duale ? ` (${formData.conto_crediti === 'DEPOSITO' ? 'deposito' : 'corrente'})` : ''}
                   {duale ? ' — il destinatario riceve sullo stesso conto.' : ''}
                 </p>
-                  Disponibili: {selectedCharacterData?.crediti || 0} CR
-                </p>
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-400 mb-2">
