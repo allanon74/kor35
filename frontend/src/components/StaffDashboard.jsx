@@ -57,6 +57,7 @@ const PersonaggiEliminatiManager = lazy(() => import('./editors/PersonaggiElimin
 const PersonaggiStaffManager = lazy(() => import('./editors/PersonaggiStaffManager'));
 const RegoleTransazioneStaffManager = lazy(() => import('./editors/RegoleTransazioneStaffManager'));
 const EconomiaCreditiManager = lazy(() => import('./editors/EconomiaCreditiManager'));
+const StaffAppLinksPanel = lazy(() => import('./editors/StaffAppLinksPanel'));
 
 const STAFF_COMPONENT_MAP = {
     plot: PlotTab,
@@ -76,6 +77,7 @@ const STAFF_COMPONENT_MAP = {
     nodi: NodoManager,
     'innesco-timer': InnescoTimerManager,
     pilotaggio: PilotaggioManager,
+    'app-links': StaffAppLinksPanel,
     'effetti-casuali': EffettiCasualiManager,
     'social-report': SocialEventReportTab,
     'risorse-pool': StaffRisorsaPoolTab,

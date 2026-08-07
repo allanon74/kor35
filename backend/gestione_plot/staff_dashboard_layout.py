@@ -29,6 +29,7 @@ KNOWN_STAFF_TOOL_IDS = frozenset({
     "nodi",
     "innesco-timer",
     "pilotaggio",
+    "app-links",
     "effetti-casuali",
     "social-report",
     "risorse-pool",
@@ -64,6 +65,7 @@ DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
             "tool_ids": [
                 "plot",
                 "pilotaggio",
+                "app-links",
                 "manifesti",
                 "nodi",
                 "innesco-timer",

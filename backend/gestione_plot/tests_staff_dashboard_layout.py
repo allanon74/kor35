@@ -74,3 +74,12 @@ class StaffDashboardLayoutTests(SimpleTestCase):
         giocatori_tools = layout["groups"][2]["tool_ids"]
         self.assertIn("economia-crediti", giocatori_tools)
         validate_staff_dashboard_layout(layout)
+
+    def test_app_links_tool_nel_default(self):
+        from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
+
+        self.assertIn("app-links", KNOWN_STAFF_TOOL_IDS)
+        layout = default_staff_dashboard_layout()
+        evento_tools = layout["groups"][0]["tool_ids"]
+        self.assertIn("app-links", evento_tools)
+        validate_staff_dashboard_layout(layout)

@@ -26,6 +26,7 @@ import {
   CreditCard,
   ListTodo,
   Wallet,
+  ExternalLink,
 } from 'lucide-react';
 
 /** Icone consentite per i gruppi del menu (allineate al backend). */
@@ -70,6 +71,7 @@ export const STAFF_TOOL_ICON_MAP = {
   ListTodo,
   Wallet,
   ArrowLeftRight,
+  ExternalLink,
 };
 
 /**
@@ -94,6 +96,7 @@ export const STAFF_TOOLS_REGISTRY = {
   nodi: { id: 'nodi', label: 'QR — Nodi', icon: Sparkles, color: 'bg-cyan-900', componentKey: 'nodi' },
   'innesco-timer': { id: 'innesco-timer', label: 'QR — Innesco timer', icon: Sparkles, color: 'bg-orange-900', componentKey: 'innesco-timer' },
   pilotaggio: { id: 'pilotaggio', label: 'Console pilotaggio', icon: Navigation, color: 'bg-sky-700', componentKey: 'pilotaggio' },
+  'app-links': { id: 'app-links', label: 'Link app', icon: ExternalLink, color: 'bg-sky-800', componentKey: 'app-links' },
   'effetti-casuali': { id: 'effetti-casuali', label: 'Effetti casuali', icon: Sparkles, color: 'bg-amber-700', componentKey: 'effetti-casuali' },
   'social-report': { id: 'social-report', label: 'Report social eventi', icon: Sparkles, color: 'bg-fuchsia-700', componentKey: 'social-report' },
   'risorse-pool': { id: 'risorse-pool', label: 'Risorse pool (Fortuna)', icon: Gem, color: 'bg-amber-800', componentKey: 'risorse-pool' },
@@ -127,7 +130,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       palette: 'indigo',
       order: 0,
       collapsed_default: false,
-      tool_ids: ['plot', 'pilotaggio', 'manifesti', 'nodi', 'innesco-timer', 'qr-debug', 'scommesse', 'negozi-mercante', 'carte-collezionabili', 'tasks'],
+      tool_ids: ['plot', 'pilotaggio', 'app-links', 'manifesti', 'nodi', 'innesco-timer', 'qr-debug', 'scommesse', 'negozi-mercante', 'carte-collezionabili', 'tasks'],
     },
     {
       id: 'database',
@@ -174,7 +177,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
 };
 
 const GLOBAL_ONLY_TOOLS = new Set(['arcana-profiles', 'campagne', 'maintenance']);
-const STAFFER_TOOLS = new Set(['messaggi', 'plot', 'tasks']);
+const STAFFER_TOOLS = new Set(['messaggi', 'plot', 'tasks', 'app-links']);
 const MASTER_EXCLUDED = new Set(['campagne', 'arcana-profiles', 'maintenance']);
 const HEAD_EXCLUDED = new Set(['arcana-profiles', 'maintenance']);
 
