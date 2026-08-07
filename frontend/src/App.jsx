@@ -1,20 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 // Importiamo sia il Provider "vero" che il Context "nudo"
 import { CharacterProvider, CharacterContext } from './components/CharacterContext';
-import LoginPage from './components/LoginPage';
 
-// Layouts
+// Layouts (shell leggeri — restano eager)
 import AppLayout from './layouts/AppLayout';
 import PublicLayout from './layouts/PublicLayout';
 
-// Pages
-import WikiPage from './pages/WikiPage';
-import SocialPublicPostPage from './pages/SocialPublicPostPage';
-import EventoLogisticaPage from './pages/EventoLogisticaPage';
-import SocialPage from './pages/SocialPage';
-import MaintenanceConsolePage from './pages/MaintenanceConsolePage';
 import { API_BASE_URL, getConfigurazioneSito, setApiMaintenanceMode, isApiMaintenanceMode } from './api';
+
+const LoginPage = lazy(() => import('./components/LoginPage'));
+const WikiPage = lazy(() => import('./pages/WikiPage'));
+const SocialPublicPostPage = lazy(() => import('./pages/SocialPublicPostPage'));
+const EventoLogisticaPage = lazy(() => import('./pages/EventoLogisticaPage'));
+const SocialPage = lazy(() => import('./pages/SocialPage'));
+const MaintenanceConsolePage = lazy(() => import('./pages/MaintenanceConsolePage'));
+
+const RouteFallback = () => (
+  <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white" role="status">
+    Caricamento...
+  </div>
+);
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('kor35_token'));
@@ -152,61 +158,63 @@ export default function App() {
   return (
     <BrowserRouter>
       <SafeProvider>
-        <Routes>
-          <Route path="/social" element={<Navigate to="/app/social" replace />} />
-          <Route path="/instafame" element={<Navigate to="/app/social" replace />} />
-          {/* --- ROTTE PUBBLICHE --- */}
-          <Route path="/" element={<PublicLayout token={token} />}>
-            <Route index element={<WikiPage slug="home" />} />
-            <Route path="regolamento/:slug" element={<WikiPage />} />
-            <Route path="eventi/:id" element={<EventoLogisticaPage />} />
-            <Route path="social/post/:slug" element={<SocialPublicPostPage />} />
-            <Route 
-              path="login" 
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/social" element={<Navigate to="/app/social" replace />} />
+            <Route path="/instafame" element={<Navigate to="/app/social" replace />} />
+            {/* --- ROTTE PUBBLICHE --- */}
+            <Route path="/" element={<PublicLayout token={token} />}>
+              <Route index element={<WikiPage slug="home" />} />
+              <Route path="regolamento/:slug" element={<WikiPage />} />
+              <Route path="eventi/:id" element={<EventoLogisticaPage />} />
+              <Route path="social/post/:slug" element={<SocialPublicPostPage />} />
+              <Route 
+                path="login" 
+                element={
+                  token && !hasArcanaFlowParams
+                    ? <Navigate to="/app" replace />
+                    : <LoginPage onLoginSuccess={handleLoginSuccess} />
+                } 
+              />
+            </Route>
+
+            {/* --- ROTTE APP (PROTETTE) --- */}
+            <Route
+              path="/app/maintenance"
               element={
-                token && !hasArcanaFlowParams
-                  ? <Navigate to="/app" replace />
-                  : <LoginPage onLoginSuccess={handleLoginSuccess} />
+                token ? (
+                  <MaintenanceConsolePage onLogout={handleLogout} />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              }
+            />
+            <Route
+              path="/app/social"
+              element={
+                isMaintenanceMode ? (
+                  isDjangoAdmin ? <Navigate to="/app/maintenance" replace /> : <Navigate to="/" replace />
+                ) : token ? (
+                  <SocialPage onLogout={handleLogout} />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              }
+            />
+            <Route 
+              path="/app/*" 
+              element={
+                isMaintenanceMode ? (
+                  isDjangoAdmin ? <Navigate to="/app/maintenance" replace /> : <Navigate to="/" replace />
+                ) : token ? (
+                  <AppLayout token={token} onLogout={handleLogout} />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
               } 
             />
-          </Route>
-
-          {/* --- ROTTE APP (PROTETTE) --- */}
-          <Route
-            path="/app/maintenance"
-            element={
-              token ? (
-                <MaintenanceConsolePage onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          />
-          <Route
-            path="/app/social"
-            element={
-              isMaintenanceMode ? (
-                isDjangoAdmin ? <Navigate to="/app/maintenance" replace /> : <Navigate to="/" replace />
-              ) : token ? (
-                <SocialPage onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          />
-          <Route 
-            path="/app/*" 
-            element={
-              isMaintenanceMode ? (
-                isDjangoAdmin ? <Navigate to="/app/maintenance" replace /> : <Navigate to="/" replace />
-              ) : token ? (
-                <AppLayout token={token} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            } 
-          />
-        </Routes>
+          </Routes>
+        </Suspense>
       </SafeProvider>
     </BrowserRouter>
   );

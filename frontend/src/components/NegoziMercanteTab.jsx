@@ -3,6 +3,8 @@ import { Store } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import { fetchNegoziCorporativi } from '../api';
 import NegozioMercanteModal from './NegozioMercanteModal';
+import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
+import { UiEmptyState, UiLoadingState } from './ui/AsyncState';
 
 const NegoziMercanteTab = ({ onLogout }) => {
   const { selectedCharacterId } = useCharacter();
@@ -35,27 +37,36 @@ const NegoziMercanteTab = ({ onLogout }) => {
   }, [load]);
 
   if (!selectedCharacterId) {
-    return <p className="p-4 text-gray-400">Seleziona un personaggio.</p>;
+    return (
+      <PlayerTabShell width="wide">
+        <UiEmptyState title="Seleziona un personaggio" message="Apri la tab Personaggi per scegliere un PG." />
+      </PlayerTabShell>
+    );
   }
 
   if (loading) {
-    return <p className="p-4 text-gray-400">Caricamento negozi corporativi…</p>;
+    return (
+      <PlayerTabShell width="wide">
+        <UiLoadingState label="Caricamento negozi corporativi…" />
+      </PlayerTabShell>
+    );
   }
 
   if (!negozi.length) {
     return (
-      <p className="p-4 text-gray-500 text-sm">
-        Nessun negozio corporativo accessibile per questo personaggio.
-      </p>
+      <PlayerTabShell width="wide">
+        <PlayerTabHeader icon={<Store size={20} />} title="Negozi corporativi" />
+        <UiEmptyState
+          title="Nessun negozio"
+          message="Nessun negozio corporativo accessibile per questo personaggio."
+        />
+      </PlayerTabShell>
     );
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <h2 className="text-lg font-bold text-amber-400 flex items-center gap-2">
-        <Store size={20} />
-        Negozi corporativi
-      </h2>
+    <PlayerTabShell width="wide" animate className="space-y-4">
+      <PlayerTabHeader icon={<Store size={20} />} title="Negozi corporativi" />
       <div className="flex flex-wrap gap-2 border-b border-gray-700 pb-2">
         {negozi.map((n) => (
           <button
@@ -91,7 +102,7 @@ const NegoziMercanteTab = ({ onLogout }) => {
           onLogout={onLogout}
         />
       )}
-    </div>
+    </PlayerTabShell>
   );
 };
 

@@ -241,7 +241,12 @@ export const useForgingQueue = (charId) => {
     queryKey: ['forging_queue', charId],
     queryFn: () => getForgingQueue(charId),
     enabled: !!charId,
-    refetchInterval: 5000, 
+    // Poll solo se c'è almeno un item in coda (refetchInterval dinamico).
+    refetchInterval: (query) => {
+      const rows = query.state.data;
+      const hasActive = Array.isArray(rows) && rows.length > 0;
+      return hasActive ? 5000 : false;
+    },
   });
 };
 

@@ -1,6 +1,8 @@
 import React from 'react';
 import { useCharacter } from './CharacterContext';
 import MissioniPersonaggioPanel from './MissioniPersonaggioPanel';
+import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
+import { ListTodo } from 'lucide-react';
 
 /** Tab dedicata alle task/missioni dell'evento per il personaggio selezionato. */
 export default function TasksTab({ onLogout }) {
@@ -11,13 +13,18 @@ export default function TasksTab({ onLogout }) {
     || '';
 
   return (
-    <div className="h-full overflow-y-auto p-4 animate-fadeIn">
+    <PlayerTabShell width="wide" animate>
+      <PlayerTabHeader
+        icon={<ListTodo size={22} />}
+        title="Tasks"
+        subtitle={nome ? `Missioni per ${nome}` : 'Missioni evento'}
+      />
       <MissioniPersonaggioPanel
         personaggioId={selectedCharacterId}
         personaggioNome={nome}
         onLogout={onLogout}
         standalone
       />
-    </div>
+    </PlayerTabShell>
   );
 }

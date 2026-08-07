@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState, memo } from 'react';
-import { Loader, RefreshCw, Ship } from 'lucide-react';
+import { RefreshCw, Ship } from 'lucide-react';
 import { getPilotStiva } from '../api';
+import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
+import { UiEmptyState, UiErrorState, UiLoadingState } from './ui/AsyncState';
 
 const StivaNaveTab = ({ onLogout, personaggioId }) => {
   const [data, setData] = useState(null);
@@ -28,34 +30,28 @@ const StivaNaveTab = ({ onLogout, personaggioId }) => {
 
   if (!personaggioId) {
     return (
-      <div className="p-4 text-center text-gray-500 text-sm">
-        Seleziona un personaggio per consultare la stiva componenti.
-      </div>
+      <PlayerTabShell width="wide">
+        <UiEmptyState
+          title="Seleziona un personaggio"
+          message="Serve un PG con accesso stiva per consultare i componenti nave."
+        />
+      </PlayerTabShell>
     );
   }
 
   if (loading && !data) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 p-8 text-gray-400">
-        <Loader className="animate-spin" size={32} />
-        <span className="text-sm">Caricamento stiva nave…</span>
-      </div>
+      <PlayerTabShell width="wide">
+        <UiLoadingState label="Caricamento stiva nave…" />
+      </PlayerTabShell>
     );
   }
 
   if (error) {
     return (
-      <div className="p-4 space-y-3">
-        <p className="text-red-400 text-sm bg-red-950/40 border border-red-800/50 rounded-lg p-3">{error}</p>
-        <button
-          type="button"
-          onClick={load}
-          className="inline-flex items-center gap-2 text-sm text-indigo-300 hover:text-indigo-200"
-        >
-          <RefreshCw size={16} />
-          Riprova
-        </button>
-      </div>
+      <PlayerTabShell width="wide" className="space-y-3">
+        <UiErrorState message={error} onRetry={load} />
+      </PlayerTabShell>
     );
   }
 
@@ -63,37 +59,28 @@ const StivaNaveTab = ({ onLogout, personaggioId }) => {
   const righeMap = Object.fromEntries((data?.righe || []).map((r) => [r.mattone_id, r]));
 
   return (
-    <div className="p-4 space-y-4 animate-fadeIn pb-safe-tab">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <Ship size={22} className="text-emerald-400" />
-            Stiva componenti nave
-          </h2>
-          <p className="text-xs text-gray-400 mt-1">
-            Inventario globale condiviso. Solo consultazione.
-            {data?.stat_accesso_sigla ? (
-              <span className="text-gray-500">
-                {' '}
-                Accesso:
-                {' '}
-                <span className="font-mono text-gray-300">{data.stat_accesso_sigla}</span>
-                {' '}
-                &gt; 0
-              </span>
-            ) : null}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={load}
-          disabled={loading}
-          className="p-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 disabled:opacity-50"
-          title="Aggiorna"
-        >
-          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-        </button>
-      </div>
+    <PlayerTabShell width="wide" animate className="space-y-4">
+      <PlayerTabHeader
+        icon={<Ship size={22} className="text-emerald-400" />}
+        title="Stiva componenti nave"
+        subtitle={
+          data?.stat_accesso_sigla
+            ? `Inventario globale · accesso ${data.stat_accesso_sigla} > 0`
+            : 'Inventario globale condiviso. Solo consultazione.'
+        }
+        actions={(
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="p-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 disabled:opacity-50"
+            title="Aggiorna"
+            aria-label="Aggiorna stiva"
+          >
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+          </button>
+        )}
+      />
 
       {data?.coppie_opposite?.length ? (
         <section className="space-y-2">
@@ -170,7 +157,7 @@ const StivaNaveTab = ({ onLogout, personaggioId }) => {
           </tbody>
         </table>
       </section>
-    </div>
+    </PlayerTabShell>
   );
 };
 

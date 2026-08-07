@@ -117,7 +117,7 @@ export default function CardFrame({
 
     <div className={`relative ${isFullLayout ? 'h-full min-h-[66%] overflow-hidden' : `mx-2 mt-2 overflow-hidden rounded-md border border-black/40 bg-black/30 ${ART_HEIGHT[size]}`}`}>
       {img ? (
-        <img src={img} alt="" className="h-full w-full object-cover" />
+        <img src={img} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
       ) : (
         <div className="flex h-full items-center justify-center text-gray-600">
           <CreditCard size={compact ? 22 : 32} />

@@ -142,7 +142,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       tool_ids: [
         'mostri', 'abilita', 'cerimoniali', 'tessiture', 'infusioni',
         'oggetti', 'oggetti-base', 'tabelle', 'effetti-casuali',
-        'ere-prefetture', 'dichiarazioni-glossario',
+        'ere-prefetture', 'carriere-korps', 'dichiarazioni-glossario',
       ],
     },
     {

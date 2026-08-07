@@ -30,6 +30,8 @@ import {
   buildCollezioneView,
   COLLEZIONE_SORT_OPTIONS,
 } from '../carte/collezioneUtils';
+import { PlayerTabShell } from './personaggi/layout/PlayerTabShell';
+import { UiErrorState } from './ui/AsyncState';
 
 function CartaCard({ item, selected, onSelect, compact = false, temaEnergie, keywords, tagsGlossary }) {
   return (
@@ -751,7 +753,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-3 pb-24 text-gray-100">
+    <PlayerTabShell width="full" className="!px-3 flex h-full flex-col gap-4 overflow-y-auto text-gray-100">
       <header className="flex items-center justify-between gap-2 border-b border-gray-700 pb-2">
         <div className="flex items-center gap-2">
           <CreditCard className="text-violet-400" />
@@ -781,7 +783,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
       </header>
 
       {error && (
-        <div className="rounded border border-red-800 bg-red-950/50 px-3 py-2 text-sm text-red-200">{error}</div>
+        <UiErrorState message={error} />
       )}
 
       {loading && (
@@ -1834,6 +1836,6 @@ export default function CarteCollezionabiliTab({ onLogout }) {
           </div>
         </div>
       )}
-    </div>
+    </PlayerTabShell>
   );
 }

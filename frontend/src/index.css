@@ -1,20 +1,37 @@
 /* Importa i layer base di Tailwind */
 @import "tailwindcss";
 
+/* Design tokens HUD giocatore / staff (dark game UI) */
+:root {
+  --kor-surface: #111827; /* gray-900 */
+  --kor-surface-raised: #1f2937; /* gray-800 */
+  --kor-surface-overlay: #374151; /* gray-700 */
+  --kor-border: #374151;
+  --kor-text: #f3f4f6;
+  --kor-text-muted: #9ca3af;
+  --kor-accent: #6366f1; /* indigo-500 */
+  --kor-accent-strong: #4f46e5; /* indigo-600 */
+  --kor-danger: #dc2626;
+  --kor-success: #059669;
+  --kor-warning: #d97706;
+  --kor-tab-bar-height: 60px;
+  --kor-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* Stili globali aggiuntivi */
 html, body, #root {
   height: 100%;
   overflow: hidden;
   margin: 0;
   padding: 0;
-  background-color: #111827; /* bg-gray-900 */
+  background-color: var(--kor-surface);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  color: white;
+  color: var(--kor-text);
 }
 
 /* Padding inferiore tab giocatore: clearance menu + safe area iOS/Android */
 .pb-safe-tab {
-  padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(6rem + var(--kor-safe-bottom));
 }
 
 /* Assicura che l'app React prenda tutto lo spazio */

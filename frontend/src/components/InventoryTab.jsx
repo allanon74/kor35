@@ -12,6 +12,8 @@ import PunteggioDisplay from './PunteggioDisplay';
 import { useOptimisticEquip, useOptimisticRecharge, useOptimisticDamage, useOptimisticRepair, useOptimisticDiscard } from '../hooks/useGameData';
 import { emitToast } from '../utils/toastBus';
 import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
+import { useSharedNowTs } from '../hooks/useSharedNowTs';
+import { LazyList } from './ui/LazyList';
 
 // --- UTILS ---
 const formatDuration = (seconds) => {
@@ -309,36 +311,6 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
                     {weaponCells.map((cell) => renderWeaponCell(cell))}
                 </div>
             </div>
-            )}
-        </div>
-    );
-};
-
-const LazyList = ({ items, renderItem, batchSize = 10 }) => {
-    const itemsKey = items.map((item) => item.id).join(',');
-    const [visibleCount, setVisibleCount] = useState(batchSize);
-
-    useEffect(() => {
-        setVisibleCount(batchSize);
-    }, [itemsKey, batchSize]);
-
-    const displayedItems = items.slice(0, visibleCount);
-    const showMore = () => {
-        setVisibleCount((prev) => Math.min(prev + batchSize, items.length));
-    };
-
-    return (
-        <div className="space-y-2">
-            {displayedItems.map(renderItem)}
-            
-            {visibleCount < items.length && (
-                <button 
-                    type="button"
-                    onClick={showMore}
-                    className="w-full py-3 mt-2 text-sm font-bold text-gray-400 bg-gray-800/50 hover:bg-gray-700 border border-dashed border-gray-600 rounded-lg transition-colors flex items-center justify-center gap-2"
-                >
-                    <ChevronDown size={16} /> Carica altri ({items.length - visibleCount})
-                </button>
             )}
         </div>
     );
@@ -765,7 +737,7 @@ const InventoryTab = ({ onLogout }) => {
   const [showModuloDetail, setShowModuloDetail] = useState(false);
   const [selectedModuloId, setSelectedModuloId] = useState(null);
   const [equipSlotModal, setEquipSlotModal] = useState({ open: false, itemId: null, itemName: '', slots: [] });
-  const [nowTs, setNowTs] = useState(() => Date.now());
+  const nowTs = useSharedNowTs();
 
   const equipMutation = useOptimisticEquip();
   const rechargeMutation = useOptimisticRecharge();
@@ -777,11 +749,6 @@ const InventoryTab = ({ onLogout }) => {
     if (characterData?.oggetti) setItems(characterData.oggetti);
     else setItems([]);
   }, [characterData]);
-
-  useEffect(() => {
-      const timer = window.setInterval(() => setNowTs(Date.now()), 1000);
-      return () => window.clearInterval(timer);
-  }, []);
 
   const executeEquipMutation = (itemId, slotKey = null) => equipMutation.mutate(
       { itemId, slotKey, charId: characterData.id },

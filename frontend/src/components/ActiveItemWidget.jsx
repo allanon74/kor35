@@ -1,41 +1,23 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Activity, Battery, Clock, RefreshCw } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import { useOptimisticUseItem, useOptimisticRecharge } from '../hooks/useGameData';
 import ActivationCostPreview from './ActivationCostPreview';
 import { evaluateActivationCosts } from '../lib/activationCostUtils';
+import { useSharedNowTs } from '../hooks/useSharedNowTs';
 
 const ActiveItemWidget = ({ item, onUpdate }) => {
     const useItemMutation = useOptimisticUseItem();
     const rechargeMutation = useOptimisticRecharge();
-    const { selectedCharacterData } = useCharacter(); 
+    const { selectedCharacterData } = useCharacter();
+    const nowTs = useSharedNowTs();
 
-    const [timeLeft, setTimeLeft] = useState(0);
-
-    // Gestione Timer Intelligente
-    useEffect(() => {
-        if (!item.data_fine_attivazione) {
-            setTimeLeft(0);
-            return;
-        }
-
-        const calculateTimeLeft = () => {
-            const now = new Date().getTime();
-            const end = new Date(item.data_fine_attivazione).getTime();
-            const diff = Math.floor((end - now) / 1000);
-            return diff > 0 ? diff : 0;
-        };
-
-        setTimeLeft(calculateTimeLeft());
-
-        const interval = setInterval(() => {
-            const remaining = calculateTimeLeft();
-            setTimeLeft(remaining);
-            if (remaining <= 0) clearInterval(interval);
-        }, 1000);
-
-        return () => clearInterval(interval);
-    }, [item.data_fine_attivazione]);
+    const timeLeft = useMemo(() => {
+        if (!item.data_fine_attivazione) return 0;
+        const end = new Date(item.data_fine_attivazione).getTime();
+        const diff = Math.floor((end - nowTs) / 1000);
+        return diff > 0 ? diff : 0;
+    }, [item.data_fine_attivazione, nowTs]);
 
     const formatTimer = (totalSeconds) => {
         if (!totalSeconds) return "Scaduto";

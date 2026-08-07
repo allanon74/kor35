@@ -1,24 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSharedNowTs } from '../hooks/useSharedNowTs';
 
 const SingleTimer = ({ timer, onExpire }) => {
-  const [timeLeft, setTimeLeft] = useState(0);
+  const nowTs = useSharedNowTs();
+  const timeLeft = Math.max(0, Math.floor((timer.endTime - nowTs) / 1000));
 
   useEffect(() => {
-    const tick = () => {
-      const now = Date.now();
-      const diff = timer.endTime - now;
-      
-      if (diff <= 0) {
-        onExpire(timer);
-      } else {
-        setTimeLeft(Math.floor(diff / 1000));
-      }
-    };
-
-    const interval = setInterval(tick, 1000);
-    tick(); // Esecuzione immediata al montaggio
-    return () => clearInterval(interval);
-  }, [timer.endTime, timer, onExpire]);
+    if (timeLeft <= 0) {
+      onExpire(timer);
+    }
+  }, [timeLeft, timer, onExpire]);
 
   const format = (s) => {
     const mins = Math.floor(s / 60);

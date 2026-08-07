@@ -80,7 +80,7 @@ function SocialAuthorAvatar({ name, avatarUrl, size = 'md', onClick }) {
   const dim =
     size === 'lg' ? 'w-20 h-20 text-xl' : size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm';
   const inner = avatarUrl ? (
-    <img src={avatarUrl} alt={name || 'Profilo'} className="h-full w-full object-cover" />
+    <img src={avatarUrl} alt={name || 'Profilo'} className="h-full w-full object-cover" loading="lazy" decoding="async" />
   ) : (
     <span className="font-extrabold text-amber-100">{authorInitials(name)}</span>
   );
@@ -1705,7 +1705,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               title="Personaggio attivo e impostazioni InstaFame"
             >
               {profile?.foto_principale ? (
-                <img src={resolveMediaUrl(profile.foto_principale)} alt="Profilo" className="h-full w-full object-cover" />
+                <img src={resolveMediaUrl(profile.foto_principale)} alt="Profilo" className="h-full w-full object-cover" loading="lazy" decoding="async" />
               ) : (
                 <div className="h-full w-full flex items-center justify-center text-amber-200 font-bold">
                   {(profile?.personaggio_nome || '?').charAt(0).toUpperCase()}
@@ -1868,7 +1868,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               <div className="flex flex-wrap gap-2">
                 {postImagesPreviewUrls.map((url, i) => (
                   <div key={url} className="relative w-16 h-16 rounded border border-gray-600 overflow-hidden">
-                    <img src={url} alt="" className="h-full w-full object-cover" />
+                    <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
                     <button
                       type="button"
                       onClick={() => removePostImageAt(i)}

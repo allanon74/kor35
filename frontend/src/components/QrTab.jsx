@@ -3,7 +3,9 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { getQrCodeData } from '../api'; // IMPORTA LA NUOVA FUNZIONE API
 import { normalizeScannedQrId } from '../utils/qrScan';
 import { useCharacter } from './CharacterContext'; // Importa per sapere chi sta scansionando
-import { Timer } from 'lucide-react'; // Icona Timer
+import { QrCode, Timer } from 'lucide-react'; // Icona Timer
+import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
+import { UiErrorState, UiLoadingState } from './ui/AsyncState';
 
 const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, onStealSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -149,8 +151,8 @@ const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, o
   }, []); // Esegui solo al mount e unmount
 
   return (
-    <div className="flex flex-col items-center p-4">
-      <h2 className="text-2xl font-bold mb-6 text-indigo-400">Scansione QR Code</h2>
+    <PlayerTabShell width="narrow" animate className="flex flex-col items-center">
+      <PlayerTabHeader icon={<QrCode size={22} />} title="Scansione QR Code" />
 
       {!azioniLiveAbilitate && !bypassEventoGate && (
         <div className="w-full max-w-md p-3 mb-4 text-sm text-amber-200/90 bg-amber-950/40 border border-amber-800/50 rounded-lg">
@@ -170,17 +172,9 @@ const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, o
         </div>
       )}
     
-      {isLoading && (
-        <div className="text-center text-lg text-gray-300">
-          <p>Caricamento dati...</p>
-        </div>
-      )}
+      {isLoading && <UiLoadingState label="Caricamento dati…" className="py-6" />}
 
-      {error && (
-        <div className="text-center text-red-400 bg-red-900 bg-opacity-50 p-3 rounded-md">
-          <p>{error}</p>
-        </div>
-      )}
+      {error && <UiErrorState message={error} className="w-full max-w-md mb-4" />}
 
       <div className="w-full max-w-md mt-4 space-y-4">
         {!isScanning && !isLoading && (
@@ -232,7 +226,7 @@ const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, o
       */}
       {!isScanning && <div id={qrReaderId} className="hidden"></div>}
 
-    </div>
+    </PlayerTabShell>
   );
 };
 

@@ -21,6 +21,7 @@ import ActivationCostPreview from './ActivationCostPreview';
 
 import ActiveItemWidget from './ActiveItemWidget';
 import { PlayerTabShell } from './personaggi/layout/PlayerTabShell';
+import { useSharedNowTs } from '../hooks/useSharedNowTs';
 
 /** Etichetta rango difesa: resa visiva stabile in base al livello */
 const RankDefLabel = ({ x, y, rankValue, fill, fontSize = '11', textAnchor = 'middle' }) => {
@@ -193,11 +194,7 @@ const DamageControlPanel = ({ stats, maxHp, maxArmor, maxShell, onChange }) => {
 };
 
 const RisorsaPoolWidget = ({ pool, onConsume, isPending }) => {
-    const [nowTs, setNowTs] = useState(Date.now());
-    useEffect(() => {
-        const id = window.setInterval(() => setNowTs(Date.now()), 1000);
-        return () => window.clearInterval(id);
-    }, []);
+    const nowTs = useSharedNowTs();
     const canConsume = (pool.valore_corrente || 0) >= 1;
     const rec = pool?.recupero_auto || {};
     const nextTickMs = rec?.next_tick_at ? new Date(rec.next_tick_at).getTime() : null;
@@ -273,13 +270,8 @@ const ChakraWidget = ({ current, max, onChange }) => {
 };
 
 const RigenerazioneTimerWidget = ({ rows, onAfterTick }) => {
-    const [nowTs, setNowTs] = useState(Date.now());
+    const nowTs = useSharedNowTs();
     const prevLeftSecRef = useRef({});
-
-    useEffect(() => {
-        const id = window.setInterval(() => setNowTs(Date.now()), 1000);
-        return () => window.clearInterval(id);
-    }, []);
 
     // Quando il countdown locale passa da >0 a 0, il server ha (o sta per) applicare il tick:
     // senza refetch, risorse_pool_ui / primarie restano obsoleti fino a navigazione o azione.
@@ -373,12 +365,7 @@ const CapacityDashboard = ({ capacityUsed, capacityMax, capacityConsumers, heavy
 };
 
 const LiveComaCountdown = ({ endAtIso, pausedAtIso, isPaused, fallbackSeconds = 0 }) => {
-    const [tick, setTick] = useState(Date.now());
-
-    useEffect(() => {
-        const id = window.setInterval(() => setTick(Date.now()), 1000);
-        return () => window.clearInterval(id);
-    }, []);
+    const tick = useSharedNowTs();
 
     const endAtMs = endAtIso ? new Date(endAtIso).getTime() : 0;
     const pausedAtMs = pausedAtIso ? new Date(pausedAtIso).getTime() : 0;
@@ -462,15 +449,11 @@ const GameTab = ({ onNavigate }) => {
     const stopRuntimeMutation = useStopTessituraRuntime();
     const disequipRuntimeObjMutation = useDisequipTessituraRuntimeObject();
     const [runtimeDetail, setRuntimeDetail] = useState(null);
-    const [runtimeNowTs, setRuntimeNowTs] = useState(() => Date.now());
+    const runtimeNowTs = useSharedNowTs();
 
     useEffect(() => {
         const savedFavs = JSON.parse(localStorage.getItem('kor35_favorites') || '[]');
         setFavorites(savedFavs);
-    }, []);
-    useEffect(() => {
-        const id = window.setInterval(() => setRuntimeNowTs(Date.now()), 1000);
-        return () => window.clearInterval(id);
     }, []);
 
     // --- FUNZIONI HELPER PER VISUALIZZAZIONE ---

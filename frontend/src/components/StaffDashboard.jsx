@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import BuildVersions from './BuildVersions';
-import MaintenanceModePanel from './MaintenanceModePanel';
 import {
     buildVisibleStaffTools,
     DEFAULT_STAFF_DASHBOARD_LAYOUT,
@@ -20,10 +19,10 @@ import {
 } from '../staff/staffDashboardLayout';
 import { staffToolModuloEnabled } from '../lib/campagnaModuli';
 
-import PlotTab from './PlotTab';
-import QrDebugTab from './QrDebugTab';
-import TabellaManager from './editors/TabellaManager';
-
+const PlotTab = lazy(() => import('./PlotTab'));
+const QrDebugTab = lazy(() => import('./QrDebugTab'));
+const TabellaManager = lazy(() => import('./editors/TabellaManager'));
+const MaintenanceModePanel = lazy(() => import('./MaintenanceModePanel'));
 const AdminMessageTab = lazy(() => import('./AdminMessageTab'));
 const CerimonialeManager = lazy(() => import('./editors/CerimonialeManager'));
 const InfusioneManager = lazy(() => import('./editors/InfusioneManager'));
@@ -99,8 +98,6 @@ const STAFF_COMPONENT_MAP = {
     'regole-transazioni': RegoleTransazioneStaffManager,
     'economia-crediti': EconomiaCreditiManager,
 };
-
-const DIRECT_LOAD_TOOLS = new Set(['plot', 'qr-debug']);
 
 const LoadingSpinner = () => (
     <div className="h-full flex items-center justify-center bg-gray-900">
@@ -465,13 +462,6 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                         const tool = visibleTools.find((t) => t.id === activeTool);
                         if (!tool) return null;
                         const Component = tool.component;
-                        if (DIRECT_LOAD_TOOLS.has(activeTool)) {
-                            return (
-                                <div className="h-full w-full flex flex-col animate-in slide-in-from-right-4 duration-300">
-                                    <Component onLogout={onLogout} onBack={() => setActiveTool('home')} />
-                                </div>
-                            );
-                        }
                         return (
                             <div className="h-full w-full flex flex-col animate-in slide-in-from-right-4 duration-300">
                                 <Suspense fallback={<LoadingSpinner />}>

@@ -87,6 +87,19 @@ export default defineConfig(({ command, mode }) => {
     plugins: plugins,
     build: {
       sourcemap: true,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('html5-qrcode')) return 'vendor-html5-qrcode';
+            if (id.includes('leaflet') || id.includes('react-leaflet')) return 'vendor-leaflet';
+            if (id.includes('react-quill') || id.includes('/quill')) return 'vendor-quill';
+            if (id.includes('lucide-react')) return 'vendor-lucide';
+            if (id.includes('@heroicons/react')) return 'vendor-heroicons';
+            return undefined;
+          },
+        },
+      },
     },
     define: {
       '__APP_VERSION__': JSON.stringify(packageJson.version),

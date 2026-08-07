@@ -1,4 +1,4 @@
-import React, { useState, Fragment, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, Fragment, useMemo, useCallback } from 'react';
 import { Tab } from '@headlessui/react';
 import { useCharacter } from './CharacterContext';
 import { Loader2, ShoppingCart, Info, CheckCircle2, PlusCircle, Trash2, Clock } from 'lucide-react'; 
@@ -9,6 +9,7 @@ import IconaPunteggio from './IconaPunteggio';
 import { useOptimisticAcquireAbilita, useRevokeAbilita } from '../hooks/useGameData';
 import { updatePersonaggio } from '../api';
 import { PlayerResourceStrip, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
+import { useSharedNowTs } from '../hooks/useSharedNowTs';
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ');
@@ -25,15 +26,11 @@ const AbilitaTab = ({ onLogout }) => {
   } = useCharacter();
   
   const [modalSkill, setModalSkill] = useState(null);
-  const [nowTs, setNowTs] = useState(() => Date.now());
+  const nowTs = useSharedNowTs();
   const acquireMutation = useOptimisticAcquireAbilita();
   const revokeMutation = useRevokeAbilita();
 
   const handleOpenModal = useCallback((skill) => setModalSkill(skill), []);
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowTs(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   const wizardInCorso = !!char?.impostazioni_ui?.creazione_guidata_in_corso;
 

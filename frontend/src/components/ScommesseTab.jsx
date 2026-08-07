@@ -15,6 +15,7 @@ import {
   scommesseRitiraRiserva,
 } from '../api';
 import { esitiScommessa, formattaRisultato, labelTipoRisultato, pareggioConsentito } from '../scommesse/risultatiSport';
+import { PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 
 const ESITO_LABEL = { V: 'Vittoria', S: 'Sconfitta', P: 'Pareggio' };
 const ESITO_SCOMMESSA_LABEL = { '1': '1', X: 'X', '2': '2' };
@@ -893,7 +894,7 @@ const ScommesseTab = ({ onLogout }) => {
   };
 
   return (
-    <div className="flex h-full flex-col bg-gray-900 text-gray-100">
+    <PlayerTabShell width="full" safeBottom={false} className="!p-0 flex h-full flex-col bg-gray-900 text-gray-100">
       <SquadraStoricoModal
         squadra={squadraModal}
         storico={squadraStorico}
@@ -1041,7 +1042,7 @@ const ScommesseTab = ({ onLogout }) => {
           </>
         )}
       </div>
-    </div>
+    </PlayerTabShell>
   );
 };
 

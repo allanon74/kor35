@@ -748,7 +748,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
 
 
   // --- VALUE DEL CONTEXT ---
-  const value = {
+  const value = useMemo(() => ({
     onLogout,
     personaggiList,
     punteggiList,
@@ -819,7 +819,57 @@ export const CharacterProvider = ({ children, onLogout }) => {
     transazioniGiocatoreAbilitate: !!giocoEventoStato.azioni_live_abilitate,
     nodoScanAbilitato: !!giocoEventoStato.nodo_scan_abilitato,
     allibratoreCodiciAbilitati: !!giocoEventoStato.allibratore_codici_abilitati,
-  };
+  }), [
+    onLogout,
+    personaggiList,
+    punteggiList,
+    statisticaContainers,
+    selectedCharacterId,
+    preferredCharacterId,
+    selectedCharacterData,
+    acquirableSkills,
+    acquirableInfusioni,
+    acquirableTessiture,
+    acquirableCerimoniali,
+    activeTimers,
+    updateTimerState,
+    removeTimerState,
+    isLoadingList,
+    isLoadingDetail,
+    isLoadingPunteggi,
+    isLoadingStatContainers,
+    mutatingCount,
+    handleSelectCharacter,
+    setPreferredCharacter,
+    refreshCharacterData,
+    fetchPersonaggi,
+    isCampaignMaster,
+    isCampaignHeadMaster,
+    isCampaignStaffer,
+    isCampaignRedactor,
+    activeCampaignRole,
+    staffWorkMode,
+    campaigns,
+    refreshCampaigns,
+    activeCampaign,
+    changeActiveCampaign,
+    isGlobalSuperuser,
+    isDjangoStaff,
+    canUseWizardTest,
+    moduliAccesso,
+    canAccessModulo,
+    viewAll,
+    toggleViewAll,
+    adminPendingCount,
+    userMessages,
+    unreadCount,
+    fetchUserMessages,
+    handleMarkAsRead,
+    handleToggleRead,
+    handleDeleteMessage,
+    subscribeToPush,
+    giocoEventoStato,
+  ]);
 
   return (
     <CharacterContext.Provider value={value}>
