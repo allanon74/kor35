@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { API_BASE_URL, getArcanaSSOStatus } from '../api';
 
 const LoginPage = ({ onLoginSuccess }) => {
@@ -62,7 +63,6 @@ const LoginPage = ({ onLoginSuccess }) => {
         const data = await response.json();
         localStorage.setItem('kor35_token', data.token);
         localStorage.setItem('kor35_is_admin', String(!!data.is_superuser));
-        // Cleanup chiavi legacy non piu' usate dal frontend.
         localStorage.removeItem('kor35_is_staff');
         localStorage.removeItem('kor35_is_master');
         localStorage.setItem('kor35_login_method', 'arcana');
@@ -109,7 +109,6 @@ const LoginPage = ({ onLoginSuccess }) => {
       if (data.token) {
         localStorage.setItem('kor35_token', data.token);
         localStorage.setItem('kor35_is_admin', String(!!data.is_superuser));
-        // Cleanup chiavi legacy non piu' usate dal frontend.
         localStorage.removeItem('kor35_is_staff');
         localStorage.removeItem('kor35_is_master');
         localStorage.setItem('kor35_login_method', 'local');
@@ -130,7 +129,6 @@ const LoginPage = ({ onLoginSuccess }) => {
   };
 
   const goArcana = () => {
-    // Evita che un vecchio token locale impedisca lo scambio ticket SSO al ritorno su /login.
     localStorage.removeItem('kor35_token');
     localStorage.removeItem('kor35_is_admin');
     localStorage.removeItem('kor35_is_staff');
@@ -142,9 +140,25 @@ const LoginPage = ({ onLoginSuccess }) => {
   const showLocalForm = !showArcanaSso || useLocalPassword;
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-900 px-4">
-      <div className="w-full max-w-md p-8 space-y-6 bg-gray-800 rounded-lg shadow-xl border border-gray-700">
-        <h2 className="text-3xl font-bold text-center text-white">Login Kor35</h2>
+    <div
+      className="flex items-center justify-center min-h-screen px-4"
+      style={{
+        background:
+          'radial-gradient(ellipse at 20% 0%, #7f1d1d66, transparent 50%), linear-gradient(165deg, #0c0a09 0%, #1c100c 40%, #111827 100%)',
+      }}
+    >
+      <div className="w-full max-w-md p-8 space-y-6 rounded-lg border border-stone-700/80 bg-black/55 backdrop-blur-sm shadow-2xl">
+        <div className="text-center space-y-3">
+          <img
+            src="/Logo Kor-AD_Trasp.png"
+            alt=""
+            width={72}
+            height={72}
+            className="mx-auto h-16 w-16 object-contain"
+          />
+          <h1 className="wiki-hero-brand text-3xl text-white">KOR35</h1>
+          <p className="text-sm text-stone-300">Accedi all&apos;area di gioco</p>
+        </div>
 
         {message.text && (
           <div
@@ -162,11 +176,11 @@ const LoginPage = ({ onLoginSuccess }) => {
               type="button"
               onClick={goArcana}
               disabled={isLoading}
-              className="w-full px-4 py-2 font-bold text-white bg-emerald-700 rounded-md shadow-lg hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50"
+              className="w-full px-4 py-2.5 font-bold text-white bg-emerald-800 rounded-md shadow-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
             >
               Accedi con Arcana Domine
             </button>
-            <label className="flex items-start gap-2 text-sm text-gray-300 cursor-pointer">
+            <label className="flex items-start gap-2 text-sm text-stone-300 cursor-pointer">
               <input
                 type="checkbox"
                 className="mt-1 rounded border-gray-600"
@@ -184,10 +198,10 @@ const LoginPage = ({ onLoginSuccess }) => {
         {showLocalForm && (
           <form className="space-y-4" onSubmit={handleLogin}>
             {showArcanaSso && (
-              <p className="text-xs text-gray-400">Accesso con utente e password Kor35.</p>
+              <p className="text-xs text-stone-400">Accesso con utente e password Kor35.</p>
             )}
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="username" className="block text-sm font-medium text-stone-300">
                 Username
               </label>
               <input
@@ -197,12 +211,12 @@ const LoginPage = ({ onLoginSuccess }) => {
                 onChange={handleChange}
                 required
                 autoComplete="username"
-                className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-200 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 mt-1 text-gray-900 bg-stone-100 border border-stone-500 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-red-700"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="password" className="block text-sm font-medium text-stone-300">
                 Password
               </label>
               <input
@@ -212,22 +226,28 @@ const LoginPage = ({ onLoginSuccess }) => {
                 onChange={handleChange}
                 required
                 autoComplete="current-password"
-                className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-200 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 mt-1 text-gray-900 bg-stone-100 border border-stone-500 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-red-700"
               />
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full px-4 py-2 font-bold text-white bg-indigo-600 rounded-md shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50"
+              className="w-full px-4 py-2.5 font-bold text-white bg-[var(--wiki-brand,#7f1d1d)] rounded-md shadow-lg hover:bg-[var(--wiki-brand-hot,#b91c1c)] focus:outline-none focus:ring-2 focus:ring-red-600 disabled:opacity-50"
             >
               {isLoading ? 'Attendere...' : 'Accedi'}
             </button>
           </form>
         )}
 
+        <p className="text-center text-xs text-stone-500">
+          <Link to="/" className="text-stone-300 hover:text-white underline-offset-2 hover:underline">
+            Torna al regolamento
+          </Link>
+        </p>
+
         {ssoStatus === null && (
-          <p className="text-center text-xs text-gray-500">Verifica accesso Arcana Domine...</p>
+          <p className="text-center text-xs text-stone-500">Verifica accesso Arcana Domine...</p>
         )}
       </div>
     </div>

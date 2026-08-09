@@ -4,6 +4,8 @@ import { Trash2, Mail, Reply, Eye, EyeOff } from 'lucide-react';
 import ComposeMessageModal from './ComposeMessageModal';
 import RichTextDisplay from './RichTextDisplay';
 import { fetchAuthenticated } from '../api';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { OfflineConsultBanner } from './OfflineConsultBanner';
 
 const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, scrollToFirstUnreadNonce = 0 }) => {
     const { 
@@ -16,6 +18,7 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
         handleToggleRead,
         handleDeleteMessage: contextDeleteMessage
     } = useCharacter();
+    const isOnline = useOnlineStatus();
 
     const [isComposeOpen, setIsComposeOpen] = useState(false);
     const [replyToRecipient, setReplyToRecipient] = useState(null); // Per pre-compilare destinatario
@@ -52,10 +55,14 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
 
     useEffect(() => {
         if (!composeTarget) return;
+        if (!isOnline) {
+            if (onComposeTargetConsumed) onComposeTargetConsumed();
+            return;
+        }
         setReplyToRecipient(composeTarget);
         setIsComposeOpen(true);
         if (onComposeTargetConsumed) onComposeTargetConsumed();
-    }, [composeTarget, onComposeTargetConsumed]);
+    }, [composeTarget, onComposeTargetConsumed, isOnline]);
 
     const toggleMessageExpansion = (msgId) => {
         setExpandedMessages(prev => ({
@@ -65,6 +72,9 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
     };
 
     const handleReply = (msg) => {
+        if (!isOnline) {
+            return;
+        }
         console.log('Reply to message:', msg); // Debug
         
         // Se il messaggio è dallo staff, rispondi allo staff
@@ -89,6 +99,14 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
 
     return (
         <div className="flex flex-col h-[calc(100vh-200px)] relative">
+            {!isOnline && (
+              <div className="px-2 mb-2">
+                <OfflineConsultBanner />
+                <p className="mt-1 text-[11px] text-center text-amber-200/80">
+                  Inbox in cache se disponibile. Nuovi messaggi e risposte sono bloccati offline.
+                </p>
+              </div>
+            )}
             
             {/* --- LISTA MESSAGGI --- */}
             <div className="flex-1 overflow-y-auto p-2 space-y-4 custom-scrollbar mb-16">
@@ -246,10 +264,15 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
             <div className="absolute bottom-4 right-4 z-10">
                 <button
                     onClick={() => {
+                        if (!isOnline) return;
                         setReplyToRecipient(null);
                         setIsComposeOpen(true);
                     }}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-full p-4 shadow-xl flex items-center gap-2 transition-transform hover:scale-105"
+                    disabled={!isOnline}
+                    className={`bg-indigo-600 hover:bg-indigo-500 text-white rounded-full p-4 shadow-xl flex items-center gap-2 transition-transform hover:scale-105 ${
+                      !isOnline ? 'opacity-40 cursor-not-allowed hover:scale-100' : ''
+                    }`}
+                    title={isOnline ? 'Nuovo messaggio' : 'Offline: compose disabilitato'}
                 >
                     <Mail size={24} />
                     <span className="font-bold hidden sm:inline">Nuovo Messaggio</span>
@@ -258,7 +281,7 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
 
             {/* --- MODALE COMPOSIZIONE --- */}
             <ComposeMessageModal 
-                isOpen={isComposeOpen} 
+                isOpen={isComposeOpen && isOnline} 
                 onClose={() => {
                     setIsComposeOpen(false);
                     setReplyToRecipient(null);

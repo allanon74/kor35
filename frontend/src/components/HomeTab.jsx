@@ -15,6 +15,9 @@ import { updatePersonaggio, resolveMediaUrl } from '../api';
 import LogViewer from './LogViewer';
 import TransazioniViewer from './TransazioniViewer';
 import { PlayerTabShell } from './personaggi/layout/PlayerTabShell';
+import { getOfflineCharacterDetail } from '../lib/offlineGameStateDb';
+import { OfflineConsultBanner } from './OfflineConsultBanner';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 
 // --- Componenti Helper ---
 
@@ -46,7 +49,7 @@ const LoadingComponent = () => (
 
 // --- Componente Scheda ---
 
-const CharacterSheet = memo(({ data, onLogout }) => {
+const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
   const { punteggiList, statisticaContainers, subscribeToPush, isWebPushSupported, refreshCharacterData } = useCharacter();
   const [pushActivating, setPushActivating] = useState(false);
   const [pushBannerDismissed, setPushBannerDismissed] = useState(false);
@@ -427,6 +430,7 @@ const CharacterSheet = memo(({ data, onLogout }) => {
 
   return (
     <PlayerTabShell width="sheet">
+      {offlineBanner}
       <div className="flex items-center gap-4 mb-6 pb-4 border-b border-gray-700/80">
         <div className="h-20 w-20 rounded-full border-2 border-indigo-500/35 bg-gray-800 overflow-hidden shrink-0 flex items-center justify-center">
           {avatarUrl ? (
@@ -837,13 +841,82 @@ const HomeTab = memo(({ onLogout }) => {
     selectedCharacterId, 
     error 
   } = useCharacter();
+  const isOnline = useOnlineStatus();
+  const [idbDetail, setIdbDetail] = useState(null);
+  const [idbStoredAt, setIdbStoredAt] = useState(null);
+  const [idbLoading, setIdbLoading] = useState(false);
 
-  if (isLoadingDetail || isLoadingPunteggi) return <LoadingComponent />;
-  if (error && !selectedCharacterData) return <div className="p-4 text-center text-red-400">Errore nel caricamento. Riprova.</div>;
-  if (!selectedCharacterId) return <div className="p-8 text-center text-gray-400"><h2 className="text-2xl font-bold mb-4">Benvenuto!</h2><p>Seleziona un personaggio.</p></div>;
-  if (!selectedCharacterData) return <div className="p-8 text-center text-gray-400"><p>Nessun dato trovato.</p></div>;
+  useEffect(() => {
+    let cancelled = false;
+    if (selectedCharacterData || !selectedCharacterId) {
+      setIdbDetail(null);
+      setIdbStoredAt(null);
+      setIdbLoading(false);
+      return undefined;
+    }
+    setIdbLoading(true);
+    getOfflineCharacterDetail(selectedCharacterId)
+      .then((row) => {
+        if (cancelled) return;
+        setIdbDetail(row?.snapshot || null);
+        setIdbStoredAt(row?.stored_at || null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIdbDetail(null);
+          setIdbStoredAt(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIdbLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCharacterData, selectedCharacterId]);
 
-  return <CharacterSheet data={selectedCharacterData} onLogout={onLogout} />;
+  const sheetData = selectedCharacterData ?? idbDetail;
+  const isOfflineSnapshot = !selectedCharacterData && !!idbDetail;
+  const showOfflineBanner = !isOnline || isOfflineSnapshot;
+
+  if ((isLoadingDetail || isLoadingPunteggi || idbLoading) && !sheetData) {
+    return <LoadingComponent />;
+  }
+  if (error && !sheetData) {
+    return <div className="p-4 text-center text-red-400">Errore nel caricamento. Riprova.</div>;
+  }
+  if (!selectedCharacterId) {
+    return (
+      <div className="p-8 text-center text-gray-400">
+        <h2 className="text-2xl font-bold mb-4">Benvenuto!</h2>
+        <p>Seleziona un personaggio.</p>
+      </div>
+    );
+  }
+  if (!sheetData) {
+    return (
+      <div className="p-8 text-center text-gray-400 space-y-3">
+        <OfflineConsultBanner isOfflineSnapshot={false} />
+        <p>Nessun dato in cache per questa scheda. Connettiti almeno una volta per salvarla offline.</p>
+      </div>
+    );
+  }
+
+  return (
+    <CharacterSheet
+      data={sheetData}
+      onLogout={onLogout}
+      offlineBanner={
+        showOfflineBanner ? (
+          <OfflineConsultBanner
+            isOfflineSnapshot={isOfflineSnapshot}
+            storedAt={idbStoredAt}
+            className="mb-4"
+          />
+        ) : null
+      }
+    />
+  );
 });
 
 HomeTab.displayName = 'HomeTab';

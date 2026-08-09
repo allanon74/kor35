@@ -91,6 +91,9 @@ export default defineConfig(({ command, mode }) => {
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return undefined;
+            // Vendor pesanti in chunk dedicati (download parallelo). Lucide resta isolato
+            // così il parse del main non include tutte le icone; AppLayout lazy evita
+            // di montare subito StaffDashboard/MainPage.
             if (id.includes('html5-qrcode')) return 'vendor-html5-qrcode';
             if (id.includes('leaflet') || id.includes('react-leaflet')) return 'vendor-leaflet';
             if (id.includes('react-quill') || id.includes('/quill')) return 'vendor-quill';

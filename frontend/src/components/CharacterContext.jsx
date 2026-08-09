@@ -24,8 +24,10 @@ import {
   getGiocoEventoStato,
 } from '../api';
 import NotificationPopup from './NotificationPopup';
-import { putOfflineGameStateSnapshot } from '../lib/offlineGameStateDb';
+import { putOfflineGameStateSnapshot, putOfflineCharacterDetail } from '../lib/offlineGameStateDb';
+import { putOfflineMessages, getOfflineMessages } from '../lib/offlineMessagesDb';
 import { activateWebPush, isWebPushSupported } from '../lib/webpush';
+import { ensureAppServiceWorker } from '../lib/appServiceWorker';
 import { canAccessModuloMode, getModuloAccesso } from '../lib/campagnaModuli';
 
 import { 
@@ -285,7 +287,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
     });
   }, [moduliAccesso, isCampaignStaffer, isDjangoStaff, isGlobalSuperuser, isPngStaffAttivo]);
 
-  /** Aggiorna IndexedDB (snapshot di gioco) dopo ogni sync online del personaggio. */
+  /** Aggiorna IndexedDB (snapshot di gioco + dettaglio Scheda) dopo ogni sync online del personaggio. */
   useEffect(() => {
     if (!selectedCharacterId || typeof navigator === 'undefined' || !navigator.onLine) {
       return undefined;
@@ -296,6 +298,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
     let cancelled = false;
     (async () => {
       try {
+        await putOfflineCharacterDetail(selectedCharacterId, selectedCharacterData);
         const snap = await getPersonaggioGameState(selectedCharacterId, onLogout);
         if (!cancelled && snap) {
           await putOfflineGameStateSnapshot(selectedCharacterId, snap);
@@ -308,6 +311,11 @@ export const CharacterProvider = ({ children, onLogout }) => {
       cancelled = true;
     };
   }, [selectedCharacterId, selectedCharacterData, onLogout]);
+
+  /** Registra SW per precache shell (offline) anche senza push. */
+  useEffect(() => {
+    ensureAppServiceWorker();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -560,7 +568,21 @@ export const CharacterProvider = ({ children, onLogout }) => {
       });
       setUserMessages(sorted);
       setUnreadCount(sorted.filter(m => !m.letto).length);
-    } catch (err) { console.error("Err msg:", err); }
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        putOfflineMessages(charId, sorted).catch(() => {});
+      }
+    } catch (err) {
+      console.error("Err msg:", err);
+      try {
+        const cached = await getOfflineMessages(charId);
+        if (cached?.messages?.length) {
+          setUserMessages(cached.messages);
+          setUnreadCount(cached.messages.filter((m) => !m.letto).length);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
   }, [onLogout]);
 
   useEffect(() => {

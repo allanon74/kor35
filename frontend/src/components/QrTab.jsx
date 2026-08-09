@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { getQrCodeData } from '../api'; // IMPORTA LA NUOVA FUNZIONE API
 import { normalizeScannedQrId } from '../utils/qrScan';
@@ -6,17 +6,79 @@ import { useCharacter } from './CharacterContext'; // Importa per sapere chi sta
 import { QrCode, Timer } from 'lucide-react'; // Icona Timer
 import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 import { UiErrorState, UiLoadingState } from './ui/AsyncState';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import {
+  enqueueOfflineAction,
+  listOfflineActions,
+  removeOfflineAction,
+  OFFLINE_ACTION_QR_SCAN,
+} from '../lib/offlineActionQueue';
 
 const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, onStealSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const [queuedCount, setQueuedCount] = useState(0);
   
   const html5QrCodeRef = useRef(null);
   const qrReaderId = "qr-reader-element";
+  const isOnline = useOnlineStatus();
   
   // Prendi il personaggio attivo dal context
   const { selectedCharacterId, azioniLiveAbilitate, bypassEventoGate } = useCharacter();
+
+  const refreshQueueCount = useCallback(async () => {
+    try {
+      const items = await listOfflineActions(OFFLINE_ACTION_QR_SCAN);
+      setQueuedCount(items.length);
+    } catch {
+      setQueuedCount(0);
+    }
+  }, []);
+
+  const flushQueuedScans = useCallback(async () => {
+    if (!selectedCharacterId || !navigator.onLine) return;
+    const items = await listOfflineActions(OFFLINE_ACTION_QR_SCAN);
+    if (!items.length) {
+      setQueuedCount(0);
+      return;
+    }
+    setIsLoading(true);
+    setInfo('');
+    setError('');
+    try {
+      for (const item of items) {
+        const qrId = item.payload?.qr_id;
+        const pgId = item.payload?.personaggio_id || selectedCharacterId;
+        if (!qrId) {
+          await removeOfflineAction(item.id);
+          continue;
+        }
+        try {
+          const jsonData = await getQrCodeData(qrId, onLogout, pgId);
+          await removeOfflineAction(item.id);
+          onScanSuccess(jsonData);
+          setInfo('Ripresa scansione dalla coda offline.');
+          break; // una alla volta: l'utente chiude la modale prima della successiva
+        } catch (err) {
+          setError(err.message || 'Replay coda QR fallito.');
+          break;
+        }
+      }
+    } finally {
+      setIsLoading(false);
+      await refreshQueueCount();
+    }
+  }, [selectedCharacterId, onLogout, onScanSuccess, refreshQueueCount]);
+
+  useEffect(() => {
+    refreshQueueCount();
+  }, [refreshQueueCount]);
+
+  useEffect(() => {
+    if (isOnline) flushQueuedScans();
+  }, [isOnline, flushQueuedScans]);
 
   const handleScanData = async (decodedText) => {
     // Controlla se un personaggio è selezionato
@@ -36,16 +98,46 @@ const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, o
     setIsScanning(false);
     setIsLoading(true);
     setError('');
+    setInfo('');
 
     try {
       await stopWebcamScan();
 
       const qrId = normalizeScannedQrId(decodedText);
+
+      // Offline: metti in coda solo la lettura QR (no furto/scambio — quelle restano online-only).
+      if (!navigator.onLine) {
+        await enqueueOfflineAction({
+          kind: OFFLINE_ACTION_QR_SCAN,
+          payload: { qr_id: qrId, personaggio_id: selectedCharacterId },
+        });
+        await refreshQueueCount();
+        setInfo(
+          'Offline: scansione messa in coda. Verrà ripresa automaticamente quando torna la rete (solo consultazione QR; furto e scambi restano bloccati offline).'
+        );
+        return;
+      }
+
       const jsonData = await getQrCodeData(qrId, onLogout, selectedCharacterId);
       
       onScanSuccess(jsonData); // Passa il JSON alla modale
       
     } catch (err) {
+      // Rete assente o timeout: prova coda
+      if (!navigator.onLine || /network|failed to fetch|offline/i.test(String(err?.message || ''))) {
+        try {
+          const qrId = normalizeScannedQrId(decodedText);
+          await enqueueOfflineAction({
+            kind: OFFLINE_ACTION_QR_SCAN,
+            payload: { qr_id: qrId, personaggio_id: selectedCharacterId },
+          });
+          await refreshQueueCount();
+          setInfo('Rete assente: scansione messa in coda per il ripristino.');
+          return;
+        } catch {
+          /* fall through */
+        }
+      }
       setError(err.message || 'Impossibile caricare i dati QR.');
     } finally {
       setIsLoading(false);
@@ -157,6 +249,33 @@ const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, o
       {!azioniLiveAbilitate && !bypassEventoGate && (
         <div className="w-full max-w-md p-3 mb-4 text-sm text-amber-200/90 bg-amber-950/40 border border-amber-800/50 rounded-lg">
           Scansione nodi, furti e scambi da QR personaggio sono attivi solo durante un evento aperto.
+        </div>
+      )}
+
+      {!isOnline && (
+        <div className="w-full max-w-md p-3 mb-4 text-sm text-amber-100 bg-amber-950/50 border border-amber-700/50 rounded-lg">
+          Offline: puoi mettere in coda una scansione QR. Furto, scambi e mutazioni restano disabilitati
+          finché non c&apos;è conferma dal server.
+          {queuedCount > 0 ? ` In coda: ${queuedCount}.` : ''}
+        </div>
+      )}
+
+      {isOnline && queuedCount > 0 && (
+        <div className="w-full max-w-md p-3 mb-4 text-sm text-emerald-100 bg-emerald-950/40 border border-emerald-800/40 rounded-lg flex items-center justify-between gap-2">
+          <span>{queuedCount} scansione/i in coda offline.</span>
+          <button
+            type="button"
+            onClick={flushQueuedScans}
+            className="shrink-0 px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-xs font-bold"
+          >
+            Riprendi
+          </button>
+        </div>
+      )}
+
+      {info && (
+        <div className="w-full max-w-md p-3 mb-4 text-sm text-sky-100 bg-sky-950/40 border border-sky-800/40 rounded-lg">
+          {info}
         </div>
       )}
 

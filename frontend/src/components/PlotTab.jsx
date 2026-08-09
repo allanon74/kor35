@@ -31,6 +31,22 @@ import {
     ItalianDateTimeInput,
     ItalianTimeInput,
 } from './ItalianDateTimeInputs';
+import {
+    StaffToolBody,
+    StaffToolHeader,
+    StaffToolShell,
+} from '../staff/StaffToolShell';
+import { UiLoadingState } from './ui/AsyncState';
+import { emitToast } from '../utils/toastBus';
+
+const plotToastError = (message) => {
+    emitToast({
+        type: 'error',
+        title: 'Plot',
+        message: String(message || 'Operazione non riuscita.'),
+        durationMs: 4500,
+    });
+};
 
 // Cache risorse plot: solo anteprima immediata; i dati freschi arrivano sempre dal server.
 const RISORSE_CACHE_TIMEOUT = 5 * 60 * 1000; // 5 minuti
@@ -126,7 +142,7 @@ const PlotTab = ({ onLogout }) => {
             await loadRisorseEditor(activeCampaign);
         } catch (e) { 
             console.error("PlotTab: Errore caricamento plot:", e);
-            alert(`Errore nel caricamento dei dati plot: ${e.message || e}`);
+            plotToastError(`Errore nel caricamento dei dati plot: ${e.message || e}`);
             setEventi([]);
             setRisorse(EMPTY_RISORSE);
             setLoading(false);
@@ -214,7 +230,7 @@ const PlotTab = ({ onLogout }) => {
                     raw.latitudine = coords.latitudine;
                     raw.longitudine = coords.longitudine;
                 } catch (coordErr) {
-                    alert(coordErr.message || 'Coordinate non valide.');
+                    plotToastError(coordErr.message || 'Coordinate non valide.');
                     return;
                 }
                 raw.iscrizione_opzioni = Array.isArray(raw.iscrizione_opzioni)
@@ -255,7 +271,7 @@ const PlotTab = ({ onLogout }) => {
             } else if (editMode === 'task' && formData.id) {
                 const stafferId = parseInt(String(formData.staffer), 10);
                 if (!Number.isFinite(stafferId)) {
-                    alert('Seleziona un membro dello staff.');
+                    plotToastError('Seleziona un membro dello staff.');
                     return;
                 }
                 const payload = {
@@ -282,7 +298,7 @@ const PlotTab = ({ onLogout }) => {
             }
             setEditMode(null);
             refreshData();
-        } catch (e) { alert("Errore durante il salvataggio."); console.error(e); }
+        } catch (e) { plotToastError("Errore durante il salvataggio."); console.error(e); }
     }, [editMode, formData, selectedEvento, onLogout, refreshData, risorse.staff]);
 
     const handleDeleteEvento = useCallback(async (id) => { 
@@ -315,7 +331,7 @@ const PlotTab = ({ onLogout }) => {
             refreshData();
         } catch (error) {
             console.error("Errore aggiunta:", error);
-            alert("Errore nell'operazione: " + error.message);
+            plotToastError("Errore nell'operazione: " + error.message);
         }
     },
     onRemoveSub: async (tipo, id) => {
@@ -374,7 +390,7 @@ const PlotTab = ({ onLogout }) => {
             + ` (${stats?.gia_presenti ?? 0} già ok`
             + (stats?.conflitti ? `, ${stats.conflitti} conflitti` : '')
             + ')';
-        window.alert(msg);
+        plotToastError(msg);
         return stats;
     }, [selectedEvento, onLogout, refreshData]);
 
@@ -591,11 +607,33 @@ const PlotTab = ({ onLogout }) => {
     }, [selectedEvento]);
 
     // Check di loading DOPO tutti gli hook
-    if (loading) return <div className="h-full flex items-center justify-center bg-gray-900"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-indigo-500"></div></div>;
+    if (loading) {
+        return (
+            <StaffToolShell fill>
+                <UiLoadingState label="Caricamento plot…" className="h-full" />
+            </StaffToolShell>
+        );
+    }
 
     return (
-        <div className="flex flex-col h-full bg-gray-900 text-white pb-20 overflow-hidden">
-            <div className="p-4 bg-gray-950 border-b border-gray-800 flex gap-2 z-40 shadow-xl sticky top-0">
+        <StaffToolShell fill className="pb-20 overflow-hidden">
+            <StaffToolHeader
+                title="Gestione plot"
+                description="Eventi, giorni, quest e associazioni QR"
+                sticky
+                actions={(
+                    <button
+                        type="button"
+                        onClick={handlePrintEvent}
+                        className="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors shadow-lg shadow-indigo-900/20 flex items-center gap-2"
+                        title="Stampa Report Completo"
+                    >
+                        <Printer size={20} aria-hidden="true" />
+                        <span className="hidden md:inline font-bold text-xs uppercase">Stampa Report</span>
+                    </button>
+                )}
+            >
+                <div className="mt-3 flex gap-2">
                 <select 
                     className="flex-1 bg-gray-900 p-3 rounded-xl border border-gray-800 font-black text-indigo-400 outline-none cursor-pointer transition-all hover:border-indigo-500"
                     value={selectedEvento?.id || ''} 
@@ -604,6 +642,7 @@ const PlotTab = ({ onLogout }) => {
                         if (found) setSelectedEvento(found);
                     }}
                     disabled={eventi.length === 0}
+                    aria-label="Seleziona evento"
                 >
                     {eventi.length === 0 ? (
                         <option value="">Nessun evento disponibile</option>
@@ -613,6 +652,7 @@ const PlotTab = ({ onLogout }) => {
                 </select>
                 {canManagePlot && (
                     <button
+                        type="button"
                         onClick={() =>
                             startEdit('evento', {
                                 pc_guadagnati: 1,
@@ -624,19 +664,16 @@ const PlotTab = ({ onLogout }) => {
                             })
                         }
                         className="p-3 bg-indigo-600 rounded-xl hover:bg-indigo-500 transition-colors shadow-lg"
+                        aria-label="Nuovo evento"
                     >
-                        <Plus size={24} />
+                        <Plus size={24} aria-hidden="true" />
                     </button>
                 )}
-                <button 
-                    onClick={handlePrintEvent}
-                    className="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors shadow-lg shadow-indigo-900/20 flex items-center gap-2"
-                    title="Stampa Report Completo"
-                >
-                    <Printer size={20} />
-                    <span className="hidden md:inline font-bold text-xs uppercase">Stampa Report</span>
-                </button>
-            </div>
+                </div>
+            </StaffToolHeader>
+
+            <StaffToolBody className="!p-0 flex flex-col min-h-0">
+            <div className="flex flex-col flex-1 min-h-0 text-white overflow-hidden">
 
             {editMode && (
                 <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -1213,7 +1250,7 @@ const PlotTab = ({ onLogout }) => {
                                     setScanningForVista(null);
                                 } else {
                                     console.error(error);
-                                    window.alert(error.message || 'Errore associazione QR');
+                                    plotToastError(error.message || 'Errore associazione QR');
                                 }
                             }
                         }} onLogout={onLogout} />
@@ -1237,7 +1274,7 @@ const PlotTab = ({ onLogout }) => {
                         setScanningForVista(null);
                         refreshData();
                     } catch (e) {
-                        window.alert(e.message || 'Errore durante la riassociazione');
+                        plotToastError(e.message || 'Errore durante la riassociazione');
                     }
                 }}
             >
@@ -1249,7 +1286,9 @@ const PlotTab = ({ onLogout }) => {
                 ) : null}
             </ConfirmDialog>
             {minigiocoModal}
-        </div>
+            </div>
+            </StaffToolBody>
+        </StaffToolShell>
     );
 };
 

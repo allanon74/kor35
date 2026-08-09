@@ -9,6 +9,7 @@ import { TimerOverlay } from './TimerOverlay';
 import { getPilotNavigationConfig, fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota, carteGetStato, getMissioniEventoAttivo } from '../api';
 import packageInfo from '../../package.json';
 import { isWebPushEnabled } from '../lib/webpush';
+import { ensureAppServiceWorker } from '../lib/appServiceWorker';
 import { useSharedNowTs } from '../hooks/useSharedNowTs';
 
 import { 
@@ -236,24 +237,10 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     window.location.reload();
   };
 
-  // Safety net: rimuove eventuali Service Worker legacy solo se webpush è disattivato.
+  // Safety net: non disinstallare più lo SW solo perché il push è off —
+  // serve al precache shell / offline. Il push resta opzionale via webpush.js.
   useEffect(() => {
-    if (isWebPushEnabled()) return undefined;
-    let mounted = true;
-    const cleanupServiceWorkers = async () => {
-      try {
-        if (!('serviceWorker' in navigator)) return;
-        const regs = await navigator.serviceWorker.getRegistrations();
-        if (!mounted) return;
-        await Promise.all(regs.map(r => r.unregister()));
-      } catch (e) {
-        // noop
-      }
-    };
-    cleanupServiceWorkers();
-    return () => {
-      mounted = false;
-    };
+    ensureAppServiceWorker();
   }, []);
 
   // --- COOLDOWN FURTO ---

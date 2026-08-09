@@ -123,6 +123,9 @@ const InstafameMediaCarousel = ({ images = [], alt = '', className = '', fullWid
               alt={alt}
               className="max-h-[92vh] max-w-full object-contain select-none"
               draggable={false}
+              loading="eager"
+              decoding="async"
+              sizes="96vw"
             />
           </button>
 
@@ -166,6 +169,11 @@ const InstafameMediaCarousel = ({ images = [], alt = '', className = '', fullWid
             alt={alt}
             className="h-full w-full object-cover select-none pointer-events-none lg:object-contain lg:h-auto lg:max-h-none"
             draggable={false}
+            loading="lazy"
+            decoding="async"
+            sizes="(min-width: 1024px) 28rem, 100vw"
+            width={720}
+            height={900}
           />
         </button>
         {count > 1 && (

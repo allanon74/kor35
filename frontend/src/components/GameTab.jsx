@@ -22,6 +22,8 @@ import ActivationCostPreview from './ActivationCostPreview';
 import ActiveItemWidget from './ActiveItemWidget';
 import { PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 import { useSharedNowTs } from '../hooks/useSharedNowTs';
+import { OfflineConsultBanner } from './OfflineConsultBanner';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 
 /** Etichetta rango difesa: resa visiva stabile in base al livello */
 const RankDefLabel = ({ x, y, rankValue, fill, fontSize = '11', textAnchor = 'middle' }) => {
@@ -399,6 +401,7 @@ const GameTab = ({ onNavigate }) => {
     const [idbChar, setIdbChar] = useState(null);
     const [idbStoredAt, setIdbStoredAt] = useState(null);
     const [idbLoading, setIdbLoading] = useState(false);
+    const isOnline = useOnlineStatus();
 
     useEffect(() => {
         let cancelled = false;
@@ -437,8 +440,7 @@ const GameTab = ({ onNavigate }) => {
 
     const char = liveChar ?? idbChar;
     const isOfflineSnapshot = !liveChar && !!idbChar;
-    const readOnlyGame =
-        typeof navigator !== 'undefined' && (!navigator.onLine || isOfflineSnapshot);
+    const readOnlyGame = !isOnline || isOfflineSnapshot;
 
     const [favorites, setFavorites] = useState([]);
     const [comaBusy, setComaBusy] = useState(false);
@@ -699,23 +701,10 @@ const GameTab = ({ onNavigate }) => {
     return (
         <PlayerTabShell width="hud" animate className="space-y-6">
             {readOnlyGame && (
-                <div
-                    className="rounded-lg border border-amber-600/50 bg-amber-950/40 px-3 py-2 text-[11px] text-amber-100/95 text-center"
-                    role="status"
-                >
-                    {isOfflineSnapshot ? (
-                        <>
-                            Modalità consultazione offline: ultimo salvataggio locale
-                            {idbStoredAt ? ` (${new Date(idbStoredAt).toLocaleString()})` : ''}. Le azioni di gioco sono
-                            disattivate finché non torna la connessione al server.
-                        </>
-                    ) : (
-                        <>
-                            Sei offline: le modifiche non possono essere salvate. Mostriamo i dati in cache del browser
-                            se disponibili.
-                        </>
-                    )}
-                </div>
+                <OfflineConsultBanner
+                  isOfflineSnapshot={isOfflineSnapshot}
+                  storedAt={idbStoredAt}
+                />
             )}
 
             <CapacityDashboard 

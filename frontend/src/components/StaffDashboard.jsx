@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import BuildVersions from './BuildVersions';
+import AppToastStack from './AppToastStack';
+import { onToast } from '../utils/toastBus';
 import {
     buildVisibleStaffTools,
     DEFAULT_STAFF_DASHBOARD_LAYOUT,
@@ -112,6 +114,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
     const [dashboardLayout, setDashboardLayout] = useState(DEFAULT_STAFF_DASHBOARD_LAYOUT);
     const [expandedGroups, setExpandedGroups] = useState({});
     const [layoutEditorOpen, setLayoutEditorOpen] = useState(false);
+    const [toasts, setToasts] = useState([]);
     const {
         selectedCharacterId,
         isGlobalSuperuser,
@@ -120,6 +123,26 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         isCampaignHeadMaster,
         moduliAccesso,
     } = useCharacter();
+
+    useEffect(() => {
+        const unsubscribe = onToast((toast) => {
+            setToasts((prev) => [
+                ...prev,
+                {
+                    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                    type: toast.type || 'info',
+                    title: toast.title || '',
+                    message: toast.message || '',
+                    durationMs: toast.durationMs || 3500,
+                },
+            ]);
+        });
+        return unsubscribe;
+    }, []);
+
+    const dismissToast = useCallback((id) => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, []);
 
     const roleFlags = useMemo(() => ({
         isGlobalSuperuser,
@@ -484,6 +507,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                     onLogout={onLogout}
                 />
             )}
+            <AppToastStack toasts={toasts} onClose={dismissToast} />
         </div>
     );
 };

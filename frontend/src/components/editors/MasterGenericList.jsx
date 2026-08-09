@@ -127,6 +127,20 @@ const MasterGenericList = ({
     return sortLogic ? [...filtered].sort(sortLogic) : filtered;
   }, [items, debouncedSearchTerm, activeFilters, sortLogic, filterConfig, serverDrivenFiltering, resolveSearchText]);
 
+  const ROW_BATCH = 40;
+  const [visibleRowCount, setVisibleRowCount] = useState(ROW_BATCH);
+  const filteredKey = useMemo(
+    () => filteredItems.map((i) => i?.id).join(','),
+    [filteredItems],
+  );
+  useEffect(() => {
+    setVisibleRowCount(ROW_BATCH);
+  }, [filteredKey]);
+  const visibleItems = useMemo(
+    () => filteredItems.slice(0, visibleRowCount),
+    [filteredItems, visibleRowCount],
+  );
+
   return (
     // H-FULL e FLEX-COL sono cruciali per bloccare l'altezza e scrollare dentro
     <div className="flex flex-col h-full space-y-4">
@@ -217,7 +231,7 @@ const MasterGenericList = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/50 text-sm">
-              {filteredItems.map(item => (
+              {visibleItems.map(item => (
                 <tr key={item.id} className="hover:bg-gray-700/30 transition-colors border-b border-gray-800/50 text-white group">
                   {columns.map((col, idx) => (
                     <td 
@@ -266,6 +280,18 @@ const MasterGenericList = ({
               ))}
             </tbody>
           </table>
+
+          {!loading && visibleRowCount < filteredItems.length && (
+            <div className="p-3 border-t border-gray-700/50">
+              <button
+                type="button"
+                onClick={() => setVisibleRowCount((n) => Math.min(n + ROW_BATCH, filteredItems.length))}
+                className="w-full py-2.5 text-xs font-bold uppercase tracking-wide text-gray-400 bg-gray-900/60 hover:bg-gray-700 border border-dashed border-gray-600 rounded-lg"
+              >
+                Carica altri ({filteredItems.length - visibleRowCount} rimanenti)
+              </button>
+            </div>
+          )}
         
           {loading && (
               <div className="p-12 text-center text-cyan-500 animate-pulse font-black uppercase tracking-widest">

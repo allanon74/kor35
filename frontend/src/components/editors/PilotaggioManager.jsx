@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Info } from 'lucide-react';
+import { Info, Ship } from 'lucide-react';
 import StaffQrTab from '../StaffQrTab';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 import StaffMinigiocoPageToolbar from './StaffMinigiocoPageToolbar';
@@ -12,6 +12,14 @@ import {
 } from '../../utils/staffMinigiocoDefaults';
 import { NAVIGATION_STAT_FIELDS } from '../../lib/navigationStats.js';
 import StaffMinigiocoUsaDefaultToggle from './StaffMinigiocoUsaDefaultToggle';
+import {
+  StaffToolBody,
+  StaffToolHeader,
+  StaffToolShell,
+  StaffToolSubnav,
+} from '../../staff/StaffToolShell';
+import { UiErrorState, UiLoadingState } from '../ui/AsyncState';
+import { emitToast } from '../../utils/toastBus';
 import {
   staffAssociaPilotSottosistemaQr,
   staffCreatePilotComandoCritico,
@@ -1327,11 +1335,14 @@ export default function PilotaggioManager({ onLogout }) {
       setError('');
       const n = res?.conteggio ?? 0;
       const fonte = res?.fonte_stato || 'nave';
-      window.alert(
-        dryRun
-          ? `Anteprima: ${n} eventi (${fonte}). Nessuna modifica salvata.`
-          : `Codici aggiornati per ${n} eventi (fonte: ${fonte}).`
-      );
+      emitToast({
+        type: dryRun ? 'info' : 'success',
+        title: dryRun ? 'Anteprima codici' : 'Codici aggiornati',
+        message: dryRun
+          ? `${n} eventi (${fonte}). Nessuna modifica salvata.`
+          : `Codici aggiornati per ${n} eventi (fonte: ${fonte}).`,
+        durationMs: 4500,
+      });
     } catch (err) {
       setError(err?.message || 'Aggiornamento codici eventi non riuscito.');
     } finally {
@@ -1356,30 +1367,25 @@ export default function PilotaggioManager({ onLogout }) {
   };
 
   if (loading) {
-    return <div className="p-6 text-gray-300">Caricamento modulo pilotaggio...</div>;
+    return (
+      <StaffToolShell fill>
+        <UiLoadingState label="Caricamento modulo pilotaggio…" className="h-full" />
+      </StaffToolShell>
+    );
   }
 
   return (
-    <div className="p-6 space-y-6 text-gray-100">
-      <h2 className="text-xl font-bold">Gestione Pilotaggio</h2>
-      {error ? <div className="rounded bg-red-900/40 border border-red-600 p-3 text-sm">{error}</div> : null}
-
-      <div className="flex flex-wrap gap-2 border-b border-gray-600 pb-3">
-        {PILOT_TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setActiveTab(t.id)}
-            className={`px-3 py-2 rounded-t text-sm font-medium transition-colors ${
-              activeTab === t.id
-                ? 'bg-indigo-700 text-white'
-                : 'bg-gray-800 text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+    <StaffToolShell fill>
+      <StaffToolHeader
+        title="Gestione Pilotaggio"
+        description="Sottosistemi, intensità, eventi e console di bordo"
+        icon={<Ship size={22} />}
+        sticky
+      >
+        <StaffToolSubnav tabs={PILOT_TABS} active={activeTab} onChange={setActiveTab} />
+      </StaffToolHeader>
+      <StaffToolBody className="space-y-6">
+      {error ? <UiErrorState message={error} /> : null}
 
       {activeTab === 'sottosistemi' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
@@ -2898,6 +2904,7 @@ export default function PilotaggioManager({ onLogout }) {
         onClose={() => setPilotEventiWikiOpen(false)}
         wikiSlug={PILOT_EVENTI_WIKI_SLUG}
       />
-    </div>
+      </StaffToolBody>
+    </StaffToolShell>
   );
 }

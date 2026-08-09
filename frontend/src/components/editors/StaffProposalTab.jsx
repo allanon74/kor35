@@ -12,6 +12,12 @@ import TessituraEditor from './TessituraEditor';
 import CerimonialeEditor from './CerimonialeEditor';
 import MissioneResolvePicker from '../MissioneResolvePicker';
 import SearchableSelect from './SearchableSelect';
+import {
+  StaffToolBody,
+  StaffToolHeader,
+  StaffToolShell,
+} from '../../staff/StaffToolShell';
+import { UiEmptyState } from '../ui/AsyncState';
 
 const StaffProposalTab = ({ onLogout }) => {
     const [proposals, setProposals] = useState([]);
@@ -163,24 +169,31 @@ const StaffProposalTab = ({ onLogout }) => {
     // --- RENDER: LISTA ---
     if (viewMode === 'list') {
         return (
-            <div className="h-full flex flex-col bg-gray-900 text-white p-6 overflow-hidden">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-black uppercase tracking-wider text-orange-500 flex items-center gap-3">
-                        <ClipboardCheck size={32}/> Valutazione Proposte
-                    </h2>
-                    <button onClick={loadProposals} className="text-sm underline text-gray-400 hover:text-white">Aggiorna</button>
-                </div>
+            <StaffToolShell fill>
+                <StaffToolHeader
+                    title="Valutazione Proposte"
+                    description="Tecniche in attesa di revisione staff"
+                    icon={<ClipboardCheck size={24} className="text-orange-400" />}
+                    sticky
+                    actions={(
+                        <button type="button" onClick={loadProposals} className="text-sm underline text-gray-400 hover:text-white">
+                            Aggiorna
+                        </button>
+                    )}
+                />
+                <StaffToolBody>
                 {feedback.message && (
                     <div className={`mb-4 text-xs border rounded-md px-3 py-2 inline-block ${
                         feedback.type === 'error'
                             ? 'text-red-200 bg-red-900/20 border-red-700/40'
                             : 'text-emerald-300 bg-emerald-900/20 border-emerald-700/40'
-                    }`}>
+                    }`}
+                    >
                         {feedback.message}
                     </div>
                 )}
                 
-                <div className="flex-1 overflow-auto rounded-xl border border-gray-700 bg-gray-800/50 shadow-inner">
+                <div className="flex-1 overflow-auto rounded-xl border border-gray-700 bg-gray-800/50 shadow-inner min-h-0">
                     <table className="w-full text-left text-gray-300">
                         <thead className="bg-gray-800 text-xs uppercase font-bold text-gray-400 sticky top-0 z-10 shadow-md">
                             <tr>
@@ -194,9 +207,12 @@ const StaffProposalTab = ({ onLogout }) => {
                         <tbody className="divide-y divide-gray-700">
                             {proposals.length === 0 ? (
                                 <tr>
-                                    <td colSpan="4" className="p-10 text-center text-gray-500 italic flex flex-col items-center gap-2">
-                                        <AlertCircle size={24}/>
-                                        Nessuna proposta in attesa di valutazione.
+                                    <td colSpan="4" className="p-6">
+                                        <UiEmptyState
+                                          icon={AlertCircle}
+                                          title="Nessuna proposta"
+                                          message="Nessuna proposta in attesa di valutazione."
+                                        />
                                     </td>
                                 </tr>
                             ) : (
@@ -210,13 +226,15 @@ const StaffProposalTab = ({ onLogout }) => {
                                                 p.tipo==='INF' ? 'bg-indigo-900/30 text-indigo-300 border-indigo-700' :
                                                 p.tipo==='TES' ? 'bg-cyan-900/30 text-cyan-300 border-cyan-700' : 
                                                 'bg-purple-900/30 text-purple-300 border-purple-700'
-                                            }`}>
+                                            }`}
+                                            >
                                                 {p.tipo === 'INF' ? 'Infusione' : p.tipo === 'TES' ? 'Tessitura' : 'Cerimoniale'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-white font-medium">{p.nome}</td>
                                         <td className="px-6 py-4 text-right">
                                             <button 
+                                                type="button"
                                                 onClick={() => handleOpenDetail(p)} 
                                                 className="bg-orange-600 hover:bg-orange-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold uppercase shadow-lg transition-all flex items-center gap-2 ml-auto"
                                             >
@@ -229,7 +247,8 @@ const StaffProposalTab = ({ onLogout }) => {
                         </tbody>
                     </table>
                 </div>
-            </div>
+                </StaffToolBody>
+            </StaffToolShell>
         );
     }
 

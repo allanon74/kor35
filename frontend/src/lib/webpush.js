@@ -1,3 +1,5 @@
+import { ensureAppServiceWorker } from './appServiceWorker';
+
 const VAPID_PUBLIC_KEY =
   'BIOIApSIeJdV1tp5iVxyLtm8KzM43_AQWV2ymS4iMjkIG1R5g399o6WRdZJY-xcUBZPyJ7EFRVgWqlbalOkGSYw';
 
@@ -25,12 +27,6 @@ function urlBase64ToUint8Array(base64String) {
     outputArray[i] = rawData.charCodeAt(i);
   }
   return outputArray;
-}
-
-async function ensureServiceWorkerRegistration() {
-  const existing = await navigator.serviceWorker.getRegistration('/');
-  if (existing) return existing;
-  return navigator.serviceWorker.register('/sw.js', { scope: '/' });
 }
 
 /**
@@ -66,7 +62,10 @@ export async function activateWebPush() {
   }
 
   try {
-    const registration = await ensureServiceWorkerRegistration();
+    const registration = await ensureAppServiceWorker();
+    if (!registration) {
+      return { ok: false, reason: 'error', message: 'Service Worker non disponibile.' };
+    }
     await navigator.serviceWorker.ready;
 
     let subscription = await registration.pushManager.getSubscription();

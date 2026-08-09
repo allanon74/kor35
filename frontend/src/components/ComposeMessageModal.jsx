@@ -258,6 +258,12 @@ const ComposeMessageModal = ({
       setError("Non puoi allegare crediti/oggetti nei messaggi allo staff.");
       return;
     }
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setError(
+        'Sei offline: l’invio messaggi (e trasferimenti) è bloccato finché non torna la connessione al server.'
+      );
+      return;
+    }
 
     setLoading(true);
     setError('');

@@ -16,6 +16,18 @@
   --kor-warning: #d97706;
   --kor-tab-bar-height: 60px;
   --kor-safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Wiki pubblica (tema light / brand forest-ember) */
+  --wiki-ink: #1c1410;
+  --wiki-paper: #f7f3ee;
+  --wiki-paper-deep: #ebe4da;
+  --wiki-brand: #7f1d1d; /* red-900 */
+  --wiki-brand-hot: #b91c1c;
+  --wiki-ember: #c2410c;
+  --wiki-moss: #3f6212;
+  --wiki-muted: #6b5e52;
+  --wiki-display: "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+  --wiki-body: "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
 }
 
 /* Stili globali aggiuntivi */
@@ -37,6 +49,50 @@ html, body, #root {
 /* Assicura che l'app React prenda tutto lo spazio */
 .kor-35-app, .kor-35-app > div {
   height: 100%;
+}
+
+/* Wiki pubblica: superfici e tipografia articolo */
+.wiki-shell {
+  background: var(--wiki-paper);
+  color: var(--wiki-ink);
+  font-family: var(--wiki-body);
+}
+
+.wiki-hero-brand {
+  font-family: var(--wiki-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 900;
+}
+
+.wiki-article-prose {
+  font-family: var(--wiki-body);
+  color: var(--wiki-ink);
+  line-height: 1.7;
+  font-size: 1.05rem;
+}
+
+.wiki-article-prose h1,
+.wiki-article-prose h2,
+.wiki-article-prose h3 {
+  font-family: var(--wiki-display);
+  color: var(--wiki-brand);
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+@keyframes wiki-kenburns {
+  from { transform: scale(1.05) translate3d(0, 0, 0); }
+  to { transform: scale(1.12) translate3d(-1.5%, 1%, 0); }
+}
+
+.wiki-hero-media {
+  animation: wiki-kenburns 28s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wiki-hero-media { animation: none; }
 }
 
 .ql-editor-view p { margin-bottom: 0.5rem; }

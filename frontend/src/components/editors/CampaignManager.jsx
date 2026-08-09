@@ -23,6 +23,13 @@ import {
   moduloImpatti,
 } from '../../lib/campagnaModuli';
 import { useCharacter } from '../CharacterContext';
+import {
+  StaffToolPageTitle,
+  StaffToolShell,
+  StaffToolSubnav,
+} from '../../staff/StaffToolShell';
+import { UiErrorState, UiLoadingState } from '../ui/AsyncState';
+import { Globe2 } from 'lucide-react';
 
 const ROLE_OPTIONS = ['PLAYER', 'REDACTOR', 'STAFFER', 'MASTER', 'HEAD_MASTER'];
 const FEATURE_KEYS = [
@@ -199,47 +206,25 @@ const CampaignManager = ({ onLogout }) => {
     updateModulo(key, MODULO_ACCESSO_DEFAULT);
   }, [updateModulo]);
 
-  if (loading) return <div className="p-6 text-gray-300">Caricamento campagne...</div>;
+  if (loading) {
+    return (
+      <StaffToolShell>
+        <UiLoadingState label="Caricamento campagne…" />
+      </StaffToolShell>
+    );
+  }
 
   return (
-    <div className="p-4 md:p-6 space-y-4 text-white h-full overflow-y-auto">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-lg font-black uppercase tracking-wide">Campagne</h1>
-          <p className="text-xs text-gray-400 mt-0.5">
-            Gestione campagne, moduli feature, membership e policy catalogo.
-          </p>
-        </div>
-      </div>
+    <StaffToolShell className="space-y-4 h-full overflow-y-auto">
+      <StaffToolPageTitle
+        icon={<Globe2 size={22} />}
+        title="Campagne"
+        description="Gestione campagne, moduli feature, membership e policy catalogo."
+      />
 
-      {error && <div className="bg-red-900/40 border border-red-700 rounded p-3 text-sm">{error}</div>}
+      {error && <UiErrorState message={error} />}
 
-      <div
-        className="flex flex-wrap gap-1 border-b border-gray-700 pb-0"
-        role="tablist"
-        aria-label="Sezioni campagne"
-      >
-        {TABS.map((tab) => {
-          const active = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setActiveTab(tab.id)}
-              className={[
-                'px-3 py-2 text-xs font-bold uppercase tracking-wide rounded-t border-b-2 transition-colors',
-                active
-                  ? 'border-cyan-400 text-cyan-200 bg-gray-800/80'
-                  : 'border-transparent text-gray-400 hover:text-gray-200 hover:bg-gray-800/40',
-              ].join(' ')}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      <StaffToolSubnav tabs={TABS} active={activeTab} onChange={setActiveTab} className="mt-0 border-b border-gray-700 pb-0" />
 
       {activeTab === 'moduli' && (
         <section className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3" role="tabpanel">
@@ -499,7 +484,7 @@ const CampaignManager = ({ onLogout }) => {
           </div>
         </section>
       )}
-    </div>
+    </StaffToolShell>
   );
 };
 

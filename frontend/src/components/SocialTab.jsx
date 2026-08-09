@@ -80,7 +80,15 @@ function SocialAuthorAvatar({ name, avatarUrl, size = 'md', onClick }) {
   const dim =
     size === 'lg' ? 'w-20 h-20 text-xl' : size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm';
   const inner = avatarUrl ? (
-    <img src={avatarUrl} alt={name || 'Profilo'} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+    <img
+      src={avatarUrl}
+      alt={name || 'Profilo'}
+      className="h-full w-full object-cover"
+      loading="lazy"
+      decoding="async"
+      width={size === 'lg' ? 80 : size === 'sm' ? 32 : 40}
+      height={size === 'lg' ? 80 : size === 'sm' ? 32 : 40}
+    />
   ) : (
     <span className="font-extrabold text-amber-100">{authorInitials(name)}</span>
   );
@@ -1705,7 +1713,15 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               title="Personaggio attivo e impostazioni InstaFame"
             >
               {profile?.foto_principale ? (
-                <img src={resolveMediaUrl(profile.foto_principale)} alt="Profilo" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                <img
+                  src={resolveMediaUrl(profile.foto_principale)}
+                  alt="Profilo"
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                  decoding="async"
+                  width={96}
+                  height={96}
+                />
               ) : (
                 <div className="h-full w-full flex items-center justify-center text-amber-200 font-bold">
                   {(profile?.personaggio_nome || '?').charAt(0).toUpperCase()}
@@ -1868,7 +1884,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               <div className="flex flex-wrap gap-2">
                 {postImagesPreviewUrls.map((url, i) => (
                   <div key={url} className="relative w-16 h-16 rounded border border-gray-600 overflow-hidden">
-                    <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                    <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" width={64} height={64} />
                     <button
                       type="button"
                       onClick={() => removePostImageAt(i)}
@@ -2033,7 +2049,15 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                     {String(storyForm.media.type || '').startsWith('video/') ? (
                       <video src={storyMediaPreviewUrl} className="w-full rounded-lg max-h-48 object-cover" controls />
                     ) : (
-                      <img src={storyMediaPreviewUrl} alt="Preview story" className="w-full rounded-lg max-h-48 object-cover" />
+                      <img
+                        src={storyMediaPreviewUrl}
+                        alt="Preview story"
+                        className="w-full rounded-lg max-h-48 object-cover"
+                        loading="lazy"
+                        decoding="async"
+                        width={480}
+                        height={192}
+                      />
                     )}
                   </div>
                 )}

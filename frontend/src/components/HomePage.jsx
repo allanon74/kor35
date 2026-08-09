@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Sparkles, LogIn, Scroll, BookOpen, Download } from 'lucide-react';
+import { LogIn, Scroll, BookOpen, Download } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
-import { getMediaUrl, getPublicWikiManualeList, getWikiManualeLatestPdfUrl } from '../api';
+import { getMediaUrl, getPublicWikiManualeList, getWikiImageUrl, getWikiManualeLatestPdfUrl } from '../api';
 import WidgetChiSiamo from './wg/WidgetChiSiamo';
 import WidgetEventi from './wg/WidgetEventi';
 import WidgetSocial from './wg/WidgetSocial';
 
 /**
- * HomePage - Layout speciale per la pagina home della Wiki
- * Mostra un layout a griglia con pulsanti e widget personalizzati
+ * Home regolamento — hero brand-first (bosco / ember), senza dashboard clutter.
  */
 export default function HomePage({ pageData, siteConfig }) {
   const navigate = useNavigate();
@@ -26,108 +25,94 @@ export default function HomePage({ pageData, siteConfig }) {
         }
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
   const isMaintenanceMode = !!siteConfig?.maintenance_mode;
   const maintenanceMessage = String(siteConfig?.maintenance_public_message || '').trim();
 
-  // Gestisce il click sul pulsante "Veterano"
-  const handleVeteranoClick = () => {
-    if (isLogged) {
-      // Se già loggato, vai alla sezione app
-      navigate('/app');
-    } else {
-      // Altrimenti vai al login
-      navigate('/login');
-    }
+  const handleEnter = () => {
+    navigate(isLogged ? '/app' : '/login');
   };
 
   return (
-    <div className="max-w-7xl mx-auto bg-white min-h-screen">
-      
-      {/* HEADER - Immagine e Titolo (se presenti nei dati della pagina) */}
-      {pageData?.immagine && (
-        <div className="relative w-full h-64 md:h-80 lg:h-96 overflow-hidden shadow-md">
-          <img 
+    <div className="wiki-shell min-h-full">
+      {/* HERO full-bleed: brand + una riga + CTA */}
+      <section className="relative min-h-[70vh] md:min-h-[78vh] w-full overflow-hidden bg-[#140c0a]">
+        {pageData?.immagine ? (
+          <img
             src={getMediaUrl(pageData.immagine)}
-            alt={pageData.titolo}
-            className="w-full h-full object-cover"
-            style={{ objectPosition: `center ${pageData.banner_y ?? 50}%` }}
+            srcSet={`${getWikiImageUrl('home', 720)} 720w, ${getWikiImageUrl('home', 1100)} 1100w, ${getWikiImageUrl('home', 1400)} 1400w`}
+            sizes="100vw"
+            alt=""
+            width={1400}
+            height={900}
+            className="wiki-hero-media absolute inset-0 h-full w-full object-cover opacity-80"
+            style={{ objectPosition: `center ${pageData.banner_y ?? 40}%` }}
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.removeAttribute('srcset');
+              e.currentTarget.src = getMediaUrl(pageData.immagine);
+            }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
-          <div className="absolute bottom-0 left-0 p-6 md:p-10 text-white">
-            <h1 className="text-4xl md:text-6xl font-bold drop-shadow-lg">{pageData.titolo}</h1>
+        ) : (
+          <div
+            className="absolute inset-0 opacity-90"
+            style={{
+              background:
+                'radial-gradient(ellipse at 30% 20%, #7f1d1d55, transparent 55%), linear-gradient(160deg, #1c100c 0%, #3b1510 45%, #0c0a09 100%)',
+            }}
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/25" />
+
+        <div className="relative z-10 flex min-h-[70vh] md:min-h-[78vh] flex-col justify-end px-6 pb-12 pt-20 md:px-12 md:pb-16">
+          <div className="flex items-center gap-3 mb-5">
+            <img
+              src="/Logo Kor-AD_Trasp.png"
+              alt=""
+              width={56}
+              height={56}
+              className="h-12 w-12 md:h-14 md:w-14 object-contain drop-shadow-lg"
+            />
+            <p className="wiki-hero-brand text-3xl md:text-5xl text-white drop-shadow-md">KOR35</p>
+          </div>
+          <p className="max-w-xl text-base md:text-lg text-stone-200/95 leading-relaxed mb-8">
+            LARP forestale: regolamento, ambientazione e ingresso all&apos;app di gioco.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={handleEnter}
+              className="inline-flex items-center gap-2 rounded-md bg-[var(--wiki-brand)] hover:bg-[var(--wiki-brand-hot)] px-5 py-3 text-sm font-bold uppercase tracking-wide text-white shadow-lg transition-colors"
+            >
+              <LogIn size={18} aria-hidden="true" />
+              {isLogged ? 'Entra nell\'app' : 'Accedi'}
+            </button>
+            <Link
+              to="/regolamento/nuovo"
+              className="inline-flex items-center gap-2 rounded-md border border-white/35 bg-black/35 hover:bg-black/50 px-5 py-3 text-sm font-bold uppercase tracking-wide text-white backdrop-blur-sm transition-colors"
+            >
+              Scopri il mondo
+            </Link>
           </div>
         </div>
-      )}
+      </section>
 
-      <div className="p-6 md:p-10">
-        {/* Titolo se non c'è immagine */}
-        {!pageData?.immagine && pageData?.titolo && (
-          <h1 className="text-4xl md:text-5xl font-bold mb-8 text-red-900 border-b pb-4">
-            {pageData.titolo}
-          </h1>
-        )}
-
-        {/* SEZIONE PULSANTI PRINCIPALI */}
-        <div className="grid md:grid-cols-2 gap-4 mb-8">
-          
-          {/* Pulsante "Sei Nuovo? Scopri!" */}
-          <Link
-            to="/regolamento/nuovo"
-            className="group relative overflow-hidden bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl p-6 shadow-lg hover:shadow-2xl transition-all transform hover:scale-105"
-          >
-            <div className="relative z-10">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="bg-white/20 p-3 rounded-lg">
-                  <Sparkles size={32} />
-                </div>
-                <h2 className="text-2xl font-bold">Sei Nuovo?</h2>
-              </div>
-              <p className="text-white/90 mb-2">
-                Scopri il mondo di KOR35
-              </p>
-              <p className="text-sm text-white/75">
-                Inizia la tua avventura da qui →
-              </p>
-            </div>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform"></div>
-          </Link>
-
-          <button
-            onClick={handleVeteranoClick}
-            className="group relative overflow-hidden bg-gradient-to-br from-red-600 to-orange-600 text-white rounded-xl p-6 shadow-lg hover:shadow-2xl transition-all transform hover:scale-105 text-left"
-          >
-            <div className="relative z-10">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="bg-white/20 p-3 rounded-lg">
-                  <LogIn size={32} />
-                </div>
-                <h2 className="text-2xl font-bold">Veterano?</h2>
-              </div>
-              <p className="text-white/90 mb-2">
-                {isLogged ? 'Accedi alla tua area riservata' : 'Accedi al tuo profilo'}
-              </p>
-              <p className="text-sm text-white/75">
-                {isLogged ? 'Vai all\'app →' : 'Effettua il login →'}
-              </p>
-            </div>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform"></div>
-          </button>
-
-        </div>
-
+      <div className="max-w-5xl mx-auto px-6 py-10 md:px-10 space-y-10">
         {isMaintenanceMode && (
-          <div className="mb-8 rounded-xl border border-amber-500/40 bg-amber-950/30 p-5 text-amber-100">
-            <h3 className="text-lg font-black mb-1">Maintenance mode attiva</h3>
+          <div className="rounded-lg border border-amber-700/40 bg-amber-950/90 p-5 text-amber-50">
+            <h3 className="text-lg font-bold mb-1">Maintenance mode attiva</h3>
             <p className="text-sm opacity-95 mb-3">
-              {maintenanceMessage || 'Il sistema e temporaneamente in manutenzione.'}
+              {maintenanceMessage || 'Il sistema è temporaneamente in manutenzione.'}
             </p>
             {isAdmin && (
               <button
                 type="button"
                 onClick={() => navigate('/app/maintenance')}
-                className="px-4 py-2 rounded-lg bg-amber-500 text-gray-900 font-bold hover:bg-amber-400"
+                className="px-4 py-2 rounded-md bg-amber-500 text-gray-900 font-bold hover:bg-amber-400"
               >
                 Apri console maintenance
               </button>
@@ -135,63 +120,35 @@ export default function HomePage({ pageData, siteConfig }) {
           </div>
         )}
 
-        {/* SEZIONE AMBIENTAZIONE E REGOLAMENTO */}
-        <div className="grid md:grid-cols-2 gap-4 mb-8">
-          
-          {/* Pulsante Ambientazione */}
-          <Link
-            to="/regolamento/ambientazione"
-            className="flex items-center gap-4 p-6 bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-200 rounded-lg hover:shadow-lg transition-all group"
-          >
-            <div className="bg-emerald-500 text-white p-4 rounded-lg group-hover:scale-110 transition-transform">
-              <Scroll size={32} />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-xl font-bold text-gray-800 mb-1">Ambientazione</h3>
-              <p className="text-sm text-gray-600">Esplora il mondo e la storia</p>
-            </div>
-            <svg 
-              className="w-6 h-6 text-emerald-500 group-hover:translate-x-1 transition-transform" 
-              fill="none" 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth="2" 
-              viewBox="0 0 24 24" 
-              stroke="currentColor"
+        <section className="space-y-4">
+          <h2 className="wiki-hero-brand text-sm text-[var(--wiki-brand)]">Esplora</h2>
+          <div className="grid md:grid-cols-2 gap-3">
+            <Link
+              to="/regolamento/ambientazione"
+              className="flex items-center gap-4 p-5 border border-stone-300/80 bg-white/70 hover:border-[var(--wiki-moss)] transition-colors"
             >
-              <path d="M9 5l7 7-7 7"></path>
-            </svg>
-          </Link>
-
-          {/* Pulsante Regolamento */}
-          <Link
-            to="/regolamento/regolamento"
-            className="flex items-center gap-4 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg hover:shadow-lg transition-all group"
-          >
-            <div className="bg-blue-500 text-white p-4 rounded-lg group-hover:scale-110 transition-transform">
-              <BookOpen size={32} />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-xl font-bold text-gray-800 mb-1">Regolamento</h3>
-              <p className="text-sm text-gray-600">Leggi le regole del gioco</p>
-            </div>
-            <svg 
-              className="w-6 h-6 text-blue-500 group-hover:translate-x-1 transition-transform" 
-              fill="none" 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth="2" 
-              viewBox="0 0 24 24" 
-              stroke="currentColor"
+              <Scroll className="text-[var(--wiki-moss)] shrink-0" size={28} aria-hidden="true" />
+              <div>
+                <h3 className="font-bold text-[var(--wiki-ink)]">Ambientazione</h3>
+                <p className="text-sm text-[var(--wiki-muted)]">Mondo e storia</p>
+              </div>
+            </Link>
+            <Link
+              to="/regolamento/regolamento"
+              className="flex items-center gap-4 p-5 border border-stone-300/80 bg-white/70 hover:border-[var(--wiki-brand)] transition-colors"
             >
-              <path d="M9 5l7 7-7 7"></path>
-            </svg>
-          </Link>
-        </div>
+              <BookOpen className="text-[var(--wiki-brand)] shrink-0" size={28} aria-hidden="true" />
+              <div>
+                <h3 className="font-bold text-[var(--wiki-ink)]">Regolamento</h3>
+                <p className="text-sm text-[var(--wiki-muted)]">Regole di gioco</p>
+              </div>
+            </Link>
+          </div>
+        </section>
 
         {wikiManuale.length > 0 && (
-          <div className="mb-8 space-y-3">
-            <h3 className="text-sm font-black uppercase tracking-widest text-gray-500">Manuali PDF</h3>
+          <section className="space-y-3">
+            <h2 className="wiki-hero-brand text-sm text-[var(--wiki-brand)]">Manuali PDF</h2>
             <div className="grid gap-3 md:grid-cols-2">
               {wikiManuale.map((m) => (
                 <a
@@ -199,42 +156,27 @@ export default function HomePage({ pageData, siteConfig }) {
                   href={getWikiManualeLatestPdfUrl(m.slug)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group relative overflow-hidden bg-gradient-to-r from-red-800 to-rose-900 text-white rounded-xl p-5 shadow-lg hover:shadow-2xl transition-all"
+                  className="flex items-center gap-3 p-4 bg-[var(--wiki-brand)] text-white hover:bg-[var(--wiki-brand-hot)] transition-colors"
                   title={`Scarica ${m.titolo}`}
                 >
-                  <div className="relative z-10 flex items-center gap-4">
-                    <div className="bg-white/25 p-2.5 rounded-lg shrink-0">
-                      <Download size={24} />
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="text-lg font-black leading-tight">{m.titolo}</h4>
-                      {m.sottotitolo && (
-                        <p className="text-sm text-white/80 mt-0.5 line-clamp-2">{m.sottotitolo}</p>
-                      )}
-                    </div>
-                    <span className="ml-auto text-xs font-bold text-white/70 group-hover:text-white">PDF →</span>
+                  <Download size={22} className="shrink-0" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <h4 className="font-bold leading-tight">{m.titolo}</h4>
+                    {m.sottotitolo && (
+                      <p className="text-sm text-white/80 mt-0.5 line-clamp-2">{m.sottotitolo}</p>
+                    )}
                   </div>
                 </a>
               ))}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* SEZIONE WIDGET: CHI SIAMO ED EVENTI */}
-        <div className="grid md:grid-cols-2 gap-6 mb-6">
+        <div className="grid md:grid-cols-2 gap-6">
           <WidgetChiSiamo />
           <WidgetEventi />
         </div>
-
-        {/* SEGUICI — larghezza piena sotto Chi Siamo ed Eventi */}
         <WidgetSocial />
-
-        {/* Footer informativo */}
-        <div className="mt-10 pt-6 border-t border-gray-200">
-          <p className="text-center text-sm text-gray-500 italic">
-            Benvenuto su KOR35 - Dove l'avventura prende vita
-          </p>
-        </div>
       </div>
     </div>
   );

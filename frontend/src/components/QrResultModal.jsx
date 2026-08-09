@@ -348,6 +348,10 @@ const PersonaggioView = ({ data, qrcodeId, onLogout, onStealSuccess }) => {
   
   const handleRuba = async (oggettoId, oggettoNome) => {
      if (isLoading || !transazioniAbilitate) return;
+     if (!navigator.onLine) {
+       setError('Furto non disponibile offline: serve conferma dal server.');
+       return;
+     }
      setIsLoading(true);
      setMessage('Tentativo di furto in corso...');
      setError('');
@@ -366,6 +370,10 @@ const PersonaggioView = ({ data, qrcodeId, onLogout, onStealSuccess }) => {
 
   const handleScambio = (oggetto) => {
     if (!transazioniAbilitate) return;
+    if (!navigator.onLine) {
+      setError('Scambio non disponibile offline: serve conferma dal server.');
+      return;
+    }
     if (!data.id) {
       alert("Impossibile determinare il personaggio destinatario.");
       return;

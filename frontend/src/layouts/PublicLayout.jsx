@@ -319,19 +319,19 @@ export default function PublicLayout({ token }) {
         }
       `}</style>
       
-      <div className="flex flex-col h-screen bg-gray-100 text-gray-900 font-sans overflow-hidden">
+      <div className="flex flex-col h-screen bg-[var(--wiki-paper-deep)] text-gray-900 font-sans overflow-hidden wiki-shell">
       
       {/* HEADER */}
-      <header className="bg-red-900 text-white shadow-md z-20 shrink-0">
+      <header className="bg-[var(--wiki-brand)] text-white shadow-md z-20 shrink-0">
         <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
-          <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="md:hidden p-1 hover:bg-red-800 rounded focus:outline-none">
+          <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="md:hidden p-1 hover:bg-red-800 rounded focus:outline-none" aria-label="Apri menu wiki">
             {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
           
           <Link to={token ? "/app/start" : "/"} className="text-xl font-bold tracking-wider flex items-center gap-2" title={token ? "Torna alla splash page" : "Vai alla home wiki"}>
-            <img src="/Logo Kor-AD_Trasp.png" alt="Logo" className="h-8" />
-            <span className="hidden xs:inline">KOR35 WIKI</span>
+            <img src="/Logo Kor-AD_Trasp.png" alt="Logo KOR35" className="h-8" />
+            <span className="wiki-hero-brand text-sm md:text-base hidden xs:inline">KOR35</span>
           </Link>
         </div>
 
@@ -522,7 +522,7 @@ export default function PublicLayout({ token }) {
         </aside>
 
         {/* MAIN CONTENT AREA */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-gray-50 relative scroll-smooth w-full">
+        <main className="flex-1 overflow-y-auto p-0 md:p-6 bg-[var(--wiki-paper)] relative scroll-smooth w-full">
           <Outlet />
           
           {/* FAB: AGGIUNGI SOTTO-PAGINA */}

@@ -1,10 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCharacter } from '../components/CharacterContext';
-import StaffDashboard from '../components/StaffDashboard';
-import MainPage from '../components/MainPage';
-import StartPage from '../components/StartPage';
-import EventSubscriptionResultPage from '../pages/EventSubscriptionResultPage';
+
+const StaffDashboard = lazy(() => import('../components/StaffDashboard'));
+const MainPage = lazy(() => import('../components/MainPage'));
+const StartPage = lazy(() => import('../components/StartPage'));
+const EventSubscriptionResultPage = lazy(() => import('../pages/EventSubscriptionResultPage'));
+
+const LayoutFallback = () => (
+  <div className="flex h-full min-h-[50vh] items-center justify-center bg-gray-900 text-gray-300" role="status">
+    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500" />
+  </div>
+);
 
 const AppLayout = ({ token, onLogout }) => {
   const { isCampaignStaffer, isGlobalSuperuser } = useCharacter();
@@ -51,6 +58,28 @@ const AppLayout = ({ token, onLogout }) => {
     }
   }, [canAccessStaffDashboard]);
 
+  // Preload chunk staff in idle se l'utente può aprirlo (non blocca first paint player).
+  useEffect(() => {
+    if (!canAccessStaffDashboard) return undefined;
+    let cancelled = false;
+    const run = () => {
+      if (!cancelled) import('../components/StaffDashboard');
+    };
+    let handle;
+    if (typeof window.requestIdleCallback === 'function') {
+      handle = window.requestIdleCallback(run, { timeout: 4000 });
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback?.(handle);
+      };
+    }
+    handle = window.setTimeout(run, 2500);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [canAccessStaffDashboard]);
+
   const updateUrlParams = (nextMode, nextTool = null) => {
     const params = new URLSearchParams(location.search);
     params.set('mode', nextMode);
@@ -79,43 +108,53 @@ const AppLayout = ({ token, onLogout }) => {
 
   if (canAccessStaffDashboard && viewMode === 'staff') {
     return (
-      <StaffDashboard 
-        token={token}
-        onLogout={onLogout} 
-        onSwitchToPlayer={() => {
+      <Suspense fallback={<LayoutFallback />}>
+        <StaffDashboard
+          token={token}
+          onLogout={onLogout}
+          onSwitchToPlayer={() => {
             setViewMode('player');
-            setDashboardInitialTool('home'); 
+            setDashboardInitialTool('home');
             updateUrlParams('player');
-        }}
-        onToolChange={(tool) => {
-          setDashboardInitialTool(tool || 'home');
-          updateUrlParams('master', tool || 'home');
-        }}
-        initialTool={dashboardInitialTool}
-      />
+          }}
+          onToolChange={(tool) => {
+            setDashboardInitialTool(tool || 'home');
+            updateUrlParams('master', tool || 'home');
+          }}
+          initialTool={dashboardInitialTool}
+        />
+      </Suspense>
     );
   }
 
   if (isEventSubscriptionResultPath) {
-    return <EventSubscriptionResultPage onLogout={onLogout} />;
+    return (
+      <Suspense fallback={<LayoutFallback />}>
+        <EventSubscriptionResultPage onLogout={onLogout} />
+      </Suspense>
+    );
   }
 
   if (isStartPagePath) {
     return (
-      <StartPage
-        onLogout={onLogout}
-        onSwitchToMaster={goToStaffDashboard}
-      />
+      <Suspense fallback={<LayoutFallback />}>
+        <StartPage
+          onLogout={onLogout}
+          onSwitchToMaster={goToStaffDashboard}
+        />
+      </Suspense>
     );
   }
 
   // Render: Vista Giocatore (Default per tutti)
   return (
-    <MainPage 
-      token={token}
-      onLogout={onLogout}
-      onSwitchToMaster={goToStaffDashboard}
-    />
+    <Suspense fallback={<LayoutFallback />}>
+      <MainPage
+        token={token}
+        onLogout={onLogout}
+        onSwitchToMaster={goToStaffDashboard}
+      />
+    </Suspense>
   );
 };
 
