@@ -3548,6 +3548,8 @@ class PersonaggioStaffListSerializer(serializers.ModelSerializer):
     avatar_url = serializers.SerializerMethodField()
     korp_attivi = serializers.SerializerMethodField()
     qrcode_id = serializers.SerializerMethodField()
+    crediti_corrente = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    crediti_deposito = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
 
     class Meta:
         model = Personaggio
@@ -3555,10 +3557,22 @@ class PersonaggioStaffListSerializer(serializers.ModelSerializer):
             'id', 'nome', 'tipologia_nome', 'giocante',
             'proprietario_nome', 'proprietario_username',
             'era', 'era_nome', 'prefettura_nome', 'campagna_nome',
-            'crediti', 'punti_caratteristica', 'data_morte',
+            'crediti', 'crediti_corrente', 'crediti_deposito', 'punti_caratteristica', 'data_morte',
             'qrcode_id', 'korp_attivi', 'avatar_url',
         )
         read_only_fields = fields
+
+    def to_representation(self, instance):
+        from personaggi.economia_crediti import economia_summary
+
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        user = getattr(request, 'user', None) if request else None
+        summary = economia_summary(instance, user=user)
+        data['crediti'] = summary['crediti']
+        data['crediti_corrente'] = summary['crediti_corrente']
+        data['crediti_deposito'] = summary['crediti_deposito']
+        return data
 
     def get_proprietario_nome(self, obj):
         user = obj.proprietario
@@ -3642,6 +3656,8 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
     can_edit_razza = serializers.SerializerMethodField()
     movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
     movimenti_pc = PuntiCaratteristicaMovimentoListSerializer(many=True, read_only=True)
+    crediti_corrente = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    crediti_deposito = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     tipologia = serializers.PrimaryKeyRelatedField(
         queryset=TipologiaPersonaggio.objects.all(), required=False
     )
@@ -3671,7 +3687,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'tipologia', 'tipologia_nome', 'giocante',
             'proprietario', 'proprietario_nome', 'proprietario_username',
             'data_nascita', 'data_morte',
-            'crediti', 'riserva', 'punti_caratteristica',
+            'crediti', 'crediti_corrente', 'crediti_deposito', 'riserva', 'punti_caratteristica',
             'campagna', 'campagna_nome',
             'era', 'prefettura', 'prefettura_esterna',
             'era_nome', 'prefettura_nome',
@@ -3686,7 +3702,8 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             'proprietario', 'proprietario_nome', 'proprietario_username',
-            'crediti', 'riserva', 'punti_caratteristica', 'data_nascita',
+            'crediti', 'crediti_corrente', 'crediti_deposito', 'riserva',
+            'punti_caratteristica', 'data_nascita',
             'tipologia_nome', 'giocante', 'campagna_nome',
             'era_nome', 'prefettura_nome', 'avatar_url',
             'qrcode_id', 'qrcode_testo', 'carriere_membership',
@@ -3694,6 +3711,20 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'punteggi_base', 'modelli_aura', 'can_edit_razza',
             'movimenti_credito', 'movimenti_pc',
         )
+
+    def to_representation(self, instance):
+        """Espone saldi economia duale; riserva legacy = deposito."""
+        from personaggi.economia_crediti import economia_summary
+
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        user = getattr(request, 'user', None) if request else None
+        summary = economia_summary(instance, user=user)
+        data['crediti'] = summary['crediti']
+        data['crediti_corrente'] = summary['crediti_corrente']
+        data['crediti_deposito'] = summary['crediti_deposito']
+        data['riserva'] = summary['crediti_deposito'] or '0.00'
+        return data
 
     def get_can_edit_razza(self, personaggio):
         from .modificabilita import personaggio_scheda_modifica_libera

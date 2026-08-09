@@ -1208,6 +1208,36 @@ class PersonaggioStaffRetrieveTests(APITestCase):
         self.assertEqual(sp.get("professioni"), "Alchimista")
         self.assertEqual(sp.get("descrizione"), "Bio test")
 
+    def test_add_resources_conto_deposito_e_retrieve_saldi(self):
+        """Staff può accreditare sul conto deposito e i saldi compaiono nel detail."""
+        from decimal import Decimal
+
+        from personaggi.economia_crediti import CONTO_CORRENTE, CONTO_DEPOSITO, modifica_crediti
+
+        modifica_crediti(self.pg, Decimal("40"), "setup corrente", conto=CONTO_CORRENTE)
+        url = f"/api/personaggi/api/staff/personaggi/{self.pg.id}/add-resources/"
+        res = self.client.post(
+            url,
+            {
+                "tipo": "crediti",
+                "amount": 25,
+                "reason": "Test staff deposito",
+                "conto": CONTO_DEPOSITO,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK, res.content)
+        body = res.json()
+        self.assertEqual(Decimal(str(body["crediti_deposito"])), Decimal("25.00"))
+        self.assertEqual(Decimal(str(body["crediti_corrente"])), Decimal("40.00"))
+
+        detail = self.client.get(f"/api/personaggi/api/staff/personaggi/{self.pg.id}/")
+        self.assertEqual(detail.status_code, status.HTTP_200_OK, detail.content)
+        d = detail.json()
+        self.assertEqual(Decimal(str(d["crediti_deposito"])), Decimal("25.00"))
+        self.assertEqual(Decimal(str(d["crediti_corrente"])), Decimal("40.00"))
+        self.assertEqual(Decimal(str(d["riserva"])), Decimal("25.00"))
+
     def test_patch_social_profile_staff(self):
         url = f"/api/personaggi/api/staff/personaggi/{self.pg.id}/social-profile/"
         res = self.client.patch(

@@ -1946,13 +1946,14 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
         if amount == 0:
             return Response({'error': "L'importo non può essere zero"}, status=status.HTTP_400_BAD_REQUEST)
         if tipo == 'crediti':
-            from personaggi.economia_crediti import normalize_conto
+            from personaggi.economia_crediti import CONTO_CORRENTE, CONTO_DEPOSITO, normalize_conto
 
-            conto = normalize_conto(request.data.get("conto") or "DEPOSITO")
+            # Default CORRENTE se omesso (compat UI «Crediti»); il client può passare DEPOSITO.
+            conto = normalize_conto(request.data.get("conto") or CONTO_CORRENTE)
             personaggio.modifica_crediti(amount, reason, conto=conto)
             val = (
                 float(personaggio.crediti_deposito)
-                if conto == "DEPOSITO"
+                if conto == CONTO_DEPOSITO
                 else float(personaggio.crediti_corrente)
             )
         elif tipo == 'pc':

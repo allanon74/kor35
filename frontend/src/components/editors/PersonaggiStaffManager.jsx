@@ -94,7 +94,12 @@ const PersonaggiStaffManager = ({ onLogout }) => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [showQrScan, setShowQrScan] = useState(false);
-  const [resourceForm, setResourceForm] = useState({ tipo: 'crediti', amount: 0, reason: 'Intervento staff' });
+  const [resourceForm, setResourceForm] = useState({
+    tipo: 'crediti',
+    conto: 'CORRENTE',
+    amount: 0,
+    reason: 'Intervento staff',
+  });
   const [poolInputs, setPoolInputs] = useState({});
   const [memberships, setMemberships] = useState([]);
   const [tipiCarriera, setTipiCarriera] = useState([]);
@@ -403,6 +408,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
         Number(resourceForm.amount),
         resourceForm.reason,
         onLogout,
+        resourceForm.tipo === 'crediti' ? { conto: resourceForm.conto || 'CORRENTE' } : {},
       );
       await reloadDetail(detail.id);
       setMessage('Risorse aggiornate.');
@@ -557,7 +563,8 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                 <th className="p-2">Era</th>
                 <th className="p-2">KORP / Carriere</th>
                 <th className="p-2">QR</th>
-                <th className="p-2 text-right">CR</th>
+                <th className="p-2 text-right">Corrente</th>
+                <th className="p-2 text-right">Deposito</th>
               </tr>
             </thead>
             <tbody>
@@ -576,7 +583,8 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                   <td className="p-2 text-gray-400">{row.era_nome || '—'}</td>
                   <td className="p-2 text-gray-400 text-xs">{(row.korp_attivi || []).join(', ') || '—'}</td>
                   <td className="p-2 font-mono text-xs text-indigo-300">{row.qrcode_id || '—'}</td>
-                  <td className="p-2 text-right text-amber-300">{row.crediti}</td>
+                  <td className="p-2 text-right text-emerald-300">{row.crediti_corrente ?? row.crediti}</td>
+                  <td className="p-2 text-right text-amber-300">{row.crediti_deposito ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -940,16 +948,27 @@ const PersonaggiStaffManager = ({ onLogout }) => {
 
                   {modalTab === 'risorse' && (
                     <div className="space-y-6">
-                      <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="grid grid-cols-3 gap-3 text-sm">
                         <div className="bg-gray-800 rounded p-3 border border-gray-700">
-                          <span className="text-gray-400">Crediti</span>
-                          <p className="text-2xl font-bold text-amber-300">{detail.crediti}</p>
+                          <span className="text-gray-400">Conto corrente</span>
+                          <p className="text-2xl font-bold text-emerald-300">
+                            {detail.crediti_corrente ?? detail.crediti}
+                          </p>
+                        </div>
+                        <div className="bg-gray-800 rounded p-3 border border-gray-700">
+                          <span className="text-gray-400">Conto deposito</span>
+                          <p className="text-2xl font-bold text-amber-300">
+                            {detail.crediti_deposito ?? detail.riserva ?? '0'}
+                          </p>
                         </div>
                         <div className="bg-gray-800 rounded p-3 border border-gray-700">
                           <span className="text-gray-400">Punti caratteristica</span>
                           <p className="text-2xl font-bold text-blue-300">{detail.punti_caratteristica}</p>
                         </div>
                       </div>
+                      <p className="text-xs text-gray-500">
+                        Quantità positiva aggiunge, negativa sottrae. Per i crediti scegli il conto di destinazione.
+                      </p>
                       <div className="flex flex-wrap gap-2 items-end">
                         <select
                           className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm"
@@ -959,6 +978,16 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                           <option value="crediti">Crediti</option>
                           <option value="pc">Punti caratteristica</option>
                         </select>
+                        {resourceForm.tipo === 'crediti' && (
+                          <select
+                            className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm"
+                            value={resourceForm.conto}
+                            onChange={(e) => setResourceForm((f) => ({ ...f, conto: e.target.value }))}
+                          >
+                            <option value="CORRENTE">Conto corrente</option>
+                            <option value="DEPOSITO">Conto deposito</option>
+                          </select>
+                        )}
                         <input
                           type="number"
                           className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm w-24"
