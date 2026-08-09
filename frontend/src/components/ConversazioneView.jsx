@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Reply, Send, X, Users, MessageCircle, Shield } from 'lucide-react';
 import RichTextDisplay from './RichTextDisplay';
 import RichTextEditor from './RichTextEditor';
+import { confirmCloseIfDirty } from '../hooks/useDirtyModalClose';
 
 const ConversazioneView = ({ conversazione, onRispondi, onClose, currentPersonaggioId }) => {
   const [testoRisposta, setTestoRisposta] = useState('');
@@ -38,9 +39,24 @@ const ConversazioneView = ({ conversazione, onRispondi, onClose, currentPersonag
     }
   };
 
+  const requestClose = () => {
+    const dirty = isReplying && String(testoRisposta || '').replace(/<[^>]+>/g, '').trim();
+    confirmCloseIfDirty(
+      Boolean(dirty),
+      onClose,
+      'Hai una risposta non inviata. Chiudere comunque?'
+    );
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4">
-      <div className="flex flex-col w-full max-w-3xl h-[92vh] sm:h-[85vh] bg-gray-950 sm:rounded-2xl shadow-2xl overflow-hidden border border-gray-700/80">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4"
+      onClick={requestClose}
+    >
+      <div
+        className="flex flex-col w-full max-w-3xl h-[92vh] sm:h-[85vh] bg-gray-950 sm:rounded-2xl shadow-2xl overflow-hidden border border-gray-700/80"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-900/90">
           <div className="flex items-center gap-3 min-w-0">
             <div className="rounded-full bg-indigo-600/25 p-2 text-indigo-300 shrink-0">
@@ -58,7 +74,7 @@ const ConversazioneView = ({ conversazione, onRispondi, onClose, currentPersonag
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="p-2 text-gray-400 rounded-full hover:bg-gray-800 hover:text-white transition-colors"
             aria-label="Chiudi"
           >

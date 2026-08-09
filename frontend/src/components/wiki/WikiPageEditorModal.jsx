@@ -10,6 +10,7 @@ import WikiCoverEditor from './WikiCoverEditor';
 import WikiWidgetHelperPanel from './WikiWidgetHelperPanel';
 import WikiImageUploadModal from './WikiImageUploadModal';
 import { getWidgetToken, getUsedWidgetIds } from './wikiWidgetTokens';
+import { confirmCloseIfDirty } from '../../hooks/useDirtyModalClose';
 
 export default function WikiPageEditorModal({ onClose, onSuccess, initialData = null }) {
   const [formData, setFormData] = useState({
@@ -278,16 +279,34 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
     }
   };
 
+  const requestClose = () => {
+    const dirty =
+      Boolean(String(formData.titolo || '').trim()) ||
+      Boolean(String(formData.contenuto || '').replace(/<[^>]+>/g, '').trim()) ||
+      Boolean(String(formData.slug || '').trim());
+    confirmCloseIfDirty(
+      dirty && !loading,
+      onClose,
+      'La pagina wiki non è stata salvata. Chiudere e perdere le modifiche?'
+    );
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-0 md:p-4">
-      <div className="bg-white md:rounded-lg shadow-xl w-full max-w-6xl h-full md:h-auto md:max-h-[95vh] flex flex-col">
+    <div
+      className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-0 md:p-4"
+      onClick={requestClose}
+    >
+      <div
+        className="bg-white md:rounded-lg shadow-xl w-full max-w-6xl h-full md:h-auto md:max-h-[95vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* HEADER */}
         <div className="p-3 md:p-4 border-b flex justify-between items-center bg-gray-100 md:rounded-t-lg shrink-0">
             <h2 className="font-bold text-lg md:text-xl text-gray-800 flex items-center gap-2 truncate">
                 {isEditing ? '✏️ Modifica Pagina' : '📄 Nuova Pagina Wiki'}
             </h2>
-            <button onClick={onClose} className="text-gray-500 hover:text-red-600 font-bold text-xl px-2">✕</button>
+            <button type="button" onClick={requestClose} className="text-gray-500 hover:text-red-600 font-bold text-xl px-2">✕</button>
         </div>
 
         {/* BODY SCROLLABILE */}
@@ -556,7 +575,7 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
         {/* FOOTER AZIONI */}
         <div className="p-3 md:p-4 border-t bg-gray-50 md:rounded-b-lg flex justify-end gap-3 shrink-0">
             <button 
-                onClick={onClose} 
+                onClick={requestClose} 
                 disabled={loading}
                 className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded font-medium disabled:opacity-50"
             >

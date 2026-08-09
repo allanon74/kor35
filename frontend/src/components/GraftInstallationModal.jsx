@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Activity, User, Coins, Send, Loader2, Trash2, CheckCircle } from 'lucide-react';
+import { confirmCloseIfDirty } from '../hooks/useDirtyModalClose';
 import { useCharacter } from './CharacterContext';
 import { 
     installaInnesto, // IMPORTANTE: Usa questo per l'installazione diretta
@@ -122,9 +123,16 @@ const GraftInstallationModal = ({ task, onClose, onSuccess }) => {
         setIsDiscarding(false);
     };
 
+    const requestClose = () =>
+        confirmCloseIfDirty(
+            Boolean(selectedSlot || selectedTargetUser || Number(offer) > 0) && !isLoading,
+            onClose,
+            'Operazione non confermata. Chiudere comunque?'
+        );
+
     return (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50 animate-fadeIn">
-            <div className="bg-gray-800 rounded-xl w-full max-w-lg border border-gray-600 shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50 animate-fadeIn" onClick={requestClose}>
+            <div className="bg-gray-800 rounded-xl w-full max-w-lg border border-gray-600 shadow-2xl flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
                 
                 {/* Header */}
                 <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900 rounded-t-xl shrink-0">
@@ -134,7 +142,7 @@ const GraftInstallationModal = ({ task, onClose, onSuccess }) => {
                         </h3>
                         <p className="text-xs text-gray-400">Finalizzazione: {task.infusione_nome}</p>
                     </div>
-                    <button onClick={onClose}><X className="text-gray-400 hover:text-white"/></button>
+                    <button type="button" onClick={requestClose}><X className="text-gray-400 hover:text-white"/></button>
                 </div>
 
                 <div className="p-6 overflow-y-auto space-y-6">

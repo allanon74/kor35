@@ -373,9 +373,9 @@ const AdminMessageTab = ({ onLogout }) => {
                     </Tab.Panel>
 
                     {/* --- PANEL 2: COMPOSE (Invio Broadcast, Gruppi o Singolo) --- */}
-                    <Tab.Panel className="h-full overflow-y-auto custom-scrollbar p-4">
-                        <form onSubmit={handleSend} className="max-w-3xl mx-auto space-y-4">
-                            
+                    <Tab.Panel className="h-full min-h-0 flex flex-col p-0">
+                        <form onSubmit={handleSend} className="max-w-3xl mx-auto w-full flex flex-col min-h-0 flex-1 h-full">
+                          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 space-y-4">
                             {/* TARGET SELECTOR */}
                             <div className="grid grid-cols-3 gap-2 bg-gray-800 p-1.5 rounded-lg border border-gray-700">
                                 {['broadcast', 'group', 'single'].map((type) => (
@@ -474,8 +474,15 @@ const AdminMessageTab = ({ onLogout }) => {
                                 />
                             </div>
 
-                            {/* FOOTER AZIONI */}
-                            <div className="flex justify-between items-center pt-2 border-t border-gray-800">
+                            {feedback.msg && (
+                                <div className={`p-3 rounded text-center text-sm font-bold ${feedback.type === 'error' ? 'bg-red-900/50 text-red-200 border border-red-800' : 'bg-green-900/50 text-green-200 border border-green-800'}`}>
+                                    {feedback.msg}
+                                </div>
+                            )}
+                          </div>
+
+                            {/* FOOTER AZIONI sticky */}
+                            <div className="flex justify-between items-center gap-3 p-4 border-t border-gray-800 bg-gray-900 shrink-0">
                                 <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer hover:text-white">
                                     <input 
                                         type="checkbox" 
@@ -494,12 +501,6 @@ const AdminMessageTab = ({ onLogout }) => {
                                     {isSending ? 'Invio in corso...' : 'Invia Messaggio'}
                                 </button>
                             </div>
-
-                            {feedback.msg && (
-                                <div className={`p-3 rounded text-center text-sm font-bold ${feedback.type === 'error' ? 'bg-red-900/50 text-red-200 border border-red-800' : 'bg-green-900/50 text-green-200 border border-green-800'}`}>
-                                    {feedback.msg}
-                                </div>
-                            )}
                         </form>
                     </Tab.Panel>
 

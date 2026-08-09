@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, FlipHorizontal2, FolderOpen, Video, StopCircle } from 'lucide-react';
+import { confirmCloseIfDirty } from '../hooks/useDirtyModalClose';
 
 const StoryMediaCaptureModal = ({ open, onClose, onPickFile }) => {
   const archiveInputRef = useRef(null);
@@ -140,12 +141,19 @@ const StoryMediaCaptureModal = ({ open, onClose, onPickFile }) => {
 
   if (!open) return null;
 
+  const requestClose = () =>
+    confirmCloseIfDirty(
+      mode !== 'picker',
+      onClose,
+      'Hai una cattura media in corso. Chiudere comunque?'
+    );
+
   return (
-    <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-3">
-      <div className="w-full max-w-md rounded-2xl border border-amber-300/30 bg-[#17101d] p-4 space-y-3 shadow-2xl">
+    <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-3" onClick={requestClose}>
+      <div className="w-full max-w-md rounded-2xl border border-amber-300/30 bg-[#17101d] p-4 space-y-3 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="text-base font-bold text-amber-100">Carica media story</h3>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white">X</button>
+          <button type="button" onClick={requestClose} className="text-gray-400 hover:text-white">X</button>
         </div>
 
         {mode === 'picker' && (

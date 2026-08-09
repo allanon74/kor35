@@ -18,6 +18,7 @@ import {
   getPresentazione,
   trailSliceToIndex,
 } from '../utils/creazioneGuidataWizard';
+import { confirmCloseIfDirty } from '../hooks/useDirtyModalClose';
 
 export default function CreazioneGuidataModal({
   isOpen,
@@ -417,9 +418,18 @@ export default function CreazioneGuidataModal({
     );
   };
 
+  const requestClose = () => {
+    const dirty = trail.length > 0 || effetti.length > 0 || Boolean(riepilogoApply);
+    confirmCloseIfDirty(
+      dirty,
+      onClose,
+      'Hai un percorso di creazione in corso. Chiudendo potresti dover ripartire.\n\nChiudere comunque?'
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 md:p-4">
-      <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={requestClose} aria-hidden />
       <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full h-full md:h-auto md:max-h-[92vh] md:max-w-3xl flex flex-col text-gray-100">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 shrink-0">
           <div className="min-w-0">
@@ -448,7 +458,7 @@ export default function CreazioneGuidataModal({
             )}
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="p-2 rounded-lg hover:bg-gray-800 text-gray-400"
               aria-label="Chiudi"
             >
@@ -597,7 +607,7 @@ export default function CreazioneGuidataModal({
                 {applying ? 'Salvataggio...' : 'Salva le proposte'}
               </button>
             )}
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm">
+            <button type="button" onClick={requestClose} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm">
               {riepilogoApply ? 'Chiudi' : 'Esci dal percorso'}
             </button>
           </div>

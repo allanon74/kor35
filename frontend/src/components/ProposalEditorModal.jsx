@@ -10,6 +10,7 @@ import {
     getMattoniAura, 
     getClassiOggetto 
 } from '../api';
+import { confirmCloseIfDirty } from '../hooks/useDirtyModalClose';
 import IconaPunteggio from './IconaPunteggio';
 
 // Costanti Slot Corporei (Invariate)
@@ -338,6 +339,21 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
         } catch (e) { setError(e.message); }
     };
 
+
+    const isDirty = Boolean(
+        (name && name !== (proposal?.nome || '')) ||
+        (description && description !== (proposal?.descrizione || '')) ||
+        (spiegazioneTeorie && spiegazioneTeorie !== (proposal?.spiegazione_teorie || '')) ||
+        (prerequisiti && prerequisiti !== (proposal?.prerequisiti || '')) ||
+        (svolgimento && svolgimento !== (proposal?.svolgimento || '')) ||
+        (effetto && effetto !== (proposal?.effetto || ''))
+    );
+    const requestClose = () => confirmCloseIfDirty(
+        isDirty,
+        onClose,
+        'Ci sono modifiche non salvate alla proposta. Chiudere comunque?'
+    );
+
     if (!char) return null;
 
     // DETERMINA COSA MOSTRARE NELLA GRIGLIA
@@ -346,8 +362,8 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
         : availableCharacteristics.filter(c => isCerimoniale || (char.punteggi_base[c.nome] > 0));
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl animate-fadeIn overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200" onClick={requestClose}>
+            <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl animate-fadeIn overflow-hidden" onClick={(e) => e.stopPropagation()}>
                 
                 {/* Header */}
                 <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800 rounded-t-xl shrink-0">
@@ -366,7 +382,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                             </p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white p-2 hover:bg-gray-700 rounded-full transition-colors">✕</button>
+                    <button type="button" onClick={requestClose} className="text-gray-400 hover:text-white p-2 hover:bg-gray-700 rounded-full transition-colors">✕</button>
                 </div>
 
                 {/* Body */}
@@ -658,7 +674,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                             </>
                         )}
                         {!isDraft && (
-                            <button onClick={onClose} className="px-8 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-xl text-xs font-black uppercase">Chiudi</button>
+                            <button type="button" onClick={requestClose} className="px-8 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-xl text-xs font-black uppercase">Chiudi</button>
                         )}
                     </div>
                 </div>

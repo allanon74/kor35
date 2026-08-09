@@ -3,6 +3,7 @@ import {
     X, Wrench, Send, ShieldAlert, Shield, ShieldCheck, // <--- AGGIUNTO Shield e ShieldCheck
     Cpu, UserCheck, Loader2, Coins, GraduationCap, Trash2 
 } from 'lucide-react';
+import { confirmCloseIfDirty } from '../hooks/useDirtyModalClose';
 import { useCharacter } from './CharacterContext';
 import { validateAssembly, createAssemblyRequest, getCapableArtisans } from '../api'; 
 import { useOptimisticAssembly } from '../hooks/useGameData';
@@ -207,16 +208,29 @@ const ItemAssemblyModal = ({ hostItem, inventory, onClose, onRefresh }) => {
   };
 
 
+  const requestClose = () =>
+    confirmCloseIfDirty(
+      (Boolean(selectedMod) || Boolean(selectedTarget) || Number(offerCredits) > 0) && !isProcessing,
+      onClose,
+      'Hai una selezione in corso. Chiudere comunque?'
+    );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-gray-900 w-full max-w-lg rounded-xl shadow-2xl border border-gray-700 flex flex-col max-h-[90vh]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+      onClick={requestClose}
+    >
+      <div
+        className="bg-gray-900 w-full max-w-lg rounded-xl shadow-2xl border border-gray-700 flex flex-col max-h-[90vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* HEADER */}
         <div className="flex justify-between items-center p-4 border-b border-gray-800">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <Wrench className="text-amber-500"/> Assemblaggio
             </h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+            <button type="button" onClick={requestClose} className="text-gray-400 hover:text-white transition-colors">
                 <X size={24} />
             </button>
         </div>

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog } from '@headlessui/react';
 import { X, Send, Loader2, Plus } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import { getOggettoDetail } from '../api';
+import { useDirtyModalClose } from '../hooks/useDirtyModalClose';
 
 const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
   const { selectedCharacterData, selectedCharacterId } = useCharacter();
@@ -31,6 +32,24 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
     formData.conto_crediti === 'DEPOSITO'
       ? Number(selectedCharacterData?.crediti_deposito ?? 0)
       : Number(selectedCharacterData?.crediti_corrente ?? selectedCharacterData?.crediti ?? 0);
+
+  const isDirty = useMemo(() => {
+    return (
+      Number(formData.crediti_da_dare) > 0 ||
+      Number(formData.crediti_da_ricevere) > 0 ||
+      (formData.oggetti_da_dare || []).length > 0 ||
+      (formData.oggetti_da_ricevere || []).length > 0 ||
+      (formData.consumabili_da_dare || []).length > 0 ||
+      (formData.consumabili_da_ricevere || []).length > 0 ||
+      Boolean(String(formData.messaggio || '').trim())
+    );
+  }, [formData]);
+
+  const requestClose = useDirtyModalClose(
+    isDirty && !loading,
+    onClose,
+    'La proposta non è stata inviata. Chiudere e perdere le modifiche?'
+  );
 
   // Determina chi è l'altro personaggio
   const altroPersonaggioId = transazione?.iniziatore === selectedCharacterId 
@@ -194,17 +213,17 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
       : 'Controproposta');
 
   return (
-    <Dialog open={true} onClose={onClose} className="relative z-50">
+    <Dialog open={true} onClose={requestClose} className="relative z-50">
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" aria-hidden="true" />
       
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <Dialog.Panel className="w-full max-w-3xl bg-gray-900 border border-gray-700 rounded-xl shadow-2xl max-h-[90vh] flex flex-col">
           {/* Header */}
-          <div className="flex justify-between items-center p-4 border-b border-gray-700 bg-gray-800/50 rounded-t-xl">
+          <div className="flex justify-between items-center p-4 border-b border-gray-700 bg-gray-800/50 rounded-t-xl shrink-0">
             <Dialog.Title className="text-xl font-bold text-white">
               {titoloModal}
             </Dialog.Title>
-            <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+            <button type="button" onClick={requestClose} className="text-gray-400 hover:text-white transition-colors">
               <X size={24} />
             </button>
           </div>
@@ -435,9 +454,10 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
           </div>
 
           {/* Footer */}
-          <div className="p-4 border-t border-gray-700 flex justify-end gap-3">
+          <div className="p-4 border-t border-gray-700 flex justify-end gap-3 shrink-0">
             <button
-              onClick={onClose}
+              type="button"
+              onClick={requestClose}
               className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white font-bold text-sm"
             >
               Annulla

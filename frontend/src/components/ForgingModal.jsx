@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Hammer, ShieldAlert, Check, Loader2, Send } from 'lucide-react';
+import { confirmCloseIfDirty } from '../hooks/useDirtyModalClose';
 import { useCharacter } from './CharacterContext';
 import { forgiaOggetto, getCapableArtisans, createForgingRequest, validateForging } from '../api';
 
@@ -79,16 +80,23 @@ const ForgingModal = ({ infusione, onClose, onRefresh }) => {
     }
   };
 
+  const requestClose = () =>
+    confirmCloseIfDirty(
+      (Boolean(selectedTarget) || Number(offerCredits) > 0) && !isProcessing,
+      onClose,
+      'La forgiatura non è stata completata. Chiudere comunque?'
+    );
+
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-       <div className="bg-gray-800 rounded-xl max-w-md w-full p-6 border border-gray-600 shadow-xl animate-fadeIn">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={requestClose}>
+       <div className="bg-gray-800 rounded-xl max-w-md w-full p-6 border border-gray-600 shadow-xl animate-fadeIn" onClick={(e) => e.stopPropagation()}>
           
           <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
               <h3 className="text-xl font-bold text-white flex gap-2 items-center">
                   <Hammer className="text-amber-500" size={20}/> 
                   Forgia: {infusione.nome}
               </h3>
-              <button onClick={onClose} className="text-gray-400 hover:text-white"><X/></button>
+              <button type="button" onClick={requestClose} className="text-gray-400 hover:text-white"><X/></button>
           </div>
 
           {isLoadingInfo ? (
