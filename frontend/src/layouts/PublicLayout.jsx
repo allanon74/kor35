@@ -9,6 +9,8 @@ import {
     ChevronRight, ChevronDown, Plus,
     Lock, EyeOff 
 } from 'lucide-react';
+import { putOfflineWikiMenu, getOfflineWikiMenu, filterWikiMenuBySearch } from '../lib/offlineWikiDb';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 
 export default function PublicLayout({ token }) {
   // --- STATI GENERALI ---
@@ -16,6 +18,8 @@ export default function PublicLayout({ token }) {
   const [isEditorOpen, setEditorOpen] = useState(false);
   const [newParentId, setNewParentId] = useState(null);
   const [siteConfig, setSiteConfig] = useState(null);
+  const [menuFromCache, setMenuFromCache] = useState(false);
+  const [menuCachedAt, setMenuCachedAt] = useState(null);
   
   // --- STATI DATI & RICERCA ---
   const [flatMenu, setFlatMenu] = useState([]); 
@@ -34,6 +38,7 @@ export default function PublicLayout({ token }) {
   const { character, isCampaignRedactor, isCampaignMaster } = useCharacter();
   const canEdit = isCampaignRedactor || isCampaignMaster;
   const location = useLocation();
+  const isOnline = useOnlineStatus();
 
   // --- HELPER: COSTRUZIONE ALBERO E ORDINAMENTO ---
   const buildTree = (items) => {
@@ -95,14 +100,24 @@ export default function PublicLayout({ token }) {
   useEffect(() => {
     const fetchMenu = async () => {
       setLoadingMenu(true);
+      setMenuFromCache(false);
+      setMenuCachedAt(null);
       try {
-        // L'API (src/api.js) ora decide se mandare il token.
-        // Il Backend filtra i dati. Se riceviamo dati, li mostriamo.
         const rawList = await getWikiMenu();
-        
-        setFlatMenu(rawList); 
+        setFlatMenu(rawList);
+        putOfflineWikiMenu(rawList).catch(() => {});
       } catch (error) {
         console.error("Errore caricamento menu:", error);
+        try {
+          const cached = await getOfflineWikiMenu();
+          if (cached?.items?.length) {
+            setFlatMenu(cached.items);
+            setMenuFromCache(true);
+            setMenuCachedAt(cached.stored_at || null);
+          }
+        } catch {
+          /* ignore */
+        }
       } finally {
         setLoadingMenu(false);
       }
@@ -208,13 +223,13 @@ export default function PublicLayout({ token }) {
         <div 
             className={`
                 group flex items-center gap-2
-                py-2.5 px-3 rounded-lg transition-all duration-200
+                py-2 px-2.5 rounded-md transition-colors duration-150
                 ${isActive 
-                    ? 'bg-red-900 text-white shadow-lg' 
-                    : 'text-gray-300 hover:bg-gray-700/60 hover:text-white'
+                    ? 'bg-[var(--wiki-brand)] text-white' 
+                    : 'text-stone-300 hover:bg-stone-800/80 hover:text-white'
                 }
-                ${isDraft ? 'border-l-4 border-yellow-500 bg-gray-800/50' : ''}
-                ${!isDraft && isStaffOnly ? 'border-l-4 border-indigo-500 bg-gray-800/50' : ''}
+                ${isDraft ? 'border-l-2 border-amber-500 bg-stone-900/60' : ''}
+                ${!isDraft && isStaffOnly ? 'border-l-2 border-stone-500 bg-stone-900/60' : ''}
             `}
             style={{ marginLeft: `${level * 12}px` }}
         >
@@ -357,22 +372,24 @@ export default function PublicLayout({ token }) {
                     <div className="font-bold text-sm">{character?.nome}</div>
                     <div className="text-xs text-red-200">{canEdit ? 'Staff' : 'Giocatore'}</div>
                 </div>
-                <Link to="/app" className="bg-white text-red-900 px-3 py-1.5 rounded font-bold hover:bg-gray-100 transition text-sm flex items-center gap-2 shadow-sm">
-                  <span>🎮</span> <span className="hidden sm:inline">Entra nel Gioco</span>
+                <Link to="/app" className="bg-white text-[var(--wiki-brand)] px-3 py-1.5 rounded font-bold hover:bg-stone-100 transition text-sm flex items-center gap-2 shadow-sm">
+                  <span className="hidden sm:inline">Entra nel gioco</span>
+                  <span className="sm:hidden">App</span>
                 </Link>
-                <Link to="/app/social" className="bg-red-700 text-white px-3 py-1.5 rounded font-bold hover:bg-red-600 transition text-sm flex items-center gap-2 shadow-sm">
-                  <span>✨</span> <span className="hidden sm:inline">InstaFame</span>
+                <Link to="/app/social" className="bg-red-800 text-white px-3 py-1.5 rounded font-bold hover:bg-red-700 transition text-sm flex items-center gap-2 shadow-sm">
+                  <span className="hidden sm:inline">InstaFame</span>
+                  <span className="sm:hidden">Social</span>
                 </Link>
             </div>
           ) : (
              <div className="flex items-center gap-2">
                {!location.pathname.includes('login') && (
-                 <Link to="/login" className="bg-red-700 hover:bg-red-600 px-4 py-2 rounded text-white transition text-sm font-medium">
-                    Login
+                 <Link to="/login" className="bg-white text-[var(--wiki-brand)] px-4 py-2 rounded text-sm font-bold hover:bg-stone-100 transition">
+                    Accedi
                  </Link>
                )}
-               <Link to="/app/social" className="bg-red-700 text-white px-3 py-1.5 rounded font-bold hover:bg-red-600 transition text-sm flex items-center gap-2 shadow-sm">
-                 <span>✨</span> <span className="hidden sm:inline">InstaFame</span>
+               <Link to="/app/social" className="bg-red-800 text-white px-3 py-1.5 rounded font-bold hover:bg-red-700 transition text-sm">
+                 InstaFame
                </Link>
              </div>
           )}
@@ -399,36 +416,45 @@ export default function PublicLayout({ token }) {
 
       <div className="flex flex-1 overflow-hidden relative">
         
-        {/* SIDEBAR - Migliorato per Mobile */}
+        {/* SIDEBAR */}
         <aside 
           className={`
-            fixed inset-y-0 left-0 w-full sm:w-96 md:w-80 bg-gray-900 text-gray-200 
-            transform transition-transform duration-300 z-30 shadow-2xl flex flex-col border-r border-gray-800
+            fixed inset-y-0 left-0 w-full sm:w-96 md:w-80 bg-[#14110f] text-stone-200 
+            transform transition-transform duration-300 z-30 shadow-2xl flex flex-col border-r border-stone-800
             md:relative md:translate-x-0
             ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
           `}
         >
           {/* BARRA DI RICERCA E CONTROLLI */}
-          <div className="p-3 bg-gray-900 border-b border-gray-800 sticky top-0 z-10 space-y-3">
+          <div className="p-3 bg-[#14110f] border-b border-stone-800 sticky top-0 z-10 space-y-2.5">
+              <p className="wiki-hero-brand text-[10px] text-stone-500 px-1">Indice regolamento</p>
               <div className="relative group">
-                  <Search className="absolute left-3 top-2.5 text-gray-500 group-focus-within:text-red-400 transition-colors" size={16} />
+                  <Search className="absolute left-3 top-2.5 text-stone-500 group-focus-within:text-red-400 transition-colors" size={16} aria-hidden="true" />
                   <input 
-                    type="text"
-                    placeholder="Cerca pagine..."
+                    type="search"
+                    placeholder={isOnline ? 'Cerca pagine…' : 'Cerca nell’indice in cache…'}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-gray-800 text-gray-200 text-sm rounded-lg pl-10 pr-8 py-2 border border-gray-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none transition-all placeholder-gray-500"
+                    aria-label="Cerca pagine wiki"
+                    className="w-full bg-stone-900 text-stone-100 text-sm rounded-md pl-10 pr-8 py-2 border border-stone-700 focus:border-red-700 focus:ring-1 focus:ring-red-800 outline-none transition-all placeholder-stone-500"
                   />
                   {searchTerm && (
-                      <button onClick={() => setSearchTerm('')} className="absolute right-2 top-2 text-gray-500 hover:text-white">
+                      <button type="button" onClick={() => setSearchTerm('')} className="absolute right-2 top-2 text-stone-500 hover:text-white" aria-label="Pulisci ricerca">
                           <X size={16} />
                       </button>
                   )}
               </div>
+
+              {(!isOnline || menuFromCache) && (
+                <div className="rounded-md border border-amber-700/40 bg-amber-950/50 px-2.5 py-1.5 text-[10px] text-amber-100/90 leading-snug" role="status">
+                  {!isOnline
+                    ? 'Offline: indice e ricerca usano solo le voci già salvate in cache.'
+                    : `Indice da cache locale${menuCachedAt ? ` (${new Date(menuCachedAt).toLocaleString()})` : ''}.`}
+                </div>
+              )}
               
-              {/* NUOVO: Checkbox per Admin - Nascondi Bozze/Staff */}
               {canEdit && (
-                  <label className="flex items-center gap-2.5 px-2 py-2 rounded-lg bg-gray-800/50 hover:bg-gray-800 cursor-pointer transition-colors border border-gray-700">
+                  <label className="flex items-center gap-2.5 px-2 py-2 rounded-md bg-stone-900/80 hover:bg-stone-900 cursor-pointer transition-colors border border-stone-700">
                       <input 
                           type="checkbox"
                           checked={hideAdminContent}
@@ -437,10 +463,10 @@ export default function PublicLayout({ token }) {
                               setHideAdminContent(newValue);
                               localStorage.setItem('wiki_hide_admin_content', newValue.toString());
                           }}
-                          className="w-4 h-4 rounded border-gray-600 text-indigo-600 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 bg-gray-700 cursor-pointer"
+                          className="w-4 h-4 rounded border-stone-600 text-red-800 focus:ring-2 focus:ring-red-700 focus:ring-offset-0 bg-stone-800 cursor-pointer"
                       />
-                      <span className="text-xs text-gray-300 font-medium flex items-center gap-1.5 leading-tight">
-                          <EyeOff size={13} className="text-gray-400" />
+                      <span className="text-xs text-stone-300 font-medium flex items-center gap-1.5 leading-tight">
+                          <EyeOff size={13} className="text-stone-400" />
                           Nascondi bozze e sezioni staff
                       </span>
                   </label>
@@ -448,50 +474,51 @@ export default function PublicLayout({ token }) {
           </div>
 
           {/* CONTENUTO MENU */}
-          <nav className="overflow-y-auto flex-1 px-3 pb-20 scroll-smooth" style={{
+          <nav className="overflow-y-auto flex-1 px-2.5 pb-20 scroll-smooth" style={{
               scrollbarWidth: 'thin',
-              scrollbarColor: '#374151 transparent'
+              scrollbarColor: '#44403c transparent'
           }}>
              {loadingMenu ? (
-               <div className="p-6 text-center text-gray-500 text-sm animate-pulse">Caricamento indice...</div>
+               <div className="p-6 text-center text-stone-500 text-sm animate-pulse">Caricamento indice...</div>
+             ) : flatMenu.length === 0 ? (
+               <div className="p-6 text-center text-stone-500 text-sm">
+                 Indice non disponibile{!isOnline ? ' offline' : ''}.
+               </div>
              ) : (
                <>
                  {searchTerm ? (
-                   /* RISULTATI RICERCA */
+                   /* RISULTATI RICERCA (solo cache locale flat) */
                    <ul className="space-y-1 mt-2">
                         {(() => {
-                            // Filtra in base alla ricerca e hideAdminContent
-                            const filtered = flatMenu.filter(i => {
-                                const matchesSearch = i.titolo.toLowerCase().includes(searchTerm.toLowerCase());
-                                if (!matchesSearch) return false;
-                                
-                                // Se hideAdminContent è attivo e l'utente è admin, nascondi bozze e staff-only
-                                if (hideAdminContent && canEdit) {
-                                    if (i.public === false || i.visibile_solo_staff === true) {
-                                        return false;
-                                    }
-                                }
-                                
-                                return true;
+                            const filtered = filterWikiMenuBySearch(flatMenu, searchTerm, {
+                              hideAdminContent,
+                              canEdit,
                             });
                             
                             if (filtered.length === 0) {
-                                return <li className="p-4 text-gray-500 text-sm text-center">Nessun risultato.</li>;
+                                return (
+                                  <li className="p-4 text-stone-500 text-sm text-center space-y-1">
+                                    <p>Nessun risultato{!isOnline || menuFromCache ? ' nella cache locale' : ''}.</p>
+                                    {!isOnline && (
+                                      <p className="text-[11px] text-stone-600">Apri le pagine online per arricchire la cache.</p>
+                                    )}
+                                  </li>
+                                );
                             }
                             
                             return filtered.map(item => (
                                 <li key={item.id}>
                                     <Link 
-                                        to={`/regolamento/${item.slug}`}
-                                        className="block p-3 rounded bg-gray-800 hover:bg-gray-700 transition-colors border-l-4 border-transparent hover:border-red-500"
+                                        to={item.slug === 'home' ? '/' : `/regolamento/${item.slug}`}
+                                        className="block p-3 rounded-md bg-stone-900 hover:bg-stone-800 transition-colors border-l-2 border-transparent hover:border-red-700"
                                         onClick={() => setSidebarOpen(false)}
                                     >
-                                        <div className="font-bold text-gray-200">{item.titolo}</div>
-                                        {item.parent && <div className="text-xs text-gray-500">in {flatMenu.find(p => p.id === item.parent)?.titolo}</div>}
+                                        <div className="font-semibold text-stone-100 text-sm">{item.titolo}</div>
+                                        {item.parent && <div className="text-xs text-stone-500">in {flatMenu.find(p => p.id === item.parent)?.titolo}</div>}
                                         
                                         <div className="flex gap-1 mt-1">
-                                            {item.public === false && <span className="text-[9px] bg-yellow-600 text-black px-1 rounded font-bold uppercase">Bozza</span>}
-                                            {item.visibile_solo_staff && <span className="text-[9px] bg-indigo-600 text-white px-1 rounded font-bold uppercase">Staff</span>}
+                                            {item.public === false && <span className="text-[9px] bg-amber-700 text-black px-1 rounded font-bold uppercase">Bozza</span>}
+                                            {item.visibile_solo_staff && <span className="text-[9px] bg-stone-600 text-white px-1 rounded font-bold uppercase">Staff</span>}
                                         </div>
                                     </Link>
                                 </li>
@@ -500,7 +527,7 @@ export default function PublicLayout({ token }) {
                    </ul>
                  ) : (
                     /* ALBERO STANDARD */
-                    <ul className="space-y-1 mt-2">
+                    <ul className="space-y-0.5 mt-2">
                         {menuTree.map(node => <WikiSidebarItem key={node.id} item={node} />)}
                     </ul>
                  )}
