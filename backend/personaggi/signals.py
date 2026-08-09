@@ -24,60 +24,135 @@ def assegna_campagna_base_ai_nuovi_utenti(sender, instance, created, **kwargs):
         return
     ensure_user_in_base_campaign(instance)
 
-@receiver(post_save, sender=Messaggio)
-def invia_notifica_messaggio(sender, instance, created, **kwargs):
-    if created: 
-        # --- 1. WebSocket (Invariato) ---
-        channel_layer = get_channel_layer()
-        data = {
-            'id': instance.id,
-            'titolo': instance.titolo,
-            'testo': instance.testo,
-            'tipo': instance.tipo_messaggio,
-            'mittente': instance.mittente.username if instance.mittente else "Sistema",
-            'destinatario_id': instance.destinatario_personaggio.id if instance.destinatario_personaggio else None,
-            'gruppo_id': instance.destinatario_gruppo.id if instance.destinatario_gruppo else None,
-        }
+def _strip_html_preview(text, max_len=120):
+    import re
 
+    plain = re.sub(r"<[^>]+>", " ", text or "")
+    plain = re.sub(r"\s+", " ", plain).strip()
+    if len(plain) <= max_len:
+        return plain
+    return plain[: max_len - 1].rstrip() + "…"
+
+
+def _ws_notify_users(user_ids, data):
+    """Invia notifica solo alle room per-utente (privacy: niente fan-out globale)."""
+    from personaggi.ws_auth import user_notifications_group
+
+    channel_layer = get_channel_layer()
+    if not channel_layer:
+        return
+    for uid in {int(u) for u in user_ids if u}:
         async_to_sync(channel_layer.group_send)(
-            'kor35_notifications',
-            {'type': 'send_notification', 'message': data}
+            user_notifications_group(uid),
+            {"type": "send_notification", "message": data},
         )
 
-        # --- 2. Web Push (Aggiornato) ---
-        try:
-            payload = {
-                "head": instance.titolo,
-                "body": "Nuovo messaggio su KOR-35",
-                "icon": "/pwa-192x192.png",
-                "url": "https://app.kor35.it/?tab=messaggi"  # Puoi personalizzare l'URL di destinazione
-            }
 
-            # A. Individuale
-            if instance.tipo_messaggio == 'INDV' and instance.destinatario_personaggio:
-                user = instance.destinatario_personaggio.proprietario
-                if user:
-                    send_user_notification(user=user, payload=payload, ttl=1000)
-            
-            # B. Gruppo
-            elif instance.tipo_messaggio == 'GROUP' and instance.destinatario_gruppo:
-                for pg in instance.destinatario_gruppo.membri.select_related('proprietario').all():
-                    if pg.proprietario:
-                        send_user_notification(user=pg.proprietario, payload=payload, ttl=1000)
-                        
-            # C. Broadcast (ABILITATO)
-            elif instance.tipo_messaggio == 'BROAD':
-                # Recupera tutti gli utenti che hanno una sottoscrizione Push attiva
-                # (È più efficiente che iterare su tutti gli User del DB)
-                from webpush.models import PushInformation
-                users_with_push = User.objects.filter(pushinformation__isnull=False).distinct()
-                
-                for user in users_with_push:
-                    send_user_notification(user=user, payload=payload, ttl=1000)
+def _ws_notify_global(data):
+    channel_layer = get_channel_layer()
+    if not channel_layer:
+        return
+    async_to_sync(channel_layer.group_send)(
+        "kor35_notifications",
+        {"type": "send_notification", "message": data},
+    )
 
-        except Exception as e:
-            print(f"Errore invio Web Push: {e}")
-            
+
+def _campaign_staff_user_ids(campagna):
+    from personaggi.models import (
+        CAMPAGNA_ROLE_HEAD_MASTER,
+        CAMPAGNA_ROLE_MASTER,
+        CAMPAGNA_ROLE_STAFFER,
+        CampagnaUtente,
+    )
+
+    if not campagna:
+        return []
+    return list(
+        CampagnaUtente.objects.filter(
+            campagna=campagna,
+            attivo=True,
+            ruolo__in=(CAMPAGNA_ROLE_STAFFER, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER),
+        ).values_list("user_id", flat=True)
+    )
+
+
+@receiver(post_save, sender=Messaggio)
+def invia_notifica_messaggio(sender, instance, created, **kwargs):
+    if not created:
+        return
+
+    data = {
+        "id": instance.id,
+        "titolo": instance.titolo,
+        "testo": instance.testo,
+        "tipo": instance.tipo_messaggio,
+        "mittente": instance.mittente.username if instance.mittente else "Sistema",
+        "destinatario_id": (
+            instance.destinatario_personaggio.id if instance.destinatario_personaggio else None
+        ),
+        "gruppo_id": instance.destinatario_gruppo.id if instance.destinatario_gruppo else None,
+    }
+
+    # --- 1. WebSocket (room per-utente; BROAD resta sul canale globale) ---
+    if instance.tipo_messaggio == Messaggio.TIPO_BROADCAST:
+        _ws_notify_global(data)
+    elif instance.tipo_messaggio == Messaggio.TIPO_INDIVIDUALE and instance.destinatario_personaggio:
+        dest_user = instance.destinatario_personaggio.proprietario_id
+        ids = [dest_user]
+        if instance.mittente_personaggio_id:
+            ids.append(instance.mittente_personaggio.proprietario_id)
+        _ws_notify_users(ids, data)
+    elif instance.tipo_messaggio == Messaggio.TIPO_GRUPPO and instance.destinatario_gruppo:
+        member_ids = instance.destinatario_gruppo.membri.values_list("proprietario_id", flat=True)
+        _ws_notify_users(member_ids, data)
+    elif instance.tipo_messaggio == Messaggio.TIPO_STAFF or instance.is_staff_message:
+        staff_ids = _campaign_staff_user_ids(instance.campagna)
+        if instance.mittente_personaggio_id:
+            staff_ids = list(staff_ids) + [instance.mittente_personaggio.proprietario_id]
+        _ws_notify_users(staff_ids, data)
+
+    # --- 2. Web Push (URL relativo: funziona su edge IP / mirror / www) ---
+    try:
+        payload = {
+            "head": instance.titolo or "Nuovo messaggio",
+            "body": _strip_html_preview(instance.testo) or "Nuovo messaggio su KOR-35",
+            "icon": "/pwa-192x192.png",
+            "url": "/?tab=messaggi",
+        }
+
+        if instance.tipo_messaggio == Messaggio.TIPO_INDIVIDUALE and instance.destinatario_personaggio:
+            user = instance.destinatario_personaggio.proprietario
+            if user:
+                send_user_notification(user=user, payload=payload, ttl=1000)
+
+        elif instance.tipo_messaggio == Messaggio.TIPO_GRUPPO and instance.destinatario_gruppo:
+            for pg in instance.destinatario_gruppo.membri.select_related("proprietario").all():
+                if pg.proprietario:
+                    send_user_notification(user=pg.proprietario, payload=payload, ttl=1000)
+
+        elif instance.tipo_messaggio == Messaggio.TIPO_BROADCAST:
+            from webpush.models import PushInformation
+
+            # Solo utenti con PG nella stessa campagna del broadcast (meno spam cross-campagna).
+            campagna = instance.campagna
+            qs = User.objects.filter(pushinformation__isnull=False).distinct()
+            if campagna:
+                qs = qs.filter(personaggi__campagna=campagna).distinct()
+            for user in qs:
+                send_user_notification(user=user, payload=payload, ttl=1000)
+
+        elif instance.tipo_messaggio == Messaggio.TIPO_STAFF or instance.is_staff_message:
+            for uid in _campaign_staff_user_ids(instance.campagna):
+                try:
+                    user = User.objects.get(pk=uid)
+                except User.DoesNotExist:
+                    continue
+                send_user_notification(user=user, payload=payload, ttl=1000)
+
+    except Exception as e:
+        print(f"Errore invio Web Push: {e}")
+
 @receiver(
     m2m_changed,
     sender=ClasseOggetto.mattoni_materia_permessi.through,

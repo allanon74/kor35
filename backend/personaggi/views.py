@@ -2554,19 +2554,14 @@ class MessaggiUnreadCountsView(APIView):
         """
         Ritorna gli unread a livello GIOCATORE (utente loggato), con dettaglio
         per personaggio e separazione player/staff.
-
-        Formato:
-        {
-          totals: { player, staff, all },
-          by_scope: {
-            player: [{ personaggio_id, personaggio_nome, unread_count }],
-            staff:  [{ personaggio_id, personaggio_nome, unread_count }]
-          },
-          by_character: [{ personaggio_id, personaggio_nome, unread_count }]
-        }
         """
         user = request.user
-        personaggi = list(Personaggio.objects.filter(proprietario=user).values("id", "nome").order_by("id"))
+        active_campaign = _get_active_campaign(request)
+        personaggi = list(
+            Personaggio.objects.filter(proprietario=user, campagna=active_campaign)
+            .values("id", "nome")
+            .order_by("id")
+        )
         if not personaggi:
             return Response(
                 {
@@ -2578,25 +2573,43 @@ class MessaggiUnreadCountsView(APIView):
 
         player_rows = []
         staff_rows = []
-        for pg in personaggi:
-            target_pg = Personaggio.objects.filter(id=pg["id"]).first()
+        pg_ids = [pg["id"] for pg in personaggi]
+        pg_by_id = {pg["id"]: pg for pg in personaggi}
+        membership = (
+            Personaggio.objects.filter(id__in=pg_ids)
+            .prefetch_related("gruppi_appartenenza")
+            .in_bulk(pg_ids)
+        )
+
+        for pg_id in pg_ids:
+            target_pg = membership.get(pg_id)
             if not target_pg:
                 continue
+            pg = pg_by_id[pg_id]
 
-            q_broadcast = Q(tipo_messaggio=Messaggio.TIPO_BROADCAST)
-            q_individuale = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(destinatario_personaggio=target_pg)
-            gruppi_id = target_pg.gruppi_appartenenza.values_list("id", flat=True)
-            q_gruppo = Q(tipo_messaggio=Messaggio.TIPO_GRUPPO) & Q(destinatario_gruppo__id__in=gruppi_id)
-            # Messaggi staff: la lettura non passa da LetturaMessaggio ma da letto_staff/cancellato_staff.
-            q_staff = Q(tipo_messaggio=Messaggio.TIPO_STAFF) & Q(destinatario_personaggio=target_pg)
+            q_broadcast = Q(tipo_messaggio=Messaggio.TIPO_BROADCAST, campagna=active_campaign)
+            q_individuale = (
+                Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE)
+                & Q(destinatario_personaggio=target_pg)
+                & Q(campagna=active_campaign)
+            )
+            gruppi_id = [g.id for g in target_pg.gruppi_appartenenza.all()]
+            q_gruppo = (
+                Q(tipo_messaggio=Messaggio.TIPO_GRUPPO)
+                & Q(destinatario_gruppo__id__in=gruppi_id)
+                & Q(campagna=active_campaign)
+            )
+            q_staff = (
+                Q(tipo_messaggio=Messaggio.TIPO_STAFF)
+                & Q(destinatario_personaggio=target_pg)
+                & Q(campagna=active_campaign)
+            )
 
             messaggi = Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo)
-
             ids_cancellati = LetturaMessaggio.objects.filter(
                 personaggio=target_pg,
                 cancellato=True,
             ).values_list("messaggio_id", flat=True)
-
             lettura_stato = LetturaMessaggio.objects.filter(
                 messaggio=OuterRef("pk"),
                 personaggio=target_pg,
@@ -2608,7 +2621,6 @@ class MessaggiUnreadCountsView(APIView):
                 .filter(is_letto_db=False)
                 .count()
             )
-
             unread_staff_count = (
                 Messaggio.objects.filter(q_staff, cancellato_staff=False)
                 .filter(letto_staff=False)
@@ -2645,172 +2657,255 @@ class MessaggiUnreadCountsView(APIView):
                     "unread_count": 0,
                 }
             merged[pid]["unread_count"] += int(row["unread_count"])
-        by_character = sorted(merged.values(), key=lambda r: (-int(r["unread_count"]), str(r["personaggio_nome"] or "")))
+        by_character = sorted(
+            merged.values(),
+            key=lambda r: (-int(r["unread_count"]), str(r["personaggio_nome"] or "")),
+        )
 
         total_player = sum(int(r["unread_count"]) for r in player_rows)
         total_staff = sum(int(r["unread_count"]) for r in staff_rows)
         return Response(
             {
-                "totals": {"player": total_player, "staff": total_staff, "all": total_player + total_staff},
+                "totals": {
+                    "player": total_player,
+                    "staff": total_staff,
+                    "all": total_player + total_staff,
+                },
                 "by_scope": {"player": player_rows, "staff": staff_rows},
                 "by_character": by_character,
             }
         )
 
+
 class ConversazioniView(APIView):
-    """View per ottenere messaggi organizzati per conversazione"""
+    """Messaggi organizzati per conversazione (thread per controparte / staff)."""
+
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
-        personaggio_id = request.query_params.get('personaggio_id')
+        import re
+
+        personaggio_id = request.query_params.get("personaggio_id")
         if not personaggio_id:
-            return Response({"error": "personaggio_id mancante"}, status=status.HTTP_400_BAD_REQUEST)
-        
+            return Response(
+                {"error": "personaggio_id mancante"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
         except Personaggio.DoesNotExist:
-            return Response({"error": "Personaggio non trovato"}, status=status.HTTP_404_NOT_FOUND)
-        
-        # Recupera tutti i messaggi del personaggio (broadcast esclusi per le conversazioni)
-        q_individuale_ricevuti = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(destinatario_personaggio=personaggio)
-        q_individuale_inviati = Q(tipo_messaggio=Messaggio.TIPO_STAFF) & Q(mittente_personaggio=personaggio)
-        
-        messaggi = Messaggio.objects.filter(q_individuale_ricevuti | q_individuale_inviati).select_related(
-            'mittente',
-            'mittente_personaggio',
-            'mittente_personaggio__social_profile',
-            'destinatario_personaggio',
-            'destinatario_personaggio__social_profile',
-            'in_risposta_a',
-        )
-        
-        # Filtra messaggi cancellati
-        ids_cancellati = LetturaMessaggio.objects.filter(
-            personaggio=personaggio, 
-            cancellato=True
-        ).values_list('messaggio_id', flat=True)
-        
-        messaggi = messaggi.exclude(id__in=ids_cancellati)
-        
-        # Raggruppa per conversazione (thread)
+            return Response(
+                {"error": "Personaggio non trovato"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        active_campaign = _get_active_campaign(request)
         from social.display_names import social_display_name
 
+        q_recv = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(
+            destinatario_personaggio=personaggio
+        )
+        q_sent = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(
+            mittente_personaggio=personaggio
+        )
+        q_staff_out = Q(tipo_messaggio=Messaggio.TIPO_STAFF) & Q(
+            mittente_personaggio=personaggio
+        )
+        q_staff_in = Q(tipo_messaggio=Messaggio.TIPO_STAFF) & Q(
+            destinatario_personaggio=personaggio
+        )
+
+        messaggi = (
+            Messaggio.objects.filter(q_recv | q_sent | q_staff_out | q_staff_in)
+            .filter(campagna=active_campaign)
+            .select_related(
+                "mittente",
+                "mittente_personaggio",
+                "mittente_personaggio__social_profile",
+                "destinatario_personaggio",
+                "destinatario_personaggio__social_profile",
+                "in_risposta_a",
+            )
+        )
+
+        ids_cancellati = LetturaMessaggio.objects.filter(
+            personaggio=personaggio,
+            cancellato=True,
+        ).values_list("messaggio_id", flat=True)
+        messaggi = messaggi.exclude(id__in=ids_cancellati)
+
+        def _thread_key(msg):
+            # Chat-style: una conversazione per controparte (PG) o Staff
+            if msg.tipo_messaggio == Messaggio.TIPO_STAFF or msg.is_staff_message:
+                return "staff", None
+            if msg.mittente_personaggio_id == personaggio.id:
+                other = msg.destinatario_personaggio
+            else:
+                other = msg.mittente_personaggio
+            if other:
+                return f"pg_{other.id}", other
+            if msg.mittente_id and (msg.mittente.is_staff or msg.mittente.is_superuser):
+                return "staff", None
+            return f"msg_{msg.id}", None
+
         conversazioni = {}
-        
         for msg in messaggi:
-            # Trova il messaggio radice (se è una risposta, risale al primo messaggio)
-            thread_id = msg.id
-            current_msg = msg
-            while current_msg.in_risposta_a:
-                thread_id = current_msg.in_risposta_a.id
-                current_msg = current_msg.in_risposta_a
-            
-            if thread_id not in conversazioni:
-                conversazioni[thread_id] = {
-                    'conversazione_id': thread_id,
-                    'messaggi': [],
-                    'partecipanti': set(),
-                    'ultimo_messaggio': msg.data_invio,
-                    'non_letti': 0
+            key, counterpart = _thread_key(msg)
+            if key not in conversazioni:
+                if key == "staff":
+                    partecipanti = [{"tipo": "staff", "id": 0, "nome": "Staff"}]
+                    titolo = "Staff"
+                elif counterpart is not None:
+                    partecipanti = [
+                        {
+                            "tipo": "pg",
+                            "id": counterpart.id,
+                            "nome": social_display_name(counterpart),
+                        }
+                    ]
+                    titolo = social_display_name(counterpart)
+                else:
+                    partecipanti = []
+                    titolo = msg.titolo or "Conversazione"
+                conversazioni[key] = {
+                    "conversazione_id": key,
+                    "titolo": titolo,
+                    "messaggi": [],
+                    "partecipanti": partecipanti,
+                    "ultimo_messaggio": msg.data_invio,
+                    "non_letti": 0,
                 }
-            
-            conversazioni[thread_id]['messaggi'].append(msg)
-            
-            # Aggiungi partecipanti
-            if msg.mittente:
-                conversazioni[thread_id]['partecipanti'].add(('user', msg.mittente.id, msg.mittente.username))
-            if msg.mittente_personaggio:
-                conversazioni[thread_id]['partecipanti'].add(
-                    ('pg', msg.mittente_personaggio.id, social_display_name(msg.mittente_personaggio))
-                )
-            if msg.destinatario_personaggio:
-                conversazioni[thread_id]['partecipanti'].add(
-                    ('pg', msg.destinatario_personaggio.id, social_display_name(msg.destinatario_personaggio))
-                )
-            
-            # Aggiorna timestamp ultimo messaggio
-            if msg.data_invio > conversazioni[thread_id]['ultimo_messaggio']:
-                conversazioni[thread_id]['ultimo_messaggio'] = msg.data_invio
-            
-            # Conta non letti
-            lettura = LetturaMessaggio.objects.filter(messaggio=msg, personaggio=personaggio, letto=True).first()
-            if not lettura:
-                conversazioni[thread_id]['non_letti'] += 1
-        
-        # Converti conversazioni in lista e ordina
+
+            conversazioni[key]["messaggi"].append(msg)
+            if msg.data_invio > conversazioni[key]["ultimo_messaggio"]:
+                conversazioni[key]["ultimo_messaggio"] = msg.data_invio
+
+            is_incoming = msg.mittente_personaggio_id != personaggio.id
+            if is_incoming:
+                if not LetturaMessaggio.objects.filter(
+                    messaggio=msg, personaggio=personaggio, letto=True
+                ).exists():
+                    conversazioni[key]["non_letti"] += 1
+
         risultato = []
-        for conv_id, conv_data in conversazioni.items():
-            # Ordina messaggi per data
-            conv_data['messaggi'].sort(key=lambda x: x.data_invio)
-            
-            # Converti partecipanti da set a lista di dict
-            conv_data['partecipanti'] = [
-                {'tipo': p[0], 'id': p[1], 'nome': p[2]} 
-                for p in conv_data['partecipanti']
-            ]
-            
-            # Serializza messaggi
-            messaggi_serializer = MessaggioSerializer(conv_data['messaggi'], many=True, context={'request': request})
-            conv_data['messaggi'] = messaggi_serializer.data
-            
+        for conv_data in conversazioni.values():
+            conv_data["messaggi"].sort(key=lambda x: x.data_invio)
+            ser = MessaggioSerializer(
+                conv_data["messaggi"],
+                many=True,
+                context={"request": request, "personaggio": personaggio},
+            )
+            conv_data["messaggi"] = ser.data
+            last = conv_data["messaggi"][-1] if conv_data["messaggi"] else None
+            anteprima = (last or {}).get("titolo") or ""
+            if last and last.get("testo"):
+                plain = re.sub(r"<[^>]+>", " ", last["testo"] or "")
+                plain = re.sub(r"\s+", " ", plain).strip()
+                anteprima = plain[:100] + ("…" if len(plain) > 100 else "")
+            conv_data["anteprima"] = anteprima
             risultato.append(conv_data)
-        
-        # Ordina conversazioni per ultimo messaggio (più recente primo)
-        risultato.sort(key=lambda x: x['ultimo_messaggio'], reverse=True)
-        
+
+        risultato.sort(key=lambda x: x["ultimo_messaggio"], reverse=True)
         return Response(risultato)
 
+
 class RispondiMessaggioView(APIView):
-    """View per rispondere a un messaggio creando un thread"""
+    """Risponde a un messaggio creando un thread (INDV o STAFF a seconda del contesto)."""
+
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request, messaggio_id):
-        personaggio_id = request.data.get('personaggio_id')
-        testo = request.data.get('testo')
-        titolo = request.data.get('titolo', '')
-        
+        personaggio_id = request.data.get("personaggio_id")
+        testo = request.data.get("testo")
+        titolo = request.data.get("titolo", "")
+
         if not personaggio_id or not testo:
             return Response(
-                {"error": "personaggio_id e testo sono obbligatori"}, 
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "personaggio_id e testo sono obbligatori"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         try:
             personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
-            messaggio_originale = Messaggio.objects.get(pk=messaggio_id)
+            messaggio_originale = Messaggio.objects.select_related(
+                "mittente", "mittente_personaggio", "destinatario_personaggio"
+            ).get(pk=messaggio_id)
         except (Personaggio.DoesNotExist, Messaggio.DoesNotExist):
             return Response({"error": "Dati non validi"}, status=status.HTTP_404_NOT_FOUND)
-        
-        # Crea la risposta
-        risposta = Messaggio.objects.create(
-            mittente_personaggio=personaggio,
-            tipo_messaggio=Messaggio.TIPO_STAFF,  # Risposta a staff
-            titolo=titolo or f"Re: {messaggio_originale.titolo}",
-            testo=testo,
-            in_risposta_a=messaggio_originale,
-            is_staff_message=False,  # È una risposta del giocatore
-            campagna=personaggio.campagna,
+
+        to_staff = (
+            messaggio_originale.tipo_messaggio == Messaggio.TIPO_STAFF
+            or messaggio_originale.is_staff_message
+            or (
+                messaggio_originale.mittente
+                and (messaggio_originale.mittente.is_staff or messaggio_originale.mittente.is_superuser)
+                and not messaggio_originale.mittente_personaggio_id
+            )
         )
-        
-        serializer = MessaggioSerializer(risposta, context={'request': request})
+
+        if to_staff:
+            risposta = Messaggio.objects.create(
+                mittente_personaggio=personaggio,
+                tipo_messaggio=Messaggio.TIPO_STAFF,
+                titolo=titolo or f"Re: {messaggio_originale.titolo}",
+                testo=testo,
+                in_risposta_a=messaggio_originale,
+                is_staff_message=True,
+                campagna=personaggio.campagna,
+            )
+        else:
+            if messaggio_originale.mittente_personaggio_id == personaggio.id:
+                dest = messaggio_originale.destinatario_personaggio
+            else:
+                dest = messaggio_originale.mittente_personaggio
+            if not dest:
+                return Response(
+                    {"error": "Impossibile determinare il destinatario della risposta"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            risposta = Messaggio.objects.create(
+                mittente_personaggio=personaggio,
+                destinatario_personaggio=dest,
+                tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
+                titolo=titolo or f"Re: {messaggio_originale.titolo}",
+                testo=testo,
+                in_risposta_a=messaggio_originale,
+                is_staff_message=False,
+                campagna=personaggio.campagna,
+            )
+
+        serializer = MessaggioSerializer(
+            risposta, context={"request": request, "personaggio": personaggio}
+        )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 
 class MessaggioAdminSentListView(generics.ListAPIView):
     serializer_class = MessaggioSerializer
-    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated, IsStaffOrMaster]
+
     def get_queryset(self):
-        return Messaggio.objects.filter(mittente=self.request.user, salva_in_cronologia=True).order_by('-data_invio')
+        active_campaign = _get_active_campaign(self.request)
+        return Messaggio.objects.filter(
+            mittente=self.request.user,
+            salva_in_cronologia=True,
+            campagna=active_campaign,
+        ).order_by("-data_invio")
+
 
 class MessaggioBroadcastCreateView(generics.CreateAPIView):
     serializer_class = MessaggioBroadcastCreateSerializer
-    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser] 
+    permission_classes = [permissions.IsAuthenticated, IsStaffOrMaster]
+
     def perform_create(self, serializer):
         serializer.save(
             mittente=self.request.user,
             tipo_messaggio=Messaggio.TIPO_BROADCAST,
             campagna=_get_active_campaign(self.request),
         )
-        
+
+
 class WebPushSubscribeView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -5297,41 +5392,54 @@ class ChangePasswordView(APIView):
     
 class StaffMessageListView(generics.ListAPIView):
     serializer_class = MessaggioSerializer
-    permission_classes = [permissions.IsAdminUser] # Solo Staff/Admin
+    permission_classes = [IsStaffOrMaster]
 
     def get_queryset(self):
-        # Restituisce messaggi per lo staff, escludendo quelli cancellati
-        return Messaggio.objects.filter(
-            is_staff_message=True, 
-            cancellato_staff=False
-        ).select_related(
-            'mittente',
-            'mittente_personaggio',
-            'mittente_personaggio__proprietario',
-            'mittente_personaggio__social_profile',
-            'destinatario_personaggio',
-        ).order_by('-data_invio')
+        active_campaign = _get_active_campaign(self.request)
+        return (
+            Messaggio.objects.filter(
+                is_staff_message=True,
+                cancellato_staff=False,
+                campagna=active_campaign,
+            )
+            .select_related(
+                "mittente",
+                "mittente_personaggio",
+                "mittente_personaggio__proprietario",
+                "mittente_personaggio__social_profile",
+                "destinatario_personaggio",
+            )
+            .order_by("-data_invio")
+        )
+
 
 class StaffMessageMarkReadView(APIView):
-    permission_classes = [permissions.IsAdminUser]
-    
+    permission_classes = [IsStaffOrMaster]
+
     def post(self, request, message_id):
+        active_campaign = _get_active_campaign(request)
         try:
-            messaggio = Messaggio.objects.get(pk=message_id, is_staff_message=True)
+            messaggio = Messaggio.objects.get(
+                pk=message_id, is_staff_message=True, campagna=active_campaign
+            )
             messaggio.letto_staff = True
-            messaggio.save()
+            messaggio.save(update_fields=["letto_staff", "updated_at"])
             return Response({"message": "Messaggio marcato come letto"})
         except Messaggio.DoesNotExist:
             return Response({"error": "Messaggio non trovato"}, status=status.HTTP_404_NOT_FOUND)
 
+
 class StaffMessageDeleteView(APIView):
-    permission_classes = [permissions.IsAdminUser]
-    
+    permission_classes = [IsStaffOrMaster]
+
     def post(self, request, message_id):
+        active_campaign = _get_active_campaign(request)
         try:
-            messaggio = Messaggio.objects.get(pk=message_id, is_staff_message=True)
+            messaggio = Messaggio.objects.get(
+                pk=message_id, is_staff_message=True, campagna=active_campaign
+            )
             messaggio.cancellato_staff = True
-            messaggio.save()
+            messaggio.save(update_fields=["cancellato_staff", "updated_at"])
             return Response({"message": "Messaggio eliminato"})
         except Messaggio.DoesNotExist:
             return Response({"error": "Messaggio non trovato"}, status=status.HTTP_404_NOT_FOUND)

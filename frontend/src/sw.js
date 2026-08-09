@@ -90,5 +90,27 @@ self.addEventListener('push', function (event) {
 
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
-  event.waitUntil(clients.openWindow(event.notification.data.url));
+  const targetUrl = event.notification.data?.url || '/?tab=messaggi';
+  event.waitUntil(
+    (async () => {
+      const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const client of allClients) {
+        try {
+          const clientUrl = new URL(client.url);
+          if (clientUrl.origin === self.location.origin) {
+            await client.focus();
+            if ('navigate' in client) {
+              await client.navigate(targetUrl);
+            } else {
+              client.postMessage({ type: 'kor35:open-url', url: targetUrl });
+            }
+            return;
+          }
+        } catch (_) {
+          /* continua */
+        }
+      }
+      await clients.openWindow(targetUrl);
+    })()
+  );
 });

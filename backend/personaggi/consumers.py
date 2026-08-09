@@ -5,36 +5,44 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 from personaggi.carte_collezionabili_models import DuelloCarte
+from personaggi.ws_auth import user_notifications_group
+
+
+# Canale globale: timer, duello, broadcast di sistema (payload già filtrati client-side).
+GLOBAL_NOTIFICATIONS_GROUP = "kor35_notifications"
 
 
 class NotificationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        self.room_group_name = 'kor35_notifications'
+        user = self.scope.get("user")
+        if not user or not getattr(user, "is_authenticated", False):
+            await self.close(code=4401)
+            return
 
-        # Unisciti al gruppo
-        await self.channel_layer.group_add(
-            self.room_group_name,
-            self.channel_name
-        )
+        self.user_id = user.id
+        self.global_group = GLOBAL_NOTIFICATIONS_GROUP
+        self.user_group = user_notifications_group(user.id)
 
+        await self.channel_layer.group_add(self.global_group, self.channel_name)
+        await self.channel_layer.group_add(self.user_group, self.channel_name)
         await self.accept()
 
     async def disconnect(self, close_code):
-        # Lascia il gruppo
-        await self.channel_layer.group_discard(
-            self.room_group_name,
-            self.channel_name
-        )
+        if hasattr(self, "global_group"):
+            await self.channel_layer.group_discard(self.global_group, self.channel_name)
+        if hasattr(self, "user_group"):
+            await self.channel_layer.group_discard(self.user_group, self.channel_name)
 
-    # Ricevi messaggio dal gruppo (inviato dal signal)
     async def send_notification(self, event):
-        message = event['message']
-
-        # Invia messaggio al WebSocket (al frontend React)
-        await self.send(text_data=json.dumps({
-            'type': 'notification',
-            'payload': message
-        }))
+        message = event["message"]
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "notification",
+                    "payload": message,
+                }
+            )
+        )
 
 
 class DuelloCarteConsumer(AsyncWebsocketConsumer):
@@ -44,7 +52,11 @@ class DuelloCarteConsumer(AsyncWebsocketConsumer):
     def _user_can_watch(self, user, duello_id):
         if not user or not user.is_authenticated:
             return False
-        duello = DuelloCarte.objects.filter(pk=duello_id).select_related("sfidante", "sfidato").first()
+        duello = (
+            DuelloCarte.objects.filter(pk=duello_id)
+            .select_related("sfidante", "sfidato")
+            .first()
+        )
         if not duello:
             return False
         owner_ids = {duello.sfidante.proprietario_id}
@@ -62,17 +74,25 @@ class DuelloCarteConsumer(AsyncWebsocketConsumer):
         self.room_group_name = f"duello_{self.duello_id}"
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
-        await self.send(text_data=json.dumps({
-            "type": "duello_connected",
-            "duello_id": str(self.duello_id),
-        }))
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "duello_connected",
+                    "duello_id": str(self.duello_id),
+                }
+            )
+        )
 
     async def disconnect(self, close_code):
         if hasattr(self, "room_group_name"):
             await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
     async def duello_update(self, event):
-        await self.send(text_data=json.dumps({
-            "type": "duello_update",
-            "payload": event.get("payload") or {},
-        }))
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "duello_update",
+                    "payload": event.get("payload") or {},
+                }
+            )
+        )

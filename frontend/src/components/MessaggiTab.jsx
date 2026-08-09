@@ -13,7 +13,16 @@ function classNames(...classes) {
 }
 
 const MessaggiTab = ({ onLogout, composeTarget, onComposeTargetConsumed }) => {
-  const { selectedCharacterData: char, viewAll, unreadCount, fetchUserMessages, selectedCharacterId, selectCharacter } = useCharacter();
+  const {
+    selectedCharacterData: char,
+    viewAll,
+    unreadCount,
+    fetchUserMessages,
+    selectedCharacterId,
+    selectCharacter,
+    isCampaignStaffer,
+    isAdmin,
+  } = useCharacter();
   const [unreadBuckets, setUnreadBuckets] = useState({
     totals: { player: 0, staff: 0, all: 0 },
     by_scope: { player: [], staff: [] },
@@ -86,8 +95,8 @@ const MessaggiTab = ({ onLogout, composeTarget, onComposeTargetConsumed }) => {
 
   if (!char) return <div className="p-4 text-gray-400">Caricamento...</div>;
 
-  // Mostra tab Admin solo se staff e non in view-all
-  const showAdminTab = char.is_staff && !viewAll;
+  // Staff di campagna (o superuser), non solo Django is_staff sul PG
+  const showAdminTab = (isCampaignStaffer || isAdmin || char.is_staff) && !viewAll;
   const staffUnreadTotal = Number(unreadBuckets?.totals?.staff || 0);
 
   return (

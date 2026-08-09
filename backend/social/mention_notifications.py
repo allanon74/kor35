@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 
-from django.conf import settings
 from django.db.models import Q
 
 from personaggi.models import Personaggio
@@ -19,11 +18,8 @@ _SOURCE_LABELS = {
 }
 
 
-def instafame_public_base_url() -> str:
-    return (getattr(settings, "INSTAFAME_PUBLIC_BASE_URL", None) or "https://www.kor35.it").rstrip("/")
-
-
 def instafame_deep_link_path(*, post_id=None, comment_id=None, story_id=None) -> str:
+    """Path relativo per Web Push (edge/mirror/www senza host assoluto)."""
     params = []
     if post_id:
         params.append(f"post={int(post_id)}")
@@ -65,8 +61,7 @@ def notify_instafame_mentions(citer, mentioned_ids, source_kind, *, post=None, c
     post_id = getattr(post, "id", None) or (getattr(comment, "post_id", None) if comment else None)
     comment_id = getattr(comment, "id", None)
     story_id = getattr(story, "id", None)
-    link_path = instafame_deep_link_path(post_id=post_id, comment_id=comment_id, story_id=story_id)
-    push_url = f"{instafame_public_base_url()}{link_path}"
+    push_url = instafame_deep_link_path(post_id=post_id, comment_id=comment_id, story_id=story_id)
 
     targets = (
         Personaggio.objects.filter(id__in=unique_ids)

@@ -1,51 +1,78 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
+import { Mail, MessageCircle, X } from 'lucide-react';
 
-const NotificationPopup = ({ notification, onClose }) => {
-  if (!notification) return null;
-
-  // Chiudi automaticamente dopo 10 secondi (10000 ms)
+/**
+ * Toast in-app per notifiche realtime (messaggi, duelli, …).
+ * Tema scuro allineato all'app; click apre la tab Messaggi.
+ */
+const NotificationPopup = ({ notification, onClose, onOpenMessages }) => {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose();
-    }, 10000); // <--- MODIFICATO: Durata più lunga
+    if (!notification) return undefined;
+    const timer = setTimeout(() => onClose(), 8000);
     return () => clearTimeout(timer);
   }, [notification, onClose]);
 
+  const plainText = useMemo(() => {
+    if (!notification?.testo) return '';
+    const raw = notification.testo;
+    if (typeof document !== 'undefined') {
+      const el = document.createElement('div');
+      el.innerHTML = raw;
+      return (el.textContent || el.innerText || '').trim();
+    }
+    return String(raw).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  }, [notification?.testo]);
+
+  if (!notification) return null;
+
+  const handleOpen = () => {
+    if (typeof onOpenMessages === 'function') onOpenMessages(notification);
+    onClose();
+  };
+
   return (
-    <div className="fixed top-5 right-5 z-50 max-w-sm w-full bg-white shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden animate-slide-in-right">
-      <div className="p-4">
-        <div className="flex items-start">
-          <div className="shrink-0">
-            <svg className="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-          </div>
-          <div className="ml-3 w-0 flex-1 pt-0.5">
-            <p className="text-sm font-medium text-gray-900">
-              {notification.titolo}
-            </p>
-            
-            {/* MODIFICA QUI: Renderizza HTML invece di testo puro */}
-            <div 
-                className="mt-1 text-sm text-gray-500"
-                dangerouslySetInnerHTML={{ __html: notification.testo }}
-            />
-            
-            <p className="mt-1 text-xs text-gray-400">
-                Da: {notification.mittente}
-            </p>
-          </div>
-          <div className="ml-4 shrink-0 flex">
-            <button
-              className="bg-white rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none"
-              onClick={onClose}
-            >
-              <span className="sr-only">Chiudi</span>
-              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
-          </div>
+    <div className="fixed top-4 right-4 z-50 max-w-sm w-[min(100vw-2rem,24rem)] animate-slide-in-right">
+      <div className="rounded-2xl border border-indigo-400/30 bg-gray-950/95 shadow-2xl shadow-indigo-950/40 backdrop-blur-md overflow-hidden ring-1 ring-white/10">
+        <div className="flex items-stretch">
+          <div className="w-1.5 bg-indigo-500 shrink-0" aria-hidden />
+          <button
+            type="button"
+            onClick={handleOpen}
+            className="flex-1 text-left p-4 hover:bg-white/5 transition-colors"
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-full bg-indigo-600/30 p-2 text-indigo-300">
+                <MessageCircle size={18} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white truncate">
+                  {notification.titolo || 'Nuovo messaggio'}
+                </p>
+                {plainText ? (
+                  <p className="mt-1 text-sm text-gray-300 line-clamp-3">{plainText}</p>
+                ) : null}
+                {notification.mittente ? (
+                  <p className="mt-2 text-[11px] uppercase tracking-wide text-gray-500">
+                    Da: {notification.mittente}
+                  </p>
+                ) : null}
+                <p className="mt-2 text-xs text-indigo-300/90 inline-flex items-center gap-1">
+                  <Mail size={12} /> Apri messaggi
+                </p>
+              </div>
+            </div>
+          </button>
+          <button
+            type="button"
+            className="self-start m-2 p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            aria-label="Chiudi"
+          >
+            <X size={16} />
+          </button>
         </div>
       </div>
     </div>

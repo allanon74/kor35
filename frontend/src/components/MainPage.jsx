@@ -431,6 +431,12 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     }
   }, [location.search]);
 
+  useEffect(() => {
+    const onOpenMessaggi = () => setActiveTab('messaggi');
+    window.addEventListener('kor35:open-messaggi', onOpenMessaggi);
+    return () => window.removeEventListener('kor35:open-messaggi', onOpenMessaggi);
+  }, []);
+
   // Persiste il tab così dopo standby / kill soft del browser si torna alla stessa schermata.
   useEffect(() => {
     try {

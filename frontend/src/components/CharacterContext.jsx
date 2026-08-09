@@ -685,8 +685,11 @@ export const CharacterProvider = ({ children, onLogout }) => {
   const [notification, setNotification] = useState(null);
   const ws = useRef(null);
   useEffect(() => {
+    const token = localStorage.getItem('kor35_token');
+    if (!token) return undefined;
+
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws/notifications/`;
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws/notifications/?token=${encodeURIComponent(token)}`;
     if (ws.current) ws.current.close();
     ws.current = new WebSocket(wsUrl);
     ws.current.onmessage = (e) => {
@@ -755,10 +758,19 @@ export const CharacterProvider = ({ children, onLogout }) => {
            if (!msg || msg.action === 'TIMER_SYNC' || msg.action === 'TIMER_INNESCO_SYNC') {
              return;
            }
-           const myId = parseInt(selectedCharacterId);
-           if (msg.tipo === 'BROAD' || (msg.tipo === 'INDV' && msg.destinatario_id === myId) || msg.tipo === 'GROUP') {
+           if (msg.action && String(msg.action).startsWith('DUELLO_')) {
+             return;
+           }
+           const myId = parseInt(selectedCharacterId, 10);
+           const forMe =
+             msg.tipo === 'BROAD' ||
+             msg.tipo === 'GROUP' ||
+             msg.tipo === 'STAFF' ||
+             (msg.tipo === 'INDV' && (msg.destinatario_id === myId || !msg.destinatario_id));
+           if (forMe) {
               setNotification(msg);
-              sendSystemNotification(msg.titolo, msg.testo.replace(/<[^>]+>/g, ''));
+              const plain = String(msg.testo || '').replace(/<[^>]+>/g, '');
+              sendSystemNotification(msg.titolo, plain);
               fetchUserMessages(selectedCharacterId);
               queryClient.invalidateQueries(['personaggio', selectedCharacterId]);
            }
@@ -896,7 +908,13 @@ export const CharacterProvider = ({ children, onLogout }) => {
   return (
     <CharacterContext.Provider value={value}>
       {children}
-      <NotificationPopup notification={notification} onClose={() => setNotification(null)} />
+      <NotificationPopup
+        notification={notification}
+        onClose={() => setNotification(null)}
+        onOpenMessages={() => {
+          window.dispatchEvent(new CustomEvent('kor35:open-messaggi'));
+        }}
+      />
     </CharacterContext.Provider>
   );
 };
