@@ -2803,6 +2803,19 @@ class ConversazioniView(APIView):
                 plain = re.sub(r"<[^>]+>", " ", last["testo"] or "")
                 plain = re.sub(r"\s+", " ", plain).strip()
                 anteprima = plain[:100] + ("…" if len(plain) > 100 else "")
+            allegati_bits = []
+            if last:
+                crediti = int(last.get("crediti_allegati") or 0)
+                oggetti = last.get("oggetti_allegati_snapshot") or []
+                if crediti > 0:
+                    allegati_bits.append(f"{crediti} crediti")
+                if oggetti:
+                    allegati_bits.append(
+                        f"{len(oggetti)} oggett{'o' if len(oggetti) == 1 else 'i'}"
+                    )
+            if allegati_bits:
+                prefix = "Allegati: " + " · ".join(allegati_bits)
+                anteprima = f"{prefix} — {anteprima}" if anteprima else prefix
             conv_data["anteprima"] = anteprima
             risultato.append(conv_data)
 

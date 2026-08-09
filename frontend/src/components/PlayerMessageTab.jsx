@@ -1,10 +1,12 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useCharacter } from './CharacterContext';
-import { Trash2, Mail, Eye, EyeOff, MessageCircle, Megaphone, Shield, ChevronRight } from 'lucide-react';
+import { Trash2, Mail, Eye, EyeOff, MessageCircle, Megaphone, Shield, ChevronRight, Coins, Package } from 'lucide-react';
 import ComposeMessageModal from './ComposeMessageModal';
 import ConversazioneView from './ConversazioneView';
 import RichTextDisplay from './RichTextDisplay';
-import { getConversazioni, rispondiMessaggio } from '../api';
+import MessageAttachmentsLine from './MessageAttachmentsLine';
+import { getMessageAttachmentsSummary } from './messageAttachments';
+import { getConversazioni, rispondiMessaggio, markMessageAsRead } from '../api';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { OfflineConsultBanner } from './OfflineConsultBanner';
 
@@ -17,6 +19,7 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
     personaggiList,
     isCampaignStaffer,
     handleToggleRead,
+    handleMarkAsRead,
     handleDeleteMessage: contextDeleteMessage,
   } = useCharacter();
   const isOnline = useOnlineStatus();
@@ -50,19 +53,87 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
     return m ? m.id : null;
   }, [userMessages, systemMessages, viewMode]);
 
+  const refreshConversazioni = useCallback(async () => {
+    if (!selectedCharacterId || !isOnline) return [];
+    const data = await getConversazioni(selectedCharacterId, onLogout);
+    const list = Array.isArray(data) ? data : [];
+    setConversazioni(list);
+    return list;
+  }, [selectedCharacterId, isOnline, onLogout]);
+
+  const markIncomingAsRead = useCallback(
+    async (conv) => {
+      if (!conv || !selectedCharacterId) return conv;
+      const incomingUnread = (conv.messaggi || []).filter(
+        (m) =>
+          !m.letto &&
+          Number(m.mittente_personaggio_id) !== Number(selectedCharacterId)
+      );
+      if (!incomingUnread.length) return conv;
+
+      const unreadIds = new Set(incomingUnread.map((m) => m.id));
+      const markedConv = {
+        ...conv,
+        non_letti: 0,
+        messaggi: (conv.messaggi || []).map((m) =>
+          unreadIds.has(m.id) ? { ...m, letto: true } : m
+        ),
+      };
+
+      // UI immediata (lista + thread)
+      setActiveConversazione((prev) =>
+        prev && prev.conversazione_id === conv.conversazione_id ? markedConv : prev
+      );
+      setConversazioni((list) =>
+        list.map((c) => (c.conversazione_id === conv.conversazione_id ? markedConv : c))
+      );
+
+      // Persistenza con endpoint "leggi" (affidabile, non toggle)
+      await Promise.all(
+        incomingUnread.map(async (m) => {
+          try {
+            await markMessageAsRead(m.id, selectedCharacterId, onLogout);
+          } catch {
+            /* ignore singolo */
+          }
+        })
+      );
+
+      try {
+        await fetchUserMessages(selectedCharacterId);
+      } catch {
+        /* ignore */
+      }
+
+      try {
+        const list = await refreshConversazioni();
+        const updated = list.find((c) => c.conversazione_id === conv.conversazione_id);
+        if (updated) {
+          setActiveConversazione((prev) =>
+            prev && prev.conversazione_id === conv.conversazione_id ? updated : prev
+          );
+          return updated;
+        }
+      } catch {
+        /* ignore */
+      }
+      return markedConv;
+    },
+    [selectedCharacterId, onLogout, fetchUserMessages, refreshConversazioni]
+  );
+
   const loadConversazioni = useCallback(async () => {
     if (!selectedCharacterId || !isOnline) return;
     setLoadingConv(true);
     try {
-      const data = await getConversazioni(selectedCharacterId, onLogout);
-      setConversazioni(Array.isArray(data) ? data : []);
+      await refreshConversazioni();
     } catch (e) {
       console.error(e);
       setConversazioni([]);
     } finally {
       setLoadingConv(false);
     }
-  }, [selectedCharacterId, isOnline, onLogout]);
+  }, [selectedCharacterId, isOnline, refreshConversazioni]);
 
   useEffect(() => {
     loadConversazioni();
@@ -98,30 +169,16 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
 
   const handleOpenConversazione = async (conv) => {
     setActiveConversazione(conv);
-    // Marca come letti i messaggi in arrivo non letti
-    const unread = (conv.messaggi || []).filter(
-      (m) =>
-        !m.letto &&
-        Number(m.mittente_personaggio_id) !== Number(selectedCharacterId)
-    );
-    for (const m of unread) {
-      try {
-        await handleToggleRead(m.id);
-      } catch {
-        /* ignore */
-      }
-    }
+    // All'apertura: segna subito come letti i messaggi in arrivo
+    await markIncomingAsRead(conv);
   };
 
   const handleRispondiThread = async (messaggioId, testo) => {
     await rispondiMessaggio(messaggioId, selectedCharacterId, testo, '', onLogout);
     await fetchUserMessages(selectedCharacterId);
-    const data = await getConversazioni(selectedCharacterId, onLogout);
-    const list = Array.isArray(data) ? data : [];
-    setConversazioni(list);
+    const list = await refreshConversazioni();
     const key = activeConversazione?.conversazione_id;
-    const updated = list.find((c) => c.conversazione_id === key) || null;
-    setActiveConversazione(updated);
+    setActiveConversazione(list.find((c) => c.conversazione_id === key) || null);
   };
 
   if (!char) return <div className="text-gray-400 text-center mt-4">Seleziona un personaggio</div>;
@@ -198,6 +255,8 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
             conversazioni.map((conv) => {
               const unread = Number(conv.non_letti || 0);
               const isStaffThread = conv.conversazione_id === 'staff' || conv.titolo === 'Staff';
+              const lastMsg = (conv.messaggi || [])[(conv.messaggi || []).length - 1];
+              const allegatiSummary = getMessageAttachmentsSummary(lastMsg);
               return (
                 <button
                   key={conv.conversazione_id}
@@ -224,6 +283,17 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
                       </span>
                     </div>
                     <p className="text-sm text-gray-400 truncate mt-0.5">{conv.anteprima || '—'}</p>
+                    {allegatiSummary ? (
+                      <p className="mt-1 text-[11px] text-amber-200/90 truncate inline-flex items-center gap-1 max-w-full">
+                        {Number(lastMsg?.crediti_allegati || 0) > 0 ? (
+                          <Coins size={12} className="shrink-0" />
+                        ) : null}
+                        {(lastMsg?.oggetti_allegati_snapshot || []).length > 0 ? (
+                          <Package size={12} className="shrink-0" />
+                        ) : null}
+                        <span className="truncate">Allegati: {allegatiSummary}</span>
+                      </p>
+                    ) : null}
                   </div>
                   {unread > 0 ? (
                     <span className="min-w-6 h-6 px-1.5 rounded-full bg-red-600 text-white text-xs leading-6 text-center shrink-0">
@@ -316,6 +386,7 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
                         <div className="absolute bottom-0 left-0 w-full h-8 bg-linear-to-t from-gray-800/90 to-transparent pointer-events-none" />
                       )}
                     </div>
+                    <MessageAttachmentsLine msg={msg} />
                   </div>
                 </div>
               );
@@ -373,6 +444,9 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
           currentPersonaggioId={selectedCharacterId}
           onClose={() => setActiveConversazione(null)}
           onRispondi={handleRispondiThread}
+          onMarkIncomingRead={async () => {
+            if (activeConversazione) await markIncomingAsRead(activeConversazione);
+          }}
         />
       )}
     </div>

@@ -4042,7 +4042,7 @@ class MessaggioSerializer(serializers.ModelSerializer):
             'mittente_is_staff', 'tipo_messaggio', 'titolo', 'testo', 
             'data_invio', 'data_creazione', 'destinatario_personaggio', 'destinatario_personaggio_id',
             'destinatario_gruppo', 'salva_in_cronologia', 'letto', 'is_staff_message',
-            'crediti_allegati', 'oggetti_allegati_snapshot',
+            'crediti_allegati', 'conto_crediti_allegati', 'oggetti_allegati_snapshot',
             'in_risposta_a_id', 'risposte_count'
         )
         read_only_fields = ('mittente', 'data_invio', 'tipo_messaggio')
@@ -4051,8 +4051,17 @@ class MessaggioSerializer(serializers.ModelSerializer):
         # Per messaggi staff, usa il campo letto_staff
         if obj.is_staff_message:
             return obj.letto_staff
-        # Per altri messaggi, usa is_letto_db se disponibile
-        return getattr(obj, 'is_letto_db', False)
+        # Annotazione da MessaggioListView
+        if hasattr(obj, 'is_letto_db'):
+            return bool(obj.is_letto_db)
+        # Fallback (es. ConversazioniView): lookup LetturaMessaggio per PG nel context
+        personaggio = self.context.get('personaggio')
+        if personaggio:
+            from personaggi.models import LetturaMessaggio
+            return LetturaMessaggio.objects.filter(
+                messaggio=obj, personaggio=personaggio, letto=True
+            ).exists()
+        return False
     
     def get_destinatario_personaggio_id(self, obj):
         return obj.destinatario_personaggio_id
