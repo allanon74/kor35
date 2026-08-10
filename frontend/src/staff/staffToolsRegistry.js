@@ -92,7 +92,7 @@ export const STAFF_TOOLS_REGISTRY = {
   tabelle: { id: 'tabelle', label: 'Tabelle', icon: Layers, color: 'bg-pink-700', componentKey: 'tabelle' },
   immagini: { id: 'immagini', label: 'Immagini wiki', icon: Image, color: 'bg-teal-700', componentKey: 'immagini' },
   inventari: { id: 'inventari', label: 'Inventari', icon: Package, color: 'bg-slate-700', componentKey: 'inventari' },
-  manifesti: { id: 'manifesti', label: 'QR — Manifesti', icon: BookText, color: 'bg-amber-900', componentKey: 'manifesti' },
+  manifesti: { id: 'manifesti', label: 'QR — Manifesti / Serie / Trappole', icon: BookText, color: 'bg-amber-900', componentKey: 'manifesti' },
   nodi: { id: 'nodi', label: 'QR — Nodi', icon: Sparkles, color: 'bg-cyan-900', componentKey: 'nodi' },
   'innesco-timer': { id: 'innesco-timer', label: 'QR — Innesco timer', icon: Sparkles, color: 'bg-orange-900', componentKey: 'innesco-timer' },
   'qr-random-pool': { id: 'qr-random-pool', label: 'QR — Pool randomico', icon: QrCode, color: 'bg-rose-800', componentKey: 'qr-random-pool' },
