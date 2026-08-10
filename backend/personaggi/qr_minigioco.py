@@ -707,26 +707,42 @@ def _crea_sessione(personaggio, qr_code, config, request=None):
     )
 
 
+def resolve_config_for_qr(qr_code, config_override=None):
+    """Config minigioco effettiva: override esplicito, altrimenti QR, altrimenti pool."""
+    if config_override is not None:
+        return config_override
+    from .models import MinigiocoQrConfig
+    from . import qr_random_pool
+
+    try:
+        cfg = qr_code.configurazione_minigioco
+        if _sezione_minigioco_attiva(cfg):
+            return cfg
+    except MinigiocoQrConfig.DoesNotExist:
+        pass
+    return qr_random_pool.resolve_minigioco_config_for_qr(qr_code)
+
+
 def check_gate_minigioco(
     *,
     qr_code,
     personaggio,
     request=None,
     bypass_session_id: Optional[str] = None,
+    config_override=None,
 ) -> Optional[Dict[str, Any]]:
     """
     Se la sezione minigiochi è attiva: verifica requisiti di accesso al QR.
     Se il minigioco è attivo: ritorna payload minigioco da risolvere, altrimenti None
     (effetto QR normale dopo i controlli).
     """
-    from .models import MinigiocoQrConfig, MinigiocoQrSession
+    from .models import MinigiocoQrSession
 
     if bypass_session_id and session_allows_bypass(bypass_session_id, personaggio, qr_code):
         return None
 
-    try:
-        config = qr_code.configurazione_minigioco
-    except MinigiocoQrConfig.DoesNotExist:
+    config = resolve_config_for_qr(qr_code, config_override)
+    if config is None:
         return None
 
     if not _sezione_minigioco_attiva(config):
@@ -823,10 +839,7 @@ def completa_sessione(session_id, personaggio, client_state: dict) -> Tuple[bool
         return False, "Sessione non più attiva.", None
 
     if sess.scadenza_at and timezone.now() >= sess.scadenza_at:
-        try:
-            config = sess.qr_code.configurazione_minigioco
-        except Exception:
-            config = None
+        config = resolve_config_for_qr(sess.qr_code)
         if config:
             payload = gestisci_scadenza_sessione(sess, config, personaggio=personaggio)
             if payload.get("tipo_modello") == "minigioco_superato":
@@ -841,11 +854,10 @@ def completa_sessione(session_id, personaggio, client_state: dict) -> Tuple[bool
     sess.completato_at = now
     sess.save(update_fields=["stato", "completato_at", "updated_at"])
 
+    config = resolve_config_for_qr(sess.qr_code)
     msg = ""
-    try:
-        msg = (sess.qr_code.configurazione_minigioco.messaggio_vittoria or "").strip()
-    except Exception:
-        pass
+    if config:
+        msg = (getattr(config, "messaggio_vittoria", None) or "").strip()
 
     return True, msg or "Minigioco completato!", {
         "tipo_modello": "minigioco_superato",
@@ -927,9 +939,8 @@ def expire_sessione(session_id, personaggio, request=None) -> Dict[str, Any]:
     if sess.personaggio_id != personaggio.pk:
         return {"error": "Sessione non valida.", "tipo_modello": "minigioco_errore"}
 
-    try:
-        config = sess.qr_code.configurazione_minigioco
-    except Exception:
+    config = resolve_config_for_qr(sess.qr_code)
+    if not config:
         return {"error": "Configurazione minigioco assente.", "tipo_modello": "minigioco_errore"}
 
     return gestisci_scadenza_sessione(sess, config, request=request, personaggio=personaggio)

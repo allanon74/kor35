@@ -77,6 +77,7 @@ from .models import (
     QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, Punteggio, Tabella, 
     TipologiaPersonaggio, abilita_tier, abilita_requisito, abilita_sbloccata, 
     abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, NodoRewardConfig, A_vista, Mattone, InnescoTimer,
+    RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect, Trappola, SerieCollezione, SerieAssegnazione, SerieQr,
     AURA, 
     Infusione, Tessitura, 
     # NUOVI MODELLI INTERMEDI
@@ -2346,6 +2347,137 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
 
     def get_target_korps_ids(self, obj):
         return list(obj.target_korps.values_list("id", flat=True))
+
+
+class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
+    nodo_nome = serializers.CharField(source="nodo.nome", read_only=True, allow_null=True)
+    serie_nome = serializers.CharField(source="serie.nome", read_only=True, allow_null=True)
+
+    class Meta:
+        model = RandomQrPoolEffect
+        fields = (
+            "id",
+            "pool",
+            "tipo",
+            "frequenza",
+            "ordine",
+            "attivo",
+            "titolo",
+            "testo",
+            "nodo",
+            "nodo_nome",
+            "durata_secondi",
+            "serie",
+            "serie_nome",
+        )
+        read_only_fields = ("id",)
+
+
+class RandomQrPoolMembershipStaffSerializer(serializers.ModelSerializer):
+    qr_code_id = serializers.CharField(source="qr_code.id", read_only=True)
+    has_vista = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RandomQrPoolMembership
+        fields = ("id", "pool", "qr_code", "qr_code_id", "has_vista", "created_at")
+        read_only_fields = ("id", "created_at")
+
+    def get_has_vista(self, obj):
+        return bool(getattr(obj.qr_code, "vista_id", None))
+
+
+class RandomQrPoolStaffSerializer(serializers.ModelSerializer):
+    effetti = RandomQrPoolEffectStaffSerializer(many=True, read_only=True)
+    memberships = RandomQrPoolMembershipStaffSerializer(many=True, read_only=True)
+    qr_count = serializers.SerializerMethodField()
+    effetti_count = serializers.SerializerMethodField()
+    campagna = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = RandomQrPool
+        fields = (
+            "id",
+            "nome",
+            "attivo",
+            "campagna",
+            "qr_count",
+            "effetti_count",
+            "effetti",
+            "memberships",
+            "minigioco_sezione_attiva",
+            "minigioco_attivo",
+            "minigioco_tipi_abilitati",
+            "minigioco_difficolta",
+            "minigioco_requisiti_attivazione",
+            "minigioco_messaggio_accesso_negato",
+            "minigioco_esclusioni",
+            "minigioco_regole_difficolta",
+            "minigioco_messaggio_pre",
+            "minigioco_messaggio_vittoria",
+            "minigioco_timer_secondi",
+            "minigioco_timer_scadenza_azione",
+            "minigioco_usa_biblioteca_se_vuota",
+            "minigioco_modalita_sblocco",
+            "minigioco_sblocco_secondi",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("campagna", "created_at", "updated_at")
+
+    def get_qr_count(self, obj):
+        return obj.memberships.count()
+
+    def get_effetti_count(self, obj):
+        return obj.effetti.count()
+
+
+class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
+    pezzi_assegnati = serializers.SerializerMethodField()
+    pezzi_rimanenti = serializers.SerializerMethodField()
+    campagna = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = SerieCollezione
+        fields = (
+            "id",
+            "nome",
+            "totale",
+            "descrizione",
+            "campagna",
+            "pezzi_assegnati",
+            "pezzi_rimanenti",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("campagna", "created_at", "updated_at", "pezzi_assegnati", "pezzi_rimanenti")
+
+    def get_pezzi_assegnati(self, obj):
+        annotated = getattr(obj, "_pezzi_assegnati", None)
+        if annotated is not None:
+            return int(annotated)
+        return obj.assegnazioni.count()
+
+    def get_pezzi_rimanenti(self, obj):
+        return max(0, int(obj.totale or 0) - self.get_pezzi_assegnati(obj))
+
+
+class TrappolaStaffSerializer(serializers.ModelSerializer):
+    has_qrcode = serializers.BooleanField(read_only=True)
+    qrcode_id = serializers.CharField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = Trappola
+        fields = ("id", "nome", "testo", "durata_secondi", "has_qrcode", "qrcode_id")
+
+
+class SerieQrStaffSerializer(serializers.ModelSerializer):
+    has_qrcode = serializers.BooleanField(read_only=True)
+    qrcode_id = serializers.CharField(read_only=True, allow_null=True)
+    serie_nome = serializers.CharField(source="serie.nome", read_only=True, allow_null=True)
+
+    class Meta:
+        model = SerieQr
+        fields = ("id", "nome", "testo", "serie", "serie_nome", "has_qrcode", "qrcode_id")
 
 
 class A_vistaSerializer(serializers.ModelSerializer):

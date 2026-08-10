@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft, Wrench, CheckCircle2, AlertTriangle, Zap, BatteryCharging } from 'lucide-react';
+import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft, Wrench, CheckCircle2, AlertTriangle, Zap, BatteryCharging, Package } from 'lucide-react';
 import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvanzata } from '../api'; 
 import { useCharacter } from './CharacterContext';
 import { useTimers } from '../hooks/useTimers';
@@ -892,7 +892,17 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
         notifica_push: true,
         messaggio_in_app: true,
       };
-    } 
+    }
+    if (data.tipo_modello === 'trappola' && data.dati?.timer_attivo && data.dati?.scadenza) {
+      timerToActivate = {
+        nome: data.dati.nome || 'Trappola',
+        endsAt: data.dati.scadenza,
+        alert_suono: true,
+        notifica_push: true,
+        messaggio_in_app: true,
+        variant: 'danger',
+      };
+    }
     // CASO B: Il QR ha un timer associato come extra (es. Manifesto + Timer)
     else if (data.timer || data.dati?.timer_config) {
       const config = data.timer || data.dati.timer_config;
@@ -1026,6 +1036,80 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             <div className="mt-8 pt-6 border-t border-white/10 text-[10px] text-gray-500 uppercase font-bold tracking-widest">
                 Sincronizzazione Cronometro Eseguita
             </div>
+          </div>
+        );
+
+      case 'trappola':
+        return (
+          <div className="text-center py-8 px-2">
+            <div className="mx-auto mb-4 w-20 h-20 rounded-full bg-red-950/80 border-4 border-red-500 flex items-center justify-center animate-pulse shadow-[0_0_30px_rgba(239,68,68,0.55)]">
+              <Timer size={40} className="text-red-400" />
+            </div>
+            <p className="text-[11px] font-black uppercase tracking-[0.25em] text-red-400 mb-2">Trappola</p>
+            <h3 className="text-3xl font-black text-red-300 uppercase tracking-tight mb-3">
+              {data.dati?.nome || data.messaggio || 'Trappola'}
+            </h3>
+            {data.dati?.testo ? (
+              <div
+                className="text-left text-gray-200 prose prose-invert prose-sm max-w-none bg-red-950/30 border border-red-800/50 rounded-lg p-4"
+                dangerouslySetInnerHTML={{ __html: data.dati.testo }}
+              />
+            ) : (
+              <p className="text-gray-300">{data.messaggio}</p>
+            )}
+            {data.dati?.timer_attivo && data.dati?.scadenza ? (
+              <p className="mt-6 text-lg font-mono font-bold text-red-400">
+                Timer attivo fino a {new Date(data.dati.scadenza).toLocaleTimeString()}
+              </p>
+            ) : null}
+          </div>
+        );
+
+      case 'serie':
+        return (
+          <div className="text-center py-8">
+            <Package size={56} className="mx-auto text-violet-400 mb-4" />
+            <h3 className="text-2xl font-black text-violet-300 uppercase tracking-tight">
+              {data.dati?.etichetta || data.messaggio || 'Serie'}
+            </h3>
+            <p className="text-gray-300 mt-3">
+              {data.dati?.nome} — pezzo {data.dati?.indice} di {data.dati?.totale}
+            </p>
+            <p className="text-xs text-gray-500 mt-4">L&apos;oggetto è stato aggiunto al tuo inventario.</p>
+            {typeof data.dati?.rimanenti === 'number' ? (
+              <p className="text-xs text-gray-400 mt-2">Pezzi ancora disponibili: {data.dati.rimanenti}</p>
+            ) : null}
+          </div>
+        );
+
+      case 'serie_esaurita':
+        return (
+          <div className="text-center py-8">
+            <X size={56} className="mx-auto text-amber-500 mb-4" />
+            <h3 className="text-2xl font-bold text-amber-300 mb-2">Serie esaurita</h3>
+            <p className="text-gray-300">{data.dati?.messaggio || data.messaggio}</p>
+          </div>
+        );
+
+      case 'pool_testo':
+        return (
+          <div className="text-center py-6">
+            <Scan size={48} className="mx-auto text-indigo-400 mb-4" />
+            <h3 className="text-2xl font-bold mb-3">{data.dati?.nome || data.messaggio}</h3>
+            {data.dati?.testo ? (
+              <div
+                className="text-left text-gray-200 prose prose-invert prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: data.dati.testo }}
+              />
+            ) : null}
+          </div>
+        );
+
+      case 'pool_errore':
+        return (
+          <div className="text-center py-8">
+            <h3 className="text-2xl font-bold text-red-400 mb-2">Pool QR</h3>
+            <p className="text-gray-300">{data.messaggio || 'Configurazione pool incompleta.'}</p>
           </div>
         );
 

@@ -95,6 +95,7 @@ export const STAFF_TOOLS_REGISTRY = {
   manifesti: { id: 'manifesti', label: 'QR — Manifesti', icon: BookText, color: 'bg-amber-900', componentKey: 'manifesti' },
   nodi: { id: 'nodi', label: 'QR — Nodi', icon: Sparkles, color: 'bg-cyan-900', componentKey: 'nodi' },
   'innesco-timer': { id: 'innesco-timer', label: 'QR — Innesco timer', icon: Sparkles, color: 'bg-orange-900', componentKey: 'innesco-timer' },
+  'qr-random-pool': { id: 'qr-random-pool', label: 'QR — Pool randomico', icon: QrCode, color: 'bg-rose-800', componentKey: 'qr-random-pool' },
   pilotaggio: { id: 'pilotaggio', label: 'Console pilotaggio', icon: Navigation, color: 'bg-sky-700', componentKey: 'pilotaggio' },
   'app-links': { id: 'app-links', label: 'Link app', icon: ExternalLink, color: 'bg-sky-800', componentKey: 'app-links' },
   'effetti-casuali': { id: 'effetti-casuali', label: 'Effetti casuali', icon: Sparkles, color: 'bg-amber-700', componentKey: 'effetti-casuali' },
@@ -130,7 +131,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       palette: 'indigo',
       order: 0,
       collapsed_default: false,
-      tool_ids: ['plot', 'pilotaggio', 'app-links', 'manifesti', 'nodi', 'innesco-timer', 'qr-debug', 'scommesse', 'negozi-mercante', 'carte-collezionabili', 'tasks'],
+      tool_ids: ['plot', 'pilotaggio', 'app-links', 'manifesti', 'nodi', 'innesco-timer', 'qr-random-pool', 'qr-debug', 'scommesse', 'negozi-mercante', 'carte-collezionabili', 'tasks'],
     },
     {
       id: 'database',

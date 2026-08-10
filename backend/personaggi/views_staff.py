@@ -17,6 +17,7 @@ from .models import (
     Infusione, Tessitura, Cerimoniale, Mattone,
     PersonaggioInfusione, PersonaggioTessitura, PersonaggioCerimoniale,
     QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario, Manifesto, Nodo, NodoRewardConfig, InnescoTimer,
+    RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect, Trappola, SerieCollezione, SerieQr,
     A_vista, Attivata, MinigiocoQrConfig, MinigiocoBibliotecaImmagine,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
@@ -74,6 +75,12 @@ from .serializers import (
     NodoStaffSerializer,
     NodoRewardConfigStaffSerializer,
     InnescoTimerStaffSerializer,
+    RandomQrPoolStaffSerializer,
+    RandomQrPoolEffectStaffSerializer,
+    RandomQrPoolMembershipStaffSerializer,
+    SerieCollezioneStaffSerializer,
+    TrappolaStaffSerializer,
+    SerieQrStaffSerializer,
     A_vistaSerializer,
     AttivataSerializer,
     PersonaggioPublicSerializer,
@@ -1259,6 +1266,133 @@ class InnescoTimerStaffViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             obj = serializer.save()
             self._apply_target_lists(obj, self.request.data)
+
+
+class RandomQrPoolStaffViewSet(viewsets.ModelViewSet):
+    """CRUD pool QR randomici (effetti + membership gestiti con action dedicate)."""
+
+    serializer_class = RandomQrPoolStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        qs = (
+            RandomQrPool.objects.prefetch_related("effetti", "memberships", "memberships__qr_code")
+            .order_by("nome")
+        )
+        active = _get_active_campaign(self.request)
+        base = _get_default_campaign()
+        if not active:
+            return qs
+        if base and active.id != base.id:
+            return qs.filter(Q(campagna=active) | Q(campagna=base))
+        return qs.filter(campagna=active)
+
+    def perform_create(self, serializer):
+        camp = _get_active_campaign(self.request) or _get_default_campaign()
+        serializer.save(campagna=camp)
+
+    @action(detail=True, methods=["post"], url_path="add-qr")
+    def add_qr(self, request, pk=None):
+        pool = self.get_object()
+        qr_id = (request.data.get("qr_code_id") or request.data.get("qr_id") or "").strip()
+        if not qr_id:
+            return Response({"error": "qr_code_id richiesto."}, status=status.HTTP_400_BAD_REQUEST)
+        qr = QrCode.objects.filter(pk=qr_id).first()
+        if not qr:
+            return Response({"error": "QR non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        existing = RandomQrPoolMembership.objects.filter(qr_code=qr).select_related("pool").first()
+        if existing and existing.pool_id != pool.pk:
+            return Response(
+                {
+                    "error": f"QR già nel pool «{existing.pool.nome}».",
+                    "pool_id": str(existing.pool_id),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        membership, created = RandomQrPoolMembership.objects.get_or_create(pool=pool, qr_code=qr)
+        warn = bool(qr.vista_id)
+        return Response(
+            {
+                "created": created,
+                "membership": RandomQrPoolMembershipStaffSerializer(membership).data,
+                "warning_has_vista": warn,
+                "message": (
+                    "QR aggiunto. Nota: ha già una vista collegata; il pool ha priorità alla scansione."
+                    if warn
+                    else "QR aggiunto al pool."
+                ),
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="remove-qr")
+    def remove_qr(self, request, pk=None):
+        pool = self.get_object()
+        qr_id = (request.data.get("qr_code_id") or request.data.get("qr_id") or "").strip()
+        deleted, _ = RandomQrPoolMembership.objects.filter(pool=pool, qr_code_id=qr_id).delete()
+        return Response({"deleted": deleted > 0})
+
+    @action(detail=True, methods=["post"], url_path="effetti")
+    def create_effetto(self, request, pk=None):
+        pool = self.get_object()
+        data = dict(request.data)
+        data["pool"] = str(pool.pk)
+        ser = RandomQrPoolEffectStaffSerializer(data=data)
+        ser.is_valid(raise_exception=True)
+        effetto = ser.save(pool=pool)
+        return Response(RandomQrPoolEffectStaffSerializer(effetto).data, status=status.HTTP_201_CREATED)
+
+
+class RandomQrPoolEffectStaffViewSet(viewsets.ModelViewSet):
+    serializer_class = RandomQrPoolEffectStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    http_method_names = ["get", "patch", "put", "delete", "head", "options"]
+
+    def get_queryset(self):
+        qs = RandomQrPoolEffect.objects.select_related("pool", "nodo", "serie").order_by("ordine", "id")
+        pool_id = self.request.query_params.get("pool")
+        if pool_id:
+            qs = qs.filter(pool_id=pool_id)
+        return qs
+
+
+class SerieCollezioneStaffViewSet(viewsets.ModelViewSet):
+    serializer_class = SerieCollezioneStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        qs = SerieCollezione.objects.annotate(
+            _pezzi_assegnati=Count("assegnazioni"),
+        ).order_by("nome")
+        active = _get_active_campaign(self.request)
+        base = _get_default_campaign()
+        if not active:
+            return qs
+        if base and active.id != base.id:
+            return qs.filter(Q(campagna=active) | Q(campagna=base))
+        return qs.filter(campagna=active)
+
+    def perform_create(self, serializer):
+        camp = _get_active_campaign(self.request) or _get_default_campaign()
+        serializer.save(campagna=camp)
+
+
+class TrappolaStaffViewSet(viewsets.ModelViewSet):
+    serializer_class = TrappolaStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        return annotate_staff_avista_qr(Trappola.objects.order_by("-id"))
+
+
+class SerieQrStaffViewSet(viewsets.ModelViewSet):
+    serializer_class = SerieQrStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        return annotate_staff_avista_qr(
+            SerieQr.objects.select_related("serie").order_by("-id")
+        )
 
 
 class FormulaBuilderSchemaView(APIView):

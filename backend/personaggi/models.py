@@ -4320,6 +4320,308 @@ class StatoInnescoTimerPersonaggio(SyncableModel, models.Model):
         return f"{self.personaggio_id} / {self.innesco_timer_id} fino {self.data_fine}"
 
 
+def _default_tipi_minigioco_pool():
+    return list(_default_tipi_minigioco_qr())
+
+
+class RandomQrPool(SyncableModel, models.Model):
+    """
+    Pool di QR fisici che, alla scansione, estraggono un effetto pesato.
+    Il minigioco può essere configurato a monte sul pool (override per-QR via MinigiocoQrConfig).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=120)
+    attivo = models.BooleanField(default=True, db_index=True)
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.PROTECT,
+        related_name="random_qr_pools",
+        default=get_default_campagna_id,
+        db_index=True,
+    )
+
+    # Minigioco a monte (stessi campi essenziali di MinigiocoQrConfig)
+    minigioco_sezione_attiva = models.BooleanField(
+        default=False,
+        help_text="Se True, la sezione minigiochi governa l'accesso ai QR del pool (salvo override per-QR).",
+    )
+    minigioco_attivo = models.BooleanField(
+        default=False,
+        help_text="Se True (con sezione attiva), richiede il minigioco prima dell'effetto pool.",
+    )
+    minigioco_tipi_abilitati = models.JSONField(default=_default_tipi_minigioco_pool, blank=True)
+    minigioco_difficolta = models.PositiveSmallIntegerField(default=4)
+    minigioco_requisiti_attivazione = models.JSONField(default=list, blank=True)
+    minigioco_messaggio_accesso_negato = models.TextField(blank=True, default="")
+    minigioco_esclusioni = models.JSONField(default=list, blank=True)
+    minigioco_regole_difficolta = models.JSONField(default=list, blank=True)
+    minigioco_messaggio_pre = models.TextField(blank=True, default="")
+    minigioco_messaggio_vittoria = models.TextField(blank=True, default="")
+    minigioco_timer_secondi = models.PositiveIntegerField(null=True, blank=True)
+    minigioco_timer_scadenza_azione = models.CharField(
+        max_length=32,
+        choices=MinigiocoQrConfig.TIMER_SAZIONE_CHOICES,
+        default=MinigiocoQrConfig.TIMER_RESET,
+    )
+    minigioco_usa_biblioteca_se_vuota = models.BooleanField(default=True)
+    minigioco_modalita_sblocco = models.CharField(
+        max_length=24,
+        choices=MinigiocoQrConfig.SBLOCCO_CHOICES,
+        default=MinigiocoQrConfig.SBLOCCO_PERMANENTE,
+    )
+    minigioco_sblocco_secondi = models.PositiveIntegerField(null=True, blank=True)
+    minigioco_immagine = models.ImageField(
+        upload_to="minigioco_qr_pool/%Y/%m/",
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        verbose_name = "Pool QR randomico"
+        verbose_name_plural = "Pool QR randomici"
+        ordering = ["nome"]
+
+    def __str__(self):
+        return self.nome
+
+
+class RandomQrPoolMembership(SyncableModel, models.Model):
+    """Associa un QR fisico a un solo pool (membership unica sul qr_code)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    pool = models.ForeignKey(
+        RandomQrPool,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    qr_code = models.OneToOneField(
+        "QrCode",
+        on_delete=models.CASCADE,
+        related_name="random_pool_membership",
+    )
+
+    class Meta:
+        verbose_name = "Membership pool QR"
+        verbose_name_plural = "Membership pool QR"
+
+    def __str__(self):
+        return f"{self.qr_code_id} → {self.pool_id}"
+
+
+class RandomQrPoolEffect(SyncableModel, models.Model):
+    """Effetto pesato all'interno di un pool randomico."""
+
+    TIPO_TESTO = "testo"
+    TIPO_NODO = "nodo"
+    TIPO_TRAPPOLA = "trappola"
+    TIPO_SERIE = "serie"
+    TIPO_CHOICES = (
+        (TIPO_TESTO, "Testo"),
+        (TIPO_NODO, "Nodo"),
+        (TIPO_TRAPPOLA, "Trappola"),
+        (TIPO_SERIE, "Serie"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    pool = models.ForeignKey(
+        RandomQrPool,
+        on_delete=models.CASCADE,
+        related_name="effetti",
+    )
+    tipo = models.CharField(max_length=16, choices=TIPO_CHOICES, db_index=True)
+    frequenza = models.PositiveIntegerField(
+        default=1,
+        help_text="Peso relativo: più alto = più comune (es. 10 vs 1 → ~10:1).",
+    )
+    ordine = models.PositiveIntegerField(default=0)
+    attivo = models.BooleanField(default=True)
+
+    # Payload tipizzato
+    titolo = models.CharField(max_length=120, blank=True, default="")
+    testo = models.TextField(blank=True, default="")
+    nodo = models.ForeignKey(
+        "Nodo",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+    )
+    durata_secondi = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Solo trappola: durata timer personale (vuoto = solo messaggio).",
+    )
+    serie = models.ForeignKey(
+        "SerieCollezione",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+    )
+
+    class Meta:
+        verbose_name = "Effetto pool QR"
+        verbose_name_plural = "Effetti pool QR"
+        ordering = ["ordine", "id"]
+
+    def __str__(self):
+        return f"{self.pool_id}:{self.tipo}×{self.frequenza}"
+
+
+class Trappola(A_vista):
+    """QR (o effetto pool) che mostra un testo e può avviare un timer personale contro lo scanner."""
+
+    durata_secondi = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Durata timer (secondi)",
+        help_text="Vuoto = solo messaggio descrittivo, senza countdown.",
+    )
+
+    class Meta:
+        verbose_name = "Trappola QR"
+        verbose_name_plural = "Trappole QR"
+
+    def __str__(self):
+        return f"Trappola: {self.nome}"
+
+
+class StatoTrappolaPersonaggio(SyncableModel, models.Model):
+    """Timer personale attivo dopo scansione trappola."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="stati_trappola",
+    )
+    # Chiave stabile per ripresa/reload (trappola A_vista id oppure effetto pool sync_id)
+    chiave = models.CharField(max_length=64, db_index=True)
+    nome = models.CharField(max_length=120)
+    testo = models.TextField(blank=True, default="")
+    data_fine = models.DateTimeField(verbose_name="Scadenza countdown")
+    trappola = models.ForeignKey(
+        Trappola,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="stati_personaggio",
+    )
+
+    class Meta:
+        verbose_name = "Stato trappola (personaggio)"
+        verbose_name_plural = "Stati trappola (personaggio)"
+        unique_together = [("personaggio", "chiave")]
+        indexes = [
+            models.Index(fields=["personaggio", "data_fine"]),
+        ]
+
+    def __str__(self):
+        return f"{self.personaggio_id} / {self.nome} fino {self.data_fine}"
+
+
+class SerieCollezione(SyncableModel, models.Model):
+    """Collezione a pezzi unici globali (es. Pecora 1..30)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=120)
+    totale = models.PositiveIntegerField(
+        help_text="Numero totale di pezzi unici (N in 'X di N').",
+    )
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.PROTECT,
+        related_name="serie_collezioni",
+        default=get_default_campagna_id,
+        db_index=True,
+    )
+    descrizione = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Serie collezione"
+        verbose_name_plural = "Serie collezioni"
+        ordering = ["nome"]
+
+    def __str__(self):
+        return f"{self.nome} (1–{self.totale})"
+
+    @property
+    def pezzi_assegnati(self):
+        return self.assegnazioni.count()
+
+    @property
+    def pezzi_rimanenti(self):
+        return max(0, int(self.totale or 0) - self.pezzi_assegnati)
+
+
+class SerieAssegnazione(SyncableModel, models.Model):
+    """Assegnazione unica globale di un indice di serie a un personaggio."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    serie = models.ForeignKey(
+        SerieCollezione,
+        on_delete=models.CASCADE,
+        related_name="assegnazioni",
+    )
+    indice = models.PositiveIntegerField()
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="serie_assegnazioni",
+    )
+    oggetto = models.ForeignKey(
+        "Oggetto",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="serie_assegnazioni",
+    )
+    assegnato_at = models.DateTimeField(auto_now_add=True)
+    qr_code = models.ForeignKey(
+        "QrCode",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="serie_assegnazioni",
+    )
+
+    class Meta:
+        verbose_name = "Assegnazione serie"
+        verbose_name_plural = "Assegnazioni serie"
+        unique_together = [("serie", "indice")]
+        indexes = [
+            models.Index(fields=["serie", "indice"]),
+            models.Index(fields=["personaggio", "serie"]),
+        ]
+
+    def __str__(self):
+        return f"{self.serie.nome} {self.indice}/{self.serie.totale} → {self.personaggio_id}"
+
+
+class SerieQr(A_vista):
+    """QR standalone che assegna un pezzo unico di una SerieCollezione."""
+
+    serie = models.ForeignKey(
+        SerieCollezione,
+        on_delete=models.PROTECT,
+        related_name="qr_standalone",
+    )
+
+    class Meta:
+        verbose_name = "QR Serie"
+        verbose_name_plural = "QR Serie"
+
+    def __str__(self):
+        return f"SerieQr: {self.nome} ({self.serie_id})"
+
+
 class ClasseOggetto(SyncableModel, models.Model):
     nome = models.CharField(max_length=50, unique=True)
     max_mod_totali = models.IntegerField(default=0, verbose_name="Max Mod Totali")

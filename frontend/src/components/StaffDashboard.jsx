@@ -47,6 +47,7 @@ const CampaignManager = lazy(() => import('./editors/CampaignManager'));
 const ManifestoManager = lazy(() => import('./editors/ManifestoManager'));
 const NodoManager = lazy(() => import('./editors/NodoManager'));
 const InnescoTimerManager = lazy(() => import('./editors/InnescoTimerManager'));
+const RandomQrPoolManager = lazy(() => import('./editors/RandomQrPoolManager'));
 const PilotaggioManager = lazy(() => import('./editors/PilotaggioManager'));
 const CreazioneGuidataStaffManager = lazy(() => import('./editors/CreazioneGuidataStaffManager'));
 const ScommesseManager = lazy(() => import('./editors/ScommesseManager'));
@@ -77,6 +78,7 @@ const STAFF_COMPONENT_MAP = {
     manifesti: ManifestoManager,
     nodi: NodoManager,
     'innesco-timer': InnescoTimerManager,
+    'qr-random-pool': RandomQrPoolManager,
     pilotaggio: PilotaggioManager,
     'app-links': StaffAppLinksPanel,
     'effetti-casuali': EffettiCasualiManager,

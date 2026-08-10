@@ -134,7 +134,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
         ...prev,
         [timerData.nome]: {
             ...timerData,
-            endTime: new Date(timerData.data_fine).getTime()
+            endTime: new Date(timerData.data_fine || timerData.endsAt || timerData.endTime).getTime(),
+            variant: timerData.variant || prev[timerData.nome]?.variant,
         }
     }));
   }, []);
@@ -222,7 +223,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
   useEffect(() => {
     const loadInitialTimers = async () => {
       try {
-        const data = await fetchAuthenticated('/api/personaggi/api/timers/active/', onLogout);
+        const qs = selectedCharacterId ? `?personaggio_id=${selectedCharacterId}` : '';
+        const data = await fetchAuthenticated(`/api/personaggi/api/timers/active/${qs}`, onLogout);
         if (Array.isArray(data)) {
           data.forEach(t => updateTimerState(t));
         }
@@ -231,7 +233,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
       }
     };
     loadInitialTimers();
-  }, [onLogout, updateTimerState]);
+  }, [onLogout, updateTimerState, selectedCharacterId]);
 
 
   // --- REACT QUERY HOOKS ---
@@ -717,6 +719,21 @@ export const CharacterProvider = ({ children, onLogout }) => {
                 alert_suono: true,
                 notifica_push: true,
                 messaggio_in_app: true,
+              });
+            }
+        }
+
+        if (action === 'TIMER_TRAPPOLA_SYNC' && payload) {
+            const ids = payload.recipient_personaggio_ids || [];
+            const myId = parseInt(selectedCharacterId, 10);
+            if (!ids.length || ids.includes(myId)) {
+              updateTimerState({
+                nome: payload.nome,
+                data_fine: payload.data_fine,
+                alert_suono: payload.alert_suono !== false,
+                notifica_push: payload.notifica_push !== false,
+                messaggio_in_app: payload.messaggio_in_app !== false,
+                variant: 'danger',
               });
             }
         }

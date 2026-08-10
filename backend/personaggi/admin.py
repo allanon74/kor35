@@ -50,6 +50,8 @@ from .models import (
     Cerimoniale, CerimonialeCaratteristica,
     TipologiaTimer, TimerQrCode, StatoTimerAttivo,
     InnescoTimer, QrInventarioScanSession, StatoInnescoTimerPersonaggio,
+    RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect,
+    Trappola, StatoTrappolaPersonaggio, SerieCollezione, SerieAssegnazione, SerieQr,
     TipologiaEffetto, EffettoCasuale, ConsumabilePersonaggio, CreazioneConsumabileInCorso,
     TIPO_EFFETTO_OGGETTO, TIPO_EFFETTO_TESSITURA,
     Korp, Carriera, SegnoZodiacale, TipoCarriera, Carica,
@@ -859,6 +861,41 @@ class QrInventarioScanSessionAdmin(admin.ModelAdmin):
 @admin.register(StatoInnescoTimerPersonaggio)
 class StatoInnescoTimerPersonaggioAdmin(admin.ModelAdmin):
     list_display = ("id", "personaggio", "innesco_timer", "data_fine", "cariche_usate_ciclo")
+
+
+@admin.register(RandomQrPool)
+class RandomQrPoolAdmin(admin.ModelAdmin):
+    list_display = ("nome", "attivo", "campagna", "minigioco_sezione_attiva", "minigioco_attivo")
+    search_fields = ("nome",)
+
+
+@admin.register(RandomQrPoolEffect)
+class RandomQrPoolEffectAdmin(admin.ModelAdmin):
+    list_display = ("pool", "tipo", "frequenza", "attivo", "titolo")
+    list_filter = ("tipo", "attivo")
+
+
+@admin.register(Trappola)
+class TrappolaAdmin(SModelAdmin):
+    list_display = ("id", "nome", "durata_secondi")
+    summernote_fields = ["testo"]
+
+
+@admin.register(SerieCollezione)
+class SerieCollezioneAdmin(admin.ModelAdmin):
+    list_display = ("nome", "totale", "campagna")
+
+
+@admin.register(SerieAssegnazione)
+class SerieAssegnazioneAdmin(admin.ModelAdmin):
+    list_display = ("serie", "indice", "personaggio", "assegnato_at")
+
+
+@admin.register(SerieQr)
+class SerieQrAdmin(SModelAdmin):
+    list_display = ("id", "nome", "serie")
+    summernote_fields = ["testo"]
+
 
 # --- NUOVA SEZIONE TIMER ---
 

@@ -1693,6 +1693,69 @@ export const staffUpdateInnescoTimer = (id, data, onLogout) =>
 export const staffDeleteInnescoTimer = (id, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/innesco-timer/${id}/`, { method: 'DELETE' }, onLogout);
 
+// --- Pool QR randomico / Trappola / Serie ---
+export const staffGetRandomQrPools = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/random-qr-pools/', { method: 'GET' }, onLogout);
+export const staffCreateRandomQrPool = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/random-qr-pools/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdateRandomQrPool = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/random-qr-pools/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeleteRandomQrPool = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/random-qr-pools/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffRandomQrPoolAddQr = (poolId, qrCodeId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/random-qr-pools/${poolId}/add-qr/`,
+    { method: 'POST', body: JSON.stringify({ qr_code_id: qrCodeId }) },
+    onLogout,
+  );
+export const staffRandomQrPoolRemoveQr = (poolId, qrCodeId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/random-qr-pools/${poolId}/remove-qr/`,
+    { method: 'POST', body: JSON.stringify({ qr_code_id: qrCodeId }) },
+    onLogout,
+  );
+export const staffCreateRandomQrPoolEffect = (poolId, data, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/random-qr-pools/${poolId}/effetti/`,
+    { method: 'POST', body: JSON.stringify(data) },
+    onLogout,
+  );
+export const staffUpdateRandomQrPoolEffect = (id, data, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/random-qr-pool-effetti/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(data) },
+    onLogout,
+  );
+export const staffDeleteRandomQrPoolEffect = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/random-qr-pool-effetti/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetSerieCollezioni = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/serie-collezioni/', { method: 'GET' }, onLogout);
+export const staffCreateSerieCollezione = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/serie-collezioni/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdateSerieCollezione = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/serie-collezioni/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeleteSerieCollezione = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/serie-collezioni/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetTrappole = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/trappole/', { method: 'GET' }, onLogout);
+export const staffCreateTrappola = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/trappole/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdateTrappola = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/trappole/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeleteTrappola = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/trappole/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetSerieQr = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/serie-qr/', { method: 'GET' }, onLogout);
+export const staffCreateSerieQr = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/serie-qr/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdateSerieQr = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/serie-qr/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeleteSerieQr = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/serie-qr/${id}/`, { method: 'DELETE' }, onLogout);
+
 export const staffAggiungiOggettoInventario = (inventarioId, oggettoId, onLogout) => 
     fetchAuthenticated(`/api/personaggi/api/staff/inventari/${inventarioId}/aggiungi_oggetto/`, { 
         method: 'POST', 

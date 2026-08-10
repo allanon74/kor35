@@ -1448,6 +1448,37 @@ class QrCodeDetailView(APIView):
         if configurazione_timer:
             return self.gestisci_scansione_timer(configurazione_timer)
 
+        scanner_pg = None
+        raw_pid = request.query_params.get("personaggio_id")
+        if request.user.is_authenticated and raw_pid not in (None, ""):
+            try:
+                pid = int(raw_pid)
+            except (TypeError, ValueError):
+                pid = None
+            if pid is not None:
+                scanner_pg = Personaggio.objects.filter(pk=pid, proprietario=request.user).first()
+
+        # Pool QR randomico: ha priorità sul vista collegato
+        from personaggi import qr_random_pool
+
+        if qr_random_pool.get_active_pool_for_qr(qr_code) is not None:
+            bypass_sid = request.query_params.get("minigioco_session_id")
+            pool_result = qr_random_pool.handle_pool_qr_scan(
+                qr_code=qr_code,
+                personaggio=scanner_pg,
+                request=request,
+                bypass_session_id=bypass_sid,
+            )
+            if pool_result:
+                if pool_result.get("tipo_modello") == "minigioco_bloccato":
+                    return Response(pool_result, status=status.HTTP_200_OK)
+                if pool_result.get("blocked"):
+                    return Response(
+                        {"error": pool_result.get("error", "Accesso negato.")},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                return Response(pool_result, status=status.HTTP_200_OK)
+
         vista_obj = qr_code.vista
         if vista_obj is None:
             return Response(
@@ -1459,16 +1490,6 @@ class QrCodeDetailView(APIView):
                 },
                 status=status.HTTP_200_OK,
             )
-
-        scanner_pg = None
-        raw_pid = request.query_params.get("personaggio_id")
-        if request.user.is_authenticated and raw_pid not in (None, ""):
-            try:
-                pid = int(raw_pid)
-            except (TypeError, ValueError):
-                pid = None
-            if pid is not None:
-                scanner_pg = Personaggio.objects.filter(pk=pid, proprietario=request.user).first()
 
         from pilotaggio.qr_sottosistema import (
             build_scan_payload,
@@ -1556,6 +1577,43 @@ class QrCodeDetailView(APIView):
                 status=status.HTTP_200_OK,
             )
 
+        # Trappola standalone
+        from personaggi.models import SerieQr, Trappola
+
+        trappola = Trappola.objects.filter(pk=vista_obj.pk).first()
+        if trappola:
+            if not scanner_pg:
+                return Response(
+                    {"error": "Parametro personaggio_id richiesto per la trappola."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            trap_result = qr_random_pool.apply_trappola_avista(
+                trappola=trappola,
+                personaggio=scanner_pg,
+                qr_code=qr_code,
+            )
+            return Response(trap_result, status=status.HTTP_200_OK)
+
+        # Serie standalone
+        serie_qr = SerieQr.objects.filter(pk=vista_obj.pk).select_related("serie").first()
+        if serie_qr:
+            if not scanner_pg:
+                return Response(
+                    {"error": "Parametro personaggio_id richiesto per la serie."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            serie_result = qr_random_pool.apply_serie_avista(
+                serie_qr=serie_qr,
+                personaggio=scanner_pg,
+                qr_code=qr_code,
+            )
+            if serie_result.get("blocked"):
+                return Response(
+                    {"error": serie_result.get("error", "Errore serie.")},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response(serie_result, status=status.HTTP_200_OK)
+
         nodo = Nodo.objects.filter(pk=vista_obj.pk).first()
         if nodo:
             if not scanner_pg:
@@ -1590,6 +1648,8 @@ class QrCodeDetailView(APIView):
                     "era_abbreviazione": res.get("era_abbreviazione"),
                     "tipo_nodo_pre": res.get("tipo_nodo_pre"),
                     "tipo_nodo_post": res.get("tipo_nodo_post"),
+                    "cooldown_until": res.get("cooldown_until"),
+                    "cooldown_minutes": res.get("cooldown_minutes"),
                     "reward": {
                         "pool": res.get("pool"),
                         "crediti": res.get("crediti"),
@@ -4888,11 +4948,42 @@ class GameActionsViewSet(viewsets.ViewSet):
 class ActiveTimersViewSet(viewsets.ReadOnlyModelViewSet):
     """API per recuperare i timer attualmente attivi al caricamento dell'app"""
     serializer_class = StatoTimerSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         # Restituisce solo i timer la cui data di fine è nel futuro
         return StatoTimerAttivo.objects.filter(data_fine__gt=timezone.now())
-    
+
+    def list(self, request, *args, **kwargs):
+        """Unisce timer globali TipologiaTimer e trappole personali del PG."""
+        from personaggi.models import StatoTrappolaPersonaggio
+
+        response = super().list(request, *args, **kwargs)
+        rows = list(response.data) if isinstance(response.data, list) else []
+        raw_pid = request.query_params.get("personaggio_id")
+        if request.user.is_authenticated and raw_pid not in (None, ""):
+            try:
+                pid = int(raw_pid)
+            except (TypeError, ValueError):
+                pid = None
+            if pid is not None and Personaggio.objects.filter(pk=pid, proprietario=request.user).exists():
+                for st in StatoTrappolaPersonaggio.objects.filter(
+                    personaggio_id=pid,
+                    data_fine__gt=timezone.now(),
+                ):
+                    rows.append(
+                        {
+                            "id": str(st.pk),
+                            "nome": st.nome,
+                            "data_fine": st.data_fine.isoformat(),
+                            "alert_suono": True,
+                            "notifica_push": True,
+                            "messaggio_in_app": True,
+                            "variant": "danger",
+                            "testo": st.testo or "",
+                        }
+                    )
+        return Response(rows) 
 class StatisticaViewSet(viewsets.ReadOnlyModelViewSet):
     """Visualizza l'elenco delle statistiche tecniche disponibili"""
     queryset = Statistica.objects.all()
