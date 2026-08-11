@@ -111,9 +111,23 @@ class TrappolaSerieTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.user)
 
+    def test_trappola_e_serieqr_usano_uuid_pk(self):
+        """Regressione .cursorrules §1: niente AutoField da A_vista MTI."""
+        import uuid as uuid_mod
+
+        trap = Trappola.objects.create(nome="U", testo="")
+        serie = SerieCollezione.objects.create(nome="S", totale=1)
+        sqr = SerieQr.objects.create(nome="SQ", serie=serie)
+        self.assertIsInstance(trap.pk, uuid_mod.UUID)
+        self.assertIsInstance(sqr.pk, uuid_mod.UUID)
+        self.assertTrue(hasattr(trap, "sync_id"))
+        self.assertTrue(hasattr(sqr, "sync_id"))
+
     def test_trappola_con_timer(self):
-        trap = Trappola.objects.create(nome="Fossa", testo="<p>Sei caduto</p>", durata_secondi=90)
-        qr = QrCode.objects.create(vista=trap)
+        qr = QrCode.objects.create()
+        Trappola.objects.create(
+            nome="Fossa", testo="<p>Sei caduto</p>", durata_secondi=90, qr_code=qr
+        )
         r = self.client.get(
             f"/api/personaggi/api/qrcode/{qr.id}/",
             {"personaggio_id": self.pg.id},
@@ -126,8 +140,10 @@ class TrappolaSerieTests(TestCase):
         )
 
     def test_trappola_senza_timer(self):
-        trap = Trappola.objects.create(nome="Cartello", testo="Attenzione", durata_secondi=None)
-        qr = QrCode.objects.create(vista=trap)
+        qr = QrCode.objects.create()
+        Trappola.objects.create(
+            nome="Cartello", testo="Attenzione", durata_secondi=None, qr_code=qr
+        )
         r = self.client.get(
             f"/api/personaggi/api/qrcode/{qr.id}/",
             {"personaggio_id": self.pg.id},
@@ -139,8 +155,8 @@ class TrappolaSerieTests(TestCase):
 
     def test_serie_indici_unici_e_esaurimento(self):
         serie = SerieCollezione.objects.create(nome="Pecora", totale=2)
-        sqr = SerieQr.objects.create(nome="Serie Pecora", serie=serie)
-        qr = QrCode.objects.create(vista=sqr)
+        qr = QrCode.objects.create()
+        SerieQr.objects.create(nome="Serie Pecora", serie=serie, qr_code=qr)
 
         r1 = self.client.get(
             f"/api/personaggi/api/qrcode/{qr.id}/",

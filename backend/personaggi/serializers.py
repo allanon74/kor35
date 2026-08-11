@@ -2462,22 +2462,36 @@ class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
 
 
 class TrappolaStaffSerializer(serializers.ModelSerializer):
-    has_qrcode = serializers.BooleanField(read_only=True)
-    qrcode_id = serializers.CharField(read_only=True, allow_null=True)
+    has_qrcode = serializers.SerializerMethodField()
+    qrcode_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Trappola
         fields = ("id", "nome", "testo", "durata_secondi", "has_qrcode", "qrcode_id")
+        read_only_fields = ("id",)
+
+    def get_has_qrcode(self, obj):
+        return bool(obj.qr_code_id)
+
+    def get_qrcode_id(self, obj):
+        return str(obj.qr_code_id) if obj.qr_code_id else None
 
 
 class SerieQrStaffSerializer(serializers.ModelSerializer):
-    has_qrcode = serializers.BooleanField(read_only=True)
-    qrcode_id = serializers.CharField(read_only=True, allow_null=True)
+    has_qrcode = serializers.SerializerMethodField()
+    qrcode_id = serializers.SerializerMethodField()
     serie_nome = serializers.CharField(source="serie.nome", read_only=True, allow_null=True)
 
     class Meta:
         model = SerieQr
         fields = ("id", "nome", "testo", "serie", "serie_nome", "has_qrcode", "qrcode_id")
+        read_only_fields = ("id",)
+
+    def get_has_qrcode(self, obj):
+        return bool(obj.qr_code_id)
+
+    def get_qrcode_id(self, obj):
+        return str(obj.qr_code_id) if obj.qr_code_id else None
 
 
 class A_vistaSerializer(serializers.ModelSerializer):

@@ -4472,19 +4472,34 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
         return f"{self.pool_id}:{self.tipo}×{self.frequenza}"
 
 
-class Trappola(A_vista):
-    """QR (o effetto pool) che mostra un testo e può avviare un timer personale contro lo scanner."""
+class Trappola(SyncableModel, models.Model):
+    """
+    QR (o effetto pool) che mostra un testo e può avviare un timer personale contro lo scanner.
+    PK UUID: non usa A_vista MTI (AutoField) per restare allineati a sync master↔replica.
+    """
 
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=100)
+    testo = models.TextField(blank=True, default="")
     durata_secondi = models.PositiveIntegerField(
         null=True,
         blank=True,
         verbose_name="Durata timer (secondi)",
         help_text="Vuoto = solo messaggio descrittivo, senza countdown.",
     )
+    qr_code = models.OneToOneField(
+        "QrCode",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="configurazione_trappola",
+    )
 
     class Meta:
         verbose_name = "Trappola QR"
         verbose_name_plural = "Trappole QR"
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"Trappola: {self.nome}"
@@ -4500,7 +4515,7 @@ class StatoTrappolaPersonaggio(SyncableModel, models.Model):
         on_delete=models.CASCADE,
         related_name="stati_trappola",
     )
-    # Chiave stabile per ripresa/reload (trappola A_vista id oppure effetto pool sync_id)
+    # Chiave stabile per ripresa/reload (trappola UUID oppure effetto pool sync_id)
     chiave = models.CharField(max_length=64, db_index=True)
     nome = models.CharField(max_length=120)
     testo = models.TextField(blank=True, default="")
@@ -4605,18 +4620,33 @@ class SerieAssegnazione(SyncableModel, models.Model):
         return f"{self.serie.nome} {self.indice}/{self.serie.totale} → {self.personaggio_id}"
 
 
-class SerieQr(A_vista):
-    """QR standalone che assegna un pezzo unico di una SerieCollezione."""
+class SerieQr(SyncableModel, models.Model):
+    """
+    QR standalone che assegna un pezzo unico di una SerieCollezione.
+    PK UUID + OneToOne QrCode (non A_vista MTI) per sync master↔replica.
+    """
 
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=100)
+    testo = models.TextField(blank=True, default="")
     serie = models.ForeignKey(
         SerieCollezione,
         on_delete=models.PROTECT,
         related_name="qr_standalone",
     )
+    qr_code = models.OneToOneField(
+        "QrCode",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="configurazione_serie",
+    )
 
     class Meta:
         verbose_name = "QR Serie"
         verbose_name_plural = "QR Serie"
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"SerieQr: {self.nome} ({self.serie_id})"

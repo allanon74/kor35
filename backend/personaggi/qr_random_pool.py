@@ -434,13 +434,14 @@ def handle_pool_qr_scan(
     return result
 
 
-def apply_trappola_avista(*, trappola, personaggio, qr_code=None) -> Dict[str, Any]:
+def apply_trappola_standalone(*, trappola, personaggio, qr_code=None) -> Dict[str, Any]:
+    """Applica trappola collegata via OneToOne QrCode (non A_vista)."""
     dati = applica_trappola(
         personaggio=personaggio,
         nome=trappola.nome or "Trappola",
         testo=trappola.testo or "",
         durata_secondi=trappola.durata_secondi,
-        chiave=f"avista:{trappola.pk}",
+        chiave=f"trappola:{trappola.pk}",
         trappola=trappola,
     )
     return {
@@ -451,7 +452,12 @@ def apply_trappola_avista(*, trappola, personaggio, qr_code=None) -> Dict[str, A
     }
 
 
-def apply_serie_avista(*, serie_qr, personaggio, qr_code=None) -> Dict[str, Any]:
+# Alias retrocompatibile
+apply_trappola_avista = apply_trappola_standalone
+
+
+def apply_serie_standalone(*, serie_qr, personaggio, qr_code=None) -> Dict[str, Any]:
+    """Applica serie da QR SerieQr (UUID + OneToOne)."""
     payload, err, override = applica_serie(
         personaggio=personaggio,
         serie=serie_qr.serie,
@@ -465,3 +471,121 @@ def apply_serie_avista(*, serie_qr, personaggio, qr_code=None) -> Dict[str, Any]
         "dati": payload or {},
         "qrcode_id": getattr(qr_code, "id", None),
     }
+
+
+apply_serie_avista = apply_serie_standalone
+
+
+def _conflict_payload(qr, *, tipo: str, nome: str, elemento_id) -> Dict[str, Any]:
+    return {
+        "error": "QR già associato",
+        "already_associated": True,
+        "qr_id": str(qr.id),
+        "associazione_attuale": {
+            "tipo": tipo,
+            "nome": nome,
+            "elemento_id": str(elemento_id),
+        },
+        "message": (
+            f'Questo QR è già collegato a «{nome}» ({tipo}). '
+            "Confermi di spostarlo?"
+        ),
+    }
+
+
+def associa_qr_a_trappola(trappola, qr, *, force: bool = False) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    """Collega un QrCode a Trappola (OneToOne). Non usa QrCode.vista."""
+    from .models import SerieQr, Trappola
+    from .qr_logic import descrivi_avista_per_associazione_qr
+
+    altro = Trappola.objects.filter(qr_code=qr).exclude(pk=trappola.pk).first()
+    if altro and not force:
+        return False, _conflict_payload(qr, tipo="trappola", nome=altro.nome, elemento_id=altro.pk)
+
+    serie_altro = SerieQr.objects.filter(qr_code=qr).first()
+    if serie_altro and not force:
+        return False, _conflict_payload(
+            qr, tipo="serie_qr", nome=serie_altro.nome, elemento_id=serie_altro.pk
+        )
+
+    if qr.vista_id and not force:
+        info = descrivi_avista_per_associazione_qr(qr.vista) or {
+            "tipo": "sconosciuto",
+            "nome": getattr(qr.vista, "nome", "?"),
+            "elemento_id": str(qr.vista_id),
+        }
+        return False, {
+            "error": "QR già associato",
+            "already_associated": True,
+            "qr_id": str(qr.id),
+            "associazione_attuale": info,
+            "message": (
+                f'Questo QR punta ancora a «{info["nome"]}» ({info["tipo"]}). '
+                "Confermi di collegarlo a questa trappola?"
+            ),
+        }
+
+    with transaction.atomic():
+        Trappola.objects.filter(qr_code=qr).exclude(pk=trappola.pk).update(qr_code=None)
+        SerieQr.objects.filter(qr_code=qr).update(qr_code=None)
+        if qr.vista_id:
+            qr.vista = None
+            qr.save(update_fields=["vista", "updated_at"])
+        trappola.qr_code = qr
+        trappola.save(update_fields=["qr_code", "updated_at"])
+    return True, None
+
+
+def scollega_qr_da_trappola(trappola) -> None:
+    if trappola.qr_code_id:
+        trappola.qr_code = None
+        trappola.save(update_fields=["qr_code", "updated_at"])
+
+
+def associa_qr_a_serie_qr(serie_qr, qr, *, force: bool = False) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    """Collega un QrCode a SerieQr (OneToOne). Non usa QrCode.vista."""
+    from .models import SerieQr, Trappola
+    from .qr_logic import descrivi_avista_per_associazione_qr
+
+    altro = SerieQr.objects.filter(qr_code=qr).exclude(pk=serie_qr.pk).first()
+    if altro and not force:
+        return False, _conflict_payload(qr, tipo="serie_qr", nome=altro.nome, elemento_id=altro.pk)
+
+    trap_altro = Trappola.objects.filter(qr_code=qr).first()
+    if trap_altro and not force:
+        return False, _conflict_payload(
+            qr, tipo="trappola", nome=trap_altro.nome, elemento_id=trap_altro.pk
+        )
+
+    if qr.vista_id and not force:
+        info = descrivi_avista_per_associazione_qr(qr.vista) or {
+            "tipo": "sconosciuto",
+            "nome": getattr(qr.vista, "nome", "?"),
+            "elemento_id": str(qr.vista_id),
+        }
+        return False, {
+            "error": "QR già associato",
+            "already_associated": True,
+            "qr_id": str(qr.id),
+            "associazione_attuale": info,
+            "message": (
+                f'Questo QR punta ancora a «{info["nome"]}» ({info["tipo"]}). '
+                "Confermi di collegarlo a questo QR Serie?"
+            ),
+        }
+
+    with transaction.atomic():
+        SerieQr.objects.filter(qr_code=qr).exclude(pk=serie_qr.pk).update(qr_code=None)
+        Trappola.objects.filter(qr_code=qr).update(qr_code=None)
+        if qr.vista_id:
+            qr.vista = None
+            qr.save(update_fields=["vista", "updated_at"])
+        serie_qr.qr_code = qr
+        serie_qr.save(update_fields=["qr_code", "updated_at"])
+    return True, None
+
+
+def scollega_qr_da_serie_qr(serie_qr) -> None:
+    if serie_qr.qr_code_id:
+        serie_qr.qr_code = None
+        serie_qr.save(update_fields=["qr_code", "updated_at"])

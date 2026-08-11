@@ -1382,7 +1382,38 @@ class TrappolaStaffViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaffOrMaster]
 
     def get_queryset(self):
-        return annotate_staff_avista_qr(Trappola.objects.order_by("-id"))
+        return Trappola.objects.select_related("qr_code").order_by("-created_at")
+
+    @action(detail=True, methods=["post"], url_path="associa-qr")
+    def associa_qr(self, request, pk=None):
+        from personaggi.models import QrCode
+        from personaggi import qr_random_pool
+
+        trappola = self.get_object()
+        qr_id = request.data.get("qr_id")
+        force = bool(request.data.get("force", False))
+
+        if qr_id in (None, ""):
+            qr_random_pool.scollega_qr_da_trappola(trappola)
+            return Response({"status": "success", "message": "QR scollegato.", "qr_id": None})
+
+        try:
+            qr = QrCode.objects.select_related("vista").get(pk=qr_id)
+        except QrCode.DoesNotExist:
+            return Response({"error": "QR Code non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+        ok, conflict = qr_random_pool.associa_qr_a_trappola(trappola, qr, force=force)
+        if not ok:
+            return Response(conflict, status=status.HTTP_409_CONFLICT)
+
+        return Response(
+            {
+                "status": "success",
+                "message": "QR associato alla trappola.",
+                "qr_id": str(qr.id),
+                "trappola_id": str(trappola.id),
+            }
+        )
 
 
 class SerieQrStaffViewSet(viewsets.ModelViewSet):
@@ -1390,8 +1421,37 @@ class SerieQrStaffViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaffOrMaster]
 
     def get_queryset(self):
-        return annotate_staff_avista_qr(
-            SerieQr.objects.select_related("serie").order_by("-id")
+        return SerieQr.objects.select_related("serie", "qr_code").order_by("-created_at")
+
+    @action(detail=True, methods=["post"], url_path="associa-qr")
+    def associa_qr(self, request, pk=None):
+        from personaggi.models import QrCode
+        from personaggi import qr_random_pool
+
+        serie_qr = self.get_object()
+        qr_id = request.data.get("qr_id")
+        force = bool(request.data.get("force", False))
+
+        if qr_id in (None, ""):
+            qr_random_pool.scollega_qr_da_serie_qr(serie_qr)
+            return Response({"status": "success", "message": "QR scollegato.", "qr_id": None})
+
+        try:
+            qr = QrCode.objects.select_related("vista").get(pk=qr_id)
+        except QrCode.DoesNotExist:
+            return Response({"error": "QR Code non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+        ok, conflict = qr_random_pool.associa_qr_a_serie_qr(serie_qr, qr, force=force)
+        if not ok:
+            return Response(conflict, status=status.HTTP_409_CONFLICT)
+
+        return Response(
+            {
+                "status": "success",
+                "message": "QR associato alla serie.",
+                "qr_id": str(qr.id),
+                "serie_qr_id": str(serie_qr.id),
+            }
         )
 
 

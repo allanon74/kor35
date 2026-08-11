@@ -16,7 +16,8 @@ import {
   unwrapStaffList,
 } from '../../utils/staffMinigiocoDefaults';
 import {
-  associaQrDiretto,
+  staffAssociaQrSerieQr,
+  staffAssociaQrTrappola,
   staffGetManifesti,
   staffCreateManifesto,
   staffUpdateManifesto,
@@ -526,7 +527,11 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                   }
                 } else {
                   try {
-                    await associaQrDiretto(scanningId, qr_id, onLogout);
+                    const assoc =
+                      scanningKind === 'serie'
+                        ? staffAssociaQrSerieQr
+                        : staffAssociaQrTrappola;
+                    await assoc(scanningId, qr_id, onLogout);
                     setScanningId(null);
                     setMsg('QR associato.');
                     await loadSerieTrappole();

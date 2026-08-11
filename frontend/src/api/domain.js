@@ -1746,6 +1746,12 @@ export const staffUpdateTrappola = (id, data, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/trappole/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 export const staffDeleteTrappola = (id, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/trappole/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffAssociaQrTrappola = (trappolaId, qrId, onLogout, force = false) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/trappole/${trappolaId}/associa-qr/`,
+    { method: 'POST', body: JSON.stringify({ qr_id: qrId, force }) },
+    onLogout,
+  );
 
 export const staffGetSerieQr = (onLogout) =>
   fetchAuthenticated('/api/personaggi/api/staff/serie-qr/', { method: 'GET' }, onLogout);
@@ -1755,6 +1761,12 @@ export const staffUpdateSerieQr = (id, data, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/serie-qr/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 export const staffDeleteSerieQr = (id, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/serie-qr/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffAssociaQrSerieQr = (serieQrId, qrId, onLogout, force = false) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/serie-qr/${serieQrId}/associa-qr/`,
+    { method: 'POST', body: JSON.stringify({ qr_id: qrId, force }) },
+    onLogout,
+  );
 
 export const staffAggiungiOggettoInventario = (inventarioId, oggettoId, onLogout) => 
     fetchAuthenticated(`/api/personaggi/api/staff/inventari/${inventarioId}/aggiungi_oggetto/`, { 

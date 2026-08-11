@@ -1458,9 +1458,46 @@ class QrCodeDetailView(APIView):
             if pid is not None:
                 scanner_pg = Personaggio.objects.filter(pk=pid, proprietario=request.user).first()
 
-        # Pool QR randomico: ha priorità sul vista collegato
+        # Trappola / SerieQr standalone (OneToOne su QrCode, non A_vista)
         from personaggi import qr_random_pool
+        from personaggi.models import SerieQr, Trappola
 
+        trappola = Trappola.objects.filter(qr_code=qr_code).first()
+        if trappola:
+            if not scanner_pg:
+                return Response(
+                    {"error": "Parametro personaggio_id richiesto per la trappola."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response(
+                qr_random_pool.apply_trappola_standalone(
+                    trappola=trappola,
+                    personaggio=scanner_pg,
+                    qr_code=qr_code,
+                ),
+                status=status.HTTP_200_OK,
+            )
+
+        serie_qr = SerieQr.objects.filter(qr_code=qr_code).select_related("serie").first()
+        if serie_qr:
+            if not scanner_pg:
+                return Response(
+                    {"error": "Parametro personaggio_id richiesto per la serie."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            serie_result = qr_random_pool.apply_serie_standalone(
+                serie_qr=serie_qr,
+                personaggio=scanner_pg,
+                qr_code=qr_code,
+            )
+            if serie_result.get("blocked"):
+                return Response(
+                    {"error": serie_result.get("error", "Errore serie.")},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response(serie_result, status=status.HTTP_200_OK)
+
+        # Pool QR randomico: ha priorità sul vista collegato
         if qr_random_pool.get_active_pool_for_qr(qr_code) is not None:
             bypass_sid = request.query_params.get("minigioco_session_id")
             pool_result = qr_random_pool.handle_pool_qr_scan(
@@ -1576,43 +1613,6 @@ class QrCodeDetailView(APIView):
                 },
                 status=status.HTTP_200_OK,
             )
-
-        # Trappola standalone
-        from personaggi.models import SerieQr, Trappola
-
-        trappola = Trappola.objects.filter(pk=vista_obj.pk).first()
-        if trappola:
-            if not scanner_pg:
-                return Response(
-                    {"error": "Parametro personaggio_id richiesto per la trappola."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            trap_result = qr_random_pool.apply_trappola_avista(
-                trappola=trappola,
-                personaggio=scanner_pg,
-                qr_code=qr_code,
-            )
-            return Response(trap_result, status=status.HTTP_200_OK)
-
-        # Serie standalone
-        serie_qr = SerieQr.objects.filter(pk=vista_obj.pk).select_related("serie").first()
-        if serie_qr:
-            if not scanner_pg:
-                return Response(
-                    {"error": "Parametro personaggio_id richiesto per la serie."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            serie_result = qr_random_pool.apply_serie_avista(
-                serie_qr=serie_qr,
-                personaggio=scanner_pg,
-                qr_code=qr_code,
-            )
-            if serie_result.get("blocked"):
-                return Response(
-                    {"error": serie_result.get("error", "Errore serie.")},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            return Response(serie_result, status=status.HTTP_200_OK)
 
         nodo = Nodo.objects.filter(pk=vista_obj.pk).first()
         if nodo:

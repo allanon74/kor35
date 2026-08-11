@@ -876,9 +876,10 @@ class RandomQrPoolEffectAdmin(admin.ModelAdmin):
 
 
 @admin.register(Trappola)
-class TrappolaAdmin(SModelAdmin):
-    list_display = ("id", "nome", "durata_secondi")
-    summernote_fields = ["testo"]
+class TrappolaAdmin(admin.ModelAdmin):
+    list_display = ("id", "nome", "durata_secondi", "qr_code")
+    search_fields = ("nome",)
+    raw_id_fields = ("qr_code",)
 
 
 @admin.register(SerieCollezione)
@@ -892,9 +893,10 @@ class SerieAssegnazioneAdmin(admin.ModelAdmin):
 
 
 @admin.register(SerieQr)
-class SerieQrAdmin(SModelAdmin):
-    list_display = ("id", "nome", "serie")
-    summernote_fields = ["testo"]
+class SerieQrAdmin(admin.ModelAdmin):
+    list_display = ("id", "nome", "serie", "qr_code")
+    search_fields = ("nome",)
+    raw_id_fields = ("serie", "qr_code")
 
 
 # --- NUOVA SEZIONE TIMER ---
