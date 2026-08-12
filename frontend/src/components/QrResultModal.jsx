@@ -889,7 +889,8 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
         nome: data.dati.nome,
         endsAt: data.dati.scadenza,
         alert_suono: true,
-        notifica_push: true,
+        // Push scadenza gestita server-side (dispatch_timer_expiry)
+        notifica_push: false,
         messaggio_in_app: true,
       };
     } else if (data.tipo_modello === 'trappola' && data.dati?.timer_attivo && data.dati?.scadenza) {

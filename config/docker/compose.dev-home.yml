@@ -39,6 +39,15 @@ services:
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
 
+  timer_dispatch:
+    container_name: kor35_devhome_timer_dispatch
+    volumes:
+      - ../../backend:/app
+      - ../../docs/wiki/staff:/app/wiki_staff_content:ro
+      - ../../docs/wiki/carte:/app/wiki_carte_content:ro
+      - ./nginx-docker/static_data:/app/static
+      - ./nginx-docker/media_data:/app/media
+
   frontend:
     container_name: kor35_devhome_frontend
     ports:

@@ -4270,6 +4270,20 @@ class InnescoTimer(A_vista):
         verbose_name="Segnale luminoso in-app",
         help_text="Il client può evidenziare il timer in modo più visibile.",
     )
+    # Broadcast attivo: usato per ripristino overlay e push web all'expiry (worker dispatch_timer_expiry).
+    broadcast_data_fine = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="Scadenza ultimo broadcast",
+        help_text="Fine countdown dell'ultima attivazione inviata a tutti i destinatari.",
+    )
+    broadcast_push_inviata = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name="Push scadenza già inviata",
+        help_text="False dopo attivazione; True dopo che il worker ha inviato le web push di scadenza.",
+    )
     campagna = models.ForeignKey(
         "Campagna",
         on_delete=models.PROTECT,

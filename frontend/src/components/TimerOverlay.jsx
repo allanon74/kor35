@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { useSharedNowTs } from '../hooks/useSharedNowTs';
 
 const SingleTimer = ({ timer, onExpire }) => {
   const nowTs = useSharedNowTs();
   const timeLeft = Math.max(0, Math.floor((timer.endTime - nowTs) / 1000));
   const isDanger = timer.variant === 'danger';
+  const expiredOnce = useRef(false);
 
   useEffect(() => {
-    if (timeLeft <= 0) {
+    if (timeLeft <= 0 && !expiredOnce.current) {
+      expiredOnce.current = true;
       onExpire(timer);
     }
   }, [timeLeft, timer, onExpire]);

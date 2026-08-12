@@ -717,7 +717,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
                 nome: payload.nome,
                 data_fine: payload.data_fine,
                 alert_suono: true,
-                notifica_push: true,
+                // Push scadenza: worker server (dispatch_timer_expiry), evita doppia Notification locale
+                notifica_push: false,
                 messaggio_in_app: true,
               });
             }

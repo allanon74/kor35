@@ -4955,8 +4955,9 @@ class ActiveTimersViewSet(viewsets.ReadOnlyModelViewSet):
         return StatoTimerAttivo.objects.filter(data_fine__gt=timezone.now())
 
     def list(self, request, *args, **kwargs):
-        """Unisce timer globali TipologiaTimer e trappole personali del PG."""
+        """Unisce timer globali TipologiaTimer, trappole personali e inneschi attivi."""
         from personaggi.models import StatoTrappolaPersonaggio
+        from personaggi import qr_logic
 
         response = super().list(request, *args, **kwargs)
         rows = list(response.data) if isinstance(response.data, list) else []
@@ -4966,7 +4967,14 @@ class ActiveTimersViewSet(viewsets.ReadOnlyModelViewSet):
                 pid = int(raw_pid)
             except (TypeError, ValueError):
                 pid = None
-            if pid is not None and Personaggio.objects.filter(pk=pid, proprietario=request.user).exists():
+            pg = (
+                Personaggio.objects.filter(pk=pid, proprietario=request.user)
+                .select_related("era", "prefettura", "prefettura__regione")
+                .first()
+                if pid is not None
+                else None
+            )
+            if pg is not None:
                 for st in StatoTrappolaPersonaggio.objects.filter(
                     personaggio_id=pid,
                     data_fine__gt=timezone.now(),
@@ -4983,6 +4991,7 @@ class ActiveTimersViewSet(viewsets.ReadOnlyModelViewSet):
                             "testo": st.testo or "",
                         }
                     )
+                rows.extend(qr_logic.active_innesco_timer_rows_for_personaggio(pg))
         return Response(rows) 
 class StatisticaViewSet(viewsets.ReadOnlyModelViewSet):
     """Visualizza l'elenco delle statistiche tecniche disponibili"""
