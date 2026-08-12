@@ -874,6 +874,7 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
     // Identifichiamo i dati del timer in base alla struttura del backend
     let timerToActivate = null;
 
+    // Casi mutuamente esclusivi: un solo timerToActivate per risposta QR
     // CASO A: Il QR è di tipo timer puro (tipo_modello: "timer_attivato")
     if (data.tipo_modello === 'timer_attivato' && data.dati) {
       timerToActivate = {
@@ -883,8 +884,7 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
         notifica_push: true,
         messaggio_in_app: true
       };
-    }
-    if (data.tipo_modello === 'timer_innesco' && data.dati) {
+    } else if (data.tipo_modello === 'timer_innesco' && data.dati) {
       timerToActivate = {
         nome: data.dati.nome,
         endsAt: data.dati.scadenza,
@@ -892,8 +892,7 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
         notifica_push: true,
         messaggio_in_app: true,
       };
-    }
-    if (data.tipo_modello === 'trappola' && data.dati?.timer_attivo && data.dati?.scadenza) {
+    } else if (data.tipo_modello === 'trappola' && data.dati?.timer_attivo && data.dati?.scadenza) {
       timerToActivate = {
         nome: data.dati.nome || 'Trappola',
         endsAt: data.dati.scadenza,
@@ -902,9 +901,8 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
         messaggio_in_app: true,
         variant: 'danger',
       };
-    }
-    // CASO B: Il QR ha un timer associato come extra (es. Manifesto + Timer)
-    else if (data.timer || data.dati?.timer_config) {
+    } else if (data.timer || data.dati?.timer_config) {
+      // CASO B: timer associato come extra (es. Manifesto + Timer)
       const config = data.timer || data.dati.timer_config;
       timerToActivate = {
         nome: config.nome,
