@@ -174,6 +174,10 @@ const ManifestoManager = ({ onBack, onLogout }) => {
               Nuovo
             </button>
           </div>
+          <p className="text-xs text-gray-500">
+            I manifesto collegati ai sottosistemi nave (gancio pilota) non compaiono qui:
+            gestiscili da Pilotaggio.
+          </p>
           <StaffMinigiocoPageToolbar
             pageKey={MINIGIOCO_PAGE_KEYS.manifesti}
             pageLabel="Manifesti"

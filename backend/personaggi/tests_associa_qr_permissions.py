@@ -103,6 +103,39 @@ class AssociaQrDirettoPermissionTests(TestCase):
         self.assertEqual(qr.vista_id, sottos.a_vista_id)
         self.assertTrue(Manifesto.objects.filter(pk=sottos.a_vista_id).exists())
 
+    def test_staff_manifesti_esclude_gancio_pilota(self):
+        narrativo = Manifesto.objects.create(nome="Manifesto narrativo", testo="ok")
+        sottos = SottosistemaNave.objects.create(codice="9", nome="Console test lista")
+        qr = QrCode.objects.create()
+        r_assoc = self.client.post(
+            f"/api/pilot/staff/sottosistemi/{sottos.pk}/associa-qr/",
+            {"qr_id": qr.id},
+            format="json",
+            **self.headers,
+        )
+        self.assertEqual(r_assoc.status_code, 200, r_assoc.content)
+        sottos.refresh_from_db()
+        pilot_pk = sottos.a_vista_id
+        self.assertIsNotNone(pilot_pk)
+
+        r_list = self.client.get(
+            "/api/personaggi/api/staff/manifesti/",
+            **self.headers,
+        )
+        self.assertEqual(r_list.status_code, 200, r_list.content)
+        ids = {row["id"] for row in r_list.data}
+        self.assertIn(narrativo.pk, ids)
+        self.assertNotIn(pilot_pk, ids)
+
+        r_all = self.client.get(
+            "/api/personaggi/api/staff/manifesti/?include_pilot=1",
+            **self.headers,
+        )
+        self.assertEqual(r_all.status_code, 200, r_all.content)
+        ids_all = {row["id"] for row in r_all.data}
+        self.assertIn(narrativo.pk, ids_all)
+        self.assertIn(pilot_pk, ids_all)
+
     def test_plot_associa_qr_vista_quest_master(self):
         quest = Quest.objects.create(nome="Q test QR", descrizione="")
         manifesto = Manifesto.objects.create(nome="Man plot", testo="")
