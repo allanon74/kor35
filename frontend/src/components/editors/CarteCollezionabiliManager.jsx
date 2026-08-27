@@ -43,8 +43,6 @@ import { CARTA_RARITA_LABEL, CARTA_TIPO_LABEL } from '../../carte/carteConstants
 import {
   LabeledField,
   StaffFieldGrid,
-  StaffListRow,
-  StaffListToolbar,
   StaffModal,
   staffInputClass,
 } from '../../staff/StaffCrudUi';
@@ -54,6 +52,7 @@ import ComboReliquiarioStaffPanel from './ComboReliquiarioStaffPanel';
 import EffectScriptWizard from './EffectScriptWizard';
 import { effectScriptsFromApi, effectScriptsToApi } from './CartaEffectScriptsEditor';
 import MercatoScambiStaffPanel from './MercatoScambiStaffPanel';
+import MasterGenericList from './MasterGenericList';
 
 function normalizeCartaStats(rows) {
   return (rows || []).map((row) => ({
@@ -458,20 +457,19 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
     load();
   }, [load]);
 
-  const bustinePerEspansione = useMemo(() => {
-    const map = new Map();
-    espansioni.forEach((e) => map.set(e.id, []));
-    bustine.forEach((b) => {
-      const key = b.espansione || null;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(b);
-    });
-    return map;
-  }, [espansioni, bustine]);
-
   const filteredErrata = useMemo(
     () => (errataCardFilter ? errata.filter((e) => e.carta === errataCardFilter) : errata),
     [errata, errataCardFilter],
+  );
+
+  const espansioneById = useMemo(
+    () => new Map(espansioni.map((e) => [e.id, e])),
+    [espansioni],
+  );
+
+  const cartaById = useMemo(
+    () => new Map(carte.map((c) => [c.id, c])),
+    [carte],
   );
   const errataJsonError = useMemo(() => {
     const raw = errataForm.effect_scripts_override_text || '';
@@ -932,43 +930,58 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
       {loading && <p className="text-gray-400">Caricamento…</p>}
 
       {!loading && tab === 'espansioni' && (
-        <div>
-          <StaffListToolbar
-            title="Espansioni"
-            count={espansioni.length}
-            onAdd={() => openEspansioneModal(null)}
-            addLabel="Nuova espansione"
-          />
-          <ul className="max-h-[70vh] space-y-1 overflow-y-auto">
-            {espansioni.map((e) => (
-              <StaffListRow
-                key={e.id}
-                onEdit={() => openEspansioneModal(e)}
-                onDelete={() => deleteEspansione(e.id)}
-                deleteConfirm={`Eliminare l'espansione «${e.nome}»?`}
-              >
-                <p className="font-bold text-white">{e.nome}</p>
-                <p className="text-xs text-gray-500">
-                  <span className="text-gray-400">Slug:</span> {e.slug}
-                  {' · '}
-                  <span className="text-gray-400">Carte:</span> {e.carte_count ?? 0}
-                  {' · '}
-                  <span className="text-gray-400">Bustine:</span> {e.bustine_count ?? 0}
-                  {!e.attiva && <span className="ml-2 text-amber-500">(disattiva)</span>}
-                  {e.in_vendita === false && <span className="ml-2 text-red-400">(fuori vendita)</span>}
-                  {e.legale_duello === false && <span className="ml-2 text-orange-400">(non legale duello)</span>}
-                </p>
-                <button
-                  type="button"
-                  className="mt-1 text-[10px] text-violet-400 underline"
-                  onClick={() => { selectEspansione(e); setTab('catalogo'); }}
-                >
-                  Filtra catalogo e bustine
-                </button>
-              </StaffListRow>
-            ))}
-          </ul>
-        </div>
+        <MasterGenericList
+          title="Espansioni"
+          items={espansioni}
+          fill={false}
+          persistKey="staff-carte-espansioni"
+          addLabel="Nuova espansione"
+          emptyMessage="Nessuna espansione."
+          getItemLabel={(e) => e.nome}
+          onAdd={() => openEspansioneModal(null)}
+          onEdit={openEspansioneModal}
+          onDelete={deleteEspansione}
+          extraRowActions={(e) => (
+            <button
+              type="button"
+              className="px-2 py-1 text-[10px] font-bold uppercase text-violet-300 hover:text-white"
+              onClick={() => { selectEspansione(e); setTab('catalogo'); }}
+            >
+              Filtra catalogo
+            </button>
+          )}
+          filterConfig={[
+            {
+              key: 'attiva',
+              label: 'Attiva',
+              options: [{ id: true, label: 'Attive' }, { id: false, label: 'Disattive' }],
+              match: (item, values) => values.some((v) => !!item.attiva === v),
+            },
+          ]}
+          columns={[
+            { key: 'nome', header: 'Nome', getSortValue: (e) => e.nome || '', render: (e) => <span className="font-bold text-white">{e.nome}</span> },
+            { key: 'slug', header: 'Slug', getSortValue: (e) => e.slug || '', render: (e) => <span className="font-mono text-xs text-gray-400">{e.slug}</span> },
+            { key: 'carte', header: 'Carte', getSortValue: (e) => e.carte_count ?? 0, render: (e) => e.carte_count ?? 0, align: 'center', width: 80 },
+            { key: 'bustine', header: 'Bustine', getSortValue: (e) => e.bustine_count ?? 0, render: (e) => e.bustine_count ?? 0, align: 'center', width: 90 },
+            {
+              key: 'attiva',
+              header: 'Attiva',
+              getSortValue: (e) => (e.attiva ? 1 : 0),
+              getFilterValue: (e) => (e.attiva ? 'Sì' : 'No'),
+              render: (e) => (e.attiva ? 'Sì' : 'No'),
+              align: 'center',
+              width: 80,
+            },
+            {
+              key: 'vendita',
+              header: 'Vendita',
+              getSortValue: (e) => (e.in_vendita === false ? 0 : 1),
+              getFilterValue: (e) => (e.in_vendita === false ? 'Fuori vendita' : 'In vendita'),
+              render: (e) => (e.in_vendita === false ? 'Fuori vendita' : 'In vendita'),
+              width: 120,
+            },
+          ]}
+        />
       )}
 
       <StaffModal
@@ -1129,45 +1142,60 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
       </StaffModal>
 
       {!loading && tab === 'catalogo' && (
-        <div>
-          <StaffListToolbar
-            title="Catalogo carte"
-            count={carte.length}
-            onAdd={() => openCartaModal(null)}
-            addLabel="Nuova carta"
-          />
-          <ul className="max-h-[70vh] space-y-1 overflow-y-auto">
-            {carte.map((c) => (
-              <StaffListRow
-                key={c.id}
-                onEdit={() => openCartaModal(c)}
-                onDelete={() => deleteCarta(c.id)}
-                deleteConfirm={`Eliminare la carta «${c.nome}» (${c.codice})?`}
-              >
-                <p className="font-bold text-white">{c.nome}</p>
-                <p className="text-xs text-gray-500">
-                  <span className="text-gray-400">Codice:</span> {c.codice}
-                  {' · '}
-                  <span className="text-gray-400">Tipo:</span> {CARTA_TIPO_LABEL[c.tipo] || c.tipo}
-                  {' · '}
-                  <span className="text-gray-400">Rarità:</span> {CARTA_RARITA_LABEL[c.rarita] || c.rarita}
-                </p>
-                <p className="text-xs text-gray-600">
-                  {c.espansione_nome && <><span className="text-gray-400">Espansione:</span> {c.espansione_nome} · </>}
-                  {c.set_collezione && <><span className="text-gray-400">Set:</span> {c.set_collezione} · </>}
-                  {c.legame_id && <><span className="text-gray-400">Legame:</span> {c.legame_id} · </>}
-                  {(c.tag_codici || []).length > 0 && (
-                    <><span className="text-gray-400">Tag:</span> [{c.tag_codici.join(', ')}]</>
-                  )}
-                  {c.bandita && <span className="ml-2 text-red-400">(bandita)</span>}
-                  {c.legale_duello === false && <span className="ml-2 text-orange-400">(non legale duello)</span>}
-                  {errata.some((e) => e.carta === c.id && e.attiva) && <span className="ml-2 text-amber-300">(errata)</span>}
-                  {!c.attiva && <span className="ml-1 text-amber-500">(disattiva)</span>}
-                </p>
-              </StaffListRow>
-            ))}
-          </ul>
-        </div>
+        <MasterGenericList
+          title="Catalogo carte"
+          items={carte}
+          fill={false}
+          persistKey="staff-carte-catalogo"
+          addLabel="Nuova carta"
+          emptyMessage="Nessuna carta in catalogo."
+          searchPlaceholder="Cerca nome, codice, set…"
+          getSearchText={(c) => [c.nome, c.codice, c.espansione_nome, c.set_collezione, c.legame_id, ...(c.tag_codici || [])].filter(Boolean).join(' ')}
+          getItemLabel={(c) => `${c.nome} (${c.codice})`}
+          onAdd={() => openCartaModal(null)}
+          onEdit={openCartaModal}
+          onDelete={deleteCarta}
+          filterConfig={[
+            {
+              key: 'tipo',
+              label: 'Tipo',
+              options: Object.entries(CARTA_TIPO_LABEL).map(([id, label]) => ({ id, label })),
+            },
+            {
+              key: 'rarita',
+              label: 'Rarità',
+              options: Object.entries(CARTA_RARITA_LABEL).map(([id, label]) => ({ id, label })),
+            },
+            {
+              key: 'attiva',
+              label: 'Attiva',
+              options: [{ id: true, label: 'Attive' }, { id: false, label: 'Disattive' }],
+              match: (item, values) => values.some((v) => !!item.attiva === v),
+            },
+          ]}
+          columns={[
+            { key: 'nome', header: 'Nome', getSortValue: (c) => c.nome || '', render: (c) => <span className="font-bold text-white">{c.nome}</span> },
+            { key: 'codice', header: 'Codice', getSortValue: (c) => c.codice || '', render: (c) => <span className="font-mono text-xs">{c.codice}</span> },
+            { key: 'tipo', header: 'Tipo', getSortValue: (c) => CARTA_TIPO_LABEL[c.tipo] || c.tipo, render: (c) => CARTA_TIPO_LABEL[c.tipo] || c.tipo, width: 110 },
+            { key: 'rarita', header: 'Rarità', getSortValue: (c) => CARTA_RARITA_LABEL[c.rarita] || c.rarita, render: (c) => CARTA_RARITA_LABEL[c.rarita] || c.rarita, width: 110 },
+            { key: 'espansione', header: 'Espansione', getSortValue: (c) => c.espansione_nome || '', render: (c) => c.espansione_nome || '—' },
+            { key: 'set', header: 'Set', getSortValue: (c) => c.set_collezione || '', render: (c) => c.set_collezione || '—' },
+            {
+              key: 'stato',
+              header: 'Stato',
+              getSortValue: (c) => [c.attiva ? 'a' : 'z', c.bandita ? 'b' : '', c.legale_duello === false ? 'n' : ''].join(),
+              getFilterValue: (c) => [!c.attiva && 'disattiva', c.bandita && 'bandita', c.legale_duello === false && 'non legale'].filter(Boolean).join(' ') || 'ok',
+              render: (c) => (
+                <span className="text-xs text-gray-400">
+                  {!c.attiva && <span className="text-amber-500">disattiva </span>}
+                  {c.bandita && <span className="text-red-400">bandita </span>}
+                  {c.legale_duello === false && <span className="text-orange-400">non legale</span>}
+                  {c.attiva && !c.bandita && c.legale_duello !== false && '—'}
+                </span>
+              ),
+            },
+          ]}
+        />
       )}
 
       <CartaCatalogoEditModal
@@ -1279,62 +1307,42 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
       )}
 
       {!loading && tab === 'bustine' && (
-        <div>
-          <StaffListToolbar
-            title="Bustine"
-            count={bustine.length}
-            onAdd={() => openBustinaModal(null)}
-            addLabel="Nuova bustina"
-          />
-          {espansioni.map((e) => {
-            const list = bustinePerEspansione.get(e.id) || [];
-            if (!list.length && selectedEspansione?.id && selectedEspansione.id !== e.id) return null;
-            if (!list.length) return null;
-            return (
-              <div key={e.id} className="mb-4">
-                <h4 className="mb-2 text-xs font-bold uppercase text-violet-300">{e.nome}</h4>
-                <ul className="space-y-1">
-                  {list.map((b) => (
-                    <StaffListRow
-                      key={b.id}
-                      onEdit={() => openBustinaModal(b)}
-                      onDelete={() => deleteBustina(b.id)}
-                      deleteConfirm={`Eliminare la bustina «${b.nome}»?`}
-                    >
-                      <p className="font-bold">{b.nome}</p>
-                      <p className="text-xs text-gray-500">
-                        <span className="text-gray-400">Costo:</span> {b.costo_crediti} CR
-                        {' · '}
-                        <span className="text-gray-400">Carte:</span> {b.carte_per_bustina}
-                        {b.set_collezione && (
-                          <> · <span className="text-gray-400">Set:</span> {b.set_collezione}</>
-                        )}
-                      </p>
-                    </StaffListRow>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-          {(bustinePerEspansione.get(null) || []).length > 0 && (
-            <div className="mb-4">
-              <h4 className="mb-2 text-xs font-bold uppercase text-gray-500">Senza espansione</h4>
-              <ul className="space-y-1">
-                {(bustinePerEspansione.get(null) || []).map((b) => (
-                  <StaffListRow
-                    key={b.id}
-                    onEdit={() => openBustinaModal(b)}
-                    onDelete={() => deleteBustina(b.id)}
-                    deleteConfirm={`Eliminare la bustina «${b.nome}»?`}
-                  >
-                    <p className="font-bold">{b.nome}</p>
-                    <p className="text-xs text-gray-500">{b.costo_crediti} CR · {b.carte_per_bustina} carte</p>
-                  </StaffListRow>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
+        <MasterGenericList
+          title="Bustine"
+          items={bustine}
+          fill={false}
+          persistKey="staff-carte-bustine"
+          addLabel="Nuova bustina"
+          emptyMessage="Nessuna bustina."
+          getItemLabel={(b) => b.nome}
+          onAdd={() => openBustinaModal(null)}
+          onEdit={openBustinaModal}
+          onDelete={deleteBustina}
+          filterConfig={[
+            {
+              key: 'espansione',
+              label: 'Espansione',
+              options: [
+                { id: '__none__', label: 'Senza espansione' },
+                ...espansioni.map((e) => ({ id: e.id, label: e.nome })),
+              ],
+              match: (item, values) =>
+                values.some((v) => (v === '__none__' ? !item.espansione : String(item.espansione) === String(v))),
+            },
+          ]}
+          columns={[
+            { key: 'nome', header: 'Nome', getSortValue: (b) => b.nome || '', render: (b) => <span className="font-bold">{b.nome}</span> },
+            {
+              key: 'espansione',
+              header: 'Espansione',
+              getSortValue: (b) => espansioneById.get(b.espansione)?.nome || '',
+              render: (b) => espansioneById.get(b.espansione)?.nome || 'Senza espansione',
+            },
+            { key: 'costo', header: 'Costo CR', getSortValue: (b) => Number(b.costo_crediti || 0), render: (b) => b.costo_crediti, align: 'right', width: 100 },
+            { key: 'carte', header: 'Carte', getSortValue: (b) => b.carte_per_bustina ?? 0, render: (b) => b.carte_per_bustina, align: 'center', width: 80 },
+            { key: 'set', header: 'Set', getSortValue: (b) => b.set_collezione || '', render: (b) => b.set_collezione || '—' },
+          ]}
+        />
       )}
 
       <StaffModal
@@ -1404,24 +1412,32 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
             I <strong>tag</strong> sono etichette meccaniche assegnate dal catalogo (non si cercano nel testo).
             Le keyword e gli EffectScript carta possono usarli per buff, distruzione o filtri.
           </p>
-          <StaffListToolbar title="Tag meccanici" count={tags.length} onAdd={() => openTagModal(null)} addLabel="Nuovo tag" />
-          <ul className="max-h-[70vh] space-y-1 overflow-y-auto">
-            {tags.map((t) => (
-              <StaffListRow
-                key={t.id}
-                onEdit={() => openTagModal(t)}
-                onDelete={() => deleteTag(t.id)}
-                deleteConfirm={`Eliminare il tag «${t.nome}»?`}
-              >
-                <p className="font-bold">{t.nome}</p>
-                <p className="text-xs text-gray-500">
-                  <span className="font-mono text-gray-400">{t.codice}</span>
-                  {t.colore && <> · <span className="text-gray-400">Colore:</span> {t.colore}</>}
-                  {!t.attiva && <span className="ml-2 text-amber-500">(disattivo)</span>}
-                </p>
-              </StaffListRow>
-            ))}
-          </ul>
+          <MasterGenericList
+            title="Tag meccanici"
+            items={tags}
+            fill={false}
+            persistKey="staff-carte-tags"
+            addLabel="Nuovo tag"
+            emptyMessage="Nessun tag."
+            getItemLabel={(t) => t.nome}
+            onAdd={() => openTagModal(null)}
+            onEdit={openTagModal}
+            onDelete={deleteTag}
+            columns={[
+              { key: 'nome', header: 'Nome', getSortValue: (t) => t.nome || '', render: (t) => <span className="font-bold">{t.nome}</span> },
+              { key: 'codice', header: 'Codice', getSortValue: (t) => t.codice || '', render: (t) => <span className="font-mono text-xs">{t.codice}</span> },
+              { key: 'colore', header: 'Colore', getSortValue: (t) => t.colore || '', render: (t) => t.colore || '—' },
+              {
+                key: 'attiva',
+                header: 'Attivo',
+                getSortValue: (t) => (t.attiva ? 1 : 0),
+                getFilterValue: (t) => (t.attiva ? 'Sì' : 'No'),
+                render: (t) => (t.attiva ? 'Sì' : 'No'),
+                align: 'center',
+                width: 80,
+              },
+            ]}
+          />
         </div>
       )}
 
@@ -1478,33 +1494,41 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
             Placeholder <code className="text-violet-300">[X]</code> nel nome e nel testo regola.
             Wiki: <strong>EffectScript v1</strong> e <strong>Keyword carte — guida master</strong>.
           </p>
-          <StaffListToolbar
+          <MasterGenericList
             title="Keyword condivise"
-            count={keywords.length}
-            onAdd={() => openKeywordModal(null)}
+            items={keywords}
+            fill={false}
+            persistKey="staff-carte-keywords"
             addLabel="Nuova keyword"
+            emptyMessage="Nessuna keyword."
+            getItemLabel={(k) => k.nome}
+            onAdd={() => openKeywordModal(null)}
+            onEdit={openKeywordModal}
+            onDelete={deleteKeyword}
+            columns={[
+              { key: 'nome', header: 'Nome', getSortValue: (k) => k.nome || '', render: (k) => <span className="font-bold">{k.nome}</span> },
+              { key: 'codice', header: 'Codice', getSortValue: (k) => k.codice || '', render: (k) => <span className="font-mono text-xs">{k.codice}</span> },
+              { key: 'priorita', header: 'Priorità', getSortValue: (k) => k.priorita ?? 0, render: (k) => k.priorita ?? 0, align: 'center', width: 90 },
+              {
+                key: 'script',
+                header: 'EffectScript',
+                getSortValue: (k) => (k.effect_script && Object.keys(k.effect_script).length ? 1 : 0),
+                getFilterValue: (k) => (k.effect_script && Object.keys(k.effect_script).length ? 'Sì' : 'No'),
+                render: (k) => (k.effect_script && Object.keys(k.effect_script).length ? 'Sì' : '—'),
+                align: 'center',
+                width: 110,
+              },
+              {
+                key: 'attiva',
+                header: 'Attiva',
+                getSortValue: (k) => (k.attiva ? 1 : 0),
+                getFilterValue: (k) => (k.attiva ? 'Sì' : 'No'),
+                render: (k) => (k.attiva ? 'Sì' : 'No'),
+                align: 'center',
+                width: 80,
+              },
+            ]}
           />
-          <ul className="max-h-[70vh] space-y-1 overflow-y-auto">
-            {keywords.map((k) => (
-              <StaffListRow
-                key={k.id}
-                onEdit={() => openKeywordModal(k)}
-                onDelete={() => deleteKeyword(k.id)}
-                deleteConfirm={`Eliminare la keyword «${k.nome}»?`}
-              >
-                <p className="font-bold">{k.nome}</p>
-                <p className="text-xs text-gray-500">
-                  <span className="font-mono text-gray-400">{k.codice}</span>
-                  {' · '}
-                  <span className="text-gray-400">Priorità:</span> {k.priorita ?? 0}
-                  {k.effect_script && Object.keys(k.effect_script).length > 0 && (
-                    <span className="ml-2 text-violet-400">EffectScript</span>
-                  )}
-                  {!k.attiva && <span className="ml-2 text-amber-500">(disattiva)</span>}
-                </p>
-              </StaffListRow>
-            ))}
-          </ul>
         </div>
       )}
 
@@ -1617,33 +1641,47 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
               </select>
             </LabeledField>
           </div>
-          <StaffListToolbar
+          <MasterGenericList
             title="Errata carte"
-            count={filteredErrata.length}
-            onAdd={() => openErrataModal(null)}
+            items={filteredErrata}
+            fill={false}
+            persistKey="staff-carte-errata"
             addLabel="Nuova errata"
+            emptyMessage="Nessuna errata."
+            getItemLabel={(e) => e.titolo || `Errata ${e.id}`}
+            onAdd={() => openErrataModal(null)}
+            onEdit={openErrataModal}
+            onDelete={deleteErrata}
+            columns={[
+              { key: 'titolo', header: 'Titolo', getSortValue: (e) => e.titolo || '', render: (e) => <span className="font-bold text-white">{e.titolo || 'Senza titolo'}</span> },
+              {
+                key: 'carta',
+                header: 'Carta',
+                getSortValue: (e) => cartaById.get(e.carta)?.nome || '',
+                render: (e) => cartaById.get(e.carta)?.nome || e.carta,
+              },
+              { key: 'da', header: 'Effettiva da', getSortValue: (e) => e.effective_from || '', render: (e) => e.effective_from || '—' },
+              { key: 'versione', header: 'Versione', getSortValue: (e) => e.versione || '', render: (e) => e.versione || '—' },
+              {
+                key: 'attiva',
+                header: 'Attiva',
+                getSortValue: (e) => (e.attiva ? 1 : 0),
+                getFilterValue: (e) => (e.attiva ? 'Sì' : 'No'),
+                render: (e) => (e.attiva ? 'Sì' : 'No'),
+                align: 'center',
+                width: 80,
+              },
+              {
+                key: 'pubblicata',
+                header: 'Pubblicata',
+                getSortValue: (e) => (e.pubblicata ? 1 : 0),
+                getFilterValue: (e) => (e.pubblicata ? 'Sì' : 'No'),
+                render: (e) => (e.pubblicata ? 'Sì' : '—'),
+                align: 'center',
+                width: 100,
+              },
+            ]}
           />
-          <ul className="max-h-[70vh] space-y-1 overflow-y-auto">
-            {filteredErrata.map((e) => (
-              <StaffListRow
-                key={e.id}
-                onEdit={() => openErrataModal(e)}
-                onDelete={() => deleteErrata(e.id)}
-                deleteConfirm={`Eliminare errata «${e.titolo || e.id}»?`}
-              >
-                <p className="font-bold text-white">{e.titolo || 'Errata senza titolo'}</p>
-                <p className="text-xs text-gray-500">
-                  <span className="text-gray-400">Carta:</span> {carte.find((c) => c.id === e.carta)?.nome || e.carta}
-                  {' · '}
-                  <span className="text-gray-400">Effettiva da:</span> {e.effective_from || '—'}
-                  {' · '}
-                  <span className="text-gray-400">Stato:</span> {e.attiva ? 'attiva' : 'disattiva'}
-                  {e.versione && <><span className="text-gray-400"> · Ver:</span> {e.versione}</>}
-                  {e.pubblicata && <span className="ml-2 text-emerald-300">(pubblicata)</span>}
-                </p>
-              </StaffListRow>
-            ))}
-          </ul>
         </div>
       )}
 

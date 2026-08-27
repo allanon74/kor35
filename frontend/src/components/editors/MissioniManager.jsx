@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Target } from 'lucide-react';
 import {
   createMissione,
   deleteMissione,
@@ -12,14 +11,13 @@ import {
 import {
   LabeledField,
   StaffFieldGrid,
-  StaffListRow,
-  StaffListToolbar,
   StaffModal,
   StaffSection,
   staffInputClass,
 } from '../../staff/StaffCrudUi';
 import { StaffToolShell } from '../../staff/StaffToolShell';
 import SearchableSelect from './SearchableSelect';
+import MasterGenericList from './MasterGenericList';
 
 const TIPO_OPTS = [
   { value: 'TECNICA', label: 'Tecnica' },
@@ -201,52 +199,103 @@ export default function MissioniManager({ onLogout }) {
     }
   };
 
-  const remove = async (row) => {
-    try {
-      await deleteMissione(row.id, onLogout);
-      await loadList();
-    } catch (err) {
-      setError(err?.message || 'Eliminazione fallita');
-    }
-  };
+  const missioneColumns = useMemo(
+    () => [
+      { key: 'titolo', header: 'Titolo', getSortValue: (x) => x.titolo || '', render: (x) => <span className="font-semibold">{x.titolo}</span> },
+      {
+        key: 'tipo',
+        header: 'Tipo',
+        getSortValue: (x) => x.tipo_risoluzione || '',
+        render: (x) => x.tipo_risoluzione,
+        width: 130,
+      },
+      {
+        key: 'korp',
+        header: 'KORP',
+        getSortValue: (x) => x.korp_nome || 'Generica',
+        render: (x) => (x.korp_nome ? `${x.korp_nome}${x.esclusiva ? ' · esclusiva' : ''}` : 'Generica'),
+      },
+      {
+        key: 'crediti',
+        header: 'Crediti',
+        getSortValue: (x) => Number(x.reward_crediti || 0),
+        render: (x) => Number(x.reward_crediti || 0).toLocaleString('it-IT'),
+        align: 'right',
+        width: 100,
+      },
+      {
+        key: 'prestigio',
+        header: 'Prestigio',
+        getSortValue: (x) => Number(x.reward_prestigio || 0),
+        render: (x) => x.reward_prestigio || 0,
+        align: 'center',
+        width: 90,
+      },
+      {
+        key: 'eventi',
+        header: 'Eventi',
+        getSortValue: (x) => x.eventi_count ?? (x.eventi || []).length,
+        render: (x) => x.eventi_count ?? (x.eventi || []).length,
+        align: 'center',
+        width: 80,
+      },
+      {
+        key: 'ordine',
+        header: 'Ordine',
+        getSortValue: (x) => x.ordine ?? 0,
+        render: (x) => x.ordine ?? 0,
+        align: 'center',
+        width: 80,
+      },
+    ],
+    [],
+  );
+
+  const missioneFilterConfig = useMemo(
+    () => [
+      {
+        key: 'tipo_risoluzione',
+        label: 'Tipo',
+        options: TIPO_OPTS.map((o) => ({ id: o.value, label: o.label })),
+      },
+      {
+        key: 'korp',
+        label: 'KORP',
+        options: [
+          { id: '__none__', label: 'Generica' },
+          ...korps.map((k) => ({ id: k.id, label: k.nome })),
+        ],
+        match: (item, values) =>
+          values.some((v) => (v === '__none__' ? !item.korp : String(item.korp) === String(v))),
+      },
+    ],
+    [korps],
+  );
 
   return (
-    <StaffToolShell>
-      <StaffListToolbar title="Tasks (missioni)" count={items.length} onAdd={openCreate} />
-      {error ? <p className="mb-3 text-sm text-red-400">{error}</p> : null}
-      {loading ? (
-        <p className="text-sm text-gray-500">Caricamento…</p>
-      ) : (
-        <ul className="space-y-2">
-          {items.map((row) => (
-            <StaffListRow
-              key={row.id}
-              onEdit={() => openEdit(row)}
-              onDelete={() => remove(row)}
-              deleteConfirm={`Eliminare la task «${row.titolo}»?`}
-            >
-              <div className="font-semibold text-white">{row.titolo}</div>
-              <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-gray-400">
-                <span className="inline-flex items-center gap-1 rounded bg-gray-800 px-2 py-0.5">
-                  <Target size={12} /> {row.tipo_risoluzione}
-                </span>
-                {row.korp_nome ? (
-                  <span className="rounded bg-violet-900/50 px-2 py-0.5 text-violet-200">
-                    {row.korp_nome}{row.esclusiva ? ' · esclusiva' : ''}
-                  </span>
-                ) : (
-                  <span className="rounded bg-gray-800 px-2 py-0.5">Generica</span>
-                )}
-                <span>
-                  {Number(row.reward_crediti || 0).toLocaleString('it-IT')} Cr · {row.reward_prestigio || 0} Pr
-                </span>
-                {row.premio_solo_primo ? <span className="text-amber-300">Solo primo</span> : null}
-                <span>{row.eventi_count ?? (row.eventi || []).length} eventi</span>
-              </div>
-            </StaffListRow>
-          ))}
-        </ul>
-      )}
+    <StaffToolShell fill>
+      {error ? <p className="mb-3 px-4 pt-3 text-sm text-red-400">{error}</p> : null}
+      <div className="h-full min-h-0 p-4">
+        <MasterGenericList
+          title="Tasks (missioni)"
+          items={items}
+          columns={missioneColumns}
+          filterConfig={missioneFilterConfig}
+          loading={loading}
+          persistKey="staff-tasks-missioni"
+          addLabel="Nuova"
+          emptyMessage="Nessuna task definita."
+          searchPlaceholder="Cerca titolo, KORP…"
+          getSearchText={(row) => [row.titolo, row.korp_nome, row.tipo_risoluzione].filter(Boolean).join(' ')}
+          getItemLabel={(row) => row.titolo || `Task #${row.id}`}
+          onAdd={openCreate}
+          onEdit={openEdit}
+          onDelete={async (id) => {
+            await deleteMissione(id, onLogout);
+            await loadList();
+          }}
+        />
+      </div>
 
       <StaffModal open={modalOpen} title={form.id ? 'Modifica task' : 'Nuova task'} onClose={() => setModalOpen(false)} onSave={save} saving={saving} wide>
         {metaLoading && !metaLoaded ? (

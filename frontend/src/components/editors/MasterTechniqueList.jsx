@@ -56,15 +56,20 @@ const MasterTechniqueList = ({
   // 2. Definizione Colonne
   const columns = [
     {
+      key: 'qr',
       header: 'QR',
       width: '44px',
       align: 'center',
+      getSortValue: (item) => (item.has_qrcode ? 1 : 0),
+      getFilterValue: (item) => (item.has_qrcode ? 'QR' : ''),
       render: (item) => <StaffQrBadge hasQr={item.has_qrcode} />,
     },
     { 
+      key: 'lvl',
       header: 'Lvl', 
       width: '60px', 
       align: 'center',
+      getSortValue: (item) => item.livello || item.liv || 0,
       render: (item) => (
         <span className="font-mono font-bold text-gray-400">
           {item.livello || item.liv}
@@ -72,9 +77,24 @@ const MasterTechniqueList = ({
       )
     },
     { 
+      key: 'au',
       header: 'Au', 
       width: '50px', 
       align: 'center',
+      getSortValue: (item) => {
+        const auraId = item.aura_richiesta?.id || item.aura_richiesta;
+        const aura = item.aura_richiesta?.id
+          ? item.aura_richiesta
+          : punteggiList.find((p) => String(p.id) === String(auraId));
+        return aura?.ordine ?? 999;
+      },
+      getFilterValue: (item) => {
+        const auraId = item.aura_richiesta?.id || item.aura_richiesta;
+        const aura = item.aura_richiesta?.id
+          ? item.aura_richiesta
+          : punteggiList.find((p) => String(p.id) === String(auraId));
+        return aura?.nome || '';
+      },
       render: (item) => {
         const auraId = item.aura_richiesta?.id || item.aura_richiesta;
         const aura = item.aura_richiesta?.id
@@ -93,7 +113,9 @@ const MasterTechniqueList = ({
       }
     },
     { 
+      key: 'nome',
       header: 'Nome', 
+      getSortValue: (item) => item.nome || '',
       render: (item) => (
         <div className="font-bold text-cyan-50 truncate max-w-[150px] md:max-w-xs">
           {item.nome}
@@ -101,17 +123,23 @@ const MasterTechniqueList = ({
       )
     },
     {
+      key: 'mattoni',
       header: 'Mattoni',
+      getSortValue: (item) => (Array.isArray(item.componenti) ? item.componenti.length : 0),
+      getFilterValue: (item) => {
+        const rows = Array.isArray(item.componenti) ? item.componenti : [];
+        return rows.map((row) => `${row.nome || '?'} x${row.valore ?? 1}`).join(' ');
+      },
       render: (item) => {
         const rows = Array.isArray(item.componenti) ? item.componenti : [];
         if (!rows.length) return <span className="text-[10px] text-gray-600">—</span>;
         return (
           <div className="text-[10px] text-gray-300 leading-tight max-w-[260px]">
-            {rows.map((row, idx) => `${row.nome || '?'} x${row.valore ?? 1}`).join(' · ')}
+            {rows.map((row) => `${row.nome || '?'} x${row.valore ?? 1}`).join(' · ')}
           </div>
         );
       },
-    }
+    },
   ];
 
   // 3. Logica di Ordinamento: Aura -> Livello -> Nome

@@ -10,6 +10,7 @@ import {
   StaffToolShell,
   staffSecondaryBtnClass,
 } from '../../staff/StaffToolShell';
+import MasterGenericList from './MasterGenericList';
 
 const formatDate = (iso) => {
   if (!iso) return '—';
@@ -91,58 +92,57 @@ const PersonaggiEliminatiManager = ({ onLogout }) => {
         </div>
       )}
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && !loading ? (
         <p className="text-sm text-gray-500">Nessun personaggio archiviato per la campagna attiva.</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-800">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-900/80 text-left text-xs uppercase text-gray-400">
-              <tr>
-                <th className="p-3">Nome</th>
-                <th className="p-3">Proprietario</th>
-                <th className="p-3">Campagna</th>
-                <th className="p-3">Tipologia</th>
-                <th className="p-3">Eliminato il</th>
-                <th className="p-3 w-44">Azioni</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="border-t border-gray-800/80 hover:bg-gray-900/40">
-                  <td className="p-3 font-semibold text-white">{row.nome}</td>
-                  <td className="p-3 text-gray-300">
-                    {row.proprietario_nome || row.proprietario_username || '—'}
-                  </td>
-                  <td className="p-3 text-gray-400">{row.campagna_nome || '—'}</td>
-                  <td className="p-3 text-gray-400">{row.tipologia_nome || '—'}</td>
-                  <td className="p-3 font-mono text-xs text-red-300/90">{formatDate(row.eliminato_at)}</td>
-                  <td className="p-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={busyId === row.id}
-                        onClick={() => setConfirm({ kind: 'restore', row })}
-                        className="inline-flex items-center gap-1 rounded-lg border border-emerald-700 bg-emerald-950/50 px-2.5 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-900 disabled:opacity-50"
-                        title="Ripristina personaggio"
-                      >
-                        <RotateCcw size={14} /> Ripristina
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busyId === row.id}
-                        onClick={() => setConfirm({ kind: 'hard', row })}
-                        className="inline-flex items-center gap-1 rounded-lg border border-red-800 bg-red-950/60 px-2.5 py-1.5 text-xs font-bold text-red-300 hover:bg-red-900 disabled:opacity-50"
-                        title="Elimina definitivamente dal database"
-                      >
-                        <Trash2 size={14} /> Definitivo
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <MasterGenericList
+          title="Archivio"
+          items={rows}
+          fill={false}
+          persistKey="staff-personaggi-eliminati"
+          loading={loading}
+          emptyMessage="Nessun personaggio archiviato."
+          getSearchText={(row) => [row.nome, row.proprietario_nome, row.proprietario_username, row.campagna_nome].filter(Boolean).join(' ')}
+          extraRowActions={(row) => (
+            <>
+              <button
+                type="button"
+                disabled={busyId === row.id}
+                onClick={() => setConfirm({ kind: 'restore', row })}
+                className="inline-flex items-center gap-1 rounded-lg border border-emerald-700 bg-emerald-950/50 px-2.5 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-900 disabled:opacity-50"
+                title="Ripristina personaggio"
+              >
+                <RotateCcw size={14} /> Ripristina
+              </button>
+              <button
+                type="button"
+                disabled={busyId === row.id}
+                onClick={() => setConfirm({ kind: 'hard', row })}
+                className="inline-flex items-center gap-1 rounded-lg border border-red-800 bg-red-950/60 px-2.5 py-1.5 text-xs font-bold text-red-300 hover:bg-red-900 disabled:opacity-50"
+                title="Elimina definitivamente dal database"
+              >
+                <Trash2 size={14} /> Definitivo
+              </button>
+            </>
+          )}
+          columns={[
+            { key: 'nome', header: 'Nome', getSortValue: (row) => row.nome || '', render: (row) => <span className="font-semibold text-white">{row.nome}</span> },
+            {
+              key: 'proprietario',
+              header: 'Proprietario',
+              getSortValue: (row) => row.proprietario_nome || row.proprietario_username || '',
+              render: (row) => row.proprietario_nome || row.proprietario_username || '—',
+            },
+            { key: 'campagna', header: 'Campagna', getSortValue: (row) => row.campagna_nome || '', render: (row) => row.campagna_nome || '—' },
+            { key: 'tipologia', header: 'Tipologia', getSortValue: (row) => row.tipologia_nome || '', render: (row) => row.tipologia_nome || '—' },
+            {
+              key: 'eliminato',
+              header: 'Eliminato il',
+              getSortValue: (row) => row.eliminato_at || '',
+              render: (row) => <span className="font-mono text-xs text-red-300/90">{formatDate(row.eliminato_at)}</span>,
+            },
+          ]}
+        />
       )}
 
       {confirm && (

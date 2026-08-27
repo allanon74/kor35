@@ -14,6 +14,10 @@ import ProfileImageField from '../ProfileImageField';
 import { prepareProfileImageForUpload } from '../../utils/profileImage';
 import { useStaffQrAssociation } from '../../hooks/useStaffQrAssociation';
 import { StaffToolHeader, StaffToolShell } from '../../staff/StaffToolShell';
+import { useStaffTableControls } from '../../staff/useStaffTableControls';
+import { StaffTableControls } from '../../staff/StaffTableControls';
+import StaffDataTable from '../../staff/StaffDataTable';
+import { applyColumnFilters, applyMultiSort } from '../../staff/staffTableModel';
 import {
   staffGetPersonaggi,
   staffGetPersonaggioDetail,
@@ -468,6 +472,75 @@ const PersonaggiStaffManager = ({ onLogout }) => {
 
   const totalPages = Math.max(1, Math.ceil((listData.count || 0) / 40));
 
+  const personaggioColumns = useMemo(
+    () => [
+      {
+        key: 'nome',
+        header: 'Nome',
+        getSortValue: (row) => row.nome || '',
+        render: (row) => (
+          <span className="font-bold text-white">
+            {row.data_morte && <Skull size={12} className="inline mr-1 text-red-400" />}
+            {row.nome}
+          </span>
+        ),
+      },
+      {
+        key: 'tipo',
+        header: 'Tipo',
+        getSortValue: (row) => (row.giocante ? 'PG' : 'PNG'),
+        render: (row) => <span className="text-gray-400">{row.giocante ? 'PG' : 'PNG'}</span>,
+      },
+      {
+        key: 'proprietario',
+        header: 'Proprietario',
+        getSortValue: (row) => row.proprietario_nome || row.proprietario_username || '',
+        render: (row) => <span className="text-gray-300">{row.proprietario_nome || row.proprietario_username}</span>,
+      },
+      {
+        key: 'era',
+        header: 'Era',
+        getSortValue: (row) => row.era_nome || '',
+        render: (row) => <span className="text-gray-400">{row.era_nome || '—'}</span>,
+      },
+      {
+        key: 'korp',
+        header: 'KORP / Carriere',
+        getSortValue: (row) => (row.korp_attivi || []).join(', '),
+        render: (row) => <span className="text-gray-400 text-xs">{(row.korp_attivi || []).join(', ') || '—'}</span>,
+      },
+      {
+        key: 'qr',
+        header: 'QR',
+        getSortValue: (row) => row.qrcode_id || '',
+        render: (row) => <span className="font-mono text-xs text-indigo-300">{row.qrcode_id || '—'}</span>,
+      },
+      {
+        key: 'corrente',
+        header: 'Corrente',
+        getSortValue: (row) => Number(row.crediti_corrente ?? row.crediti ?? 0),
+        render: (row) => <span className="text-emerald-300">{row.crediti_corrente ?? row.crediti}</span>,
+        align: 'right',
+      },
+      {
+        key: 'deposito',
+        header: 'Deposito',
+        getSortValue: (row) => Number(row.crediti_deposito ?? 0),
+        render: (row) => <span className="text-amber-300">{row.crediti_deposito ?? '—'}</span>,
+        align: 'right',
+      },
+    ],
+    [],
+  );
+
+  const tableControls = useStaffTableControls({ persistKey: 'staff-personaggi-elenco', columns: personaggioColumns });
+  const personaggiRows = useMemo(() => {
+    const raw = listData.results || [];
+    const filtered = applyColumnFilters(raw, tableControls.columnFilters, personaggioColumns);
+    if (tableControls.sorts.length) return applyMultiSort(filtered, tableControls.sorts, personaggioColumns);
+    return filtered;
+  }, [listData.results, tableControls.columnFilters, tableControls.sorts, personaggioColumns]);
+
   return (
     <StaffToolShell fill>
       <StaffToolHeader
@@ -544,51 +617,40 @@ const PersonaggiStaffManager = ({ onLogout }) => {
           >
             Aggiorna
           </button>
+          <StaffTableControls
+            compact
+            sorts={tableControls.sorts}
+            onResetSorts={tableControls.resetSorts}
+            columns={personaggioColumns}
+            hiddenColumnKeys={tableControls.hiddenColumnKeys}
+            onToggleColumn={tableControls.toggleColumn}
+            onResetColumns={tableControls.resetColumns}
+            showColumnFilters={tableControls.showColumnFilters}
+            onToggleColumnFilters={() => tableControls.setShowColumnFilters((v) => !v)}
+            columnFilters={tableControls.columnFilters}
+            onResetColumnFilters={tableControls.resetColumnFilters}
+          />
         </div>
         {message && !selected && (
           <p className="mt-2 text-sm text-teal-300">{message}</p>
         )}
       </StaffToolHeader>
 
-      <div className="flex-1 overflow-auto min-h-0">
+      <div className="flex-1 overflow-hidden min-h-0 flex flex-col bg-gray-800/40">
         {loading ? (
           <div className="p-8 text-center text-gray-400">Caricamento…</div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-800 sticky top-0">
-              <tr className="text-left text-gray-400 text-xs uppercase">
-                <th className="p-2">Nome</th>
-                <th className="p-2">Tipo</th>
-                <th className="p-2">Proprietario</th>
-                <th className="p-2">Era</th>
-                <th className="p-2">KORP / Carriere</th>
-                <th className="p-2">QR</th>
-                <th className="p-2 text-right">Corrente</th>
-                <th className="p-2 text-right">Deposito</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(listData.results || []).map((row) => (
-                <tr
-                  key={row.id}
-                  onClick={() => openPersonaggio(row)}
-                  className="border-b border-gray-800 hover:bg-gray-800/60 cursor-pointer"
-                >
-                  <td className="p-2 font-bold text-white">
-                    {row.data_morte && <Skull size={12} className="inline mr-1 text-red-400" />}
-                    {row.nome}
-                  </td>
-                  <td className="p-2 text-gray-400">{row.giocante ? 'PG' : 'PNG'}</td>
-                  <td className="p-2 text-gray-300">{row.proprietario_nome || row.proprietario_username}</td>
-                  <td className="p-2 text-gray-400">{row.era_nome || '—'}</td>
-                  <td className="p-2 text-gray-400 text-xs">{(row.korp_attivi || []).join(', ') || '—'}</td>
-                  <td className="p-2 font-mono text-xs text-indigo-300">{row.qrcode_id || '—'}</td>
-                  <td className="p-2 text-right text-emerald-300">{row.crediti_corrente ?? row.crediti}</td>
-                  <td className="p-2 text-right text-amber-300">{row.crediti_deposito ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <StaffDataTable
+            columns={personaggioColumns}
+            items={personaggiRows}
+            hiddenColumnKeys={tableControls.hiddenColumnKeys}
+            sorts={tableControls.sorts}
+            onCycleSort={tableControls.cycleSort}
+            showColumnFilters={tableControls.showColumnFilters}
+            columnFilters={tableControls.columnFilters}
+            onColumnFilterChange={tableControls.setColumnFilter}
+            onRowClick={openPersonaggio}
+          />
         )}
       </div>
 

@@ -651,18 +651,34 @@ export default function CarriereKorpsManager({ onLogout }) {
 
   const carrieraColumns = useMemo(
     () => [
-      { header: 'Nome', render: (x) => <span className="font-bold">{x.nome}</span> },
-      { header: 'Tipo', render: (x) => x.tipo_carriera_nome || x.tipo_carriera_codice || '—' },
-      { header: 'Tier wiki', render: (x) => x.tipo || '—', align: 'center', width: 90 },
-      { header: 'Bonus CR', render: (x) => Number(x.bonus_crediti_evento || 0).toFixed(2), align: 'center', width: 100 },
+      { key: 'nome', header: 'Nome', getSortValue: (x) => x.nome, render: (x) => <span className="font-bold">{x.nome}</span> },
       {
+        key: 'tipo',
+        header: 'Tipo',
+        getSortValue: (x) => x.tipo_carriera_nome || x.tipo_carriera_codice || '',
+        render: (x) => x.tipo_carriera_nome || x.tipo_carriera_codice || '—',
+      },
+      { key: 'tier_wiki', header: 'Tier wiki', getSortValue: (x) => x.tipo || '', render: (x) => x.tipo || '—', align: 'center', width: 90 },
+      {
+        key: 'bonus_cr',
+        header: 'Bonus CR',
+        getSortValue: (x) => Number(x.bonus_crediti_evento || 0),
+        render: (x) => Number(x.bonus_crediti_evento || 0).toFixed(2),
+        align: 'center',
+        width: 100,
+      },
+      {
+        key: 'tier_sblocco',
         header: 'Tier sblocco',
+        getSortValue: (x) => x.tiers_sblocco_dettaglio?.length ?? 0,
         render: (x) => (x.tiers_sblocco_dettaglio?.length ?? 0),
         align: 'center',
         width: 100,
       },
       {
+        key: 'perk_auto',
         header: 'Perk auto',
+        getSortValue: (x) => x.abilita_default_dettaglio?.length ?? 0,
         render: (x) => (x.abilita_default_dettaglio?.length ?? 0),
         align: 'center',
         width: 90,
@@ -673,15 +689,44 @@ export default function CarriereKorpsManager({ onLogout }) {
 
   const caricaColumns = useMemo(
     () => [
-      { header: 'Carica', render: (x) => <span className="font-bold">{x.nome}</span> },
+      { key: 'nome', header: 'Carica', getSortValue: (x) => x.nome, render: (x) => <span className="font-bold">{x.nome}</span> },
       {
+        key: 'dipartimenti',
         header: 'Dipartimenti',
+        getSortValue: (x) => (x.carriere_nomi || []).join(', '),
+        getFilterValue: (x) => (x.carriere_nomi || []).join(', '),
         render: (x) => (x.carriere_nomi?.length ? x.carriere_nomi.join(', ') : '—'),
       },
-      { header: 'Bonus CR', render: (x) => Number(x.bonus_crediti_evento || 0).toFixed(2), align: 'center', width: 100 },
-      { header: 'Ordine', render: (x) => x.ordine ?? 0, align: 'center', width: 80 },
       {
+        key: 'bonus_stipendio',
+        header: 'Bonus stipendio',
+        getSortValue: (x) => Number(x.bonus_stipendio_evento || 0),
+        render: (x) => Number(x.bonus_stipendio_evento || 0),
+        align: 'center',
+        width: 120,
+      },
+      {
+        key: 'bonus_cr',
+        header: 'Bonus CR',
+        getSortValue: (x) => Number(x.bonus_crediti_evento || 0),
+        render: (x) => Number(x.bonus_crediti_evento || 0).toFixed(2),
+        align: 'center',
+        width: 100,
+      },
+      {
+        key: 'bonus_prestigio',
+        header: 'Prestigio',
+        getSortValue: (x) => Number(x.bonus_peso_influencer || 0),
+        render: (x) => Number(x.bonus_peso_influencer || 0),
+        align: 'center',
+        width: 90,
+      },
+      { key: 'ordine', header: 'Ordine', getSortValue: (x) => x.ordine ?? 0, render: (x) => x.ordine ?? 0, align: 'center', width: 80 },
+      {
+        key: 'attiva',
         header: 'Attiva',
+        getSortValue: (x) => (x.attiva === false ? 0 : 1),
+        getFilterValue: (x) => (x.attiva === false ? 'No' : 'Sì'),
         render: (x) => (x.attiva === false ? 'No' : 'Sì'),
         align: 'center',
         width: 80,
@@ -713,24 +758,101 @@ export default function CarriereKorpsManager({ onLogout }) {
 
   const membershipColumns = useMemo(
     () => [
-      { header: 'PG', render: (x) => x.personaggio_nome || `#${x.personaggio}` },
-      { header: 'Carriera', render: (x) => x.carriera_nome || '—' },
-      { header: 'Tipo', render: (x) => x.tipo_carriera_codice || '—', width: 110 },
-      { header: 'Carica', render: (x) => x.carica_nome || '—' },
       {
+        key: 'pg',
+        header: 'PG',
+        getSortValue: (x) => x.personaggio_nome || '',
+        render: (x) => x.personaggio_nome || `#${x.personaggio}`,
+      },
+      { key: 'carriera', header: 'Carriera', getSortValue: (x) => x.carriera_nome || '', render: (x) => x.carriera_nome || '—' },
+      { key: 'tipo', header: 'Tipo', getSortValue: (x) => x.tipo_carriera_codice || '', render: (x) => x.tipo_carriera_codice || '—', width: 110 },
+      { key: 'carica', header: 'Carica', getSortValue: (x) => x.carica_nome || '', render: (x) => x.carica_nome || '—' },
+      {
+        key: 'social',
         header: 'Social',
+        getSortValue: (x) => (x.visibile_social === false ? 0 : 1),
+        getFilterValue: (x) => (x.visibile_social === false ? 'Nascosta' : 'Visibile'),
         render: (x) => (x.visibile_social === false ? 'Nascosta' : 'Visibile'),
         align: 'center',
         width: 90,
       },
       {
+        key: 'stato',
         header: 'Stato',
+        getSortValue: (x) => (x.data_a ? 0 : 1),
+        getFilterValue: (x) => (x.data_a ? 'Chiusa' : 'Attiva'),
         render: (x) => (x.data_a ? 'Chiusa' : 'Attiva'),
         align: 'center',
         width: 90,
       },
     ],
     [],
+  );
+
+  const carrieraFilterConfig = useMemo(
+    () => [
+      {
+        key: 'tipo_carriera_codice',
+        label: 'Tipo',
+        options: tipi.map((t) => ({ id: t.codice, label: t.nome })),
+      },
+    ],
+    [tipi],
+  );
+
+  const caricaFilterConfig = useMemo(
+    () => [
+      {
+        key: 'dipartimento',
+        label: 'Dipartimento',
+        options: carriere.map((c) => ({ id: c.id, label: c.nome })),
+        match: (item, values) => {
+          const raw = item.carriere_ids ?? item.carriere ?? [];
+          const ids = Array.isArray(raw) ? raw.map(String) : raw ? [String(raw)] : [];
+          if (!ids.length && item.carriera) ids.push(String(item.carriera));
+          return values.some((v) => ids.includes(String(v)));
+        },
+      },
+      {
+        key: 'attiva',
+        label: 'Attiva',
+        options: [
+          { id: true, label: 'Attive' },
+          { id: false, label: 'Disattive' },
+        ],
+        match: (item, values) => values.some((v) => (item.attiva !== false) === v),
+      },
+    ],
+    [carriere],
+  );
+
+  const membershipFilterConfig = useMemo(
+    () => [
+      {
+        key: 'tipo_carriera_codice',
+        label: 'Tipo',
+        options: tipi.map((t) => ({ id: t.codice, label: t.nome })),
+      },
+      {
+        key: 'stato',
+        label: 'Stato',
+        options: [
+          { id: 'attiva', label: 'Attive' },
+          { id: 'chiusa', label: 'Chiuse' },
+        ],
+        match: (item, values) => values.some((v) => (item.data_a ? 'chiusa' : 'attiva') === v),
+      },
+      {
+        key: 'visibile_social',
+        label: 'Social',
+        options: [
+          { id: true, label: 'Visibile' },
+          { id: false, label: 'Nascosta' },
+        ],
+        match: (item, values) => values.some((v) => (item.visibile_social !== false) === v),
+      },
+    ],
+    [tipi],
   );
 
   const saveCarriera = async (form, mode) => {
@@ -884,6 +1006,7 @@ export default function CarriereKorpsManager({ onLogout }) {
             columns={carrieraColumns}
             loading={loading}
             persistKey="staff-carriere-korps-org"
+            filterConfig={carrieraFilterConfig}
             addLabel="Nuova carriera"
             emptyMessage="Nessuna carriera trovata."
             onAdd={() =>
@@ -915,6 +1038,7 @@ export default function CarriereKorpsManager({ onLogout }) {
             columns={caricaColumns}
             loading={loading}
             persistKey="staff-carriere-korps-cariche"
+            filterConfig={caricaFilterConfig}
             addLabel="Nuova carica"
             emptyMessage="Nessuna carica definita."
             onAdd={() => setModalCarica({ attiva: true, ordine: 0 })}
@@ -939,6 +1063,7 @@ export default function CarriereKorpsManager({ onLogout }) {
             columns={membershipColumns}
             loading={loading}
             persistKey="staff-carriere-korps-membership"
+            filterConfig={membershipFilterConfig}
             addLabel="Nuova appartenenza"
             emptyMessage="Nessuna appartenenza registrata."
             searchPlaceholder="Cerca personaggio, giocatore, KORP, carriera o carica…"

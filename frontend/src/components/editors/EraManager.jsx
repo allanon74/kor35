@@ -165,24 +165,24 @@ const EraManager = ({ onLogout, onBack }) => {
   useEffect(() => { load(); }, []);
 
   const eraColumns = useMemo(() => [
-    { header: 'Nome', render: (x) => <span className="font-bold">{x.nome}</span> },
-    { header: 'Abbr.', render: (x) => x.abbreviazione || '-' },
-    { header: 'Ordine', render: (x) => x.ordine ?? 0, align: 'center', width: 90 },
-    { header: 'Attiva', render: (x) => (x.attiva ? 'Si' : 'No'), align: 'center', width: 90 },
+    { key: 'nome', header: 'Nome', getSortValue: (x) => x.nome || '', render: (x) => <span className="font-bold">{x.nome}</span> },
+    { key: 'abbr', header: 'Abbr.', getSortValue: (x) => x.abbreviazione || '', render: (x) => x.abbreviazione || '-' },
+    { key: 'ordine', header: 'Ordine', getSortValue: (x) => x.ordine ?? 0, render: (x) => x.ordine ?? 0, align: 'center', width: 90 },
+    { key: 'attiva', header: 'Attiva', getSortValue: (x) => (x.attiva ? 1 : 0), getFilterValue: (x) => (x.attiva ? 'Si' : 'No'), render: (x) => (x.attiva ? 'Si' : 'No'), align: 'center', width: 90 },
   ], []);
 
   const prefColumns = useMemo(() => [
-    { header: 'Nome', render: (x) => <span className="font-bold">{x.nome}</span> },
-    { header: 'Era', render: (x) => x.era_nome || '-' },
-    { header: 'Reg.', render: (x) => x.regione_sigla || '-' },
-    { header: 'Ordine', render: (x) => x.ordine ?? 0, align: 'center', width: 90 },
+    { key: 'nome', header: 'Nome', getSortValue: (x) => x.nome || '', render: (x) => <span className="font-bold">{x.nome}</span> },
+    { key: 'era', header: 'Era', getSortValue: (x) => x.era_nome || '', render: (x) => x.era_nome || '-' },
+    { key: 'reg', header: 'Reg.', getSortValue: (x) => x.regione_sigla || '', render: (x) => x.regione_sigla || '-' },
+    { key: 'ordine', header: 'Ordine', getSortValue: (x) => x.ordine ?? 0, render: (x) => x.ordine ?? 0, align: 'center', width: 90 },
   ], []);
 
   const regioneColumns = useMemo(() => [
-    { header: 'Nome', render: (x) => <span className="font-bold">{x.nome}</span> },
-    { header: 'Sigla', render: (x) => x.sigla || '-' },
-    { header: 'Ordine', render: (x) => x.ordine ?? 0, align: 'center', width: 90 },
-    { header: 'Attiva', render: (x) => (x.attiva ? 'Si' : 'No'), align: 'center', width: 90 },
+    { key: 'nome', header: 'Nome', getSortValue: (x) => x.nome || '', render: (x) => <span className="font-bold">{x.nome}</span> },
+    { key: 'sigla', header: 'Sigla', getSortValue: (x) => x.sigla || '', render: (x) => x.sigla || '-' },
+    { key: 'ordine', header: 'Ordine', getSortValue: (x) => x.ordine ?? 0, render: (x) => x.ordine ?? 0, align: 'center', width: 90 },
+    { key: 'attiva', header: 'Attiva', getSortValue: (x) => (x.attiva ? 1 : 0), getFilterValue: (x) => (x.attiva ? 'Si' : 'No'), render: (x) => (x.attiva ? 'Si' : 'No'), align: 'center', width: 90 },
   ], []);
 
   return (

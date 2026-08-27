@@ -45,6 +45,9 @@ const ImmagineList = ({ onAdd, onEdit, onLogout }) => {
             header: 'Anteprima', 
             width: '120px',
             align: 'center',
+            sortable: false,
+            filterable: false,
+            hideable: true,
             render: (item) => (
                 item.immagine ? (
                     <div className="flex justify-center">
