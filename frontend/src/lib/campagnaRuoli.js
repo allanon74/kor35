@@ -1,4 +1,4 @@
-"""Ruoli campagna: etichette UI (allineate a CampagnaUtente.ruolo)."""
+/** Ruoli campagna: etichette UI (allineate a CampagnaUtente.ruolo). */
 
 export const CAMPAGNA_ROLE_LABELS = {
   PLAYER: 'Giocatore',
