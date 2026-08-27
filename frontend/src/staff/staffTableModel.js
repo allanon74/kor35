@@ -146,9 +146,12 @@ export function applyMultiSort(items, sorts, columns) {
 
 export function applyColumnFilters(items, columnFilters, columns) {
   if (!items?.length) return items || [];
-  const entries = Object.entries(columnFilters || {}).filter(([, v]) => String(v || '').trim() !== '');
-  if (!entries.length) return items;
   const colByKey = new Map((columns || []).map((col, idx) => [columnKey(col, idx), col]));
+  const entries = Object.entries(columnFilters || {}).filter(([key, v]) => {
+    if (!colByKey.has(key)) return false;
+    return String(v || '').trim() !== '';
+  });
+  if (!entries.length) return items;
   return items.filter((item) =>
     entries.every(([key, raw]) => {
       const needle = String(raw).trim().toLowerCase();

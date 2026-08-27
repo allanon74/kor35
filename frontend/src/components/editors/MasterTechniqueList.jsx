@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useCharacter } from '../CharacterContext';
 import IconaPunteggio from '../IconaPunteggio';
 import MasterGenericList from './MasterGenericList';
@@ -23,38 +23,42 @@ const MasterTechniqueList = ({
   const { punteggiList } = useCharacter();
 
   // 1. Configurazione Filtri (Livelli e Aure)
-  const filterConfig = [
-    {
-      key: 'livello_virtual', // Chiave virtuale, usiamo match personalizzato
-      label: 'Livelli',
-      type: 'button',
-      options: [1, 2, 3, 4, 5, 6, 7].map(l => ({ id: l, label: l.toString() })),
-      // Logica di matching per coprire sia il campo 'livello' che 'liv'
-      match: (item, values) => values.includes(item.livello || item.liv)
-    },
-    {
-      key: 'aura_richiesta',
-      label: 'Aure',
-      type: 'icon',
-      options: punteggiList.filter(p => p.tipo === 'AU'),
-      renderOption: (opt) => (
-        <IconaPunteggio 
-          url={opt.icona_url || opt.icona} 
-          color={opt.colore} 
-          size="xs" 
-          mode="cerchio_inv" 
-        />
-      ),
-      // Matcher per gestire ID o oggetti nidificati per l'aura
-      match: (item, values) => {
-        const itemAuraId = item.aura_richiesta?.id || item.aura_richiesta;
-        return values.some((v) => String(v) === String(itemAuraId));
-      }
-    }
-  ];
+  const filterConfig = useMemo(
+    () => [
+      {
+        key: 'livello_virtual', // Chiave virtuale, usiamo match personalizzato
+        label: 'Livelli',
+        type: 'button',
+        options: [1, 2, 3, 4, 5, 6, 7].map((l) => ({ id: l, label: l.toString() })),
+        // Logica di matching per coprire sia il campo 'livello' che 'liv'
+        match: (item, values) => values.includes(item.livello || item.liv),
+      },
+      {
+        key: 'aura_richiesta',
+        label: 'Aure',
+        type: 'icon',
+        options: punteggiList.filter((p) => p.tipo === 'AU'),
+        renderOption: (opt) => (
+          <IconaPunteggio
+            url={opt.icona_url || opt.icona}
+            color={opt.colore}
+            size="xs"
+            mode="cerchio_inv"
+          />
+        ),
+        // Matcher per gestire ID o oggetti nidificati per l'aura
+        match: (item, values) => {
+          const itemAuraId = item.aura_richiesta?.id || item.aura_richiesta;
+          return values.some((v) => String(v) === String(itemAuraId));
+        },
+      },
+    ],
+    [punteggiList],
+  );
 
   // 2. Definizione Colonne
-  const columns = [
+  const columns = useMemo(
+    () => [
     {
       key: 'qr',
       header: 'QR',
@@ -140,10 +144,13 @@ const MasterTechniqueList = ({
         );
       },
     },
-  ];
+  ],
+    [punteggiList],
+  );
 
   // 3. Logica di Ordinamento: Aura -> Livello -> Nome
-  const sortLogic = (a, b) => {
+  const sortLogic = useMemo(
+    () => (a, b) => {
     // Ordine Aura
     const auraAId = a.aura_richiesta?.id || a.aura_richiesta;
     const auraBId = b.aura_richiesta?.id || b.aura_richiesta;
@@ -163,8 +170,10 @@ const MasterTechniqueList = ({
     if (livA !== livB) return livA - livB;
 
     // Ordine Alfabetico
-    return (a.nome || "").localeCompare(b.nome || "");
-  };
+    return (a.nome || '').localeCompare(b.nome || '');
+  },
+    [punteggiList],
+  );
 
   return (
     <MasterGenericList 

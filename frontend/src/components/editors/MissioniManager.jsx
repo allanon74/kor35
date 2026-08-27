@@ -199,6 +199,16 @@ export default function MissioniManager({ onLogout }) {
     }
   };
 
+  const remove = async (id) => {
+    setError('');
+    try {
+      await deleteMissione(id, onLogout);
+      await loadList();
+    } catch (err) {
+      setError(err?.message || 'Eliminazione fallita');
+    }
+  };
+
   const missioneColumns = useMemo(
     () => [
       { key: 'titolo', header: 'Titolo', getSortValue: (x) => x.titolo || '', render: (x) => <span className="font-semibold">{x.titolo}</span> },
@@ -290,10 +300,7 @@ export default function MissioniManager({ onLogout }) {
           getItemLabel={(row) => row.titolo || `Task #${row.id}`}
           onAdd={openCreate}
           onEdit={openEdit}
-          onDelete={async (id) => {
-            await deleteMissione(id, onLogout);
-            await loadList();
-          }}
+          onDelete={remove}
         />
       </div>
 

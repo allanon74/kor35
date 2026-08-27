@@ -106,6 +106,16 @@ export function useStaffTableControls({ persistKey, columns = [] } = {}) {
     [hiddenColumnKeys, knownKeys],
   );
 
+  const sanitizedColumnFilters = useMemo(() => {
+    const next = {};
+    Object.entries(columnFilters || {}).forEach(([key, value]) => {
+      if (knownKeys.has(key) && String(value || '').trim() !== '') {
+        next[key] = value;
+      }
+    });
+    return next;
+  }, [columnFilters, knownKeys]);
+
   const cycleSort = useCallback((key) => {
     setSorts((prev) => cycleColumnSort(prev, key));
   }, []);
@@ -170,7 +180,7 @@ export function useStaffTableControls({ persistKey, columns = [] } = {}) {
     hiddenColumnKeys: sanitizedHiddenKeys,
     toggleColumn,
     resetColumns,
-    columnFilters,
+    columnFilters: sanitizedColumnFilters,
     setColumnFilter,
     resetColumnFilters,
     showColumnFilters,

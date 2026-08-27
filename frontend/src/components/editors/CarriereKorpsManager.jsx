@@ -651,7 +651,7 @@ export default function CarriereKorpsManager({ onLogout }) {
 
   const carrieraColumns = useMemo(
     () => [
-      { key: 'nome', header: 'Nome', getSortValue: (x) => x.nome, render: (x) => <span className="font-bold">{x.nome}</span> },
+      { key: 'nome', header: 'Nome', getSortValue: (x) => x.nome || '', render: (x) => <span className="font-bold">{x.nome}</span> },
       {
         key: 'tipo',
         header: 'Tipo',
@@ -689,7 +689,7 @@ export default function CarriereKorpsManager({ onLogout }) {
 
   const caricaColumns = useMemo(
     () => [
-      { key: 'nome', header: 'Carica', getSortValue: (x) => x.nome, render: (x) => <span className="font-bold">{x.nome}</span> },
+      { key: 'nome', header: 'Carica', getSortValue: (x) => x.nome || '', render: (x) => <span className="font-bold">{x.nome}</span> },
       {
         key: 'dipartimenti',
         header: 'Dipartimenti',
