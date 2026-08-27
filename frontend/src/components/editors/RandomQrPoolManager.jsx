@@ -13,6 +13,7 @@ import {
   staffDeleteRandomQrPoolEffect,
   staffGetSerieCollezioni,
   staffGetNodi,
+  staffGetMinigiocoPatterns,
 } from '../../api';
 
 const emptyPool = () => ({
@@ -24,6 +25,7 @@ const emptyPool = () => ({
   minigioco_messaggio_pre: '',
   minigioco_messaggio_vittoria: '',
   minigioco_modalita_sblocco: 'permanente',
+  minigioco_pattern: '',
 });
 
 const emptyEffect = () => ({
@@ -46,6 +48,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
   const [qrIdInput, setQrIdInput] = useState('');
   const [serieList, setSerieList] = useState([]);
   const [nodi, setNodi] = useState([]);
+  const [patterns, setPatterns] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -60,12 +63,15 @@ const RandomQrPoolManager = ({ onLogout }) => {
   }, [onLogout]);
 
   const reloadLookups = useCallback(async () => {
-    const [serie, nodiData] = await Promise.all([
+    const [serie, nodiData, patternData] = await Promise.all([
       staffGetSerieCollezioni(onLogout),
       staffGetNodi(onLogout),
+      staffGetMinigiocoPatterns(onLogout),
     ]);
     setSerieList(Array.isArray(serie) ? serie : serie?.results || []);
     setNodi(Array.isArray(nodiData) ? nodiData : nodiData?.results || []);
+    const plist = Array.isArray(patternData) ? patternData : patternData?.results || [];
+    setPatterns(plist.filter((p) => p.attivo !== false));
   }, [onLogout]);
 
   useEffect(() => {
@@ -92,6 +98,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
       minigioco_messaggio_pre: p.minigioco_messaggio_pre || '',
       minigioco_messaggio_vittoria: p.minigioco_messaggio_vittoria || '',
       minigioco_modalita_sblocco: p.minigioco_modalita_sblocco || 'permanente',
+      minigioco_pattern: p.minigioco_pattern || '',
     });
     setEffectForm(emptyEffect());
   };
@@ -100,10 +107,14 @@ const RandomQrPoolManager = ({ onLogout }) => {
     try {
       setBusy(true);
       setError('');
+      const payload = {
+        ...form,
+        minigioco_pattern: form.minigioco_pattern || null,
+      };
       if (selectedId) {
-        await staffUpdateRandomQrPool(selectedId, form, onLogout);
+        await staffUpdateRandomQrPool(selectedId, payload, onLogout);
       } else {
-        const created = await staffCreateRandomQrPool(form, onLogout);
+        const created = await staffCreateRandomQrPool(payload, onLogout);
         setSelectedId(created.id);
       }
       await reloadPools();
@@ -265,6 +276,19 @@ const RandomQrPoolManager = ({ onLogout }) => {
                 />
                 Richiedi minigioco
               </label>
+              <label className="block text-xs text-gray-400 mt-1">
+                Pattern estrazione
+                <select
+                  className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm mt-0.5"
+                  value={form.minigioco_pattern || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, minigioco_pattern: e.target.value }))}
+                >
+                  <option value="">— Legacy (tipi/diff sul pool) —</option>
+                  {patterns.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nome}</option>
+                  ))}
+                </select>
+              </label>
               <div className="grid grid-cols-2 gap-2 mt-1">
                 <label className="text-xs text-gray-400">
                   Difficoltà
@@ -275,6 +299,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
                     className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
                     value={form.minigioco_difficolta}
                     onChange={(e) => setForm((f) => ({ ...f, minigioco_difficolta: Number(e.target.value) }))}
+                    disabled={Boolean(form.minigioco_pattern)}
                   />
                 </label>
                 <label className="text-xs text-gray-400">

@@ -1297,6 +1297,30 @@ def _can_view_unpublished_non_staff_wiki(request, user_override=None):
     return role in (CAMPAGNA_ROLE_REDACTOR, CAMPAGNA_ROLE_STAFFER, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
 
 
+def _apply_wiki_visibility(queryset, request, *, effective_user):
+    """
+    Visibilità wiki:
+    - Master+/admin (token): tutto
+    - Redactor/staffer: anche bozze, non staff-only
+    - Altri: pagine pubbliche non staff-only
+    - visibile_solo_autenticati: nascosta agli anonimi (vale anche con sessione cookie)
+    """
+    if _is_campaign_master_plus(request, user_override=effective_user):
+        return queryset
+    if _can_view_unpublished_non_staff_wiki(request, user_override=effective_user):
+        queryset = queryset.filter(visibile_solo_staff=False)
+    else:
+        queryset = queryset.filter(public=True, visibile_solo_staff=False)
+
+    logged_in = bool(
+        (request.user and request.user.is_authenticated)
+        or (effective_user and getattr(effective_user, "is_authenticated", False))
+    )
+    if not logged_in:
+        queryset = queryset.filter(visibile_solo_autenticati=False)
+    return queryset
+
+
 def _public_wiki_effective_user(request):
     """
     Hardening endpoint pubblici wiki:
@@ -1666,16 +1690,7 @@ def get_wiki_menu(request):
     # Base: prendi tutto
     queryset = PaginaRegolamento.objects.all().order_by('parent', 'ordine', 'titolo')
     effective_user = _public_wiki_effective_user(request)
-
-    if _is_campaign_master_plus(request, user_override=effective_user):
-        # Master/Head Master/Admin: visione completa inclusa staff-only.
-        pass
-    elif _can_view_unpublished_non_staff_wiki(request, user_override=effective_user):
-        # Redactor/Staffer: vedono anche bozze, ma non staff-only.
-        queryset = queryset.filter(visibile_solo_staff=False)
-    else:
-        # Player/non autenticati: solo pubblico non staff-only.
-        queryset = queryset.filter(public=True, visibile_solo_staff=False)
+    queryset = _apply_wiki_visibility(queryset, request, effective_user=effective_user)
 
     from personaggi.carte_wiki_access import filtra_queryset_wiki_carte
 
@@ -1692,13 +1707,7 @@ def get_wiki_menu(request):
 def get_wiki_page(request, slug):
     queryset = PaginaRegolamento.objects.all()
     effective_user = _public_wiki_effective_user(request)
-
-    if _is_campaign_master_plus(request, user_override=effective_user):
-        pass
-    elif _can_view_unpublished_non_staff_wiki(request, user_override=effective_user):
-        queryset = queryset.filter(visibile_solo_staff=False)
-    else:
-        queryset = queryset.filter(public=True, visibile_solo_staff=False)
+    queryset = _apply_wiki_visibility(queryset, request, effective_user=effective_user)
 
     from personaggi.carte_wiki_access import filtra_queryset_wiki_carte
 

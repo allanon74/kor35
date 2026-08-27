@@ -130,6 +130,7 @@ PAGINA_REGOLAMENTO_MENU_FIELD_NAMES = frozenset(
         "ordine",
         "public",
         "visibile_solo_staff",
+        "visibile_solo_autenticati",
         "includi_in_pdf",
         "manuali_pdf",
         "pdf_solo_indice",
@@ -553,6 +554,10 @@ def try_apply_pagina_regolamento_structure_when_skipped(
         local_obj.visibile_solo_staff
     ):
         patch["visibile_solo_staff"] = bool(row.get("visibile_solo_staff"))
+    if "visibile_solo_autenticati" in row and bool(row.get("visibile_solo_autenticati")) != bool(
+        getattr(local_obj, "visibile_solo_autenticati", False)
+    ):
+        patch["visibile_solo_autenticati"] = bool(row.get("visibile_solo_autenticati"))
 
     raw_parent = row.get("parent")
     resolved_parent = None

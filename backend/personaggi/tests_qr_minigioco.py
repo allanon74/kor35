@@ -9,10 +9,13 @@ from personaggi.models import MinigiocoQrConfig, MinigiocoQrSession, QrCode, Tip
 from personaggi.qr_minigioco import (
     generate_game_state,
     generate_sliding_state,
+    grid_size,
     verify_memory,
     verify_rotate,
     verify_sliding,
     verify_solution,
+    verify_wire_match,
+    verify_tap_order,
     scegli_tipo_e_difficolta,
     tipi_pool,
     risolvi_difficolta,
@@ -24,7 +27,8 @@ from personaggi.qr_minigioco import (
     MINIGIOCO_TIPO_SIMON,
     MINIGIOCO_TIPO_PATTERN,
     MINIGIOCO_TIPO_PIPE,
-    generate_game_state,
+    MINIGIOCO_TIPO_WIRE,
+    MINIGIOCO_TIPO_TAP_ORDER,
     verify_simon,
     verify_pattern_lock,
     verify_pipe_connect,
@@ -61,6 +65,13 @@ class QrMinigiocoLogicTests(SimpleTestCase):
     def test_sliding_solved_state(self):
         tiles = list(range(16))
         self.assertTrue(verify_sliding(tiles, 4))
+
+    def test_sliding_diff4_is_4x4_not_5x5(self):
+        cols, rows = grid_size(MINIGIOCO_TIPO_SLIDING, 4)
+        self.assertEqual((cols, rows), (4, 4))
+        state = generate_game_state(MINIGIOCO_TIPO_SLIDING, 4, 11)
+        self.assertEqual(state["size"], 4)
+        self.assertEqual(len(state["tiles"]), 16)
 
     def test_sliding_shuffle_is_solvable_path(self):
         tiles = generate_sliding_state(3, 42)
@@ -261,11 +272,53 @@ class MinigiocoBibliotecaTests(TestCase):
         self.assertEqual(pipe["size"], 4)
         self.assertEqual(len(pipe["bases"]), 16)
 
+    def test_wire_match_generate_and_verify(self):
+        state = generate_game_state(MINIGIOCO_TIPO_WIRE, 2, 42)
+        self.assertEqual(len(state["pairs"]), 4)
+        self.assertEqual(len(state["right_order"]), 4)
+        self.assertFalse(
+            verify_wire_match(state["pairs"], [])
+        )
+        ids = [p["id"] for p in state["pairs"]]
+        self.assertTrue(verify_wire_match(state["pairs"], ids))
+        self.assertTrue(
+            verify_solution(
+                MINIGIOCO_TIPO_WIRE,
+                2,
+                {"matched_pairs": ids},
+                state,
+            )
+        )
+
+    def test_tap_order_generate_and_verify(self):
+        state = generate_game_state(MINIGIOCO_TIPO_TAP_ORDER, 1, 7)
+        self.assertEqual(len(state["order"]), 4)
+        self.assertEqual(len(state["cells"]), 4)
+        self.assertTrue(verify_tap_order(state["order"], list(state["order"])))
+        self.assertFalse(verify_tap_order(state["order"], []))
+        self.assertTrue(
+            verify_solution(
+                MINIGIOCO_TIPO_TAP_ORDER,
+                1,
+                {"player_input": list(state["order"])},
+                state,
+            )
+        )
+
     @patch("personaggi.minigioco_biblioteca.biblioteca_immagine_count", return_value=0)
     def test_tipi_pool_senza_immagine(self, _mock):
         cfg = _Cfg(tipi_abilitati=[MINIGIOCO_TIPO_SIMON, MINIGIOCO_TIPO_SLIDING], usa_biblioteca_se_vuota=True)
         pool = tipi_pool_giocabili(cfg)
         self.assertEqual(pool, [MINIGIOCO_TIPO_SIMON])
+
+    @patch("personaggi.minigioco_biblioteca.biblioteca_immagine_count", return_value=0)
+    def test_tipi_pool_include_wire_tap_senza_immagine(self, _mock):
+        cfg = _Cfg(
+            tipi_abilitati=[MINIGIOCO_TIPO_WIRE, MINIGIOCO_TIPO_TAP_ORDER, MINIGIOCO_TIPO_SLIDING],
+            usa_biblioteca_se_vuota=True,
+        )
+        pool = tipi_pool_giocabili(cfg)
+        self.assertEqual(set(pool), {MINIGIOCO_TIPO_WIRE, MINIGIOCO_TIPO_TAP_ORDER})
 
     @patch("personaggi.minigioco_biblioteca.requests.post")
     def test_registra_openverse_salva_su_db(self, mock_post):

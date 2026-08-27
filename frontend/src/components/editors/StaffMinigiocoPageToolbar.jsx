@@ -1,22 +1,41 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Puzzle } from 'lucide-react';
 import StaffMinigiocoDefaultModal from './StaffMinigiocoDefaultModal';
 import {
   loadPageMinigiocoSettings,
-  setPageMinigiocoApplyToNew,
+  loadPageMinigiocoSettingsAsync,
+  setPageMinigiocoApplyToNewAsync,
 } from '../../utils/staffMinigiocoDefaults';
 
 const StaffMinigiocoPageToolbar = ({ pageKey, pageLabel, onLogout }) => {
   const [applyToNew, setApplyToNew] = useState(() => loadPageMinigiocoSettings(pageKey).applyToNew);
+  const [hasDefault, setHasDefault] = useState(() => Boolean(loadPageMinigiocoSettings(pageKey).config));
   const [defaultModalOpen, setDefaultModalOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const toggleApply = useCallback(() => {
+  const refresh = useCallback(async () => {
+    const data = await loadPageMinigiocoSettingsAsync(pageKey, onLogout);
+    setApplyToNew(Boolean(data.applyToNew));
+    setHasDefault(Boolean(data.config));
+  }, [pageKey, onLogout]);
+
+  useEffect(() => {
+    refresh().catch(() => {});
+  }, [refresh]);
+
+  const toggleApply = useCallback(async () => {
     const next = !applyToNew;
     setApplyToNew(next);
-    setPageMinigiocoApplyToNew(pageKey, next);
-  }, [applyToNew, pageKey]);
-
-  const hasDefault = Boolean(loadPageMinigiocoSettings(pageKey).config);
+    setBusy(true);
+    try {
+      await setPageMinigiocoApplyToNewAsync(pageKey, next, onLogout);
+      await refresh();
+    } catch {
+      setApplyToNew(!next);
+    } finally {
+      setBusy(false);
+    }
+  }, [applyToNew, pageKey, onLogout, refresh]);
 
   return (
     <>
@@ -33,7 +52,12 @@ const StaffMinigiocoPageToolbar = ({ pageKey, pageLabel, onLogout }) => {
           {hasDefault ? 'Modifica default' : 'Crea default minigioco'}
         </button>
         <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer ml-auto">
-          <input type="checkbox" checked={applyToNew} onChange={toggleApply} />
+          <input
+            type="checkbox"
+            checked={applyToNew}
+            onChange={toggleApply}
+            disabled={busy}
+          />
           Applica default ai nuovi QR
         </label>
         {!hasDefault && applyToNew && (
@@ -46,7 +70,10 @@ const StaffMinigiocoPageToolbar = ({ pageKey, pageLabel, onLogout }) => {
         pageKey={pageKey}
         pageLabel={pageLabel}
         open={defaultModalOpen}
-        onClose={() => setDefaultModalOpen(false)}
+        onClose={() => {
+          setDefaultModalOpen(false);
+          refresh().catch(() => {});
+        }}
         onLogout={onLogout}
       />
     </>

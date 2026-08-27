@@ -5,45 +5,17 @@ Eseguito dal worker `dispatch_timer_expiry` (compose) ogni pochi secondi.
 """
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict, List
 
-from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
 
-logger = logging.getLogger(__name__)
-
 
 def _send_webpush_to_users(user_ids: List[int], *, head: str, body: str, url: str = "/") -> int:
-    """Invia web push ai proprietari (deduplicati). Ritorna quanti invii tentati."""
-    try:
-        from webpush import send_user_notification
-    except Exception as exc:  # pragma: no cover
-        logger.warning("webpush non disponibile: %s", exc)
-        return 0
+    """Notifica i proprietari (web push / Telegram / email secondo preferenze)."""
+    from personaggi.notify import notify_user_ids
 
-    sent = 0
-    for uid in sorted({int(u) for u in user_ids if u}):
-        try:
-            user = User.objects.get(pk=uid)
-        except User.DoesNotExist:
-            continue
-        try:
-            send_user_notification(
-                user=user,
-                payload={
-                    "head": head,
-                    "body": body,
-                    "icon": "/pwa-192x192.png",
-                    "url": url,
-                },
-                ttl=1000,
-            )
-            sent += 1
-        except Exception as exc:
-            logger.warning("Web push fallita per user=%s: %s", uid, exc)
-    return sent
+    return notify_user_ids(user_ids, category="in_game", head=head, body=body, url=url)
 
 
 def dispatch_expired_innesco_pushes(*, now=None) -> Dict[str, Any]:

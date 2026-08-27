@@ -48,6 +48,7 @@ const ManifestoManager = lazy(() => import('./editors/ManifestoManager'));
 const NodoManager = lazy(() => import('./editors/NodoManager'));
 const InnescoTimerManager = lazy(() => import('./editors/InnescoTimerManager'));
 const RandomQrPoolManager = lazy(() => import('./editors/RandomQrPoolManager'));
+const MinigiocoPatternManager = lazy(() => import('./editors/MinigiocoPatternManager'));
 const PilotaggioManager = lazy(() => import('./editors/PilotaggioManager'));
 const CreazioneGuidataStaffManager = lazy(() => import('./editors/CreazioneGuidataStaffManager'));
 const ScommesseManager = lazy(() => import('./editors/ScommesseManager'));
@@ -60,6 +61,7 @@ const PersonaggiStaffManager = lazy(() => import('./editors/PersonaggiStaffManag
 const RegoleTransazioneStaffManager = lazy(() => import('./editors/RegoleTransazioneStaffManager'));
 const EconomiaCreditiManager = lazy(() => import('./editors/EconomiaCreditiManager'));
 const StaffAppLinksPanel = lazy(() => import('./editors/StaffAppLinksPanel'));
+const StaffCalendarioCompitiManager = lazy(() => import('./editors/StaffCalendarioCompitiManager'));
 
 const STAFF_COMPONENT_MAP = {
     plot: PlotTab,
@@ -79,8 +81,10 @@ const STAFF_COMPONENT_MAP = {
     nodi: NodoManager,
     'innesco-timer': InnescoTimerManager,
     'qr-random-pool': RandomQrPoolManager,
+    'minigioco-pattern': MinigiocoPatternManager,
     pilotaggio: PilotaggioManager,
     'app-links': StaffAppLinksPanel,
+    'calendario-compiti': StaffCalendarioCompitiManager,
     'effetti-casuali': EffettiCasualiManager,
     'social-report': SocialEventReportTab,
     'risorse-pool': StaffRisorsaPoolTab,

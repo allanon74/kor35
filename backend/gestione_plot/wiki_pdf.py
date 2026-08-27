@@ -49,7 +49,11 @@ def get_manuale_pdf_pagine_qs(manuale: ManualePdf, *, force_public: bool = True)
         .order_by("ordine", "pagina__titolo")
     )
     if force_public:
-        qs = qs.filter(pagina__public=True, pagina__visibile_solo_staff=False)
+        qs = qs.filter(
+            pagina__public=True,
+            pagina__visibile_solo_staff=False,
+            pagina__visibile_solo_autenticati=False,
+        )
     return qs
 
 

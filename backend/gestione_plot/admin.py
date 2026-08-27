@@ -8,6 +8,7 @@ from .models import (
     IscrizioneEventoPagamentoOpzione, EventoIscrizioneOpzione, EventoPremioPersonaggio,
     CreazioneGuidataFlusso, CreazioneGuidataPasso, CreazioneGuidataScelta,
     Missione, MissioneEvento, MissioneRisoluzione,
+    StaffCompito, StaffCompitoAssegnazione, CalendarioFeedToken,
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 
@@ -52,7 +53,7 @@ class PaginaRegolamentoAdmin(SModelAdmin):
     ordering = ('parent', 'ordine', 'titolo')
     fieldsets = (
         ('Intestazione', {
-            'fields': ('titolo', 'slug', 'parent', 'ordine', 'public', 'immagine', 'visibile_solo_staff'),
+            'fields': ('titolo', 'slug', 'parent', 'ordine', 'public', 'immagine', 'visibile_solo_staff', 'visibile_solo_autenticati'),
         }),
         ('Contenuto', {
             'fields': ('contenuto',),
@@ -519,3 +520,26 @@ class MissioneRisoluzioneAdmin(admin.ModelAdmin):
     list_display = ("missione", "evento", "personaggio", "is_primo", "ricompensa_reclamata", "resolved_at")
     list_filter = ("is_primo", "ricompensa_reclamata")
     readonly_fields = ("sync_id", "updated_at", "created_at", "resolved_at")
+
+
+class StaffCompitoAssegnazioneInline(admin.TabularInline):
+    model = StaffCompitoAssegnazione
+    extra = 0
+    raw_id_fields = ("user",)
+
+
+@admin.register(StaffCompito)
+class StaffCompitoAdmin(admin.ModelAdmin):
+    list_display = ("titolo", "campagna", "scadenza", "preavviso_minuti", "attivo")
+    list_filter = ("attivo", "campagna")
+    search_fields = ("titolo",)
+    raw_id_fields = ("campagna", "creato_da")
+    inlines = [StaffCompitoAssegnazioneInline]
+    readonly_fields = ("sync_id", "updated_at", "created_at", "preavviso_at")
+
+
+@admin.register(CalendarioFeedToken)
+class CalendarioFeedTokenAdmin(admin.ModelAdmin):
+    list_display = ("user", "token", "updated_at")
+    search_fields = ("user__username",)
+    readonly_fields = ("sync_id", "updated_at", "created_at", "token")

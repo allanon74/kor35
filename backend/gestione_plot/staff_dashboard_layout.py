@@ -29,6 +29,7 @@ KNOWN_STAFF_TOOL_IDS = frozenset({
     "nodi",
     "innesco-timer",
     "qr-random-pool",
+    "minigioco-pattern",
     "pilotaggio",
     "app-links",
     "effetti-casuali",
@@ -51,6 +52,7 @@ KNOWN_STAFF_TOOL_IDS = frozenset({
     "personaggi",
     "regole-transazioni",
     "economia-crediti",
+    "calendario-compiti",
 })
 
 DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
@@ -67,10 +69,12 @@ DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
                 "plot",
                 "pilotaggio",
                 "app-links",
+                "calendario-compiti",
                 "manifesti",
                 "nodi",
                 "innesco-timer",
                 "qr-random-pool",
+                "minigioco-pattern",
                 "qr-debug",
                 "scommesse",
                 "negozi-mercante",

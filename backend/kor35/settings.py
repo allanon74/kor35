@@ -457,8 +457,10 @@ EMAIL_HOST = env("EMAIL_HOST", default="")
 EMAIL_PORT = env.int("EMAIL_PORT", default=587)
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
-EMAIL_USE_TLS = False
-EMAIL_USE_SSL = False
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=EMAIL_PORT == 587)
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=EMAIL_PORT == 465)
+if EMAIL_USE_SSL:
+    EMAIL_USE_TLS = False
 EMAIL_TIMEOUT = 10
 if SMTP_EMAIL.strip() and EMAIL_HOST.strip():
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
@@ -466,6 +468,10 @@ if SMTP_EMAIL.strip() and EMAIL_HOST.strip():
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
     DEFAULT_FROM_EMAIL = SMTP_EMAIL.strip() or "django@localhost"
+
+# Bot Telegram (opzionale). Username senza @. Token da @BotFather.
+TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", default="")
+TELEGRAM_BOT_USERNAME = env("TELEGRAM_BOT_USERNAME", default="").lstrip("@")
 
 
 # admin_interface settings

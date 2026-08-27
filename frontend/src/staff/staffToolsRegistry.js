@@ -27,6 +27,8 @@ import {
   ListTodo,
   Wallet,
   ExternalLink,
+  Puzzle,
+  Calendar,
 } from 'lucide-react';
 
 /** Icone consentite per i gruppi del menu (allineate al backend). */
@@ -72,6 +74,8 @@ export const STAFF_TOOL_ICON_MAP = {
   Wallet,
   ArrowLeftRight,
   ExternalLink,
+  Puzzle,
+  Calendar,
 };
 
 /**
@@ -96,8 +100,10 @@ export const STAFF_TOOLS_REGISTRY = {
   nodi: { id: 'nodi', label: 'QR — Nodi', icon: Sparkles, color: 'bg-cyan-900', componentKey: 'nodi' },
   'innesco-timer': { id: 'innesco-timer', label: 'QR — Innesco timer', icon: Sparkles, color: 'bg-orange-900', componentKey: 'innesco-timer' },
   'qr-random-pool': { id: 'qr-random-pool', label: 'QR — Pool randomico', icon: QrCode, color: 'bg-rose-800', componentKey: 'qr-random-pool' },
+  'minigioco-pattern': { id: 'minigioco-pattern', label: 'Minigioco — Pattern', icon: Puzzle, color: 'bg-indigo-800', componentKey: 'minigioco-pattern' },
   pilotaggio: { id: 'pilotaggio', label: 'Console pilotaggio', icon: Navigation, color: 'bg-sky-700', componentKey: 'pilotaggio' },
   'app-links': { id: 'app-links', label: 'Link app', icon: ExternalLink, color: 'bg-sky-800', componentKey: 'app-links' },
+  'calendario-compiti': { id: 'calendario-compiti', label: 'Calendario compiti', icon: Calendar, color: 'bg-sky-700', componentKey: 'calendario-compiti' },
   'effetti-casuali': { id: 'effetti-casuali', label: 'Effetti casuali', icon: Sparkles, color: 'bg-amber-700', componentKey: 'effetti-casuali' },
   'social-report': { id: 'social-report', label: 'Report social eventi', icon: Sparkles, color: 'bg-fuchsia-700', componentKey: 'social-report' },
   'risorse-pool': { id: 'risorse-pool', label: 'Risorse pool (Fortuna)', icon: Gem, color: 'bg-amber-800', componentKey: 'risorse-pool' },
@@ -131,7 +137,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       palette: 'indigo',
       order: 0,
       collapsed_default: false,
-      tool_ids: ['plot', 'pilotaggio', 'app-links', 'manifesti', 'nodi', 'innesco-timer', 'qr-random-pool', 'qr-debug', 'scommesse', 'negozi-mercante', 'carte-collezionabili', 'tasks'],
+      tool_ids: ['plot', 'pilotaggio', 'app-links', 'calendario-compiti', 'manifesti', 'nodi', 'innesco-timer', 'qr-random-pool', 'minigioco-pattern', 'qr-debug', 'scommesse', 'negozi-mercante', 'carte-collezionabili', 'tasks'],
     },
     {
       id: 'database',
@@ -178,7 +184,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
 };
 
 const GLOBAL_ONLY_TOOLS = new Set(['arcana-profiles', 'campagne', 'maintenance']);
-const STAFFER_TOOLS = new Set(['messaggi', 'plot', 'tasks', 'app-links']);
+const STAFFER_TOOLS = new Set(['messaggi', 'plot', 'tasks', 'app-links', 'calendario-compiti']);
 const MASTER_EXCLUDED = new Set(['campagne', 'arcana-profiles', 'maintenance']);
 const HEAD_EXCLUDED = new Set(['arcana-profiles', 'maintenance']);
 

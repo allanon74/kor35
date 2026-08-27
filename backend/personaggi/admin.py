@@ -60,6 +60,7 @@ from .models import (
     Campagna,
     CampagnaUtente,
     CampagnaFeaturePolicy,
+    NotificaPreferenze,
     StatisticaContainer, StatisticaContainerItem,
     Era, Prefettura, EraAbilita, Regione, RegioneAbilita, CarrieraAbilita,
 )
@@ -75,6 +76,7 @@ PERSONAGGI_ADMIN_MODEL_GROUPS = {
     "Campagna": ("Campagne", 10),
     "CampagnaUtente": ("Campagne", 11),
     "CampagnaFeaturePolicy": ("Campagne", 12),
+    "NotificaPreferenze": ("Campagne", 13),
     # Anagrafiche mondo
     "Era": ("Mondo", 20),
     "Prefettura": ("Mondo", 21),
@@ -1359,6 +1361,14 @@ class CampagnaFeaturePolicyAdmin(admin.ModelAdmin):
     search_fields = ("campagna__nome", "campagna__slug", "feature_key")
     autocomplete_fields = ("campagna",)
     ordering = ("campagna__nome", "feature_key")
+
+
+@admin.register(NotificaPreferenze)
+class NotificaPreferenzeAdmin(admin.ModelAdmin):
+    list_display = ("user", "telegram_chat_id", "telegram_username", "updated_at")
+    search_fields = ("user__username", "user__email", "telegram_username", "telegram_chat_id")
+    readonly_fields = ("sync_id", "updated_at", "created_at", "telegram_link_code", "telegram_link_expires")
+    raw_id_fields = ("user",)
 
 class LetturaMessaggioInline(admin.TabularInline):
     model = LetturaMessaggio

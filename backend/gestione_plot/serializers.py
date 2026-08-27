@@ -10,6 +10,8 @@ from .models import (
     ManualePdf,
     ManualePdfGenerazione,
     ManualePdfBatchJob,
+    StaffCompito,
+    StaffCompitoAssegnazione,
 )
 from personaggi.models import (
     Abilita,
@@ -445,7 +447,7 @@ class PaginaRegolamentoSmallSerializer(serializers.ModelSerializer):
         model = PaginaRegolamento
         fields = [
             'id', 'titolo', 'slug',
-            'parent', 'ordine', 'public', 'visibile_solo_staff',
+            'parent', 'ordine', 'public', 'visibile_solo_staff', 'visibile_solo_autenticati',
             'includi_in_pdf', 'manuali_pdf', 'manuali_pdf_config',
             'pdf_solo_indice', 'pdf_forza_nuova_pagina', 'pdf_titolo_capitolo',
         ]
@@ -914,3 +916,91 @@ class PublicDichiarazioneGlossarioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Dichiarazione
         fields = ['sync_id', 'nome', 'dichiarazione', 'descrizione']
+
+
+class StaffCompitoAssegnazioneSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    first_name = serializers.CharField(source="user.first_name", read_only=True)
+    last_name = serializers.CharField(source="user.last_name", read_only=True)
+    is_mine = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StaffCompitoAssegnazione
+        fields = [
+            "id",
+            "user",
+            "username",
+            "first_name",
+            "last_name",
+            "completato_at",
+            "is_mine",
+        ]
+        read_only_fields = fields
+
+    def get_is_mine(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        return bool(user and user.is_authenticated and obj.user_id == user.pk)
+
+
+class StaffCompitoSerializer(serializers.ModelSerializer):
+    assegnazioni = StaffCompitoAssegnazioneSerializer(many=True, read_only=True)
+    assegnatari = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+    )
+    creato_da_username = serializers.CharField(source="creato_da.username", read_only=True, default="")
+    mia_assegnazione = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StaffCompito
+        fields = [
+            "id",
+            "campagna",
+            "titolo",
+            "descrizione",
+            "scadenza",
+            "preavviso_minuti",
+            "preavviso_at",
+            "crea_notifica_scadenza",
+            "creato_da",
+            "creato_da_username",
+            "attivo",
+            "assegnazioni",
+            "assegnatari",
+            "mia_assegnazione",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "campagna",
+            "preavviso_at",
+            "creato_da",
+            "creato_da_username",
+            "assegnazioni",
+            "mia_assegnazione",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_mia_assegnazione(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        if not (user and user.is_authenticated):
+            return None
+        for row in obj.assegnazioni.all():
+            if row.user_id == user.pk:
+                return StaffCompitoAssegnazioneSerializer(row, context=self.context).data
+        return None
+
+    def validate_preavviso_minuti(self, value):
+        if value is None:
+            return 0
+        if int(value) < 0:
+            raise serializers.ValidationError("Il preavviso non può essere negativo.")
+        return int(value)
+
+    def validate_assegnatari(self, value):
+        return list({int(v) for v in (value or []) if v})

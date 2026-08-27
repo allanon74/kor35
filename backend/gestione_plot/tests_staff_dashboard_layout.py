@@ -92,3 +92,21 @@ class StaffDashboardLayoutTests(SimpleTestCase):
         evento_tools = layout["groups"][0]["tool_ids"]
         self.assertIn("qr-random-pool", evento_tools)
         validate_staff_dashboard_layout(layout)
+
+    def test_minigioco_pattern_tool_nel_default(self):
+        from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
+
+        self.assertIn("minigioco-pattern", KNOWN_STAFF_TOOL_IDS)
+        layout = default_staff_dashboard_layout()
+        evento_tools = layout["groups"][0]["tool_ids"]
+        self.assertIn("minigioco-pattern", evento_tools)
+        validate_staff_dashboard_layout(layout)
+
+    def test_calendario_compiti_tool_nel_default(self):
+        from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
+
+        self.assertIn("calendario-compiti", KNOWN_STAFF_TOOL_IDS)
+        layout = default_staff_dashboard_layout()
+        evento_tools = layout["groups"][0]["tool_ids"]
+        self.assertIn("calendario-compiti", evento_tools)
+        validate_staff_dashboard_layout(layout)

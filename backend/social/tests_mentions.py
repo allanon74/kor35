@@ -34,8 +34,8 @@ class MentionNotificationTests(TestCase):
         msg = format_mention_message("Alice", "Bob", "post")
         self.assertEqual(msg, "Alice ha citato Bob in un post di InstaFame.")
 
-    @patch("webpush.send_user_notification")
-    def test_push_to_owner(self, mock_push):
+    @patch("personaggi.notify.notify_user")
+    def test_push_to_owner(self, mock_notify):
         User = get_user_model()
         owner = User.objects.create_user(username="cited_owner", password="test")
         citer_user = User.objects.create_user(username="citer", password="test")
@@ -47,7 +47,8 @@ class MentionNotificationTests(TestCase):
 
         notify_instafame_mentions(citer, [cited.id], "comment")
 
-        mock_push.assert_called_once()
-        kwargs = mock_push.call_args.kwargs
-        self.assertEqual(kwargs["user"], owner)
-        self.assertIn("Citante ha citato Citato", kwargs["payload"]["body"])
+        mock_notify.assert_called_once()
+        self.assertEqual(mock_notify.call_args.args[0], owner)
+        kwargs = mock_notify.call_args.kwargs
+        self.assertEqual(kwargs["category"], "social")
+        self.assertIn("Citante ha citato Citato", kwargs["body"])

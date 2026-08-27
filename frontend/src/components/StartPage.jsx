@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit3, LogOut, Plus, Sparkles, BookOpen, Shield, ShieldAlert, ArrowRight, Lock, Star, Globe, X, Watch } from 'lucide-react';
+import { Edit3, LogOut, Plus, Sparkles, BookOpen, Shield, ShieldAlert, ArrowRight, Lock, Star, Globe, X, Watch, Bell } from 'lucide-react';
 import {
   createPersonaggio,
   getArcanaPasswordStatus,
@@ -20,6 +20,8 @@ import { useCharacter } from './CharacterContext';
 import PasswordChangeModal from './PasswordChangeModal';
 import RichTextEditor from './RichTextEditor';
 import EventSubscriptionStartPanel from './EventSubscriptionStartPanel';
+import StaffCompitiWidget from './StaffCompitiWidget';
+import { campagnaRuoloLabel } from '../lib/campagnaRuoli';
 import CreazioneGuidataModal from './CreazioneGuidataModal';
 import ProfileImageField from './ProfileImageField';
 import PersonaggioEraPrefetturaFields from './PersonaggioEraPrefetturaFields';
@@ -34,6 +36,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     isCampaignMaster,
     isCampaignStaffer,
     isAdmin,
+    canSeeStaffCompiti,
     canUseWizardTest,
     campaigns,
     activeCampaign,
@@ -537,7 +540,17 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
 
         <EventSubscriptionStartPanel onLogout={onLogout} />
 
+        {canSeeStaffCompiti ? <StaffCompitiWidget onLogout={onLogout} /> : null}
+
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <button
+            onClick={() => navigate('/app/play?tab=notifiche')}
+            className="rounded-xl border border-violet-800/70 bg-violet-950/40 p-4 text-left hover:bg-violet-950/70"
+          >
+            <Bell size={20} className="text-violet-300 mb-2" />
+            <div className="font-bold">Notifiche</div>
+            <div className="text-xs text-gray-400 mt-1">Web push, Telegram, email e calendario</div>
+          </button>
           <button
             onClick={() => navigate('/')}
             className="rounded-xl border border-gray-700 bg-gray-800 p-4 text-left hover:bg-gray-750"
@@ -926,7 +939,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                         : 'border-gray-700 bg-gray-900 hover:bg-gray-700 text-gray-200'
                     }`}
                   >
-                    {c.nome} {c.ruolo === 'HEAD_MASTER' ? '(Head Master)' : c.ruolo === 'MASTER' ? '(Master)' : c.ruolo === 'STAFFER' ? '(Staffer)' : c.ruolo === 'REDACTOR' ? '(Redactor)' : '(Player)'}
+                    {c.nome} ({campagnaRuoloLabel(c.ruolo)})
                   </button>
                 );
               })}

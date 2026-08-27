@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getWikiTierList, getWikiImageList, getWidgetButtonsList, getWikiTierWidgetList, getWikiTierCollectionWidgetList, getWikiMattoniWidgetList, createWikiImage, updateWikiImage, createWidgetButtons, updateWidgetButtons, createWikiTierWidget, updateWikiTierWidget, createWikiTierCollectionWidget, updateWikiTierCollectionWidget, createWikiMattoniWidget, updateWikiMattoniWidget, createWikiPage, updateWikiPage, getWikiImageUrl, getEre, getStaffManualePdfList } from '../../api';
 import RichTextEditor from '../RichTextEditor';
-import { Lock, Eye, X, Edit, FileText } from 'lucide-react';
+import { Lock, Eye, X, Edit, FileText, UserRound } from 'lucide-react';
 import ButtonWidgetEditorModal from './ButtonWidgetEditorModal';
 import TierWidgetEditorModal from './TierWidgetEditorModal'; 
 import TierCollectionWidgetEditorModal from './TierCollectionWidgetEditorModal';
@@ -20,6 +20,7 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
     contenuto: '',
     public: false,
     visibile_solo_staff: false,
+    visibile_solo_autenticati: false,
     includi_in_pdf: false,
     pdf_solo_indice: false,
     pdf_forza_nuova_pagina: false,
@@ -233,6 +234,7 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
         data.append('contenuto', formData.contenuto || ''); 
         data.append('public', formData.public);
         data.append('visibile_solo_staff', formData.visibile_solo_staff);
+        data.append('visibile_solo_autenticati', formData.visibile_solo_autenticati);
         data.append('includi_in_pdf', formData.includi_in_pdf ? 'true' : 'false');
         data.append('pdf_solo_indice', formData.pdf_solo_indice ? 'true' : 'false');
         data.append('pdf_forza_nuova_pagina', formData.pdf_forza_nuova_pagina ? 'true' : 'false');
@@ -382,10 +384,24 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
                             id="is_staff"
                             className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
                             checked={formData.visibile_solo_staff} 
-                            onChange={e => setFormData({...formData, visibile_solo_staff: e.target.checked})}
+                            onChange={e => setFormData({...formData, visibile_solo_staff: e.target.checked, visibile_solo_autenticati: e.target.checked ? false : formData.visibile_solo_autenticati})}
                         />
                         <label htmlFor="is_staff" className="text-sm font-bold text-indigo-900 cursor-pointer flex items-center gap-2">
                             <Lock size={16} /> Visibile solo allo Staff
+                        </label>
+                    </div>
+
+                    <div className={`flex items-center gap-3 p-2 rounded border transition-colors ${formData.visibile_solo_autenticati ? 'bg-emerald-50 border-emerald-300' : 'bg-white border-gray-200'}`}>
+                        <input
+                            type="checkbox"
+                            id="is_authed"
+                            className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                            checked={formData.visibile_solo_autenticati}
+                            disabled={formData.visibile_solo_staff}
+                            onChange={e => setFormData({...formData, visibile_solo_autenticati: e.target.checked})}
+                        />
+                        <label htmlFor="is_authed" className="text-sm font-bold text-emerald-900 cursor-pointer flex items-center gap-2">
+                            <UserRound size={16} /> Solo utenti loggati
                         </label>
                     </div>
                 </div>

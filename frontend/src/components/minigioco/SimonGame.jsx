@@ -9,18 +9,42 @@ const COLORS = [
   'bg-pink-600 border-pink-400',
 ];
 
-const SimonGame = ({ numButtons = 4, sequence = [], playerInput = [], onChange }) => {
+const softVibrate = (ms = 30) => {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(ms);
+  } catch {
+    /* ignore */
+  }
+};
+
+const SimonGame = ({
+  numButtons = 4,
+  sequence = [],
+  playerInput = [],
+  onChange,
+  onPhaseChange,
+}) => {
   const [lit, setLit] = useState(-1);
   const [phase, setPhase] = useState('demo');
-  const playedRef = useRef(false);
+  const [demoKey, setDemoKey] = useState(0);
+  const [errorFlash, setErrorFlash] = useState(false);
+  const cancelRef = useRef(null);
 
   useEffect(() => {
-    if (!sequence?.length || playedRef.current) return undefined;
-    playedRef.current = true;
+    onPhaseChange?.(phase);
+  }, [phase, onPhaseChange]);
+
+  useEffect(() => {
+    if (!sequence?.length) return undefined;
     let cancelled = false;
+    cancelRef.current = () => {
+      cancelled = true;
+    };
 
     const run = async () => {
       setPhase('demo');
+      setErrorFlash(false);
+      onChange?.({ player_input: [] });
       await new Promise((r) => setTimeout(r, 400));
       for (let i = 0; i < sequence.length; i += 1) {
         if (cancelled) return;
@@ -35,28 +59,45 @@ const SimonGame = ({ numButtons = 4, sequence = [], playerInput = [], onChange }
     return () => {
       cancelled = true;
     };
-  }, [sequence]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- replay via demoKey
+  }, [sequence, demoKey]);
 
   const handleTap = (idx) => {
     if (phase !== 'input') return;
+    softVibrate(25);
     const next = [...(playerInput || []), idx];
     onChange({ player_input: next });
     setLit(idx);
     setTimeout(() => setLit(-1), 200);
     if (next.length < sequence.length && sequence[next.length - 1] !== idx) {
-      setTimeout(() => onChange({ player_input: [] }), 350);
+      setErrorFlash(true);
+      softVibrate([40, 40, 40]);
+      setTimeout(() => {
+        onChange({ player_input: [] });
+        setErrorFlash(false);
+      }, 350);
     }
+  };
+
+  const replayDemo = () => {
+    if (phase === 'demo') return;
+    cancelRef.current?.();
+    setDemoKey((k) => k + 1);
   };
 
   const cols = numButtons <= 4 ? 2 : 3;
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-center text-gray-400">
-        {phase === 'demo' ? 'Memorizza la sequenza…' : `Ripeti (${(playerInput || []).length}/${sequence.length})`}
+      <p className={`text-xs text-center ${errorFlash ? 'text-red-400 font-semibold' : 'text-gray-400'}`}>
+        {errorFlash
+          ? 'Errore — riprova'
+          : phase === 'demo'
+            ? 'Memorizza la sequenza…'
+            : `Ripeti (${(playerInput || []).length}/${sequence.length})`}
       </p>
       <div
-        className="grid gap-2 max-w-xs mx-auto"
+        className={`grid gap-2 max-w-xs mx-auto ${errorFlash ? 'animate-pulse' : ''}`}
         style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
       >
         {Array.from({ length: numButtons }, (_, i) => (
@@ -65,12 +106,23 @@ const SimonGame = ({ numButtons = 4, sequence = [], playerInput = [], onChange }
             type="button"
             disabled={phase !== 'input'}
             onClick={() => handleTap(i)}
-            className={`aspect-square rounded-xl border-2 transition-all ${
+            className={`aspect-square min-h-[44px] rounded-xl border-2 transition-all ${
               COLORS[i % COLORS.length]
             } ${lit === i ? 'scale-110 brightness-125 shadow-lg' : 'opacity-80'}`}
           />
         ))}
       </div>
+      {phase === 'input' && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={replayDemo}
+            className="text-xs px-3 py-1.5 rounded bg-gray-800 border border-gray-600 text-indigo-300"
+          >
+            Rivedi sequenza
+          </button>
+        </div>
+      )}
     </div>
   );
 };

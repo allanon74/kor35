@@ -14,6 +14,8 @@ import time
 from django.core.management.base import BaseCommand
 
 from personaggi.timer_expiry_push import dispatch_expired_innesco_pushes
+from personaggi.telegram_bot import process_telegram_updates
+from gestione_plot.compiti_push import dispatch_compiti_scadenze
 
 
 class Command(BaseCommand):
@@ -40,6 +42,22 @@ class Command(BaseCommand):
                         self.style.SUCCESS(
                             f"Timer expiry: dispatched={stats['dispatched']} "
                             f"push_attempts={stats['push_attempts']}"
+                        )
+                    )
+                compiti_stats = dispatch_compiti_scadenze()
+                if compiti_stats.get("dispatched"):
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Compiti: dispatched={compiti_stats['dispatched']} "
+                            f"push_attempts={compiti_stats['push_attempts']}"
+                        )
+                    )
+                tg_stats = process_telegram_updates()
+                if tg_stats.get("linked") or tg_stats.get("unlinked"):
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Telegram: linked={tg_stats.get('linked', 0)} "
+                            f"unlinked={tg_stats.get('unlinked', 0)}"
                         )
                     )
             except Exception as exc:  # pragma: no cover

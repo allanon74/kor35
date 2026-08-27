@@ -108,6 +108,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
     activeCampaignRole === 'STAFFER' ||
     activeCampaignRole === 'MASTER' ||
     activeCampaignRole === 'HEAD_MASTER';
+  const isCampaignHelper = activeCampaignRole === 'HELPER';
+  const canSeeStaffCompiti = isCampaignStaffer || isCampaignHelper;
   const isCampaignRedactor = isCampaignStaffer || activeCampaignRole === 'REDACTOR';
   const canUseWizardTest = isGlobalSuperuser || isDjangoStaff || isCampaignStaffer;
   const moduliAccesso = useMemo(
@@ -838,6 +840,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
     isCampaignMaster,
     isCampaignHeadMaster,
     isCampaignStaffer,
+    isCampaignHelper,
+    canSeeStaffCompiti,
     isCampaignRedactor,
     activeCampaignRole,
     staffWorkMode,
@@ -898,6 +902,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
     isCampaignMaster,
     isCampaignHeadMaster,
     isCampaignStaffer,
+    isCampaignHelper,
+    canSeeStaffCompiti,
     isCampaignRedactor,
     activeCampaignRole,
     staffWorkMode,

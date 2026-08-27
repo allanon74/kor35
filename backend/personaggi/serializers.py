@@ -78,6 +78,7 @@ from .models import (
     TipologiaPersonaggio, abilita_tier, abilita_requisito, abilita_sbloccata, 
     abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, NodoRewardConfig, A_vista, Mattone, InnescoTimer,
     RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect, Trappola, SerieCollezione, SerieAssegnazione, SerieQr,
+    MinigiocoPattern, MinigiocoPatternEntry, MinigiocoSezioneDefault, MinigiocoQrConfig,
     AURA, 
     Infusione, Tessitura, 
     # NUOVI MODELLI INTERMEDI
@@ -2419,6 +2420,7 @@ class RandomQrPoolStaffSerializer(serializers.ModelSerializer):
             "minigioco_usa_biblioteca_se_vuota",
             "minigioco_modalita_sblocco",
             "minigioco_sblocco_secondi",
+            "minigioco_pattern",
             "created_at",
             "updated_at",
         )
@@ -2429,6 +2431,158 @@ class RandomQrPoolStaffSerializer(serializers.ModelSerializer):
 
     def get_effetti_count(self, obj):
         return obj.effetti.count()
+
+
+class MinigiocoPatternEntryStaffSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(required=False)
+
+    class Meta:
+        model = MinigiocoPatternEntry
+        fields = (
+            "id",
+            "pattern",
+            "tipo",
+            "peso",
+            "difficolta",
+            "ordine",
+            "attivo",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("created_at", "updated_at")
+        extra_kwargs = {"pattern": {"required": False}}
+
+    def validate_peso(self, value):
+        if value is None or int(value) < 1:
+            raise serializers.ValidationError("peso deve essere ≥ 1.")
+        return int(value)
+
+    def validate_difficolta(self, value):
+        try:
+            d = int(value)
+        except (TypeError, ValueError):
+            raise serializers.ValidationError("difficolta non valida.")
+        if d < 1 or d > 4:
+            raise serializers.ValidationError("difficolta deve essere 1–4.")
+        return d
+
+    def validate_tipo(self, value):
+        if value not in dict(MinigiocoQrConfig.TIPO_CHOICES):
+            raise serializers.ValidationError("tipo minigioco non valido.")
+        return value
+
+
+class MinigiocoPatternStaffSerializer(serializers.ModelSerializer):
+    entries = MinigiocoPatternEntryStaffSerializer(many=True, required=False)
+    campagna = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = MinigiocoPattern
+        fields = (
+            "id",
+            "nome",
+            "descrizione",
+            "attivo",
+            "campagna",
+            "entries",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("campagna", "created_at", "updated_at")
+
+    def create(self, validated_data):
+        entries_data = validated_data.pop("entries", [])
+        pattern = MinigiocoPattern.objects.create(**validated_data)
+        for idx, row in enumerate(entries_data):
+            payload = {
+                "tipo": row["tipo"],
+                "peso": row.get("peso", 1),
+                "difficolta": row.get("difficolta", 3),
+                "ordine": row.get("ordine", idx),
+                "attivo": row.get("attivo", True),
+            }
+            MinigiocoPatternEntry.objects.create(pattern=pattern, **payload)
+        return pattern
+
+    def update(self, instance, validated_data):
+        entries_data = validated_data.pop("entries", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if entries_data is not None:
+            keep_ids = []
+            for idx, row in enumerate(entries_data):
+                entry_id = row.get("id")
+                payload = {
+                    "tipo": row["tipo"],
+                    "peso": row.get("peso", 1),
+                    "difficolta": row.get("difficolta", 3),
+                    "ordine": row.get("ordine", idx),
+                    "attivo": row.get("attivo", True),
+                }
+                if entry_id:
+                    entry = instance.entries.filter(pk=entry_id).first()
+                    if entry:
+                        for k, v in payload.items():
+                            setattr(entry, k, v)
+                        entry.save()
+                        keep_ids.append(entry.pk)
+                        continue
+                entry = MinigiocoPatternEntry.objects.create(pattern=instance, **payload)
+                keep_ids.append(entry.pk)
+            instance.entries.exclude(pk__in=keep_ids).delete()
+        return instance
+
+
+class MinigiocoSezioneDefaultStaffSerializer(serializers.ModelSerializer):
+    campagna = serializers.PrimaryKeyRelatedField(read_only=True)
+    pattern_nome = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MinigiocoSezioneDefault
+        fields = (
+            "id",
+            "page_key",
+            "campagna",
+            "pattern",
+            "pattern_nome",
+            "apply_to_new",
+            "sezione_attiva",
+            "attivo",
+            "tipi_abilitati",
+            "difficolta",
+            "requisiti_attivazione",
+            "messaggio_accesso_negato",
+            "esclusioni_minigioco",
+            "regole_difficolta",
+            "messaggio_pre",
+            "messaggio_vittoria",
+            "timer_secondi",
+            "timer_scadenza_azione",
+            "usa_biblioteca_se_vuota",
+            "modalita_sblocco",
+            "sblocco_secondi",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("campagna", "created_at", "updated_at")
+
+    def get_pattern_nome(self, obj):
+        return obj.pattern.nome if obj.pattern_id else None
+
+    def validate_page_key(self, value):
+        if value not in dict(MinigiocoSezioneDefault.PAGE_KEY_CHOICES):
+            raise serializers.ValidationError("page_key non valida.")
+        return value
+
+    def validate_difficolta(self, value):
+        try:
+            d = int(value)
+        except (TypeError, ValueError):
+            raise serializers.ValidationError("difficolta non valida.")
+        if d < 1 or d > 4:
+            raise serializers.ValidationError("difficolta deve essere 1–4.")
+        return d
 
 
 class SerieCollezioneStaffSerializer(serializers.ModelSerializer):

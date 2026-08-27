@@ -19,6 +19,7 @@ from .creazione_guidata_views import (
     creazione_guidata_stato,
     creazione_guidata_passo,
 )
+from .compiti_views import CalendarioCompitiIcsView, StaffCompitoViewSet
 from .views import(
     EventoViewSet, PublicAuraViewSet, PublicTabellaViewSet, PublicTierViewSet, PublicEventiViewSet, QuestMostroViewSet, 
     QuestVistaViewSet, GiornoEventoViewSet, QuestViewSet, PngAssegnatoViewSet, 
@@ -55,6 +56,7 @@ router.register(r'viste-setup', QuestVistaViewSet)
 router.register(r'png-assegnati', PngAssegnatoViewSet)
 router.register(r'fasi', QuestFaseViewSet)
 router.register(r'tasks', QuestTaskViewSet)
+router.register(r'calendario-compiti', StaffCompitoViewSet, basename='calendario-compiti')
 router.register(r'missioni', MissioneViewSet, basename='missioni')
 router.register(r'missioni-risoluzioni', MissioneRisoluzioneViewSet, basename='missioni-risoluzioni')
 
@@ -147,5 +149,7 @@ urlpatterns = [
     path('api/wiki/buttons-display/<str:key>/', get_wiki_buttons_display, name='wiki_buttons_display'),
     path('api/wiki/era-display/<str:key>/', get_wiki_era_display, name='wiki_era_display'),
     path('api/wiki/punteggi/', public_wiki_punteggi, name='wiki_punteggi'),
+    path('api/calendario.ics', CalendarioCompitiIcsView.as_view(), name='calendario_ics'),
+    path('api/calendario-compiti.ics', CalendarioCompitiIcsView.as_view(), name='calendario_compiti_ics'),
     path('api/', include(router.urls)),
 ]   

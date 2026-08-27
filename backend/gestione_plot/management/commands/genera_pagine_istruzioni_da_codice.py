@@ -29,7 +29,7 @@ class Command(BaseCommand):
         )
 
     def get_or_create_page(self, slug, titolo, contenuto, parent=None, ordine=0, 
-                          public=True, visibile_solo_staff=False, force=False):
+                          public=True, visibile_solo_staff=False, visibile_solo_autenticati=False, force=False):
         """Crea o aggiorna una pagina wiki"""
         try:
             page = PaginaRegolamento.objects.get(slug=slug)
@@ -40,6 +40,7 @@ class Command(BaseCommand):
                 page.ordine = ordine
                 page.public = public
                 page.visibile_solo_staff = visibile_solo_staff
+                page.visibile_solo_autenticati = visibile_solo_autenticati
                 page.save()
                 self.stdout.write(self.style.WARNING(f'  ↻ Pagina "{titolo}" aggiornata'))
                 return page
@@ -55,6 +56,7 @@ class Command(BaseCommand):
                 ordine=ordine,
                 public=public,
                 visibile_solo_staff=visibile_solo_staff,
+                visibile_solo_autenticati=visibile_solo_autenticati,
             )
             self.stdout.write(self.style.SUCCESS(f'  ✓ Pagina "{titolo}" creata'))
             return page
@@ -78,6 +80,34 @@ class Command(BaseCommand):
                 ordine=1,
                 public=True,
                 visibile_solo_staff=False,
+                force=force
+            )
+
+            self.get_or_create_page(
+                slug='notifiche',
+                titolo='Notifiche, Telegram e calendario',
+                contenuto='''
+<h2>Notifiche KOR35</h2>
+<p>Scheda <strong>Notifiche</strong> dell'app: web push (default acceso), Telegram ed email (default spenti). Guida visibile solo dopo il login.</p>
+<h3>Calendario iCal</h3>
+<ol>
+    <li>Tocca <strong>Copia link iscrizione</strong> (è personale: non condividerlo).</li>
+    <li><strong>Google Calendar</strong>: Altri calendari → Da URL → incolla.</li>
+    <li><strong>iPhone</strong>: Impostazioni → Calendario → Account → Altro → Aggiungi calendario iscritto.</li>
+    <li>Giocatori: solo eventi. Aiuto staff / staff / master: eventi e compiti. Le modifiche sul telefono non tornano in KOR35.</li>
+</ol>
+<h3>Bot Telegram</h3>
+<ol>
+    <li>Tocca <strong>Collega Telegram</strong>, premi Avvia sul bot (o <code>/start CODICE</code>).</li>
+    <li>Accendi le categorie nella colonna Telegram.</li>
+    <li>Scollega con il pulsante in app o <code>/stop</code>.</li>
+</ol>
+                ''',
+                parent=pagina_istruzioni,
+                ordine=2,
+                public=True,
+                visibile_solo_staff=False,
+                visibile_solo_autenticati=True,
                 force=force
             )
 

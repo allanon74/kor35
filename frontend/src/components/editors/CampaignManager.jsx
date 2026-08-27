@@ -23,6 +23,7 @@ import {
   moduloImpatti,
 } from '../../lib/campagnaModuli';
 import { useCharacter } from '../CharacterContext';
+import { campagnaRuoloLabel } from '../../lib/campagnaRuoli';
 import {
   StaffToolPageTitle,
   StaffToolShell,
@@ -31,7 +32,7 @@ import {
 import { UiErrorState, UiLoadingState } from '../ui/AsyncState';
 import { Globe2 } from 'lucide-react';
 
-const ROLE_OPTIONS = ['PLAYER', 'REDACTOR', 'STAFFER', 'MASTER', 'HEAD_MASTER'];
+const ROLE_OPTIONS = ['PLAYER', 'REDACTOR', 'HELPER', 'STAFFER', 'MASTER', 'HEAD_MASTER'];
 const FEATURE_KEYS = [
   'abilita',
   'tessiture',
@@ -402,7 +403,7 @@ const CampaignManager = ({ onLogout }) => {
               {users.map((u) => <option key={u.id} value={u.id}>{u.username} ({u.id})</option>)}
             </select>
             <select className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm" value={newMembro.ruolo} onChange={(e) => setNewMembro((s) => ({ ...s, ruolo: e.target.value }))}>
-              {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+              {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{campagnaRuoloLabel(r)}</option>)}
             </select>
             <label className="text-xs flex items-center gap-2">
               <input type="checkbox" checked={!!newMembro.attivo} onChange={(e) => setNewMembro((s) => ({ ...s, attivo: e.target.checked }))} />
@@ -423,7 +424,7 @@ const CampaignManager = ({ onLogout }) => {
                   <div className="text-gray-400 text-xs">{campagneById[m.campagna]?.nome || m.campagna_nome || m.campagna}</div>
                 </div>
                 <select className="bg-gray-900 border border-gray-700 rounded px-2 py-1" value={m.ruolo} onChange={(e) => executeAction(() => staffUpdateCampagnaUtente(m.id, { ruolo: e.target.value }, onLogout), { invalidatePlotCache: true })}>
-                  {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                  {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{campagnaRuoloLabel(r)}</option>)}
                 </select>
                 <label className="text-xs flex items-center gap-2">
                   <input type="checkbox" checked={!!m.attivo} onChange={(e) => executeAction(() => staffUpdateCampagnaUtente(m.id, { attivo: e.target.checked }, onLogout), { invalidatePlotCache: true })} />

@@ -18,8 +18,8 @@ def get_pool_membership(qr_code):
 
     try:
         return (
-            RandomQrPoolMembership.objects.select_related("pool")
-            .prefetch_related("pool__effetti")
+            RandomQrPoolMembership.objects.select_related("pool", "pool__minigioco_pattern")
+            .prefetch_related("pool__effetti", "pool__minigioco_pattern__entries")
             .get(qr_code=qr_code)
         )
     except RandomQrPoolMembership.DoesNotExist:
@@ -63,6 +63,8 @@ class PoolMinigiocoConfigAdapter:
         self.immagine = pool.minigioco_immagine
         self.tipo = ""
         self.usa_default_pagina = False
+        self.pattern = getattr(pool, "minigioco_pattern", None)
+        self.pattern_id = getattr(pool, "minigioco_pattern_id", None)
         # Attributo usato in alcuni path; non esiste OneToOne reale
         self.qr_code = None
         self.qr_code_id = None

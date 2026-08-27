@@ -1,5 +1,6 @@
 """
-Minigiochi QR: sliding puzzle, memory, rotate tiles, simon, pattern lock, pipe connect.
+Minigiochi QR: sliding puzzle, memory, rotate tiles, simon, pattern lock,
+pipe connect, wire match, tap order.
 Gate sulla scansione + timer opzionale con esiti configurabili.
 """
 from __future__ import annotations
@@ -22,6 +23,8 @@ MINIGIOCO_TIPO_ROTATE = "rotate_tiles"
 MINIGIOCO_TIPO_SIMON = "simon"
 MINIGIOCO_TIPO_PATTERN = "pattern_lock"
 MINIGIOCO_TIPO_PIPE = "pipe_connect"
+MINIGIOCO_TIPO_WIRE = "wire_match"
+MINIGIOCO_TIPO_TAP_ORDER = "tap_order"
 
 MINIGIOCO_TIPI = (
     MINIGIOCO_TIPO_SLIDING,
@@ -30,6 +33,8 @@ MINIGIOCO_TIPI = (
     MINIGIOCO_TIPO_SIMON,
     MINIGIOCO_TIPO_PATTERN,
     MINIGIOCO_TIPO_PIPE,
+    MINIGIOCO_TIPO_WIRE,
+    MINIGIOCO_TIPO_TAP_ORDER,
 )
 
 MINIGIOCO_TIPI_SENZA_IMMAGINE = frozenset(
@@ -37,6 +42,8 @@ MINIGIOCO_TIPI_SENZA_IMMAGINE = frozenset(
         MINIGIOCO_TIPO_SIMON,
         MINIGIOCO_TIPO_PATTERN,
         MINIGIOCO_TIPO_PIPE,
+        MINIGIOCO_TIPO_WIRE,
+        MINIGIOCO_TIPO_TAP_ORDER,
     }
 )
 
@@ -55,13 +62,16 @@ STATI_SBLocco = frozenset({SESSIONE_COMPLETATO, SESSIONE_SCADUTO_ATTIVA})
 # Finestra per bypass immediato post-vittoria (caricamento effetto QR) in modalità ogni_scansione.
 BYPASS_TRANSITO_SECONDI = 120
 
-_SLIDING_GRID = {1: 2, 2: 3, 3: 4, 4: 5}
+# Sliding: diff 4 resta 4×4 (niente 5×5 outdoor).
+_SLIDING_GRID = {1: 2, 2: 3, 3: 4, 4: 4}
 _ROTATE_GRID = {1: 2, 2: 3, 3: 4, 4: 5}
 _MEMORY_GRID = {1: (2, 2), 2: (3, 4), 3: (4, 4), 4: (4, 5)}
 _SIMON_LEN = {1: 3, 2: 4, 3: 5, 4: 6}
 _SIMON_BUTTONS = {1: 4, 2: 4, 3: 5, 4: 6}
 _PATTERN_LEN = {1: 4, 2: 5, 3: 6, 4: 7}
 _PIPE_GRID = {1: 3, 2: 4, 3: 5, 4: 6}
+_WIRE_PAIRS = {1: 3, 2: 4, 3: 5, 4: 6}
+_TAP_ORDER_LEN = {1: 4, 2: 6, 3: 8, 4: 10}
 
 # Maschere connessioni tubi: N=1, E=2, S=4, W=8
 _PIPE_BASE_MASKS = (5, 10, 3, 6, 12, 9, 7, 14, 13, 11, 15)
@@ -82,6 +92,14 @@ def grid_size(tipo: str, difficolta: int) -> Tuple[int, int]:
     if tipo == MINIGIOCO_TIPO_PIPE:
         n = _PIPE_GRID[d]
         return n, n
+    if tipo == MINIGIOCO_TIPO_WIRE:
+        n = _WIRE_PAIRS[d]
+        return n, 1
+    if tipo == MINIGIOCO_TIPO_TAP_ORDER:
+        n = _TAP_ORDER_LEN[d]
+        cols = int(n**0.5 + 0.999)
+        rows = (n + cols - 1) // cols
+        return cols, rows
     n = _SLIDING_GRID[d] if tipo == MINIGIOCO_TIPO_SLIDING else _ROTATE_GRID[d]
     return n, n
 
@@ -214,15 +232,15 @@ def _pipe_mask_for_cell(r: int, c: int, path_set: set[tuple[int, int]]) -> int:
     return conn
 
 
-def _encode_pipe_tile(mask: int, rng: random.Random) -> Tuple[int, int]:
+def _encode_pipe_tile(mask: int, rng: random.Random, max_scramble: int = 3) -> Tuple[int, int]:
     if mask == 0:
-        return 0, rng.randint(0, 3)
+        return 0, rng.randint(0, 3) if max_scramble > 0 else 0
     for base in _PIPE_BASE_MASKS:
         for rot in range(4):
             if _rotate_pipe_mask(base, rot) == mask:
-                scramble = rng.randint(0, 3)
+                scramble = rng.randint(0, max_scramble) if max_scramble > 0 else 0
                 return base, (rot + scramble) % 4
-    return 15, rng.randint(0, 3)
+    return 15, rng.randint(0, max(0, max_scramble))
 
 
 def _generate_pipe_path(size: int, rng: random.Random) -> List[tuple[int, int]]:
@@ -265,6 +283,8 @@ def _generate_pipe_path(size: int, rng: random.Random) -> List[tuple[int, int]]:
 def generate_pipe_connect_state(difficolta: int, seed: int) -> Dict[str, Any]:
     d = max(1, min(4, int(difficolta or 2)))
     size = _PIPE_GRID[d]
+    # Diff basse: meno scramble sulle rotazioni → meno tap random.
+    max_scramble = {1: 1, 2: 2, 3: 3, 4: 3}[d]
     rng = _rng(seed)
     path = _generate_pipe_path(size, rng)
     path_set = set(path)
@@ -276,7 +296,7 @@ def generate_pipe_connect_state(difficolta: int, seed: int) -> Dict[str, Any]:
                 mask = _pipe_mask_for_cell(r, c, path_set)
             else:
                 mask = 0
-            base, rot = _encode_pipe_tile(mask, rng)
+            base, rot = _encode_pipe_tile(mask, rng, max_scramble=max_scramble)
             bases.append(base)
             rotations.append(rot)
     return {
@@ -285,6 +305,41 @@ def generate_pipe_connect_state(difficolta: int, seed: int) -> Dict[str, Any]:
         "end": size * size - 1,
         "bases": bases,
         "rotations": rotations,
+    }
+
+
+def generate_wire_match_state(difficolta: int, seed: int) -> Dict[str, Any]:
+    d = max(1, min(4, int(difficolta or 2)))
+    n = _WIRE_PAIRS[d]
+    rng = _rng(seed)
+    left_order = list(range(n))
+    right_order = list(range(n))
+    rng.shuffle(right_order)
+    # Evita che sia già risolto visualmente (stesso ordine).
+    if right_order == left_order and n > 1:
+        right_order[0], right_order[1] = right_order[1], right_order[0]
+    return {
+        "pairs": [{"id": i} for i in range(n)],
+        "left_order": left_order,
+        "right_order": right_order,
+        "matched_pairs": [],
+    }
+
+
+_TAP_LABELS = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C")
+
+
+def generate_tap_order_state(difficolta: int, seed: int) -> Dict[str, Any]:
+    d = max(1, min(4, int(difficolta or 2)))
+    n = _TAP_ORDER_LEN[d]
+    rng = _rng(seed)
+    cells = [{"id": i, "label": _TAP_LABELS[i % len(_TAP_LABELS)]} for i in range(n)]
+    order = list(range(n))
+    rng.shuffle(order)
+    return {
+        "cells": cells,
+        "order": order,
+        "player_input": [],
     }
 
 
@@ -304,6 +359,10 @@ def generate_game_state(tipo: str, difficolta: int, seed: int) -> Dict[str, Any]
         return {"tipo": tipo, **generate_pattern_lock_state(difficolta, seed)}
     if tipo == MINIGIOCO_TIPO_PIPE:
         return {"tipo": tipo, **generate_pipe_connect_state(difficolta, seed)}
+    if tipo == MINIGIOCO_TIPO_WIRE:
+        return {"tipo": tipo, **generate_wire_match_state(difficolta, seed)}
+    if tipo == MINIGIOCO_TIPO_TAP_ORDER:
+        return {"tipo": tipo, **generate_tap_order_state(difficolta, seed)}
     raise ValueError(f"Tipo minigioco sconosciuto: {tipo}")
 
 
@@ -353,15 +412,6 @@ def verify_pipe_connect(
     def idx_rc(idx: int) -> tuple[int, int]:
         return divmod(idx, size)
 
-    def connected(a: int, b: int) -> bool:
-        ar, ac = idx_rc(a)
-        br, bc = idx_rc(b)
-        if ar == br and ac + 1 == bc:
-            return bool(conns[a] & 2 and conns[b] & 8)
-        if ac == bc and ar + 1 == br:
-            return bool(conns[a] & 4 and conns[b] & 1)
-        return False
-
     stack = [start]
     seen = {start}
     while stack:
@@ -382,6 +432,20 @@ def verify_pipe_connect(
                     seen.add(nxt)
                     stack.append(nxt)
     return False
+
+
+def verify_wire_match(pairs: List[dict], matched_pairs: List[int]) -> bool:
+    if not pairs:
+        return False
+    expected = {int(p["id"]) for p in pairs if isinstance(p, dict) and "id" in p}
+    got = {int(x) for x in (matched_pairs or [])}
+    return expected == got and len(got) == len(pairs)
+
+
+def verify_tap_order(order: List[int], player_input: List[int]) -> bool:
+    if not order:
+        return False
+    return list(player_input or []) == list(order)
 
 
 def verify_solution(
@@ -426,6 +490,16 @@ def verify_solution(
             int(server_state.get("start") or 0),
             int(server_state.get("end") or (size * size - 1)),
         )
+    if tipo == MINIGIOCO_TIPO_WIRE:
+        return verify_wire_match(
+            server_state.get("pairs") or client_state.get("pairs") or [],
+            client_state.get("matched_pairs") or [],
+        )
+    if tipo == MINIGIOCO_TIPO_TAP_ORDER:
+        return verify_tap_order(
+            server_state.get("order") or [],
+            client_state.get("player_input") or [],
+        )
     return False
 
 
@@ -451,16 +525,68 @@ def tipi_pool_giocabili(config) -> List[str]:
     return senza_img
 
 
+def resolve_pattern(config):
+    """Ritorna MinigiocoPattern attivo collegato alla config, o None."""
+    pattern = getattr(config, "pattern", None)
+    if pattern is not None:
+        return pattern if getattr(pattern, "attivo", True) else None
+    pattern_id = getattr(config, "pattern_id", None)
+    if not pattern_id:
+        return None
+    from .models import MinigiocoPattern
+
+    try:
+        pattern = MinigiocoPattern.objects.prefetch_related("entries").get(pk=pattern_id)
+    except MinigiocoPattern.DoesNotExist:
+        return None
+    return pattern if pattern.attivo else None
+
+
+def _pattern_entries_attive(pattern) -> List:
+    if pattern is None:
+        return []
+    entries = list(getattr(pattern, "entries").all()) if hasattr(pattern, "entries") else []
+    out = []
+    for e in entries:
+        if not getattr(e, "attivo", False):
+            continue
+        tipo = getattr(e, "tipo", None)
+        if tipo not in MINIGIOCO_TIPI:
+            continue
+        try:
+            peso = int(getattr(e, "peso", 1) or 1)
+        except (TypeError, ValueError):
+            peso = 1
+        if peso < 1:
+            continue
+        out.append(e)
+    return out
+
+
+def pattern_entries_giocabili(config) -> List:
+    """
+    Entry attive del pattern filtrabili in gioco.
+    Ritorna [] se non c'è pattern o non ci sono entry utilizzabili.
+    """
+    pattern = resolve_pattern(config)
+    raw = _pattern_entries_attive(pattern)
+    if not raw:
+        return []
+    if minigioco_ha_immagine_disponibile(config):
+        return raw
+    return [e for e in raw if e.tipo in MINIGIOCO_TIPI_SENZA_IMMAGINE]
+
+
 def difficolta_default(config) -> int:
     return max(1, min(4, int(getattr(config, "difficolta", 4) or 4)))
 
 
-def risolvi_difficolta(personaggio, config) -> int:
+def risolvi_difficolta(personaggio, config, base=None) -> int:
     """
-    Parte dalla difficoltà predefinita; per ogni regola condizionale che matcha
-    applica il minimo (più favorevole al giocatore).
+    Parte dalla difficoltà predefinita (o `base` da entry pattern); per ogni regola
+    condizionale che matcha applica il minimo (più favorevole al giocatore).
     """
-    best = difficolta_default(config)
+    best = difficolta_default(config) if base is None else max(1, min(4, int(base)))
     for rule in getattr(config, "regole_difficolta", None) or []:
         if not isinstance(rule, dict):
             continue
@@ -483,8 +609,30 @@ def deve_saltare_minigioco(personaggio, config) -> bool:
 
 
 def scegli_tipo_e_difficolta(config, seed: int, personaggio=None) -> Tuple[str, int]:
-    """Estrae tipo a caso; difficoltà da regole condizionali sul personaggio."""
+    """
+    Estrae (tipo, difficoltà).
+    Con pattern e entry attive: pick pesato (tipo+diff per entry), poi regole PG.
+    Altrimenti: legacy tipi_abilitati + difficolta config.
+    """
     rng = _rng(seed)
+    pattern = resolve_pattern(config)
+    raw_entries = _pattern_entries_attive(pattern) if pattern else []
+    if raw_entries:
+        entries = pattern_entries_giocabili(config)
+        if not entries:
+            entries = [e for e in raw_entries if e.tipo in MINIGIOCO_TIPI_SENZA_IMMAGINE]
+        if entries:
+            weights = [max(1, int(getattr(e, "peso", 1) or 1)) for e in entries]
+            chosen = rng.choices(entries, weights=weights, k=1)[0]
+            tipo = chosen.tipo
+            try:
+                base_diff = max(1, min(4, int(chosen.difficolta)))
+            except (TypeError, ValueError):
+                base_diff = difficolta_default(config)
+            if personaggio is not None:
+                return tipo, risolvi_difficolta(personaggio, config, base=base_diff)
+            return tipo, base_diff
+
     pool = tipi_pool_giocabili(config)
     if not pool:
         pool = list(MINIGIOCO_TIPI_SENZA_IMMAGINE)
@@ -499,6 +647,15 @@ def scegli_tipo_e_difficolta(config, seed: int, personaggio=None) -> Tuple[str, 
 def _config_attiva(config) -> bool:
     if not config or not config.attivo:
         return False
+    if pattern_entries_giocabili(config):
+        return True
+    pattern = resolve_pattern(config)
+    if pattern and _pattern_entries_attive(pattern):
+        # Pattern configurato ma solo tipi che richiedono immagine assente:
+        # ancora "attivo" se esistono entry senza immagine tra le attive.
+        if any(e.tipo in MINIGIOCO_TIPI_SENZA_IMMAGINE for e in _pattern_entries_attive(pattern)):
+            return True
+        return False
     if not tipi_pool_giocabili(config):
         return False
     return True
@@ -506,6 +663,53 @@ def _config_attiva(config) -> bool:
 
 def _sezione_minigioco_attiva(config) -> bool:
     return bool(config and getattr(config, "sezione_attiva", False))
+
+
+def apply_sezione_default_to_config(config, sezione) -> None:
+    """Copia campi policy (+ pattern) da MinigiocoSezioneDefault su MinigiocoQrConfig (in memoria)."""
+    if not sezione or not config:
+        return
+    config.sezione_attiva = bool(sezione.sezione_attiva)
+    config.attivo = bool(sezione.attivo)
+    config.tipi_abilitati = list(sezione.tipi_abilitati or [])
+    config.difficolta = max(1, min(4, int(sezione.difficolta or 4)))
+    config.requisiti_attivazione = list(sezione.requisiti_attivazione or [])
+    config.messaggio_accesso_negato = sezione.messaggio_accesso_negato or ""
+    config.esclusioni_minigioco = list(sezione.esclusioni_minigioco or [])
+    config.regole_difficolta = list(sezione.regole_difficolta or [])
+    config.messaggio_pre = sezione.messaggio_pre or ""
+    config.messaggio_vittoria = sezione.messaggio_vittoria or ""
+    config.timer_secondi = sezione.timer_secondi
+    config.timer_scadenza_azione = sezione.timer_scadenza_azione
+    config.usa_biblioteca_se_vuota = bool(sezione.usa_biblioteca_se_vuota)
+    config.modalita_sblocco = sezione.modalita_sblocco
+    config.sblocco_secondi = sezione.sblocco_secondi
+    config.pattern_id = sezione.pattern_id
+    config.usa_default_pagina = True
+
+
+def sezione_default_to_config_dict(sezione) -> dict:
+    """Serializza un MinigiocoSezioneDefault nel formato usato dall'editor FE."""
+    if not sezione:
+        return {}
+    return {
+        "sezione_attiva": bool(sezione.sezione_attiva),
+        "attivo": bool(sezione.attivo),
+        "tipi_abilitati": list(sezione.tipi_abilitati or []),
+        "difficolta": int(sezione.difficolta or 4),
+        "requisiti_attivazione": list(sezione.requisiti_attivazione or []),
+        "messaggio_accesso_negato": sezione.messaggio_accesso_negato or "",
+        "esclusioni_minigioco": list(sezione.esclusioni_minigioco or []),
+        "regole_difficolta": list(sezione.regole_difficolta or []),
+        "messaggio_pre": sezione.messaggio_pre or "",
+        "messaggio_vittoria": sezione.messaggio_vittoria or "",
+        "timer_secondi": sezione.timer_secondi,
+        "timer_scadenza_azione": sezione.timer_scadenza_azione,
+        "usa_biblioteca_se_vuota": bool(sezione.usa_biblioteca_se_vuota),
+        "modalita_sblocco": sezione.modalita_sblocco,
+        "sblocco_secondi": sezione.sblocco_secondi,
+        "pattern_id": str(sezione.pattern_id) if sezione.pattern_id else None,
+    }
 
 
 def verifica_accesso_qr_minigioco(personaggio, config) -> Tuple[bool, str]:
@@ -657,6 +861,10 @@ def descrizione_difficolta(tipo: str, difficolta: int) -> str:
         return f"{_PATTERN_LEN[d]} nodi"
     if tipo == MINIGIOCO_TIPO_PIPE:
         return f"{cols}×{rows} tubi"
+    if tipo == MINIGIOCO_TIPO_WIRE:
+        return f"{_WIRE_PAIRS[d]} fili"
+    if tipo == MINIGIOCO_TIPO_TAP_ORDER:
+        return f"{_TAP_ORDER_LEN[d]} tap"
     return f"{cols}×{rows}"
 
 
@@ -786,7 +994,14 @@ def check_gate_minigioco(
     if deve_saltare_minigioco(personaggio, config):
         return None
 
-    if not tipi_pool_giocabili(config):
+    has_pattern_playable = bool(pattern_entries_giocabili(config))
+    if not has_pattern_playable:
+        pattern = resolve_pattern(config)
+        if pattern and any(
+            e.tipo in MINIGIOCO_TIPI_SENZA_IMMAGINE for e in _pattern_entries_attive(pattern)
+        ):
+            has_pattern_playable = True
+    if not has_pattern_playable and not tipi_pool_giocabili(config):
         return None
 
     in_corso = (

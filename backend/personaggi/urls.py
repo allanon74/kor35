@@ -1,7 +1,7 @@
 from django.urls import path, include
 # from rest_framework.authtoken.views import obtain_auth_token
 
-from . import views, views_staff, views_scommesse, views_carte, views_carte_platform, watch_views, views_economia
+from . import views, views_staff, views_scommesse, views_carte, views_carte_platform, watch_views, views_economia, views_notifiche
 from rest_framework import routers
 
 from rest_framework.routers import DefaultRouter
@@ -95,6 +95,9 @@ router.register(r'staff/nodi-reward-config', views_staff.NodoRewardConfigStaffVi
 router.register(r'staff/innesco-timer', views_staff.InnescoTimerStaffViewSet, basename='staff-innesco-timer')
 router.register(r'staff/random-qr-pools', views_staff.RandomQrPoolStaffViewSet, basename='staff-random-qr-pools')
 router.register(r'staff/random-qr-pool-effetti', views_staff.RandomQrPoolEffectStaffViewSet, basename='staff-random-qr-pool-effetti')
+router.register(r'staff/minigioco-patterns', views_staff.MinigiocoPatternStaffViewSet, basename='staff-minigioco-patterns')
+router.register(r'staff/minigioco-pattern-entries', views_staff.MinigiocoPatternEntryStaffViewSet, basename='staff-minigioco-pattern-entries')
+router.register(r'staff/minigioco-sezione-defaults', views_staff.MinigiocoSezioneDefaultStaffViewSet, basename='staff-minigioco-sezione-defaults')
 router.register(r'staff/serie-collezioni', views_staff.SerieCollezioneStaffViewSet, basename='staff-serie-collezioni')
 router.register(r'staff/trappole', views_staff.TrappolaStaffViewSet, basename='staff-trappole')
 router.register(r'staff/serie-qr', views_staff.SerieQrStaffViewSet, basename='staff-serie-qr')
@@ -412,6 +415,10 @@ urlpatterns = [
     ),
     
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
+    path('api/notifiche/', views_notifiche.NotificaPreferenzeView.as_view(), name='notifiche-preferenze'),
+    path('api/notifiche/telegram/link/', views_notifiche.TelegramLinkView.as_view(), name='notifiche-telegram-link'),
+    path('api/notifiche/telegram/unlink/', views_notifiche.TelegramUnlinkView.as_view(), name='notifiche-telegram-unlink'),
+    path('api/calendario/feed-token/', views_notifiche.CalendarioFeedTokenView.as_view(), name='calendario-feed-token'),
     
     # Endpoint per associare QR a elementi A_vista
     path('api/a-vista/<int:a_vista_id>/associa-qr/', views.AssociaQrAVistaView.as_view(), name='associa-qr-a-vista'),

@@ -18,6 +18,7 @@ import { PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 import { getOfflineCharacterDetail } from '../lib/offlineGameStateDb';
 import { OfflineConsultBanner } from './OfflineConsultBanner';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import StaffCompitiWidget from './StaffCompitiWidget';
 
 // --- Componenti Helper ---
 
@@ -50,7 +51,7 @@ const LoadingComponent = () => (
 // --- Componente Scheda ---
 
 const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
-  const { punteggiList, statisticaContainers, subscribeToPush, isWebPushSupported, refreshCharacterData } = useCharacter();
+  const { punteggiList, statisticaContainers, subscribeToPush, isWebPushSupported, refreshCharacterData, canSeeStaffCompiti } = useCharacter();
   const [pushActivating, setPushActivating] = useState(false);
   const [pushBannerDismissed, setPushBannerDismissed] = useState(false);
   const [pushFeedback, setPushFeedback] = useState(null);
@@ -444,6 +445,8 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
           <p className="text-xs text-gray-500 mt-1">Scheda personaggio</p>
         </div>
       </div>
+
+      {canSeeStaffCompiti ? <StaffCompitiWidget onLogout={onLogout} /> : null}
 
       {/* Banner Notifiche */}
       {showPushBanner && (
@@ -839,7 +842,8 @@ const HomeTab = memo(({ onLogout }) => {
     isLoadingDetail,
     isLoadingPunteggi, 
     selectedCharacterId, 
-    error 
+    error,
+    canSeeStaffCompiti,
   } = useCharacter();
   const isOnline = useOnlineStatus();
   const [idbDetail, setIdbDetail] = useState(null);
@@ -888,6 +892,11 @@ const HomeTab = memo(({ onLogout }) => {
   if (!selectedCharacterId) {
     return (
       <div className="p-8 text-center text-gray-400">
+        {canSeeStaffCompiti ? (
+          <div className="max-w-xl mx-auto text-left mb-6">
+            <StaffCompitiWidget onLogout={onLogout} />
+          </div>
+        ) : null}
         <h2 className="text-2xl font-bold mb-4">Benvenuto!</h2>
         <p>Seleziona un personaggio.</p>
       </div>
