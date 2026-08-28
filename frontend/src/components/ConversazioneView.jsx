@@ -4,6 +4,7 @@ import RichTextDisplay from './RichTextDisplay';
 import RichTextEditor from './RichTextEditor';
 import MessageAttachmentsLine from './MessageAttachmentsLine';
 import { confirmCloseIfDirty } from '../hooks/useDirtyModalClose';
+import { richTextHasContent } from '../utils/htmlSanitizer';
 
 const ConversazioneView = ({
   conversazione,
@@ -65,7 +66,7 @@ const ConversazioneView = ({
   };
 
   const requestClose = () => {
-    const dirty = isReplying && String(testoRisposta || '').replace(/<[^>]+>/g, '').trim();
+    const dirty = isReplying && richTextHasContent(testoRisposta);
     confirmCloseIfDirty(
       Boolean(dirty),
       onClose,

@@ -11,6 +11,15 @@ import { purifyToFragment, fragmentToHtml } from './richText/htmlPolicy';
 
 const HTML_TAG_RE = /<[a-z][\s\S]*>/i;
 
+/**
+ * Entita HTML (`&nbsp;`, `&amp;`, `&#39;`, ...).
+ *
+ * Serve perche un messaggio di una sola riga scritto nell'editor arriva spesso senza
+ * alcun tag ma con `&nbsp;` al posto degli spazi ripetuti: trattandolo come testo
+ * semplice l'escape trasformava `&` in `&amp;` e l'entita si vedeva scritta a schermo.
+ */
+const HTML_ENTITY_RE = /&(?:#\d+|#x[0-9a-f]+|[a-z][a-z0-9]{1,31});/i;
+
 /** Elementi in cui i newline del sorgente sono struttura, non testo. */
 const NEWLINE_SKIP_ANCESTORS = new Set([
     'PRE', 'CODE', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'COLGROUP',
@@ -35,12 +44,17 @@ export const ensureDetailsClosed = (html) => {
     });
 };
 
-/** Se il contenuto e testo semplice, lo trasforma in HTML preservando gli a capo. */
+/**
+ * Se il contenuto e testo semplice, lo trasforma in HTML preservando gli a capo.
+ * Con tag o entita HTML si passa il contenuto cosi com'e: l'escape servirebbe solo a
+ * proteggere un `<` letterale del testo (es. "5 < 10"), non a rendere sicuro l'HTML —
+ * di quello si occupa DOMPurify subito dopo.
+ */
 export const prepareRichHtmlForView = (content) => {
     if (!content) return '';
     const trimmed = String(content).trim();
     if (!trimmed) return '';
-    if (HTML_TAG_RE.test(trimmed)) return trimmed;
+    if (HTML_TAG_RE.test(trimmed) || HTML_ENTITY_RE.test(trimmed)) return trimmed;
     return escapeHtml(trimmed).replace(/\r\n|\r|\n/g, '<br>');
 };
 
@@ -164,6 +178,34 @@ export const sanitizeHtmlForEditor = (html) => {
 
 /** Versione stringa di `sanitizeHtmlForEditor`. */
 export const sanitizeHtmlForEditorString = (html) => fragmentToHtml(sanitizeHtmlForEditor(html));
+
+/** Tag dopo i quali il testo va separato da uno spazio nella riduzione a testo semplice. */
+const BLOCK_BOUNDARY_RE = /<br\s*\/?>|<\/(?:p|div|li|tr|h[1-6]|blockquote)\s*>/gi;
+
+/**
+ * Riduce l'HTML a testo semplice decodificando le entita (`&nbsp;`, `&amp;`, ...).
+ *
+ * Serve per notifiche di sistema e anteprime in lista: rimuovendo solo i tag con una
+ * regex, le entita restavano scritte per esteso a schermo. Il parsing avviene in un
+ * documento inerte (DOMParser), quindi nessuno script o risorsa remota viene eseguito.
+ */
+export const htmlToPlainText = (html) => {
+    if (!html) return '';
+    const spaced = String(html).replace(BLOCK_BOUNDARY_RE, ' ');
+
+    if (typeof DOMParser === 'undefined') {
+        return spaced.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    const doc = new DOMParser().parseFromString(spaced, 'text/html');
+    // textContent includerebbe il sorgente di script/style: inerte ma illeggibile in un avviso.
+    doc.body?.querySelectorAll('script, style, template, noscript').forEach((el) => el.remove());
+
+    return (doc.body?.textContent || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+};
 
 /** true se il contenuto rich text ha testo o media significativi. */
 export const richTextHasContent = (html) => {

@@ -29,6 +29,7 @@ import { putOfflineMessages, getOfflineMessages } from '../lib/offlineMessagesDb
 import { activateWebPush, isWebPushSupported } from '../lib/webpush';
 import { ensureAppServiceWorker } from '../lib/appServiceWorker';
 import { canAccessModuloMode, getModuloAccesso } from '../lib/campagnaModuli';
+import { htmlToPlainText } from '../utils/htmlSanitizer';
 
 import { 
   usePunteggi, 
@@ -789,8 +790,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
              (msg.tipo === 'INDV' && (msg.destinatario_id === myId || !msg.destinatario_id));
            if (forMe) {
               setNotification(msg);
-              const plain = String(msg.testo || '').replace(/<[^>]+>/g, '');
-              sendSystemNotification(msg.titolo, plain);
+              sendSystemNotification(msg.titolo, htmlToPlainText(msg.testo));
               fetchUserMessages(selectedCharacterId);
               queryClient.invalidateQueries(['personaggio', selectedCharacterId]);
            }

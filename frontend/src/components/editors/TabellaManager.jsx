@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import MasterGenericList from './MasterGenericList';
 import TabellaEditor from './TabellaEditor';
 import { getTiers, createTier, updateTier, deleteTier, updateTierAbilita } from '../../api';
+import { htmlToPlainText } from '../../utils/htmlSanitizer';
 
 const TabellaManager = ({ onLogout }) => {
     const [tiers, setTiers] = useState([]);
@@ -108,7 +109,7 @@ const TabellaManager = ({ onLogout }) => {
         { key: 'tipo', header: 'Tipo', getSortValue: (t) => tierTypeLabels[t.tipo] || t.tipo, render: (t) => tierTypeLabels[t.tipo] || t.tipo, width: 180 },
         { key: 'caratt', header: 'Caratt.', getSortValue: (t) => (t.caratteristiche_visibili_dettaglio || []).length, render: (t) => (t.caratteristiche_visibili_dettaglio || []).length, align: 'center', width: 90 },
         { key: 'abilita', header: 'Abilita', getSortValue: (t) => t.abilita_count || 0, render: (t) => t.abilita_count || 0, align: 'center', width: 100 },
-        { key: 'descrizione', header: 'Descrizione', getSortValue: (t) => (t.descrizione || '').replace(/<[^>]+>/g, ''), render: (t) => <span className="text-gray-300">{(t.descrizione || '').replace(/<[^>]+>/g, '').slice(0, 90)}{(t.descrizione || '').length > 90 ? '...' : ''}</span> },
+        { key: 'descrizione', header: 'Descrizione', getSortValue: (t) => htmlToPlainText(t.descrizione), render: (t) => { const testo = htmlToPlainText(t.descrizione); return <span className="text-gray-300">{testo.slice(0, 90)}{testo.length > 90 ? '...' : ''}</span>; } },
     ], [tierTypeLabels]);
 
     const filterConfig = useMemo(() => ([

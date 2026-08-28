@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ensureDetailsClosed, richTextHasContent, sanitizeHtml } from './htmlSanitizer';
+import { ensureDetailsClosed, htmlToPlainText, richTextHasContent, sanitizeHtml } from './htmlSanitizer';
 
 describe('sanitizeHtml — sicurezza', () => {
     it('rimuove script, iframe e attributi on*', () => {
@@ -113,6 +113,27 @@ describe('sanitizeHtml — a capo', () => {
     });
 });
 
+describe('sanitizeHtml — entita HTML', () => {
+    it('non mostra le entita come testo quando il contenuto non ha tag', () => {
+        // Un messaggio di una riga scritto nell'editor: nessun tag, ma &nbsp; per gli spazi.
+        const clean = sanitizeHtml('Ciao&nbsp;&nbsp;come stai?');
+
+        expect(clean).not.toContain('&amp;nbsp;');
+        expect(clean).toContain('Ciao');
+        expect(clean).toContain('come stai?');
+    });
+
+    it('non mostra le entita come testo dentro i tag', () => {
+        const clean = sanitizeHtml('<p>a&nbsp;b &amp; c</p>');
+        expect(clean).not.toContain('&amp;nbsp;');
+        expect(clean).not.toContain('&amp;amp;');
+    });
+
+    it('protegge ancora i minore/maggiore letterali del testo semplice', () => {
+        expect(sanitizeHtml('5 < 10 e 11 > 3')).toContain('5 &lt; 10 e 11 &gt; 3');
+    });
+});
+
 describe('sanitizeHtml — tabelle e collapsible', () => {
     it('avvolge le tabelle in un contenitore scrollabile', () => {
         const clean = sanitizeHtml('<table data-table-style="grid"><tbody><tr><td>a</td></tr></tbody></table>');
@@ -129,6 +150,18 @@ describe('sanitizeHtml — tabelle e collapsible', () => {
 describe('helper', () => {
     it('ensureDetailsClosed rimuove open preservando gli altri attributi', () => {
         expect(ensureDetailsClosed('<details class="wiki-collapsible" open>')).toBe('<details class="wiki-collapsible">');
+    });
+
+    it('htmlToPlainText decodifica le entita invece di mostrarle', () => {
+        expect(htmlToPlainText('<p>a&nbsp;b &amp; c</p>')).toBe('a b & c');
+        expect(htmlToPlainText('Ciao&nbsp;mondo')).toBe('Ciao mondo');
+    });
+
+    it('htmlToPlainText separa i blocchi e non lascia tag', () => {
+        expect(htmlToPlainText('<p>riga uno</p><p>riga due</p>')).toBe('riga uno riga due');
+        expect(htmlToPlainText('riga uno<br>riga due')).toBe('riga uno riga due');
+        expect(htmlToPlainText('<p>x</p><script>alert(1)</script>')).toBe('x');
+        expect(htmlToPlainText('')).toBe('');
     });
 
     it('richTextHasContent distingue contenuto reale da markup vuoto', () => {
