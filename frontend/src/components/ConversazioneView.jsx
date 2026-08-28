@@ -212,13 +212,14 @@ const ConversazioneView = ({
             </button>
           ) : (
             <div className="space-y-2">
-              <div className="bg-gray-950 rounded-xl border border-gray-700 overflow-hidden min-h-[120px]">
-                <RichTextEditor
-                  value={testoRisposta}
-                  onChange={setTestoRisposta}
-                  placeholder="Scrivi la tua risposta..."
-                />
-              </div>
+              {/* Nessun overflow-hidden: i pannelli della toolbar si aprono sopra l'editor */}
+              <RichTextEditor
+                value={testoRisposta}
+                onChange={setTestoRisposta}
+                placeholder="Scrivi la tua risposta…"
+                minHeight={130}
+                maxHeight="32vh"
+              />
               <div className="flex gap-2">
                 <button
                   type="button"
