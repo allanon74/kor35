@@ -1,12 +1,14 @@
 import React, { useMemo } from 'react';
 import { sanitizeHtml } from '../utils/htmlSanitizer';
 import { activateUser, deleteUser, staffKillPersonaggio, staffRevivePersonaggio } from '../api';
-import { RICH_TEXT_SHARED_STYLES } from '../styles/richTextSharedStyles';
+import { ensureRichTextStyles } from '../styles/richTextStyleSheet';
 
 /** Tag di macroazione staff riconosciuti nel corpo del messaggio. */
 const MACRO_TAG_SPLIT = /(\[(?:ACTIVATE|DELETE)_USER:\d+\]|\[(?:CONFIRM_DEATH|REVOKE_DEATH):\d+\])/g;
 
 const RichTextDisplay = ({ content, onUpdate, onLogout, textTone = 'onDark' }) => {
+    ensureRichTextStyles();
+
     const isOnLight = textTone === 'onLight';
 
     // Su fondo chiaro i colori di testo pensati per il tema scuro renderebbero
@@ -73,21 +75,19 @@ const RichTextDisplay = ({ content, onUpdate, onLogout, textTone = 'onDark' }) =
     const parts = cleanContent.split(MACRO_TAG_SPLIT);
 
     return (
-        <>
-            <style>{RICH_TEXT_SHARED_STYLES}</style>
-            <div 
-                className={`ql-editor-view w-full${isOnLight ? ' ql-editor-view--light' : ''}`}
-                style={{
-                    fontSize: '0.875rem',
-                    lineHeight: '1.6',
-                    color: isOnLight ? 'inherit' : '#d1d5db',
-                    whiteSpace: 'normal',       
-                    overflowWrap: 'anywhere',   
-                    wordBreak: 'normal',        
-                    maxWidth: '100%',
-                    minWidth: '0'
-                }}
-            >
+        <div 
+            className={`ql-editor-view w-full${isOnLight ? ' ql-editor-view--light' : ''}`}
+            style={{
+                fontSize: '0.875rem',
+                lineHeight: '1.6',
+                color: isOnLight ? 'inherit' : '#d1d5db',
+                whiteSpace: 'normal',
+                overflowWrap: 'anywhere',
+                wordBreak: 'normal',
+                maxWidth: '100%',
+                minWidth: '0'
+            }}
+        >
                 {parts.length === 1 ? (
                     <div style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: parts[0] }} />
                 ) : parts.map((part, index) => {
@@ -172,8 +172,7 @@ const RichTextDisplay = ({ content, onUpdate, onLogout, textTone = 'onDark' }) =
                     />
                 );
             })}
-            </div>
-        </>
+        </div>
     );
 };
 

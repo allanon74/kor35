@@ -3,7 +3,7 @@ import { Info } from 'lucide-react';
 import RichTextToolbar from './richtext/RichTextToolbar';
 import RichTextLinkDialog from './richtext/RichTextLinkDialog';
 import { COLLAPSIBLE_TEMPLATE } from './richtext/richTextConfig';
-import { RICH_TEXT_SHARED_STYLES } from '../styles/richTextSharedStyles';
+import { ensureRichTextStyles } from '../styles/richTextStyleSheet';
 import {
     escapeHtml,
     richTextHasContent,
@@ -56,6 +56,8 @@ const RichTextEditor = ({
     fillHeight = false,
     ariaLabel,
 }) => {
+    ensureRichTextStyles();
+
     const editorRef = useRef(null);
     const lastEmittedRef = useRef(null);
     const savedRangeRef = useRef(null);
@@ -416,8 +418,6 @@ const RichTextEditor = ({
 
     return (
         <div className={`flex flex-col gap-1 w-full ${fillHeight ? 'min-h-0 flex-1' : ''}`}>
-            <style>{RICH_TEXT_SHARED_STYLES}</style>
-
             {label && !isFullscreen ? (
                 <label className="text-sm font-medium text-gray-300 ml-1">{label}</label>
             ) : null}

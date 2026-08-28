@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getWikiMattoniWidgetDisplay, resolveMediaUrl } from '../../api';
+import RichHtml from '../RichHtml';
 
 /**
  * Stessi hex usati nel widget Tier per i gradienti (sezione "gradienti").
@@ -202,17 +203,19 @@ export default function WidgetMattoni({ id }) {
                   </div>
 
                   {descrizione && (
-                    <div
+                    <RichHtml
+                      content={descrizione}
+                      tone="onLight"
                       className="prose prose-sm max-w-none leading-snug prose-inherit"
-                      dangerouslySetInnerHTML={{ __html: descrizione }}
                     />
                   )}
                   {meta && (
                     <div className="mt-3 border-t border-black/10 pt-2">
                       <div className="text-[11px] md:text-xs font-bold opacity-80">Metatalento</div>
-                      <div
+                      <RichHtml
+                        content={meta}
+                        tone="onLight"
                         className="prose prose-sm max-w-none leading-snug prose-inherit"
-                        dangerouslySetInnerHTML={{ __html: meta }}
                       />
                     </div>
                   )}

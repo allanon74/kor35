@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getWikiTier } from '../../api';
 import AbilitaTable from '../wiki/AbilitaTable';
+import RichHtml from '../RichHtml';
 import { CHROMATIC_STYLES } from '../../utils/chromaticStyles';
 
 /** Costruisce la stringa CSS per il gradiente (135deg) da una lista di colori hex */
@@ -154,10 +155,11 @@ export default function WidgetTier({ id, badgeMode = 'compact', forceDisableRunt
 
         {/* DESCRIZIONE TIER */}
         {data.descrizione && (
-            <div
+            <RichHtml
+              content={data.descrizione}
+              tone="onLight"
               className={descClass}
               style={descStyle}
-              dangerouslySetInnerHTML={{ __html: data.descrizione }}
             />
         )}
 

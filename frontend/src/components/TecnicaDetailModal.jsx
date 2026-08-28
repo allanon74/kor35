@@ -1,6 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import PunteggioDisplay from './PunteggioDisplay.jsx';
+import RichHtml from './RichHtml';
 import ActivationCostPreview from './ActivationCostPreview';
 import { evaluateActivationCosts } from '../lib/activationCostUtils';
 
@@ -103,9 +104,9 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica', char = null })
               </div>
             )}
             {testoDescrizione ? (
-            <div
-                className="text-gray-300 prose prose-invert prose-sm max-w-none leading-relaxed break-words" 
-                dangerouslySetInnerHTML={{ __html: testoDescrizione }}
+            <RichHtml
+                content={testoDescrizione}
+                className="text-gray-300 prose prose-invert prose-sm max-w-none leading-relaxed break-words"
             />
             ) : (
             <p className="text-gray-500 italic text-sm">Nessuna descrizione disponibile.</p>

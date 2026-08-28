@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { X, Loader2, ChevronDown } from 'lucide-react';
 import PunteggioDisplay from './PunteggioDisplay';
+import RichHtml from './RichHtml';
 import { useOptimisticAcquireAbilita } from '../hooks/useGameData';
 
 const PREFIX_ARCH = 'archetipo - ';
@@ -107,9 +108,9 @@ function ExpandableDescrizione({ descrizione }) {
         <span>Descrizione</span>
         <ChevronDown size={14} className="transition-transform group-open:rotate-180" />
       </summary>
-      <div
+      <RichHtml
+        content={descrizione}
         className="mt-2 text-sm text-slate-200/90 prose prose-invert prose-sm max-w-none leading-relaxed prose-p:my-1.5 prose-headings:text-slate-100"
-        dangerouslySetInnerHTML={{ __html: descrizione }}
       />
     </details>
   );
@@ -379,9 +380,9 @@ export function RazzaPickerContent({
                   Applico la scelta…
                 </div>
               ) : null}
-              <div
+              <RichHtml
+                content={descrizione}
                 className="text-sm text-slate-200/90 prose prose-invert prose-sm max-w-none leading-relaxed prose-p:my-1.5 prose-headings:text-slate-100"
-                dangerouslySetInnerHTML={{ __html: descrizione }}
               />
             </div>
           ) : null}

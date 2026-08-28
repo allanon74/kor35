@@ -9,6 +9,7 @@ import StatisticaModificatoriModal from './StatisticaModificatoriModal'; // <---
 import { stripRazzaPrefix } from './RazzaCollapsible';
 import RichTextDisplay from './RichTextDisplay';
 import RichTextEditor from './RichTextEditor';
+import RichHtml from './RichHtml';
 import { updatePersonaggio, resolveMediaUrl } from '../api';
 
 // --- NUOVI COMPONENTI ---
@@ -386,9 +387,9 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
             </div>
 
             {abilita.descrizione && (
-                <div
+                <RichHtml
+                    content={abilita.descrizione}
                     className="text-sm text-gray-400 pl-8 mt-1 prose prose-invert prose-sm max-w-none leading-snug"
-                    dangerouslySetInnerHTML={{ __html: abilita.descrizione }}
                 />
             )}
         </li>
@@ -694,9 +695,9 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
               </p>
               <p className="text-lg font-bold text-gray-100 mb-2">{razzaRiepilogo.archetipoNome}</p>
               {razzaRiepilogo.archetipoDescrizione ? (
-                <div
+                <RichHtml
+                  content={razzaRiepilogo.archetipoDescrizione}
                   className="text-sm text-gray-300 prose prose-invert prose-sm max-w-none leading-relaxed prose-p:my-1.5 prose-headings:text-gray-200"
-                  dangerouslySetInnerHTML={{ __html: razzaRiepilogo.archetipoDescrizione }}
                 />
               ) : null}
             </div>
@@ -707,9 +708,9 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
                 </p>
                 <p className="text-lg font-bold text-gray-100 mb-2">{razzaRiepilogo.formaNome}</p>
                 {razzaRiepilogo.formaDescrizione ? (
-                  <div
+                  <RichHtml
+                    content={razzaRiepilogo.formaDescrizione}
                     className="text-sm text-gray-300 prose prose-invert prose-sm max-w-none leading-relaxed prose-p:my-1.5 prose-headings:text-gray-200"
-                    dangerouslySetInnerHTML={{ __html: razzaRiepilogo.formaDescrizione }}
                   />
                 ) : null}
               </div>
@@ -725,9 +726,9 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
             <div className="text-sm font-bold text-violet-100 mt-1">{data.era.difetto_interpretativo_titolo}</div>
           )}
           {data?.era?.difetto_interpretativo_testo && (
-            <div
+            <RichHtml
+              content={data.era.difetto_interpretativo_testo}
               className="text-xs text-violet-100/90 mt-2 prose prose-invert prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: data.era.difetto_interpretativo_testo }}
             />
           )}
         </div>
@@ -748,9 +749,9 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
                   )}
                 </div>
                 {abilita?.descrizione && (
-                  <div
+                  <RichHtml
+                    content={abilita.descrizione}
                     className="text-xs text-indigo-100/90 mt-2 prose prose-invert prose-sm max-w-none"
-                    dangerouslySetInnerHTML={{ __html: abilita.descrizione }}
                   />
                 )}
               </div>

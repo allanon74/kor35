@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getWikiTable } from '../../api'; 
 import AbilitaTable from '../wiki/AbilitaTable'; 
+import RichHtml from '../RichHtml';
 
 export default function WidgetTabellaAbilita({ id }) {
   const [data, setData] = useState(null);
@@ -36,7 +37,11 @@ export default function WidgetTabellaAbilita({ id }) {
             {data.titolo}
           </h3>
           {data.descrizione && (
-            <div className="mt-2 text-xs md:text-sm text-gray-600 italic break-words" dangerouslySetInnerHTML={{__html: data.descrizione}} />
+            <RichHtml
+              content={data.descrizione}
+              tone="onLight"
+              className="mt-2 text-xs md:text-sm text-gray-600 italic break-words"
+            />
           )}
       </div>
 

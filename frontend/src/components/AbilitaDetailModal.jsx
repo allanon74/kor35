@@ -2,6 +2,7 @@ import React from 'react';
 import { X } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import PunteggioDisplay from './PunteggioDisplay.jsx';
+import RichHtml from './RichHtml';
 
 const AbilitaDetailModal = ({ skill, onClose }) => {
   if (!skill) return null;
@@ -113,9 +114,9 @@ const AbilitaDetailModal = ({ skill, onClose }) => {
         </h2>
         
         {skill.descrizione ? (
-          <div
-            className="text-gray-300 mb-4 prose prose-invert" 
-            dangerouslySetInnerHTML={{ __html: skill.descrizione }}
+          <RichHtml
+            content={skill.descrizione}
+            className="text-gray-300 mb-4 prose prose-invert"
           />
         ) : (
           <p className="text-gray-300 mb-4">

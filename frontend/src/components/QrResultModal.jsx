@@ -4,6 +4,7 @@ import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvan
 import { useCharacter } from './CharacterContext';
 import { useTimers } from '../hooks/useTimers';
 import PropostaEditorModal from './PropostaEditorModal';
+import RichHtml from './RichHtml';
 
 const PersonaggioDuelloQrView = React.lazy(() => import('./PersonaggioDuelloQrView'));
 import ComponentiRiparazionePicker, {
@@ -534,9 +535,9 @@ const TecnicaAcquisizioneView = ({ qrId, tipo, data, onLogout, onClose }) => {
         </p>
       )}
       {data.TestoFormattato && (
-        <div
-          className="prose prose-invert prose-sm max-w-none mb-4 max-h-[40vh] overflow-y-auto border border-gray-700 rounded p-3 bg-gray-900/50"
-          dangerouslySetInnerHTML={{ __html: data.TestoFormattato }}
+        <RichHtml
+          content={data.TestoFormattato}
+          className="prose prose-invert prose-sm max-w-none mb-4 max-h-[40vh] overflow-y-auto border border-gray-700 rounded p-3 bg-gray-900/50 custom-scrollbar"
         />
       )}
       {error && <p className="text-red-400 mb-4 bg-red-900 bg-opacity-30 p-2 rounded">{error}</p>}
@@ -779,9 +780,9 @@ const PilotSottosistemaView = ({
       {d.manifesto_testo && (
         <details className="bg-gray-900/40 rounded-lg border border-gray-700">
           <summary className="cursor-pointer p-3 text-sm text-gray-400">Scheda tecnica</summary>
-          <div
+          <RichHtml
+            content={d.manifesto_testo}
             className="px-3 pb-3 text-sm text-gray-300 prose prose-invert max-w-none"
-            dangerouslySetInnerHTML={{ __html: d.manifesto_testo }}
           />
         </details>
       )}
@@ -1049,9 +1050,9 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
               {data.dati?.nome || data.messaggio || 'Trappola'}
             </h3>
             {data.dati?.testo ? (
-              <div
+              <RichHtml
+                content={data.dati.testo}
                 className="text-left text-gray-200 prose prose-invert prose-sm max-w-none bg-red-950/30 border border-red-800/50 rounded-lg p-4"
-                dangerouslySetInnerHTML={{ __html: data.dati.testo }}
               />
             ) : (
               <p className="text-gray-300">{data.messaggio}</p>
@@ -1096,9 +1097,9 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             <Scan size={48} className="mx-auto text-indigo-400 mb-4" />
             <h3 className="text-2xl font-bold mb-3">{data.dati?.nome || data.messaggio}</h3>
             {data.dati?.testo ? (
-              <div
+              <RichHtml
+                content={data.dati.testo}
                 className="text-left text-gray-200 prose prose-invert prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: data.dati.testo }}
               />
             ) : null}
           </div>

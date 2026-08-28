@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { staffGetWikiImages, deleteWikiImage, getMediaUrl } from '../../api';
 import MasterGenericList from './MasterGenericList';
+import RichHtml from '../RichHtml';
 
 const ALLINEAMENTO_CHOICES = [
     { id: 'left', nome: 'Sinistra' },
@@ -68,7 +69,7 @@ const ImmagineList = ({ onAdd, onEdit, onLogout }) => {
                 <div className="flex flex-col">
                     <span className="font-bold text-cyan-50">{item.titolo || '(Senza titolo)'}</span>
                     {item.descrizione && (
-                        <span className="text-[9px] text-gray-500 line-clamp-2" dangerouslySetInnerHTML={{ __html: item.descrizione }} />
+                        <RichHtml content={item.descrizione} as="span" className="text-[9px] text-gray-500 line-clamp-2" />
                     )}
                 </div>
             )

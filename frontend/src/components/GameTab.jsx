@@ -20,6 +20,7 @@ import { evaluateActivationCosts } from '../lib/activationCostUtils';
 import ActivationCostPreview from './ActivationCostPreview';
 
 import ActiveItemWidget from './ActiveItemWidget';
+import RichHtml from './RichHtml';
 import { PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 import { useSharedNowTs } from '../hooks/useSharedNowTs';
 import { OfflineConsultBanner } from './OfflineConsultBanner';
@@ -240,9 +241,9 @@ const RisorsaPoolWidget = ({ pool, onConsume, isPending }) => {
                 </div>
             ) : null}
             {pool.descrizione ? (
-                <div
+                <RichHtml
+                    content={pool.descrizione}
                     className="mt-2 text-[11px] text-gray-400 prose prose-invert prose-sm max-w-none leading-snug"
-                    dangerouslySetInnerHTML={{ __html: pool.descrizione }}
                 />
             ) : null}
         </div>
@@ -991,11 +992,9 @@ const GameTab = ({ onNavigate }) => {
                                         )}
                                     </div>
                                     <div className="bg-black/30 rounded p-2 mt-2 border-l-2 border-purple-500">
-                                        <div
+                                        <RichHtml
+                                            content={tessitura.testo_formattato_personaggio || tessitura.TestoFormattato || tessitura.formula || 'Formula non disponibile'}
                                             className="text-xs text-purple-200 prose prose-invert prose-sm max-w-none"
-                                            dangerouslySetInnerHTML={{
-                                                __html: tessitura.testo_formattato_personaggio || tessitura.TestoFormattato || tessitura.formula || 'Formula non disponibile'
-                                            }}
                                         />
                                     </div>
                                     {runtimeAttivo && (
@@ -1069,7 +1068,7 @@ const GameTab = ({ onNavigate }) => {
                                     <span className="font-bold text-yellow-200/80 text-sm">{fav.nome}</span>
                                     <button onClick={() => toggleFavorite(fav)} className="text-yellow-800 hover:text-red-400"><Star size={12} fill="currentColor"/></button>
                                 </div>
-                                <div className="text-[11px] text-gray-400 leading-snug prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: fav.testo }} />
+                                <RichHtml content={fav.testo} className="text-[11px] text-gray-400 leading-snug prose prose-invert max-w-none" />
                             </div>
                         ))}
                     </div>

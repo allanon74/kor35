@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getWikiAura } from '../../api';
 import MattoneList from '../wiki/MattoneList';
+import RichHtml from '../RichHtml';
 
 export default function WidgetAura({ id }) {
   const [aura, setAura] = useState(null);
@@ -35,9 +36,11 @@ export default function WidgetAura({ id }) {
       </div>
 
       {aura.descrizione && (
-        <div className="mb-4 prose prose-blue prose-sm max-w-none text-gray-700 break-words">
-           <div dangerouslySetInnerHTML={{ __html: aura.descrizione }} />
-        </div>
+        <RichHtml
+          content={aura.descrizione}
+          tone="onLight"
+          className="mb-4 prose prose-blue prose-sm max-w-none text-gray-700 break-words"
+        />
       )}
 
       {aura.mattoni && aura.mattoni.length > 0 && (

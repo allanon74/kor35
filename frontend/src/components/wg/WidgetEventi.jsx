@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, MapPin, Clock, AlertCircle } from 'lucide-react';
 import { getEventiPubblici } from '../../api';
-import { sanitizeHtml } from '../../utils/htmlSanitizer';
-import { RICH_TEXT_SHARED_STYLES } from '../../styles/richTextSharedStyles';
+import RichHtml from '../RichHtml';
 
 /**
  * Widget Eventi - Mostra gli eventi pubblici futuri e recenti
@@ -69,7 +68,6 @@ export default function WidgetEventi() {
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 max-w-full min-w-0 overflow-hidden">
-      <style>{RICH_TEXT_SHARED_STYLES}</style>
       <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
         <Calendar className="text-red-700" size={28} />
         <h3 className="text-xl font-bold text-gray-800">Eventi</h3>
@@ -104,9 +102,10 @@ export default function WidgetEventi() {
                   </h4>
                   
                   {evento.sinossi && (
-                    <div
-                      className="wiki-content prose prose-sm max-w-none text-sm text-gray-600 mb-3 leading-relaxed break-words [&_img]:max-w-full [&_img]:h-auto [&_table]:max-w-full [&_table]:overflow-x-auto"
-                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(evento.sinossi) }}
+                    <RichHtml
+                      content={evento.sinossi}
+                      tone="onLight"
+                      className="wiki-content prose prose-sm max-w-none text-sm text-gray-600 mb-3 leading-relaxed break-words"
                     />
                   )}
                   
