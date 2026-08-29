@@ -50,6 +50,8 @@ from .models import (
     Cerimoniale, CerimonialeCaratteristica,
     TipologiaTimer, TimerQrCode, StatoTimerAttivo,
     InnescoTimer, QrInventarioScanSession, StatoInnescoTimerPersonaggio,
+    RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect,
+    Trappola, StatoTrappolaPersonaggio, SerieCollezione, SerieAssegnazione, SerieQr,
     TipologiaEffetto, EffettoCasuale, ConsumabilePersonaggio, CreazioneConsumabileInCorso,
     TIPO_EFFETTO_OGGETTO, TIPO_EFFETTO_TESSITURA,
     Korp, Carriera, SegnoZodiacale, TipoCarriera, Carica,
@@ -58,6 +60,7 @@ from .models import (
     Campagna,
     CampagnaUtente,
     CampagnaFeaturePolicy,
+    NotificaPreferenze,
     StatisticaContainer, StatisticaContainerItem,
     Era, Prefettura, EraAbilita, Regione, RegioneAbilita, CarrieraAbilita,
 )
@@ -73,6 +76,7 @@ PERSONAGGI_ADMIN_MODEL_GROUPS = {
     "Campagna": ("Campagne", 10),
     "CampagnaUtente": ("Campagne", 11),
     "CampagnaFeaturePolicy": ("Campagne", 12),
+    "NotificaPreferenze": ("Campagne", 13),
     # Anagrafiche mondo
     "Era": ("Mondo", 20),
     "Prefettura": ("Mondo", 21),
@@ -860,6 +864,43 @@ class QrInventarioScanSessionAdmin(admin.ModelAdmin):
 class StatoInnescoTimerPersonaggioAdmin(admin.ModelAdmin):
     list_display = ("id", "personaggio", "innesco_timer", "data_fine", "cariche_usate_ciclo")
 
+
+@admin.register(RandomQrPool)
+class RandomQrPoolAdmin(admin.ModelAdmin):
+    list_display = ("nome", "attivo", "campagna", "minigioco_sezione_attiva", "minigioco_attivo")
+    search_fields = ("nome",)
+
+
+@admin.register(RandomQrPoolEffect)
+class RandomQrPoolEffectAdmin(admin.ModelAdmin):
+    list_display = ("pool", "tipo", "frequenza", "attivo", "titolo")
+    list_filter = ("tipo", "attivo")
+
+
+@admin.register(Trappola)
+class TrappolaAdmin(admin.ModelAdmin):
+    list_display = ("id", "nome", "durata_secondi", "qr_code")
+    search_fields = ("nome",)
+    raw_id_fields = ("qr_code",)
+
+
+@admin.register(SerieCollezione)
+class SerieCollezioneAdmin(admin.ModelAdmin):
+    list_display = ("nome", "totale", "campagna")
+
+
+@admin.register(SerieAssegnazione)
+class SerieAssegnazioneAdmin(admin.ModelAdmin):
+    list_display = ("serie", "indice", "personaggio", "assegnato_at")
+
+
+@admin.register(SerieQr)
+class SerieQrAdmin(admin.ModelAdmin):
+    list_display = ("id", "nome", "serie", "qr_code")
+    search_fields = ("nome",)
+    raw_id_fields = ("serie", "qr_code")
+
+
 # --- NUOVA SEZIONE TIMER ---
 
 class TimerQrCodeInline(admin.StackedInline):
@@ -1320,6 +1361,14 @@ class CampagnaFeaturePolicyAdmin(admin.ModelAdmin):
     search_fields = ("campagna__nome", "campagna__slug", "feature_key")
     autocomplete_fields = ("campagna",)
     ordering = ("campagna__nome", "feature_key")
+
+
+@admin.register(NotificaPreferenze)
+class NotificaPreferenzeAdmin(admin.ModelAdmin):
+    list_display = ("user", "telegram_chat_id", "telegram_username", "updated_at")
+    search_fields = ("user__username", "user__email", "telegram_username", "telegram_chat_id")
+    readonly_fields = ("sync_id", "updated_at", "created_at", "telegram_link_code", "telegram_link_expires")
+    raw_id_fields = ("user",)
 
 class LetturaMessaggioInline(admin.TabularInline):
     model = LetturaMessaggio

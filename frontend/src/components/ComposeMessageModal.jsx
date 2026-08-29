@@ -2,21 +2,17 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Dialog, DialogPanel, DialogTitle, DialogBackdrop } from '@headlessui/react';
 import { searchPersonaggi, fetchAuthenticated, getPersonaggioDetail } from '../api';
 import RichTextEditor from './RichTextEditor';
-import { Shield, User, X, UserCircle, Eye, EyeOff } from 'lucide-react';
+import { Shield, User, X, UserCircle, Eye, EyeOff, ChevronDown } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import { useDirtyModalClose } from '../hooks/useDirtyModalClose';
+import { richTextHasContent } from '../utils/htmlSanitizer';
 
 const filterTransferableItems = (oggetti = []) =>
   (oggetti || []).filter(
     (item) => item && item.id && item.tipo_oggetto === 'FIS' && !item.is_equipaggiato
   );
 
-const hasMeaningfulText = (html) => {
-  const clean = String(html || '')
-    .replace(/<[^>]+>/g, '')
-    .trim();
-  return Boolean(clean) || String(html || '').includes('<img');
-};
+const hasMeaningfulText = (html) => richTextHasContent(html);
 
 const ComposeMessageModal = ({
   isOpen,
@@ -52,6 +48,9 @@ const ComposeMessageModal = ({
   const [senderTransferItems, setSenderTransferItems] = useState([]);
   const [showOwnerToRecipient, setShowOwnerToRecipient] = useState(true);
   const [ownerLabel, setOwnerLabel] = useState('');
+  // Il pannello mittente parte chiuso: su smartphone occupava tutto lo spazio
+  // lasciando l'editor del messaggio fuori schermo.
+  const [senderPanelOpen, setSenderPanelOpen] = useState(false);
 
   const defaultShowOwnerToRecipient = !isCampaignStaffer;
 
@@ -108,6 +107,7 @@ const ComposeMessageModal = ({
       setError('');
       setSelectedSenderId(currentCharacterId ? String(currentCharacterId) : '');
       setShowOwnerToRecipient(defaultShowOwnerToRecipient);
+      setSenderPanelOpen(false);
 
       if (replyToRecipient) {
         if (replyToRecipient.isStaff) {
@@ -338,7 +338,8 @@ const ComposeMessageModal = ({
       <DialogBackdrop className="fixed inset-0 bg-black/80" />
 
       <div className="fixed inset-0 flex items-center justify-center p-3 sm:p-4">
-        <DialogPanel className="mx-auto max-w-2xl w-full max-h-[min(92vh,900px)] flex flex-col rounded-xl bg-gray-800 text-white shadow-2xl border border-gray-600 overflow-hidden">
+        {/* Altezza definita su mobile: serve perché l'area di scrittura possa espandersi */}
+        <DialogPanel className="mx-auto max-w-2xl w-full h-full sm:h-auto sm:max-h-[min(92vh,900px)] flex flex-col rounded-xl bg-gray-800 text-white shadow-2xl border border-gray-600 overflow-hidden">
           <div className="flex justify-between items-center gap-3 px-4 sm:px-6 py-4 border-b border-gray-700 shrink-0">
             <DialogTitle className="text-xl font-bold">Nuovo Messaggio</DialogTitle>
             <button
@@ -358,22 +359,49 @@ const ComposeMessageModal = ({
           )}
 
           <form onSubmit={handleSendMessage} className="flex flex-col min-h-0 flex-1">
-            <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 custom-scrollbar">
+            {/*
+              Intestazione scorrevole con altezza limitata: l'editor sotto conserva
+              sempre spazio utile, anche su schermi piccoli.
+            */}
+            <div className="shrink-0 max-h-[40vh] overflow-y-auto px-4 sm:px-6 py-3 space-y-3 custom-scrollbar border-b border-gray-700/70">
               {ownCharacters.length > 0 && (
-                <div className="rounded-xl border-2 border-indigo-500/50 bg-indigo-950/40 p-4 space-y-3 shadow-lg shadow-indigo-900/20">
-                  <div className="flex items-start gap-3">
-                    <div className="shrink-0 w-11 h-11 rounded-full bg-indigo-800 border border-indigo-400/40 flex items-center justify-center">
-                      <UserCircle size={28} className="text-indigo-200" />
+                <div className="rounded-xl border border-indigo-500/40 bg-indigo-950/30 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setSenderPanelOpen((open) => !open)}
+                    aria-expanded={senderPanelOpen}
+                    className="w-full flex items-center gap-3 p-3 text-left hover:bg-indigo-900/20 transition-colors"
+                  >
+                    <div className="shrink-0 w-9 h-9 rounded-full bg-indigo-800 border border-indigo-400/40 flex items-center justify-center">
+                      <UserCircle size={22} className="text-indigo-200" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[11px] font-bold uppercase tracking-widest text-indigo-300/90">
-                        Stai scrivendo come
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-300/90">
+                        Scrivi come
                       </div>
-                      {ownCharacters.length > 1 ? (
+                      <div className="text-sm font-bold text-white truncate">
+                        {selectedSender?.nome || 'Personaggio'}
+                        <span className="ml-2 text-[11px] font-normal text-indigo-200/70">
+                          {showOwnerToRecipient
+                            ? `giocatore visibile${ownerLabel ? `: ${ownerLabel}` : ''}`
+                            : 'giocatore nascosto'}
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronDown
+                      size={18}
+                      className={`shrink-0 text-indigo-300 transition-transform ${senderPanelOpen ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+
+                  {senderPanelOpen && (
+                    <div className="px-3 pb-3 space-y-3 border-t border-indigo-500/25">
+                      {ownCharacters.length > 1 && (
                         <select
-                          className="mt-1 w-full bg-gray-900 border border-indigo-500/40 rounded-lg p-2.5 text-lg font-bold text-white focus:ring-2 focus:ring-indigo-400 outline-none"
+                          className="mt-3 w-full bg-gray-900 border border-indigo-500/40 rounded-lg p-2.5 text-base font-bold text-white focus:ring-2 focus:ring-indigo-400 outline-none"
                           value={selectedSenderId}
                           onChange={(e) => setSelectedSenderId(e.target.value)}
+                          aria-label="Personaggio mittente"
                         >
                           {ownCharacters.map((pg) => (
                             <option key={pg.id} value={pg.id}>
@@ -382,68 +410,57 @@ const ComposeMessageModal = ({
                             </option>
                           ))}
                         </select>
-                      ) : (
-                        <div className="mt-1 text-xl font-bold text-white truncate">
-                          {selectedSender?.nome || 'Personaggio'}
-                          {selectedSender?.campagna_nome ? (
-                            <span className="text-sm font-normal text-indigo-200/80 ml-2">
-                              {selectedSender.campagna_nome}
-                            </span>
-                          ) : null}
-                        </div>
                       )}
-                    </div>
-                  </div>
 
-                  <div className="rounded-lg border border-gray-600/80 bg-gray-900/60 p-3 space-y-2">
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={showOwnerToRecipient}
-                        onChange={(e) => setShowOwnerToRecipient(e.target.checked)}
-                        className="mt-1 w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
-                      />
-                      <span className="text-sm text-gray-100">
-                        <span className="font-semibold block mb-0.5">
-                          Mostra anche il giocatore proprietario nel messaggio
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showOwnerToRecipient}
+                          onChange={(e) => setShowOwnerToRecipient(e.target.checked)}
+                          className="mt-0.5 w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-gray-100">
+                          <span className="font-semibold block mb-0.5">
+                            Mostra anche il giocatore proprietario
+                          </span>
+                          <span className="text-gray-400 text-xs">
+                            Se disattivato, il destinatario vede solo il personaggio mittente.
+                          </span>
                         </span>
-                        <span className="text-gray-400 text-xs">
-                          Se disattivato, il destinatario vede solo il personaggio mittente.
-                        </span>
-                      </span>
-                    </label>
+                      </label>
 
-                    <div
-                      className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm border ${
-                        showOwnerToRecipient
-                          ? 'bg-emerald-950/40 border-emerald-600/40 text-emerald-100'
-                          : 'bg-gray-800/80 border-gray-600/50 text-gray-300'
-                      }`}
-                    >
-                      {showOwnerToRecipient ? (
-                        <Eye size={16} className="shrink-0" />
-                      ) : (
-                        <EyeOff size={16} className="shrink-0" />
-                      )}
-                      <span>
-                        Il destinatario vedrà: <strong>{selectedSender?.nome || 'personaggio'}</strong>
+                      <div
+                        className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs border ${
+                          showOwnerToRecipient
+                            ? 'bg-emerald-950/40 border-emerald-600/40 text-emerald-100'
+                            : 'bg-gray-800/80 border-gray-600/50 text-gray-300'
+                        }`}
+                      >
                         {showOwnerToRecipient ? (
-                          <>
-                            {' '}
-                            <span className="text-gray-400">(giocatore:</span>{' '}
-                            <strong>{ownerLabel || '…'}</strong>
-                            <span className="text-gray-400">)</span>
-                          </>
+                          <Eye size={15} className="shrink-0" />
                         ) : (
-                          <span className="text-gray-400"> — identità giocatore nascosta</span>
+                          <EyeOff size={15} className="shrink-0" />
                         )}
-                      </span>
+                        <span>
+                          Il destinatario vedrà: <strong>{selectedSender?.nome || 'personaggio'}</strong>
+                          {showOwnerToRecipient ? (
+                            <>
+                              {' '}
+                              <span className="text-gray-400">(giocatore:</span>{' '}
+                              <strong>{ownerLabel || '…'}</strong>
+                              <span className="text-gray-400">)</span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400"> — identità giocatore nascosta</span>
+                          )}
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
-              <div className="flex items-center gap-3 p-3 bg-gray-700/50 rounded border border-gray-600">
+              <div className="flex items-center gap-3 p-2.5 bg-gray-700/50 rounded border border-gray-600">
                 <input
                   type="checkbox"
                   id="chk_staff"
@@ -630,17 +647,20 @@ const ComposeMessageModal = ({
                 </div>
               )}
 
-              <div className="min-h-52 sm:min-h-64 h-52 sm:h-72 text-black rounded overflow-hidden shrink-0">
-                <RichTextEditor
-                  label="Testo"
-                  value={testo}
-                  onChange={setTesto}
-                  placeholder="Scrivi qui..."
-                />
-              </div>
             </div>
 
-            <div className="flex justify-end gap-3 px-4 sm:px-6 py-3 border-t border-gray-700 bg-gray-850/80 bg-gray-900/90 shrink-0">
+            {/* Area di scrittura: occupa tutta l'altezza rimasta nel modal */}
+            <div className="flex-1 min-h-0 flex flex-col px-4 sm:px-6 py-3">
+              <RichTextEditor
+                label="Testo del messaggio"
+                value={testo}
+                onChange={setTesto}
+                placeholder="Scrivi qui il tuo messaggio…"
+                fillHeight
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 px-4 sm:px-6 py-3 border-t border-gray-700 bg-gray-900/90 shrink-0">
               <button
                 type="button"
                 onClick={requestClose}

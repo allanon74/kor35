@@ -6,6 +6,7 @@ import AbilitaDetailModal from './AbilitaDetailModal.jsx';
 import GenericGroupedList from './GenericGroupedList';
 import PunteggioDisplay from './PunteggioDisplay';     
 import IconaPunteggio from './IconaPunteggio';
+import RichHtml from './RichHtml';
 import { useOptimisticAcquireAbilita, useRevokeAbilita } from '../hooks/useGameData';
 import { updatePersonaggio } from '../api';
 import { PlayerResourceStrip, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
@@ -467,9 +468,9 @@ const AbilitaTab = ({ onLogout }) => {
                       <div className="font-mono text-sky-100">{tmp.countdown}</div>
                     </div>
                   </div>
-                  <div
+                  <RichHtml
+                    content={tmp.descrizioneHtml}
                     className="mt-2 text-xs text-sky-50/90 rounded border border-sky-700/40 bg-sky-950/20 p-2 prose prose-invert prose-sm max-w-none"
-                    dangerouslySetInnerHTML={{ __html: tmp.descrizioneHtml }}
                   />
                 </div>
               ))}

@@ -10,13 +10,12 @@ import {
 import {
   LabeledField,
   StaffFieldGrid,
-  StaffListRow,
-  StaffListToolbar,
   StaffModal,
   StaffSection,
   staffInputClass,
 } from '../../staff/StaffCrudUi';
 import StatModInline from './inlines/StatModInline';
+import MasterGenericList from './MasterGenericList';
 
 const TRIGGER_OPTIONS = [
   { value: 'LEGAME', label: 'Stesso legame_id' },
@@ -123,39 +122,73 @@ export default function ComboReliquiarioStaffPanel({ onLogout, carteCatalogo = [
     }
   };
 
+  const comboColumns = useMemo(
+    () => [
+      {
+        key: 'nome',
+        header: 'Nome',
+        getSortValue: (c) => c.nome || '',
+        render: (c) => <span className="font-bold" style={{ color: c.colore || '#10b981' }}>{c.nome}</span>,
+      },
+      { key: 'codice', header: 'Codice', getSortValue: (c) => c.codice || '', render: (c) => <span className="font-mono text-xs">{c.codice}</span> },
+      {
+        key: 'trigger',
+        header: 'Trigger',
+        getSortValue: (c) => c.tipo_trigger || '',
+        getFilterValue: (c) => TRIGGER_OPTIONS.find((o) => o.value === c.tipo_trigger)?.label || c.tipo_trigger,
+        render: (c) => TRIGGER_OPTIONS.find((o) => o.value === c.tipo_trigger)?.label || c.tipo_trigger,
+      },
+      { key: 'ordine', header: 'Ordine', getSortValue: (c) => c.ordine ?? 0, render: (c) => c.ordine ?? 0, align: 'center', width: 80 },
+      {
+        key: 'attiva',
+        header: 'Attiva',
+        getSortValue: (c) => (c.attiva ? 1 : 0),
+        getFilterValue: (c) => (c.attiva ? 'Sì' : 'No'),
+        render: (c) => (c.attiva ? 'Sì' : 'No'),
+        align: 'center',
+        width: 80,
+      },
+    ],
+    [],
+  );
+
   return (
     <div>
       {msg && <p className="mb-2 text-xs text-amber-300">{msg}</p>}
-      <StaffListToolbar
-        title="Combo reliquiario"
-        count={combos.length}
-        onAdd={() => openModal(null)}
-        addLabel="Nuova combo"
-      />
       <p className="mb-3 text-xs text-gray-500">
         Le combo non compaiono sulla carta. Se attive, mostrano testo sotto il reliquiario e applicano modificatori al personaggio.
       </p>
-      <ul className="max-h-[70vh] space-y-1 overflow-y-auto">
-        {combos.map((c) => (
-          <StaffListRow
-            key={c.id}
-            onEdit={() => openModal(c)}
-            onDelete={() => deleteCombo(c.id)}
-            deleteConfirm={`Eliminare la combo «${c.nome}»?`}
-          >
-            <p className="font-bold" style={{ color: c.colore || '#10b981' }}>{c.nome}</p>
-            <p className="text-xs text-gray-500">
-              <span className="text-gray-400">Codice:</span> {c.codice}
-              {' · '}
-              <span className="text-gray-400">Trigger:</span> {c.tipo_trigger}
-              {!c.attiva && <span className="ml-2 text-amber-500">(disattiva)</span>}
-            </p>
-          </StaffListRow>
-        ))}
-      </ul>
-      <button type="button" className="mt-2 text-xs text-gray-400 underline" onClick={load}>
-        <RefreshCw size={12} className="inline" /> Aggiorna
-      </button>
+      <MasterGenericList
+        title="Combo reliquiario"
+        items={combos}
+        columns={comboColumns}
+        fill={false}
+        persistKey="staff-carte-combo-reliquiario"
+        addLabel="Nuova combo"
+        emptyMessage="Nessuna combo definita."
+        getItemLabel={(c) => c.nome || c.codice}
+        onAdd={() => openModal(null)}
+        onEdit={openModal}
+        onDelete={deleteCombo}
+        filterConfig={[
+          {
+            key: 'tipo_trigger',
+            label: 'Trigger',
+            options: TRIGGER_OPTIONS.map((o) => ({ id: o.value, label: o.label })),
+          },
+          {
+            key: 'attiva',
+            label: 'Attiva',
+            options: [{ id: true, label: 'Attive' }, { id: false, label: 'Disattive' }],
+            match: (item, values) => values.some((v) => !!item.attiva === v),
+          },
+        ]}
+        toolbarExtra={(
+          <button type="button" className="text-xs text-gray-400 underline" onClick={load}>
+            <RefreshCw size={12} className="inline" /> Aggiorna
+          </button>
+        )}
+      />
 
       <StaffModal
         open={modalOpen}

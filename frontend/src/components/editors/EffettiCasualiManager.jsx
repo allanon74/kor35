@@ -4,6 +4,7 @@ import { Tab } from '@headlessui/react';
 import { fetchAuthenticated, getPersonaggiList } from '../../api';
 import { Loader2, Plus, Pencil, Trash2, X } from 'lucide-react';
 import ConfirmDialog from './ConfirmDialog';
+import RichHtml from '../RichHtml';
 
 const API_BASE = '/api/personaggi/api/staff';
 const AURA_TIPO = 'AU'; // tipo Punteggio per Aura
@@ -597,11 +598,11 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
               {risultato && (
                 <div className="mt-6 p-4 bg-gray-900 rounded border border-gray-600">
                   <h4 className="font-bold text-amber-400 mb-2">{risultato.nome}</h4>
-                  <div className="text-sm text-gray-300 prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: risultato.descrizione }} />
+                  <RichHtml content={risultato.descrizione} className="text-sm text-gray-300 prose prose-invert max-w-none" />
                   {risultato.formula && (
                     <div className="mt-2 pt-2 border-t border-gray-700">
                       <span className="text-xs text-gray-500">Formula: </span>
-                      <span dangerouslySetInnerHTML={{ __html: risultato.formula }} />
+                      <RichHtml content={risultato.formula} as="span" />
                     </div>
                   )}
                   {(risultato.oggetto_creato_id || risultato.consumabile_creato_id) && (

@@ -3,6 +3,7 @@ import { staffGetProposteInValutazione, staffRifiutaProposta, staffApprovaPropos
 import GenericHeader from '../GenericHeader';
 import { Eye, X, Check, ClipboardCheck, AlertCircle } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor';
+import RichHtml from '../RichHtml';
 import ConfirmDialog from './ConfirmDialog';
 import { getAuraName } from '../../utils/auraDisplay';
 
@@ -347,8 +348,9 @@ const StaffProposalTab = ({ onLogout }) => {
                             {/* Card Descrizione */}
                             <div className="bg-gray-800/50 p-5 rounded-xl border border-gray-700">
                                 <h3 className="text-cyan-500 font-black uppercase text-xs tracking-widest mb-4 border-b border-gray-700 pb-2">Descrizione Giocatore</h3>
-                                <div className="prose prose-invert text-sm max-w-none text-gray-300 leading-relaxed whitespace-pre-wrap"
-                                     dangerouslySetInnerHTML={{ __html: selectedProposal.descrizione }} 
+                                <RichHtml
+                                    content={selectedProposal.descrizione}
+                                    className="prose prose-invert text-sm max-w-none text-gray-300 leading-relaxed"
                                 />
 
                                 {selectedProposal.spiegazione_teorie && (

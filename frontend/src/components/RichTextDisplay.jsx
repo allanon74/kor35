@@ -1,11 +1,22 @@
 import React, { useMemo } from 'react';
 import { sanitizeHtml } from '../utils/htmlSanitizer';
 import { activateUser, deleteUser, staffKillPersonaggio, staffRevivePersonaggio } from '../api';
-import { RICH_TEXT_SHARED_STYLES } from '../styles/richTextSharedStyles';
+import { ensureRichTextStyles } from '../styles/richTextStyleSheet';
+
+/** Tag di macroazione staff riconosciuti nel corpo del messaggio. */
+const MACRO_TAG_SPLIT = /(\[(?:ACTIVATE|DELETE)_USER:\d+\]|\[(?:CONFIRM_DEATH|REVOKE_DEATH):\d+\])/g;
 
 const RichTextDisplay = ({ content, onUpdate, onLogout, textTone = 'onDark' }) => {
-    // 1. Sanitizzazione base dell'HTML
-    const cleanContent = useMemo(() => sanitizeHtml(content), [content]);
+    ensureRichTextStyles();
+
+    const isOnLight = textTone === 'onLight';
+
+    // Su fondo chiaro i colori di testo pensati per il tema scuro renderebbero
+    // il contenuto illeggibile: si neutralizzano solo quelli senza sfondo proprio.
+    const cleanContent = useMemo(
+        () => sanitizeHtml(content, { dropTextColors: isOnLight }),
+        [content, isOnLight]
+    );
 
     if (!cleanContent) return null;
 
@@ -61,25 +72,25 @@ const RichTextDisplay = ({ content, onUpdate, onLogout, textTone = 'onDark' }) =
 
     // 4. Parser Custom per trovare i tag [ACTIVATE_USER:ID] e [DELETE_USER:ID]
     // Dividiamo la stringa in parti basate sulla Regex
-    const parts = cleanContent.split(/(\[(?:ACTIVATE|DELETE)_USER:\d+\]|\[(?:CONFIRM_DEATH|REVOKE_DEATH):\d+\])/g);
+    const parts = cleanContent.split(MACRO_TAG_SPLIT);
 
     return (
-        <>
-            <style>{RICH_TEXT_SHARED_STYLES}</style>
-            <div 
-                className={`ql-editor-view w-full${textTone === 'onLight' ? ' ql-editor-view--light' : ''}`}
-                style={{
-                    fontSize: '0.875rem',
-                    lineHeight: '1.6',
-                    color: textTone === 'onLight' ? 'inherit' : '#d1d5db',
-                    whiteSpace: 'normal',       
-                    overflowWrap: 'anywhere',   
-                    wordBreak: 'normal',        
-                    maxWidth: '100%',
-                    minWidth: '0'
-                }}
-            >
-                {parts.map((part, index) => {
+        <div 
+            className={`ql-editor-view w-full${isOnLight ? ' ql-editor-view--light' : ''}`}
+            style={{
+                fontSize: '0.875rem',
+                lineHeight: '1.6',
+                color: isOnLight ? 'inherit' : '#d1d5db',
+                whiteSpace: 'normal',
+                overflowWrap: 'anywhere',
+                wordBreak: 'normal',
+                maxWidth: '100%',
+                minWidth: '0'
+            }}
+        >
+                {parts.length === 1 ? (
+                    <div style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: parts[0] }} />
+                ) : parts.map((part, index) => {
                 // Controllo se questa parte è il tag ACTIVATE_USER
                 const activateMatch = part.match(/\[ACTIVATE_USER:(\d+)\]/);
                 
@@ -150,16 +161,18 @@ const RichTextDisplay = ({ content, onUpdate, onLogout, textTone = 'onDark' }) =
                     );
                 }
 
-                // Se non è un tag, renderizziamo l'HTML normale (sicuro perché già sanitizzato)
+                // Se non è un tag, renderizziamo l'HTML normale (sicuro perché già sanitizzato).
+                // `display: contents` evita che paragrafi, elenchi e tabelle finiscano
+                // dentro un wrapper inline, che alterava spaziature e a capo.
                 return (
-                    <span 
-                        key={index} 
-                        dangerouslySetInnerHTML={{ __html: part }} 
+                    <div
+                        key={index}
+                        style={{ display: 'contents' }}
+                        dangerouslySetInnerHTML={{ __html: part }}
                     />
                 );
             })}
-            </div>
-        </>
+        </div>
     );
 };
 

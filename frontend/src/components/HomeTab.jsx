@@ -9,6 +9,7 @@ import StatisticaModificatoriModal from './StatisticaModificatoriModal'; // <---
 import { stripRazzaPrefix } from './RazzaCollapsible';
 import RichTextDisplay from './RichTextDisplay';
 import RichTextEditor from './RichTextEditor';
+import RichHtml from './RichHtml';
 import { updatePersonaggio, resolveMediaUrl } from '../api';
 
 // --- NUOVI COMPONENTI ---
@@ -18,6 +19,7 @@ import { PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 import { getOfflineCharacterDetail } from '../lib/offlineGameStateDb';
 import { OfflineConsultBanner } from './OfflineConsultBanner';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import StaffCompitiWidget from './StaffCompitiWidget';
 
 // --- Componenti Helper ---
 
@@ -50,7 +52,7 @@ const LoadingComponent = () => (
 // --- Componente Scheda ---
 
 const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
-  const { punteggiList, statisticaContainers, subscribeToPush, isWebPushSupported, refreshCharacterData } = useCharacter();
+  const { punteggiList, statisticaContainers, subscribeToPush, isWebPushSupported, refreshCharacterData, canSeeStaffCompiti } = useCharacter();
   const [pushActivating, setPushActivating] = useState(false);
   const [pushBannerDismissed, setPushBannerDismissed] = useState(false);
   const [pushFeedback, setPushFeedback] = useState(null);
@@ -385,9 +387,9 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
             </div>
 
             {abilita.descrizione && (
-                <div
+                <RichHtml
+                    content={abilita.descrizione}
                     className="text-sm text-gray-400 pl-8 mt-1 prose prose-invert prose-sm max-w-none leading-snug"
-                    dangerouslySetInnerHTML={{ __html: abilita.descrizione }}
                 />
             )}
         </li>
@@ -444,6 +446,8 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
           <p className="text-xs text-gray-500 mt-1">Scheda personaggio</p>
         </div>
       </div>
+
+      {canSeeStaffCompiti ? <StaffCompitiWidget onLogout={onLogout} /> : null}
 
       {/* Banner Notifiche */}
       {showPushBanner && (
@@ -691,9 +695,9 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
               </p>
               <p className="text-lg font-bold text-gray-100 mb-2">{razzaRiepilogo.archetipoNome}</p>
               {razzaRiepilogo.archetipoDescrizione ? (
-                <div
+                <RichHtml
+                  content={razzaRiepilogo.archetipoDescrizione}
                   className="text-sm text-gray-300 prose prose-invert prose-sm max-w-none leading-relaxed prose-p:my-1.5 prose-headings:text-gray-200"
-                  dangerouslySetInnerHTML={{ __html: razzaRiepilogo.archetipoDescrizione }}
                 />
               ) : null}
             </div>
@@ -704,9 +708,9 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
                 </p>
                 <p className="text-lg font-bold text-gray-100 mb-2">{razzaRiepilogo.formaNome}</p>
                 {razzaRiepilogo.formaDescrizione ? (
-                  <div
+                  <RichHtml
+                    content={razzaRiepilogo.formaDescrizione}
                     className="text-sm text-gray-300 prose prose-invert prose-sm max-w-none leading-relaxed prose-p:my-1.5 prose-headings:text-gray-200"
-                    dangerouslySetInnerHTML={{ __html: razzaRiepilogo.formaDescrizione }}
                   />
                 ) : null}
               </div>
@@ -722,9 +726,9 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
             <div className="text-sm font-bold text-violet-100 mt-1">{data.era.difetto_interpretativo_titolo}</div>
           )}
           {data?.era?.difetto_interpretativo_testo && (
-            <div
+            <RichHtml
+              content={data.era.difetto_interpretativo_testo}
               className="text-xs text-violet-100/90 mt-2 prose prose-invert prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: data.era.difetto_interpretativo_testo }}
             />
           )}
         </div>
@@ -745,9 +749,9 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
                   )}
                 </div>
                 {abilita?.descrizione && (
-                  <div
+                  <RichHtml
+                    content={abilita.descrizione}
                     className="text-xs text-indigo-100/90 mt-2 prose prose-invert prose-sm max-w-none"
-                    dangerouslySetInnerHTML={{ __html: abilita.descrizione }}
                   />
                 )}
               </div>
@@ -839,7 +843,8 @@ const HomeTab = memo(({ onLogout }) => {
     isLoadingDetail,
     isLoadingPunteggi, 
     selectedCharacterId, 
-    error 
+    error,
+    canSeeStaffCompiti,
   } = useCharacter();
   const isOnline = useOnlineStatus();
   const [idbDetail, setIdbDetail] = useState(null);
@@ -888,6 +893,11 @@ const HomeTab = memo(({ onLogout }) => {
   if (!selectedCharacterId) {
     return (
       <div className="p-8 text-center text-gray-400">
+        {canSeeStaffCompiti ? (
+          <div className="max-w-xl mx-auto text-left mb-6">
+            <StaffCompitiWidget onLogout={onLogout} />
+          </div>
+        ) : null}
         <h2 className="text-2xl font-bold mb-4">Benvenuto!</h2>
         <p>Seleziona un personaggio.</p>
       </div>

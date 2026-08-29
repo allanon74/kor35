@@ -9,6 +9,7 @@ import ShopModal from './ShopModal';
 import ItemAssemblyModal from './ItemAssemblyModal';
 import ModuloDetailModal from './ModuloDetailModal';
 import PunteggioDisplay from './PunteggioDisplay';
+import RichHtml from './RichHtml';
 import { useOptimisticEquip, useOptimisticRecharge, useOptimisticDamage, useOptimisticRepair, useOptimisticDiscard } from '../hooks/useGameData';
 import { emitToast } from '../utils/toastBus';
 import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
@@ -579,7 +580,7 @@ const InventoryItemCard = memo(({ item, isExpanded, onToggleExpand, onEquip, onR
 
                     {/* Descrizione */}
                     <div className="text-xs text-gray-300 prose prose-invert prose-sm max-w-none leading-relaxed bg-black/10 p-2 rounded border border-gray-700/30">
-                         <div dangerouslySetInnerHTML={{ __html: item.testo_formattato_personaggio || item.testo || item.descrizione || "Nessun dato disponibile." }} />
+                         <RichHtml content={item.testo_formattato_personaggio || item.testo || item.descrizione || "Nessun dato disponibile."} />
                          {item.data_fine_attivazione && (
                              <div className="mt-2 pt-2 border-t border-gray-700 text-[10px] text-orange-400 font-mono text-right">
                                  Scade: {new Date(item.data_fine_attivazione).toLocaleString()}

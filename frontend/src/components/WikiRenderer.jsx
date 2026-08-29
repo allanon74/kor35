@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createRoot } from 'react-dom/client';
 import { ensureDetailsClosed } from '../utils/htmlSanitizer';
 import { applyWikiGlossaryToContainer } from '../utils/wikiGlossaryDom';
-import { RICH_TEXT_SHARED_STYLES } from '../styles/richTextSharedStyles';
+import { ensureRichTextStyles } from '../styles/richTextStyleSheet';
 import { CharacterContext } from './CharacterContext';
 import WidgetTier from './wg/WidgetTier';
 import WidgetAura from './wg/WidgetAura';
@@ -73,6 +73,8 @@ function getFinalHtml(content) {
 }
 
 export default function WikiRenderer({ content, glossaryEntries = EMPTY_GLOSSARY }) {
+  ensureRichTextStyles();
+
   const containerRef = useRef(null);
   const rootsRef = useRef([]);
   const characterValue = useContext(CharacterContext);
@@ -80,7 +82,6 @@ export default function WikiRenderer({ content, glossaryEntries = EMPTY_GLOSSARY
 
   // Render container whenever we have content (string); empty string still gets a div so effect can run
   const contentStr = content != null ? String(content) : '';
-  if (contentStr === '' && content == null) return null;
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -128,13 +129,14 @@ export default function WikiRenderer({ content, glossaryEntries = EMPTY_GLOSSARY
     };
   }, [contentStr, characterValue, navigate, glossaryEntries]);
 
+  // Senza contenuto non si monta il contenitore: l'effect sopra si limita a non fare nulla
+  // (l'uscita anticipata prima degli hook violava le regole dei hook di React).
+  if (content == null) return null;
+
   return (
-    <>
-      <style>{RICH_TEXT_SHARED_STYLES}</style>
-      <div
-        ref={containerRef}
-        className="wiki-content prose prose-red max-w-none text-gray-800"
-      />
-    </>
+    <div
+      ref={containerRef}
+      className="wiki-content prose prose-red max-w-none text-gray-800"
+    />
   );
 }

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft, Wrench, CheckCircle2, AlertTriangle, Zap, BatteryCharging } from 'lucide-react';
+import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft, Wrench, CheckCircle2, AlertTriangle, Zap, BatteryCharging, Package } from 'lucide-react';
 import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvanzata } from '../api'; 
 import { useCharacter } from './CharacterContext';
 import { useTimers } from '../hooks/useTimers';
 import PropostaEditorModal from './PropostaEditorModal';
+import RichHtml from './RichHtml';
 
 const PersonaggioDuelloQrView = React.lazy(() => import('./PersonaggioDuelloQrView'));
 import ComponentiRiparazionePicker, {
@@ -534,9 +535,9 @@ const TecnicaAcquisizioneView = ({ qrId, tipo, data, onLogout, onClose }) => {
         </p>
       )}
       {data.TestoFormattato && (
-        <div
-          className="prose prose-invert prose-sm max-w-none mb-4 max-h-[40vh] overflow-y-auto border border-gray-700 rounded p-3 bg-gray-900/50"
-          dangerouslySetInnerHTML={{ __html: data.TestoFormattato }}
+        <RichHtml
+          content={data.TestoFormattato}
+          className="prose prose-invert prose-sm max-w-none mb-4 max-h-[40vh] overflow-y-auto border border-gray-700 rounded p-3 bg-gray-900/50 custom-scrollbar"
         />
       )}
       {error && <p className="text-red-400 mb-4 bg-red-900 bg-opacity-30 p-2 rounded">{error}</p>}
@@ -779,9 +780,9 @@ const PilotSottosistemaView = ({
       {d.manifesto_testo && (
         <details className="bg-gray-900/40 rounded-lg border border-gray-700">
           <summary className="cursor-pointer p-3 text-sm text-gray-400">Scheda tecnica</summary>
-          <div
+          <RichHtml
+            content={d.manifesto_testo}
             className="px-3 pb-3 text-sm text-gray-300 prose prose-invert max-w-none"
-            dangerouslySetInnerHTML={{ __html: d.manifesto_testo }}
           />
         </details>
       )}
@@ -874,6 +875,7 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
     // Identifichiamo i dati del timer in base alla struttura del backend
     let timerToActivate = null;
 
+    // Casi mutuamente esclusivi: un solo timerToActivate per risposta QR
     // CASO A: Il QR è di tipo timer puro (tipo_modello: "timer_attivato")
     if (data.tipo_modello === 'timer_attivato' && data.dati) {
       timerToActivate = {
@@ -883,18 +885,26 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
         notifica_push: true,
         messaggio_in_app: true
       };
-    }
-    if (data.tipo_modello === 'timer_innesco' && data.dati) {
+    } else if (data.tipo_modello === 'timer_innesco' && data.dati) {
       timerToActivate = {
         nome: data.dati.nome,
         endsAt: data.dati.scadenza,
         alert_suono: true,
-        notifica_push: true,
+        // Push scadenza gestita server-side (dispatch_timer_expiry)
+        notifica_push: false,
         messaggio_in_app: true,
       };
-    } 
-    // CASO B: Il QR ha un timer associato come extra (es. Manifesto + Timer)
-    else if (data.timer || data.dati?.timer_config) {
+    } else if (data.tipo_modello === 'trappola' && data.dati?.timer_attivo && data.dati?.scadenza) {
+      timerToActivate = {
+        nome: data.dati.nome || 'Trappola',
+        endsAt: data.dati.scadenza,
+        alert_suono: true,
+        notifica_push: true,
+        messaggio_in_app: true,
+        variant: 'danger',
+      };
+    } else if (data.timer || data.dati?.timer_config) {
+      // CASO B: timer associato come extra (es. Manifesto + Timer)
       const config = data.timer || data.dati.timer_config;
       timerToActivate = {
         nome: config.nome,
@@ -1026,6 +1036,80 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             <div className="mt-8 pt-6 border-t border-white/10 text-[10px] text-gray-500 uppercase font-bold tracking-widest">
                 Sincronizzazione Cronometro Eseguita
             </div>
+          </div>
+        );
+
+      case 'trappola':
+        return (
+          <div className="text-center py-8 px-2">
+            <div className="mx-auto mb-4 w-20 h-20 rounded-full bg-red-950/80 border-4 border-red-500 flex items-center justify-center animate-pulse shadow-[0_0_30px_rgba(239,68,68,0.55)]">
+              <Timer size={40} className="text-red-400" />
+            </div>
+            <p className="text-[11px] font-black uppercase tracking-[0.25em] text-red-400 mb-2">Trappola</p>
+            <h3 className="text-3xl font-black text-red-300 uppercase tracking-tight mb-3">
+              {data.dati?.nome || data.messaggio || 'Trappola'}
+            </h3>
+            {data.dati?.testo ? (
+              <RichHtml
+                content={data.dati.testo}
+                className="text-left text-gray-200 prose prose-invert prose-sm max-w-none bg-red-950/30 border border-red-800/50 rounded-lg p-4"
+              />
+            ) : (
+              <p className="text-gray-300">{data.messaggio}</p>
+            )}
+            {data.dati?.timer_attivo && data.dati?.scadenza ? (
+              <p className="mt-6 text-lg font-mono font-bold text-red-400">
+                Timer attivo fino a {new Date(data.dati.scadenza).toLocaleTimeString()}
+              </p>
+            ) : null}
+          </div>
+        );
+
+      case 'serie':
+        return (
+          <div className="text-center py-8">
+            <Package size={56} className="mx-auto text-violet-400 mb-4" />
+            <h3 className="text-2xl font-black text-violet-300 uppercase tracking-tight">
+              {data.dati?.etichetta || data.messaggio || 'Serie'}
+            </h3>
+            <p className="text-gray-300 mt-3">
+              {data.dati?.nome} — pezzo {data.dati?.indice} di {data.dati?.totale}
+            </p>
+            <p className="text-xs text-gray-500 mt-4">L&apos;oggetto è stato aggiunto al tuo inventario.</p>
+            {typeof data.dati?.rimanenti === 'number' ? (
+              <p className="text-xs text-gray-400 mt-2">Pezzi ancora disponibili: {data.dati.rimanenti}</p>
+            ) : null}
+          </div>
+        );
+
+      case 'serie_esaurita':
+        return (
+          <div className="text-center py-8">
+            <X size={56} className="mx-auto text-amber-500 mb-4" />
+            <h3 className="text-2xl font-bold text-amber-300 mb-2">Serie esaurita</h3>
+            <p className="text-gray-300">{data.dati?.messaggio || data.messaggio}</p>
+          </div>
+        );
+
+      case 'pool_testo':
+        return (
+          <div className="text-center py-6">
+            <Scan size={48} className="mx-auto text-indigo-400 mb-4" />
+            <h3 className="text-2xl font-bold mb-3">{data.dati?.nome || data.messaggio}</h3>
+            {data.dati?.testo ? (
+              <RichHtml
+                content={data.dati.testo}
+                className="text-left text-gray-200 prose prose-invert prose-sm max-w-none"
+              />
+            ) : null}
+          </div>
+        );
+
+      case 'pool_errore':
+        return (
+          <div className="text-center py-8">
+            <h3 className="text-2xl font-bold text-red-400 mb-2">Pool QR</h3>
+            <p className="text-gray-300">{data.messaggio || 'Configurazione pool incompleta.'}</p>
           </div>
         );
 

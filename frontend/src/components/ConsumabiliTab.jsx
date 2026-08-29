@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useCharacter } from './CharacterContext';
 import { Loader2, Info, Zap, Calendar, X, Timer, PackageCheck } from 'lucide-react';
 import RichTextDisplay from './RichTextDisplay';
+import RichHtml from './RichHtml';
 import { consumaConsumabile, completaCreazioneConsumabile } from '../api';
 import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 
@@ -231,9 +232,9 @@ const ConsumabiliTab = ({ onLogout }) => {
             {modalConsumabile.formula_formattata || modalConsumabile.formula ? (
               <div className="pt-4 border-t border-gray-700">
                 <h4 className="text-sm font-bold text-gray-400 mb-2">Formula</h4>
-                <div
+                <RichHtml
+                  content={modalConsumabile.formula_formattata || modalConsumabile.formula || ''}
                   className="text-gray-300"
-                  dangerouslySetInnerHTML={{ __html: modalConsumabile.formula_formattata || modalConsumabile.formula || '' }}
                 />
               </div>
             ) : null}
@@ -258,9 +259,9 @@ const ConsumabiliTab = ({ onLogout }) => {
             {modalAttivazione.formula ? (
               <div className="pt-6 border-t border-gray-700">
                 <h4 className="text-sm font-bold text-gray-400 mb-3">Formula</h4>
-                <div
+                <RichHtml
+                  content={modalAttivazione.formula}
                   className="text-gray-300 text-base"
-                  dangerouslySetInnerHTML={{ __html: modalAttivazione.formula }}
                 />
               </div>
             ) : null}

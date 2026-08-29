@@ -242,6 +242,11 @@ def attiva_innesco_timer_per_personaggio(
             if personaggio_match_innesco_timer(pg, innesco):
                 ids.append(pg.id)
 
+    InnescoTimer.objects.filter(pk=innesco.pk).update(
+        broadcast_data_fine=stato.data_fine,
+        broadcast_push_inviata=False,
+    )
+
     _broadcast_timer_innesco(
         nome=innesco.nome,
         data_fine=stato.data_fine,
@@ -255,6 +260,75 @@ def attiva_innesco_timer_per_personaggio(
         "segnale_luminoso": innesco.segnale_luminoso,
         "recipient_personaggio_ids": ids,
     }, None
+
+
+def recipient_personaggio_ids_for_innesco(innesco) -> List[int]:
+    """Stessa lista destinatari usata al broadcast di attivazione."""
+    from .models import InnescoTimer, Personaggio
+
+    if innesco.modalita_target == InnescoTimer.INNESCO_TARGET_GLOBAL:
+        return list(
+            Personaggio.objects.filter(tipologia__giocante=True).values_list("id", flat=True)[:5000]
+        )
+    ids: List[int] = []
+    for pg in Personaggio.objects.filter(tipologia__giocante=True).select_related(
+        "era", "prefettura", "prefettura__regione"
+    ):
+        if personaggio_match_innesco_timer(pg, innesco):
+            ids.append(pg.id)
+    return ids
+
+
+def active_innesco_timer_rows_for_personaggio(personaggio) -> List[Dict[str, Any]]:
+    """
+    Timer innesco ancora in corso, visibili al PG (stesso filtro del broadcast WS).
+    Preferisce broadcast_data_fine sul modello; fallback su stati scanner.
+    """
+    from .models import InnescoTimer, StatoInnescoTimerPersonaggio
+
+    if personaggio is None:
+        return []
+
+    now = timezone.now()
+    rows_by_innesco: Dict[Any, Dict[str, Any]] = {}
+
+    for inn in InnescoTimer.objects.filter(broadcast_data_fine__gt=now):
+        if not personaggio_match_innesco_timer(personaggio, inn):
+            continue
+        rows_by_innesco[inn.pk] = {
+            "id": f"innesco:{inn.pk}",
+            "nome": inn.nome,
+            "data_fine": inn.broadcast_data_fine.isoformat(),
+            "alert_suono": True,
+            "notifica_push": False,  # push scadenza gestita server-side
+            "messaggio_in_app": True,
+            "segnale_luminoso": bool(inn.segnale_luminoso),
+            "source": "innesco_timer",
+        }
+
+    # Fallback: attivazioni precedenti alla migrazione campi broadcast_*
+    qs = (
+        StatoInnescoTimerPersonaggio.objects.filter(data_fine__gt=now)
+        .select_related("innesco_timer")
+        .order_by("-data_fine")
+    )
+    for st in qs:
+        inn = st.innesco_timer
+        if inn.pk in rows_by_innesco:
+            continue
+        if not personaggio_match_innesco_timer(personaggio, inn):
+            continue
+        rows_by_innesco[inn.pk] = {
+            "id": f"innesco:{inn.pk}",
+            "nome": inn.nome,
+            "data_fine": st.data_fine.isoformat(),
+            "alert_suono": True,
+            "notifica_push": False,
+            "messaggio_in_app": True,
+            "segnale_luminoso": bool(inn.segnale_luminoso),
+            "source": "innesco_timer",
+        }
+    return list(rows_by_innesco.values())
 
 
 def gestisci_scansione_inventario_qr(

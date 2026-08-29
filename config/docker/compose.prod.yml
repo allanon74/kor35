@@ -43,6 +43,12 @@ services:
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
 
+  timer_dispatch:
+    container_name: kor35_prod_timer_dispatch
+    volumes:
+      - ./nginx-docker/static_data:/app/static
+      - ./nginx-docker/media_data:/app/media
+
   frontend:
     container_name: kor35_prod_frontend
     ports:

@@ -4,7 +4,6 @@ from django.utils import timezone
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from django.contrib.auth.models import User
-from webpush import send_user_notification
 
 from .models import (
     ClasseOggetto,
@@ -112,46 +111,45 @@ def invia_notifica_messaggio(sender, instance, created, **kwargs):
             staff_ids = list(staff_ids) + [instance.mittente_personaggio.proprietario_id]
         _ws_notify_users(staff_ids, data)
 
-    # --- 2. Web Push (URL relativo: funziona su edge IP / mirror / www) ---
+    # --- 2. Notifiche (web push / Telegram / email secondo preferenze) ---
     try:
-        payload = {
-            "head": instance.titolo or "Nuovo messaggio",
-            "body": _strip_html_preview(instance.testo) or "Nuovo messaggio su KOR-35",
-            "icon": "/pwa-192x192.png",
-            "url": "/?tab=messaggi",
-        }
+        from personaggi.notify import notify_user, notify_users, notify_user_ids
+
+        head = instance.titolo or "Nuovo messaggio"
+        body = _strip_html_preview(instance.testo) or "Nuovo messaggio su KOR-35"
+        url = "/?tab=messaggi"
 
         if instance.tipo_messaggio == Messaggio.TIPO_INDIVIDUALE and instance.destinatario_personaggio:
             user = instance.destinatario_personaggio.proprietario
             if user:
-                send_user_notification(user=user, payload=payload, ttl=1000)
+                notify_user(user, category="messaggi", head=head, body=body, url=url)
 
         elif instance.tipo_messaggio == Messaggio.TIPO_GRUPPO and instance.destinatario_gruppo:
-            for pg in instance.destinatario_gruppo.membri.select_related("proprietario").all():
-                if pg.proprietario:
-                    send_user_notification(user=pg.proprietario, payload=payload, ttl=1000)
+            users = [
+                pg.proprietario
+                for pg in instance.destinatario_gruppo.membri.select_related("proprietario").all()
+                if pg.proprietario
+            ]
+            notify_users(users, category="messaggi", head=head, body=body, url=url)
 
         elif instance.tipo_messaggio == Messaggio.TIPO_BROADCAST:
-            from webpush.models import PushInformation
-
-            # Solo utenti con PG nella stessa campagna del broadcast (meno spam cross-campagna).
             campagna = instance.campagna
-            qs = User.objects.filter(pushinformation__isnull=False).distinct()
+            qs = User.objects.all()
             if campagna:
                 qs = qs.filter(personaggi__campagna=campagna).distinct()
-            for user in qs:
-                send_user_notification(user=user, payload=payload, ttl=1000)
+            notify_users(qs, category="in_game", head=head, body=body, url=url)
 
         elif instance.tipo_messaggio == Messaggio.TIPO_STAFF or instance.is_staff_message:
-            for uid in _campaign_staff_user_ids(instance.campagna):
-                try:
-                    user = User.objects.get(pk=uid)
-                except User.DoesNotExist:
-                    continue
-                send_user_notification(user=user, payload=payload, ttl=1000)
+            notify_user_ids(
+                _campaign_staff_user_ids(instance.campagna),
+                category="staff",
+                head=head,
+                body=body,
+                url=url,
+            )
 
     except Exception as e:
-        print(f"Errore invio Web Push: {e}")
+        print(f"Errore invio notifiche messaggio: {e}")
 
 @receiver(
     m2m_changed,

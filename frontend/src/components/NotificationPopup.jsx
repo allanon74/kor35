@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { Mail, MessageCircle, X } from 'lucide-react';
+import { htmlToPlainText } from '../utils/htmlSanitizer';
 
 /**
  * Toast in-app per notifiche realtime (messaggi, duelli, …).
@@ -12,16 +13,7 @@ const NotificationPopup = ({ notification, onClose, onOpenMessages }) => {
     return () => clearTimeout(timer);
   }, [notification, onClose]);
 
-  const plainText = useMemo(() => {
-    if (!notification?.testo) return '';
-    const raw = notification.testo;
-    if (typeof document !== 'undefined') {
-      const el = document.createElement('div');
-      el.innerHTML = raw;
-      return (el.textContent || el.innerText || '').trim();
-    }
-    return String(raw).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  }, [notification?.testo]);
+  const plainText = useMemo(() => htmlToPlainText(notification?.testo), [notification?.testo]);
 
   if (!notification) return null;
 

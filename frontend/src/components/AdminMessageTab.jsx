@@ -375,7 +375,11 @@ const AdminMessageTab = ({ onLogout }) => {
                     {/* --- PANEL 2: COMPOSE (Invio Broadcast, Gruppi o Singolo) --- */}
                     <Tab.Panel className="h-full min-h-0 flex flex-col p-0">
                         <form onSubmit={handleSend} className="max-w-3xl mx-auto w-full flex flex-col min-h-0 flex-1 h-full">
-                          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 space-y-4">
+                          {/*
+                            Intestazione (destinatario + oggetto) con altezza limitata: l'editor
+                            sotto riceve tutto lo spazio restante invece di finire in coda allo scroll.
+                          */}
+                          <div className="shrink-0 max-h-[38vh] overflow-y-auto custom-scrollbar p-4 pb-3 space-y-3">
                             {/* TARGET SELECTOR */}
                             <div className="grid grid-cols-3 gap-2 bg-gray-800 p-1.5 rounded-lg border border-gray-700">
                                 {['broadcast', 'group', 'single'].map((type) => (
@@ -393,7 +397,7 @@ const AdminMessageTab = ({ onLogout }) => {
                             </div>
 
                             {/* LOGICA SELEZIONE DESTINATARIO */}
-                            <div className="animate-fadeIn min-h-[60px]">
+                            <div className="animate-fadeIn empty:hidden">
                                 {targetType === 'group' && (
                                     <div className="bg-gray-800 p-3 rounded-lg border border-gray-700">
                                         <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Seleziona Gruppo</label>
@@ -466,19 +470,22 @@ const AdminMessageTab = ({ onLogout }) => {
                                 />
                             </div>
 
-                            <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden" style={{ minHeight: '200px' }}>
-                                <RichTextEditor 
-                                    value={text} 
-                                    onChange={setText} 
-                                    placeholder="Scrivi qui il contenuto del messaggio..."
-                                />
-                            </div>
-
                             {feedback.msg && (
                                 <div className={`p-3 rounded text-center text-sm font-bold ${feedback.type === 'error' ? 'bg-red-900/50 text-red-200 border border-red-800' : 'bg-green-900/50 text-green-200 border border-green-800'}`}>
                                     {feedback.msg}
                                 </div>
                             )}
+                          </div>
+
+                          {/* Area di scrittura: prende tutta l'altezza rimasta nel pannello */}
+                          <div className="flex-1 min-h-0 flex flex-col px-4 pb-3">
+                                <RichTextEditor
+                                    label="Contenuto del messaggio"
+                                    value={text}
+                                    onChange={setText}
+                                    placeholder="Scrivi qui il contenuto del messaggio…"
+                                    fillHeight
+                                />
                           </div>
 
                             {/* FOOTER AZIONI sticky */}

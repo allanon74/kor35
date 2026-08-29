@@ -6,61 +6,23 @@ import RotateTiles from './RotateTiles';
 import SimonGame from './SimonGame';
 import PatternLock from './PatternLock';
 import PipeConnect from './PipeConnect';
+import WireMatch from './WireMatch';
+import TapOrder from './TapOrder';
+import { isPipeSolved } from './pipeHelpers';
 import { minigiocoComplete, minigiocoExpire } from '../../api';
 
 const TIPO_LABELS = {
-  sliding_puzzle: 'Ricomponi l\'immagine',
+  sliding_puzzle: "Ricomponi l'immagine",
   memory: 'Memory',
   rotate_tiles: 'Ruota le tessere',
   simon: 'Sequenza (Simon)',
   pattern_lock: 'Pattern lock',
   pipe_connect: 'Collega i tubi',
+  wire_match: 'Collega i fili',
+  tap_order: 'Tocca in ordine',
 };
 
-const rotatePipeMask = (mask, times) => {
-  let conn = mask & 15;
-  for (let t = 0; t < (times % 4); t += 1) {
-    let next = 0;
-    if (conn & 1) next |= 2;
-    if (conn & 2) next |= 4;
-    if (conn & 4) next |= 8;
-    if (conn & 8) next |= 1;
-    conn = next;
-  }
-  return conn;
-};
-
-const isPipeSolved = (size, bases, rotations, start, end) => {
-  const total = size * size;
-  if (!bases?.length || bases.length !== total) return false;
-  const conns = bases.map((b, i) => rotatePipeMask(Number(b) || 0, Number(rotations?.[i]) || 0));
-  const stack = [start];
-  const seen = new Set([start]);
-  while (stack.length) {
-    const cur = stack.pop();
-    if (cur === end) return true;
-    const r = Math.floor(cur / size);
-    const c = cur % size;
-    const dirs = [
-      [-1, 0, 1, 4],
-      [0, 1, 2, 8],
-      [1, 0, 4, 1],
-      [0, -1, 8, 2],
-    ];
-    for (const [dr, dc, outM, inM] of dirs) {
-      const nr = r + dr;
-      const nc = c + dc;
-      if (nr >= 0 && nr < size && nc >= 0 && nc < size) {
-        const nxt = nr * size + nc;
-        if (!seen.has(nxt) && (conns[cur] & outM) && (conns[nxt] & inM)) {
-          seen.add(nxt);
-          stack.push(nxt);
-        }
-      }
-    }
-  }
-  return false;
-};
+const TIPI_CON_DEMO = new Set(['simon', 'pattern_lock']);
 
 const isSolvedClient = (tipo, stato) => {
   if (!stato) return false;
@@ -100,6 +62,16 @@ const isSolvedClient = (tipo, stato) => {
       stato.end ?? size * size - 1
     );
   }
+  if (tipo === 'wire_match') {
+    const pairs = stato.pairs || [];
+    const matched = stato.matched_pairs || [];
+    return pairs.length > 0 && matched.length === pairs.length;
+  }
+  if (tipo === 'tap_order') {
+    const order = stato.order || [];
+    const inp = stato.player_input || [];
+    return order.length > 0 && inp.length === order.length && JSON.stringify(inp) === JSON.stringify(order);
+  }
   return false;
 };
 
@@ -123,6 +95,7 @@ const MinigiocoModal = ({
   const [secondsLeft, setSecondsLeft] = useState(dati.timer_secondi_rimanenti ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [timerPaused, setTimerPaused] = useState(() => TIPI_CON_DEMO.has(dati.tipo));
   const expiredRef = useRef(false);
 
   useEffect(() => {
@@ -134,8 +107,14 @@ const MinigiocoModal = ({
       rows: dati.stato_gioco?.rows,
     });
     setSecondsLeft(dati.timer_secondi_rimanenti ?? null);
+    setTimerPaused(TIPI_CON_DEMO.has(dati.tipo));
     expiredRef.current = false;
   }, [dati.session_id, payload]);
+
+  const handlePhaseChange = useCallback((phase) => {
+    if (phase === 'demo') setTimerPaused(true);
+    else if (phase === 'input') setTimerPaused(false);
+  }, []);
 
   const handleExpire = useCallback(async () => {
     if (expiredRef.current || !session?.session_id) return;
@@ -157,6 +136,7 @@ const MinigiocoModal = ({
         setSession(res.dati);
         setStatoGioco({ ...res.dati.stato_gioco });
         setSecondsLeft(res.dati.timer_secondi_rimanenti ?? null);
+        setTimerPaused(TIPI_CON_DEMO.has(res.dati?.tipo));
         setError(res.messaggio || 'Il minigioco riparte.');
         return;
       }
@@ -170,7 +150,7 @@ const MinigiocoModal = ({
   }, [session?.session_id, personaggioId, onLogout, onBlocked, onUnlocked, qrcodeId]);
 
   useEffect(() => {
-    if (secondsLeft == null || secondsLeft <= 0) return undefined;
+    if (timerPaused || secondsLeft == null || secondsLeft <= 0) return undefined;
     const t = setInterval(() => {
       setSecondsLeft((s) => {
         if (s == null) return s;
@@ -183,7 +163,7 @@ const MinigiocoModal = ({
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [session?.session_id, secondsLeft, handleExpire]);
+  }, [session?.session_id, secondsLeft, handleExpire, timerPaused]);
 
   const tryComplete = useCallback(async () => {
     if (!session?.session_id || busy) return;
@@ -205,6 +185,12 @@ const MinigiocoModal = ({
       end: sg.end,
       cols: statoGioco.cols ?? sg.cols,
       rows: statoGioco.rows ?? sg.rows,
+      pairs: sg.pairs,
+      left_order: sg.left_order,
+      right_order: sg.right_order,
+      matched_pairs: statoGioco.matched_pairs,
+      order: sg.order,
+      cells: sg.cells,
     };
     if (!isSolvedClient(tipo, fullState)) return;
 
@@ -222,7 +208,18 @@ const MinigiocoModal = ({
 
   useEffect(() => {
     const sg = session?.stato_gioco || {};
-    const full = { ...sg, ...statoGioco, sequence: sg.sequence, pattern: sg.pattern, bases: sg.bases };
+    const full = {
+      ...sg,
+      ...statoGioco,
+      sequence: sg.sequence,
+      pattern: sg.pattern,
+      bases: sg.bases,
+      pairs: sg.pairs,
+      left_order: sg.left_order,
+      right_order: sg.right_order,
+      order: sg.order,
+      cells: sg.cells,
+    };
     if (isSolvedClient(session?.tipo, full)) {
       tryComplete();
     }
@@ -275,6 +272,7 @@ const MinigiocoModal = ({
           numButtons={session.stato_gioco?.num_buttons || 4}
           sequence={session.stato_gioco?.sequence || []}
           playerInput={statoGioco.player_input || []}
+          onPhaseChange={handlePhaseChange}
           onChange={(patch) => setStatoGioco((s) => ({ ...s, ...patch }))}
         />
       );
@@ -284,6 +282,7 @@ const MinigiocoModal = ({
         <PatternLock
           pattern={session.stato_gioco?.pattern || []}
           playerInput={statoGioco.player_input || []}
+          onPhaseChange={handlePhaseChange}
           onChange={(patch) => setStatoGioco((s) => ({ ...s, ...patch }))}
         />
       );
@@ -297,6 +296,29 @@ const MinigiocoModal = ({
           rotations={statoGioco.rotations || sg.rotations || []}
           start={sg.start ?? 0}
           end={sg.end}
+          onChange={(patch) => setStatoGioco((s) => ({ ...s, ...patch }))}
+        />
+      );
+    }
+    if (tipo === 'wire_match') {
+      const sg = session.stato_gioco || {};
+      return (
+        <WireMatch
+          pairs={sg.pairs || []}
+          leftOrder={sg.left_order}
+          rightOrder={sg.right_order}
+          matchedPairs={statoGioco.matched_pairs || []}
+          onChange={(patch) => setStatoGioco((s) => ({ ...s, ...patch }))}
+        />
+      );
+    }
+    if (tipo === 'tap_order') {
+      const sg = session.stato_gioco || {};
+      return (
+        <TapOrder
+          cells={sg.cells || []}
+          order={sg.order || []}
+          playerInput={statoGioco.player_input || []}
           onChange={(patch) => setStatoGioco((s) => ({ ...s, ...patch }))}
         />
       );
@@ -341,6 +363,7 @@ const MinigiocoModal = ({
             >
               <Timer className="w-4 h-4" />
               {secondsLeft}s
+              {timerPaused ? <span className="text-[10px] text-gray-500">(in pausa)</span> : null}
             </div>
           )}
 

@@ -52,13 +52,25 @@ class WikiPermissionsMatrixTests(APITestCase):
             public=False,
             visibile_solo_staff=False,
         )
+        self.page_authed = PaginaRegolamento.objects.create(
+            titolo="Authed",
+            slug="authed-page",
+            public=True,
+            visibile_solo_staff=False,
+            visibile_solo_autenticati=True,
+        )
 
     def _get(self, user, url):
+        from rest_framework.authtoken.models import Token
+
+        token, _ = Token.objects.get_or_create(user=user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
         self.client.force_authenticate(user=user)
         return self.client.get(url, HTTP_X_CAMPAGNA=self.campagna.slug)
 
     def _patch_page_title(self, user, page, title):
         self.client.force_authenticate(user=user)
+        self.client.credentials()
         return self.client.patch(
             f"/api/plot/api/staff/pagine-regolamento/{page.id}/",
             {"titolo": title},
@@ -72,8 +84,12 @@ class WikiPermissionsMatrixTests(APITestCase):
         self.assertEqual(menu_player.status_code, status.HTTP_200_OK)
         slugs_player = {row["slug"] for row in menu_player.data}
         self.assertIn(self.page_public.slug, slugs_player)
+        self.assertIn(self.page_authed.slug, slugs_player)
         self.assertNotIn(self.page_staff.slug, slugs_player)
         self.assertNotIn(self.page_draft.slug, slugs_player)
+
+        page_authed_player = self._get(self.user_player, f"/api/plot/api/wiki/pagina/{self.page_authed.slug}/")
+        self.assertEqual(page_authed_player.status_code, status.HTTP_200_OK)
 
         page_draft_player = self._get(self.user_player, f"/api/plot/api/wiki/pagina/{self.page_draft.slug}/")
         self.assertEqual(page_draft_player.status_code, status.HTTP_404_NOT_FOUND)
@@ -89,6 +105,7 @@ class WikiPermissionsMatrixTests(APITestCase):
                 slugs = {row["slug"] for row in menu.data}
                 self.assertIn(self.page_public.slug, slugs)
                 self.assertIn(self.page_draft.slug, slugs)
+                self.assertIn(self.page_authed.slug, slugs)
                 self.assertNotIn(self.page_staff.slug, slugs)
 
         # MASTER / HEAD / ADMIN: visione completa.
@@ -100,6 +117,20 @@ class WikiPermissionsMatrixTests(APITestCase):
                 self.assertIn(self.page_public.slug, slugs)
                 self.assertIn(self.page_draft.slug, slugs)
                 self.assertIn(self.page_staff.slug, slugs)
+
+    def test_anonimo_non_vede_pagine_solo_loggati(self):
+        self.client.credentials()
+        self.client.force_authenticate(user=None)
+        menu = self.client.get("/api/plot/api/wiki/menu/", HTTP_X_CAMPAGNA=self.campagna.slug)
+        self.assertEqual(menu.status_code, status.HTTP_200_OK)
+        slugs = {row["slug"] for row in menu.data}
+        self.assertIn(self.page_public.slug, slugs)
+        self.assertNotIn(self.page_authed.slug, slugs)
+        page = self.client.get(
+            f"/api/plot/api/wiki/pagina/{self.page_authed.slug}/",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(page.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_edit_matrix_non_staff_pages(self):
         # Non-staff page editable by redactor/staffer/master/head/admin.

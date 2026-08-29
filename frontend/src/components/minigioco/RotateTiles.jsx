@@ -2,6 +2,7 @@ import React from 'react';
 
 /**
  * Ogni cella ha rotazione 0–3 (×90°). Tap per ruotare.
+ * Bordo soft quando la tessera è orientata correttamente (rot % 4 === 0).
  */
 const RotateTiles = ({ size, rotations, imageUrl, onChange }) => {
   const total = size * size;
@@ -20,13 +21,16 @@ const RotateTiles = ({ size, rotations, imageUrl, onChange }) => {
     >
       {Array.from({ length: total }, (_, idx) => {
         const rot = Number((rotations || [])[idx]) || 0;
+        const correct = rot % 4 === 0;
         const pr = Math.floor(idx / size);
         const pc = idx % size;
         return (
           <button
             key={idx}
             type="button"
-            className="absolute box-border border border-white/10 overflow-hidden active:brightness-110"
+            className={`absolute box-border overflow-hidden active:brightness-110 ${
+              correct ? 'border-2 border-emerald-400/70' : 'border border-white/10'
+            }`}
             style={{
               width: `${pct}%`,
               height: `${pct}%`,

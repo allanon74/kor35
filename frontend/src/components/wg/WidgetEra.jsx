@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getWikiEraDisplay } from '../../api';
-import { sanitizeHtml } from '../../utils/htmlSanitizer';
+import RichHtml from '../RichHtml';
 
+/** Il widget vive nella pagina wiki, a fondo chiaro: i colori pensati per il tema scuro vanno neutralizzati. */
 function HtmlContent({ html, className }) {
-  if (!html) return null;
-  return <div className={className} dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }} />;
+  return <RichHtml content={html} tone="onLight" className={className} />;
 }
 
 export default function WidgetEra({ id }) {

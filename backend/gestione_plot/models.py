@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db import models
@@ -518,6 +519,11 @@ class PaginaRegolamento(SyncableModel, models.Model):
         default=False, 
         verbose_name="Visibile solo allo Staff",
         help_text="Se attivo, la pagina sarà visibile solo a Staff e Superuser, anche se Pubblica è True."
+    )
+    visibile_solo_autenticati = models.BooleanField(
+        default=False,
+        verbose_name="Visibile solo agli utenti loggati",
+        help_text="Se attivo, la pagina non compare nella wiki pubblica anonima: serve il login (giocatori e staff).",
     )
 
     includi_in_pdf = models.BooleanField(
@@ -1616,3 +1622,119 @@ class MissioneRisoluzione(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.missione_id} / {self.evento_id} → PG {self.personaggio_id}"
+
+
+class StaffCompito(SyncableModel, models.Model):
+    """Compito operativo di staff/master/aiuto-staff con scadenza e preavviso."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    campagna = models.ForeignKey(
+        "personaggi.Campagna",
+        on_delete=models.CASCADE,
+        related_name="staff_compiti",
+        db_index=True,
+    )
+    titolo = models.CharField(max_length=200)
+    descrizione = models.TextField(blank=True, default="")
+    scadenza = models.DateTimeField(db_index=True)
+    preavviso_minuti = models.PositiveIntegerField(
+        default=1440,
+        help_text="Minuti prima della scadenza per la notifica di preavviso (0 = solo a scadenza).",
+    )
+    preavviso_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Istante calcolato della notifica di preavviso.",
+    )
+    crea_notifica_scadenza = models.BooleanField(default=True)
+    creato_da = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="staff_compiti_creati",
+    )
+    attivo = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Compito staff"
+        verbose_name_plural = "Compiti staff"
+        ordering = ["scadenza", "titolo"]
+
+    def __str__(self):
+        return self.titolo
+
+    def refresh_preavviso_at(self):
+        if self.scadenza and self.preavviso_minuti:
+            self.preavviso_at = self.scadenza - timedelta(minutes=int(self.preavviso_minuti))
+        else:
+            self.preavviso_at = None
+
+    def save(self, *args, **kwargs):
+        self.refresh_preavviso_at()
+        super().save(*args, **kwargs)
+
+
+class StaffCompitoAssegnazione(SyncableModel, models.Model):
+    """Assegnazione per-utente di un compito, con completamento e flag push."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    compito = models.ForeignKey(
+        StaffCompito,
+        on_delete=models.CASCADE,
+        related_name="assegnazioni",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="staff_compiti_assegnati",
+    )
+    completato_at = models.DateTimeField(null=True, blank=True)
+    push_preavviso_inviata = models.BooleanField(default=False, db_index=True)
+    push_scadenza_inviata = models.BooleanField(default=False, db_index=True)
+
+    class Meta:
+        verbose_name = "Assegnazione compito staff"
+        verbose_name_plural = "Assegnazioni compiti staff"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["compito", "user"],
+                name="uq_staff_compito_assegnazione_user",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["user", "completato_at"]),
+            models.Index(fields=["compito", "user"]),
+        ]
+        ordering = ["compito_id", "user_id"]
+
+    def __str__(self):
+        return f"{self.compito_id} → user {self.user_id}"
+
+
+class CalendarioFeedToken(SyncableModel, models.Model):
+    """Token segreto per il feed iCal dei compiti assegnati all'utente."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="calendario_feed_token",
+    )
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
+
+    class Meta:
+        verbose_name = "Token feed calendario"
+        verbose_name_plural = "Token feed calendario"
+
+    def __str__(self):
+        return f"ICS {self.user_id}"
+
+    def rigenera(self):
+        self.token = uuid.uuid4()
+        self.save(update_fields=["token", "updated_at"])
+        return self.token

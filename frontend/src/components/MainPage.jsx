@@ -5,6 +5,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import QrResultModal from './QrResultModal.jsx';
 import MinigiocoModal from './minigioco/MinigiocoModal.jsx';
 import { useCharacter } from './CharacterContext';
+import { useMieiStaffCompiti } from './StaffCompitiWidget';
+import { campagnaRuoloLabel } from '../lib/campagnaRuoli';
 import { TimerOverlay } from './TimerOverlay';
 import { getPilotNavigationConfig, fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota, carteGetStato, getMissioniEventoAttivo } from '../api';
 import packageInfo from '../../package.json';
@@ -17,7 +19,7 @@ import {
     Menu, X, UserCog, RefreshCw, Filter, DownloadCloud, ScrollText, 
     ArrowRightLeft, Gamepad2, Loader2, ExternalLink, Tag, Users, Sparkles,
     Pin, PinOff, Briefcase, ClipboardCheck, Globe, ChevronRight, Package, Star,
-    Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard, ListTodo, Wallet
+    Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard, ListTodo, Wallet, Bell
 } from 'lucide-react';
 
 // GameTab resta eager: first paint su /app/play (tab di default).
@@ -54,6 +56,7 @@ const TAB_LOADERS = {
   'stiva-nave': () => import('./StivaNaveTab.jsx'),
   qr: () => import('./QrTab.jsx'),
   messaggi: () => import('./MessaggiTab.jsx'),
+  notifiche: () => import('./NotificheTab.jsx'),
   logs: () => import('./LogViewer.jsx'),
   transazioni: () => import('./TransazioniViewer.jsx'),
   economia: () => import('./EconomiaTab.jsx'),
@@ -91,6 +94,7 @@ const AVAILABLE_TABS = [
     { id: 'stiva-nave', label: 'Stiva nave', icon: Ship, component: lazyTab('stiva-nave'), requiresStivaAccess: true, requiresModulo: 'pilotaggio' },
     { id: 'qr', label: 'Scanner', icon: QrCode, component: lazyTab('qr') },
     { id: 'messaggi', label: 'Messaggi', icon: Mail, component: lazyTab('messaggi') },
+    { id: 'notifiche', label: 'Notifiche', icon: Bell, component: lazyTab('notifiche') },
     { id: 'logs', label: 'Diario', icon: ScrollText, component: lazyTab('logs') },
     { id: 'transazioni', label: 'Transazioni', icon: ArrowRightLeft, component: lazyTab('transazioni') },
     { id: 'economia', label: 'Economia', icon: Wallet, component: lazyTab('economia'), requiresModulo: 'conto_deposito' },
@@ -115,7 +119,7 @@ const MAIN_TAB_STORAGE_KEY = 'kor35_main_active_tab';
 
 function isValidMainTabId(tabId) {
     if (!tabId) return false;
-    if (tabId === 'game' || tabId === 'home' || tabId === 'admin_msg' || tabId === 'watch') return true;
+    if (tabId === 'game' || tabId === 'home' || tabId === 'admin_msg' || tabId === 'watch' || tabId === 'notifiche') return true;
     return AVAILABLE_TABS.some((t) => t.id === tabId);
 }
 
@@ -140,6 +144,7 @@ const TAB_TO_WIKI_SLUG = {
     'infusioni': 'infusioni',
     'cerimoniali': 'cerimoniali',
     'messaggi': 'messaggi',
+    'notifiche': 'notifiche',
     'qr': 'scanner-qr',
     'logs': 'diario',
     'transazioni': 'transazioni',
@@ -292,8 +297,12 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     isCampaignMaster,
     isCampaignStaffer,
     isCampaignHeadMaster,
+    canSeeStaffCompiti,
     canAccessModulo,
   } = useCharacter();
+
+  const { aperti: compitiAperti } = useMieiStaffCompiti(onLogout, { enabled: !!canSeeStaffCompiti });
+  const compitiApertiCount = compitiAperti.length;
 
   useEffect(() => {
     let cancelled = false;
@@ -806,11 +815,12 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     const jobsCount = selectedCharacterData?.lavori_pendenti_count || 0; 
     const hasJobNotif = jobsCount > 0; 
     const hasStaffMsgNotif = isCampaignStaffer && staffUnreadCount > 0;
+    const hasCompitoNotif = canSeeStaffCompiti && compitiApertiCount > 0;
     
-    return { hasAdminNotif, hasMsgNotif, hasJobNotif, hasStaffMsgNotif, jobsCount };
-  }, [isAdmin, adminPendingCount, unreadCount, selectedCharacterData?.lavori_pendenti_count, isCampaignStaffer, staffUnreadCount]);
+    return { hasAdminNotif, hasMsgNotif, hasJobNotif, hasStaffMsgNotif, hasCompitoNotif, jobsCount, compitiApertiCount };
+  }, [isAdmin, adminPendingCount, unreadCount, selectedCharacterData?.lavori_pendenti_count, isCampaignStaffer, staffUnreadCount, canSeeStaffCompiti, compitiApertiCount]);
   
-  const { hasAdminNotif, hasMsgNotif, hasJobNotif, hasStaffMsgNotif } = notificationState;
+  const { hasAdminNotif, hasMsgNotif, hasJobNotif, hasStaffMsgNotif, hasCompitoNotif, compitiApertiCount: compitiBadgeCount } = notificationState;
   const campaignsWithMembership = useMemo(
     () => (campaigns || []).filter((c) => c?.is_member === true),
     [campaigns]
@@ -863,7 +873,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   }, [activeTab, selectedCharacterId, watchTabEnabled]);
 
   useEffect(() => {
-    if (!selectedCharacterId && activeTab !== 'personaggi') {
+    if (!selectedCharacterId && activeTab !== 'personaggi' && activeTab !== 'notifiche') {
       setActiveTab('personaggi');
     }
   }, [selectedCharacterId, activeTab]);
@@ -944,7 +954,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                       onSelectChar={() => setActiveTab('game')}
                   />
               );
-          } else if (!selectedCharacterId && tabDef.id !== 'personaggi') {
+          } else if (!selectedCharacterId && tabDef.id !== 'personaggi' && tabDef.id !== 'notifiche') {
               content = (
                   <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-4 animate-fadeIn">
                       <Users size={64} className="opacity-20 animate-pulse"/>
@@ -1031,7 +1041,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                         >
                             {campaignsWithMembership.map(c => (
                                 <option key={c.slug} value={c.slug}>
-                                    {c.nome} {c.ruolo === 'HEAD_MASTER' ? '(Head Master)' : c.ruolo === 'MASTER' ? '(Master)' : c.ruolo === 'STAFFER' ? '(Staffer)' : c.ruolo === 'REDACTOR' ? '(Redactor)' : ''}
+                                    {c.nome} {c.ruolo ? `(${campagnaRuoloLabel(c.ruolo)})` : ''}
                                 </option>
                             ))}
                         </select>
@@ -1109,6 +1119,10 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                     let badgeColor = 'bg-gray-600';
                     
                     // Logica Badge
+                    if (tab.id === 'home' && hasCompitoNotif) {
+                        badgeCount = compitiBadgeCount;
+                        badgeColor = 'bg-sky-500';
+                    }
                     if (tab.id === 'messaggi') {
                         if (hasStaffMsgNotif) { // Priorità al verde staff
                             badgeCount = staffUnreadCount;
@@ -1423,12 +1437,13 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                     <Menu size={28} aria-hidden="true" />
                     
                     {/* PALLINI NOTIFICHE HEADER */}
-                    <div className="absolute top-1 right-1 flex flex-col gap-0.5 pointer-events-none" aria-hidden={!hasAdminNotif && !hasStaffMsgNotif && !hasMsgNotif && !hasJobNotif && !needRefresh}>
+                    <div className="absolute top-1 right-1 flex flex-col gap-0.5 pointer-events-none" aria-hidden={!hasAdminNotif && !hasStaffMsgNotif && !hasMsgNotif && !hasJobNotif && !hasCompitoNotif && !needRefresh}>
                         {hasAdminNotif && <span className="block h-2.5 w-2.5 rounded-full ring-1 ring-gray-900 bg-red-600 animate-pulse shadow-sm" title="Admin Pending" role="status" aria-label="Proposte admin in attesa" />}
                         {/* [MODIFICA] Pallino verde se staff msg */}
                         {hasStaffMsgNotif && <span className="block h-2.5 w-2.5 rounded-full ring-1 ring-gray-900 bg-green-500 animate-pulse shadow-sm" title="Staff Msg" role="status" aria-label="Messaggi staff non letti" />}
                         {(!hasStaffMsgNotif && hasMsgNotif) && <span className="block h-2.5 w-2.5 rounded-full ring-1 ring-gray-900 bg-purple-500 shadow-sm" title="Messaggi" role="status" aria-label="Messaggi non letti" />}
                         {hasJobNotif && <span className="block h-2.5 w-2.5 rounded-full ring-1 ring-gray-900 bg-amber-500 shadow-sm" title="Lavori" role="status" aria-label="Lavori pendenti" />}
+                        {hasCompitoNotif && <span className="block h-2.5 w-2.5 rounded-full ring-1 ring-gray-900 bg-sky-400 shadow-sm" title="Compiti" role="status" aria-label="Compiti in scadenza" />}
                         {needRefresh && <span className="block h-2.5 w-2.5 rounded-full ring-1 ring-gray-900 bg-blue-500 animate-bounce shadow-sm" title="Update" role="status" aria-label="Aggiornamento disponibile" />}
                     </div>
                   </button>
@@ -1506,6 +1521,9 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
               isActive={activeTab === 'home'}
               onClick={() => setActiveTab('home')}
               onPrefetch={() => preloadTabChunk('home')}
+              notificationDot={hasCompitoNotif}
+              dotColor="bg-sky-400"
+              notificationLabel={hasCompitoNotif ? 'Compiti in scadenza' : ''}
             />
             {selectedCharacterId && watchTabEnabled ? (
               <TabButton

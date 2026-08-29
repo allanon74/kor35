@@ -1693,6 +1693,103 @@ export const staffUpdateInnescoTimer = (id, data, onLogout) =>
 export const staffDeleteInnescoTimer = (id, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/innesco-timer/${id}/`, { method: 'DELETE' }, onLogout);
 
+// --- Pool QR randomico / Trappola / Serie ---
+export const staffGetRandomQrPools = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/random-qr-pools/', { method: 'GET' }, onLogout);
+export const staffCreateRandomQrPool = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/random-qr-pools/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdateRandomQrPool = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/random-qr-pools/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeleteRandomQrPool = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/random-qr-pools/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffRandomQrPoolAddQr = (poolId, qrCodeId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/random-qr-pools/${poolId}/add-qr/`,
+    { method: 'POST', body: JSON.stringify({ qr_code_id: qrCodeId }) },
+    onLogout,
+  );
+export const staffRandomQrPoolRemoveQr = (poolId, qrCodeId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/random-qr-pools/${poolId}/remove-qr/`,
+    { method: 'POST', body: JSON.stringify({ qr_code_id: qrCodeId }) },
+    onLogout,
+  );
+export const staffCreateRandomQrPoolEffect = (poolId, data, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/random-qr-pools/${poolId}/effetti/`,
+    { method: 'POST', body: JSON.stringify(data) },
+    onLogout,
+  );
+export const staffUpdateRandomQrPoolEffect = (id, data, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/random-qr-pool-effetti/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(data) },
+    onLogout,
+  );
+export const staffDeleteRandomQrPoolEffect = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/random-qr-pool-effetti/${id}/`, { method: 'DELETE' }, onLogout);
+
+// --- Pattern minigioco / default sezione ---
+export const staffGetMinigiocoPatterns = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/minigioco-patterns/', { method: 'GET' }, onLogout);
+export const staffCreateMinigiocoPattern = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/minigioco-patterns/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdateMinigiocoPattern = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/minigioco-patterns/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeleteMinigiocoPattern = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/minigioco-patterns/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffGetMinigiocoSezioneDefault = (pageKey, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/minigioco-sezione-defaults/by-page/${encodeURIComponent(pageKey)}/`,
+    { method: 'GET' },
+    onLogout,
+  );
+export const staffSaveMinigiocoSezioneDefault = (data, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/minigioco-sezione-defaults/',
+    { method: 'POST', body: JSON.stringify(data) },
+    onLogout,
+  );
+
+export const staffGetSerieCollezioni = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/serie-collezioni/', { method: 'GET' }, onLogout);
+export const staffCreateSerieCollezione = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/serie-collezioni/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdateSerieCollezione = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/serie-collezioni/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeleteSerieCollezione = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/serie-collezioni/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetTrappole = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/trappole/', { method: 'GET' }, onLogout);
+export const staffCreateTrappola = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/trappole/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdateTrappola = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/trappole/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeleteTrappola = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/trappole/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffAssociaQrTrappola = (trappolaId, qrId, onLogout, force = false) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/trappole/${trappolaId}/associa-qr/`,
+    { method: 'POST', body: JSON.stringify({ qr_id: qrId, force }) },
+    onLogout,
+  );
+
+export const staffGetSerieQr = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/serie-qr/', { method: 'GET' }, onLogout);
+export const staffCreateSerieQr = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/serie-qr/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdateSerieQr = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/serie-qr/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeleteSerieQr = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/serie-qr/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffAssociaQrSerieQr = (serieQrId, qrId, onLogout, force = false) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/serie-qr/${serieQrId}/associa-qr/`,
+    { method: 'POST', body: JSON.stringify({ qr_id: qrId, force }) },
+    onLogout,
+  );
+
 export const staffAggiungiOggettoInventario = (inventarioId, oggettoId, onLogout) => 
     fetchAuthenticated(`/api/personaggi/api/staff/inventari/${inventarioId}/aggiungi_oggetto/`, { 
         method: 'POST', 
@@ -3897,3 +3994,76 @@ export const syncStaffWikiCarteRegolamento = (onLogout, { force = true } = {}) =
         { method: 'POST', body: JSON.stringify({ force }) },
         onLogout,
     );
+
+const CALENDARIO_COMPITI = '/api/plot/api/calendario-compiti';
+
+export const getStaffCompiti = (onLogout, { miei = false } = {}) =>
+    fetchAuthenticated(`${CALENDARIO_COMPITI}/${miei ? '?miei=1' : ''}`, { method: 'GET' }, onLogout);
+
+export const getMieiStaffCompiti = (onLogout) =>
+    fetchAuthenticated(`${CALENDARIO_COMPITI}/miei/`, { method: 'GET' }, onLogout);
+
+export const getStaffCompitiCandidati = (onLogout) =>
+    fetchAuthenticated(`${CALENDARIO_COMPITI}/candidati/`, { method: 'GET' }, onLogout);
+
+export const createStaffCompito = (data, onLogout) =>
+    fetchAuthenticated(`${CALENDARIO_COMPITI}/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const updateStaffCompito = (id, data, onLogout) =>
+    fetchAuthenticated(`${CALENDARIO_COMPITI}/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const deleteStaffCompito = (id, onLogout) =>
+    fetchAuthenticated(`${CALENDARIO_COMPITI}/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const completaStaffCompito = (id, onLogout, { undo = false } = {}) =>
+    fetchAuthenticated(`${CALENDARIO_COMPITI}/${id}/completa/`, {
+        method: 'POST',
+        body: JSON.stringify({ undo }),
+    }, onLogout);
+
+export const getStaffCompitiFeedToken = (onLogout) =>
+    fetchAuthenticated(`${CALENDARIO_COMPITI}/feed-token/`, { method: 'GET' }, onLogout);
+
+export const rigeneraStaffCompitiFeedToken = (onLogout) =>
+    fetchAuthenticated(`${CALENDARIO_COMPITI}/feed-token/rigenera/`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+    }, onLogout);
+
+const NOTIFICHE_API = '/api/personaggi/api/notifiche';
+
+export const getNotificaPreferenze = (onLogout) =>
+    fetchAuthenticated(`${NOTIFICHE_API}/`, { method: 'GET' }, onLogout);
+
+export const patchNotificaPreferenze = (data, onLogout) =>
+    fetchAuthenticated(`${NOTIFICHE_API}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const postTelegramLink = (onLogout) =>
+    fetchAuthenticated(`${NOTIFICHE_API}/telegram/link/`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+    }, onLogout);
+
+export const postTelegramUnlink = (onLogout) =>
+    fetchAuthenticated(`${NOTIFICHE_API}/telegram/unlink/`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+    }, onLogout);
+
+export const getCalendarioFeedToken = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/calendario/feed-token/', { method: 'GET' }, onLogout);
+
+export const postCalendarioFeedTokenRigenera = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/calendario/feed-token/', {
+        method: 'POST',
+        body: JSON.stringify({}),
+    }, onLogout);

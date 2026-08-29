@@ -3,7 +3,6 @@ import { Link, useParams } from 'react-router-dom';
 import { Clock, MapPin, Navigation, ArrowLeft } from 'lucide-react';
 import { getEventoPubblicoDettaglio } from '../api';
 import { RichTextViewer } from '../components/RichTextDisplay';
-import { RICH_TEXT_SHARED_STYLES } from '../styles/richTextSharedStyles';
 
 function formatDate(dateString) {
   const date = new Date(dateString);
@@ -63,8 +62,6 @@ export default function EventoLogisticaPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <style>{RICH_TEXT_SHARED_STYLES}</style>
-
       <Link
         to="/"
         className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-red-800 mb-6 font-medium"

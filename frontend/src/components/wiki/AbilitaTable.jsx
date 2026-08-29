@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import { X } from 'lucide-react';
 import PunteggioDisplay from '../PunteggioDisplay';
+import RichHtml from '../RichHtml';
 import { resolveMediaUrl } from '../../api';
 
 /** Colori hex dalla scheda (caratteristica 1, 2, 3) per sfondo header */
@@ -226,9 +227,10 @@ export default function AbilitaTable({ list, chromaticStyle, soloList = false })
                     </div>
                   )}
 
-                  <div
+                  <RichHtml
+                    content={item.descrizione || ''}
+                    tone="onLight"
                     className="prose prose-sm max-w-none leading-snug prose-inherit"
-                    dangerouslySetInnerHTML={{ __html: item.descrizione || '' }}
                   />
                 </div>
               </div>
@@ -315,9 +317,10 @@ export default function AbilitaTable({ list, chromaticStyle, soloList = false })
                     </div>
                   )}
 
-                  <div
+                  <RichHtml
+                    content={selectedAbility.descrizione || ''}
+                    tone="onLight"
                     className="prose prose-sm max-w-none leading-snug prose-inherit"
-                    dangerouslySetInnerHTML={{ __html: selectedAbility.descrizione || '' }}
                   />
                 </div>
               </>

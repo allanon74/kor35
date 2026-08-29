@@ -61,7 +61,7 @@ const MessaggiTab = ({ onLogout, composeTarget, onComposeTargetConsumed }) => {
             by_character: payload.by_character || [],
           });
         }
-      } catch (e) {
+      } catch {
         if (!alive) return;
         setUnreadBuckets({
           totals: { player: 0, staff: 0, all: 0 },
@@ -223,7 +223,12 @@ const MessaggiTab = ({ onLogout, composeTarget, onComposeTargetConsumed }) => {
           </Tab.Panel>
           
           {showAdminTab && (
-            <Tab.Panel className="focus:outline-none animate-fadeIn">
+            /*
+              Altezza esplicita come per la inbox giocatore: AdminMessageTab e i suoi
+              pannelli usano h-full, e senza un riferimento definito l'area di
+              composizione del messaggio collassava.
+            */
+            <Tab.Panel className="focus:outline-none animate-fadeIn h-[calc(100dvh-240px)] min-h-[480px]">
               <AdminMessageTab onLogout={onLogout} />
             </Tab.Panel>
           )}

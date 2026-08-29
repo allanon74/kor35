@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.db.models import Count, Q, Sum, Prefetch, OuterRef, Subquery
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.exceptions import ValidationError
 import re
 
 from .models import (
@@ -17,7 +18,9 @@ from .models import (
     Infusione, Tessitura, Cerimoniale, Mattone,
     PersonaggioInfusione, PersonaggioTessitura, PersonaggioCerimoniale,
     QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario, Manifesto, Nodo, NodoRewardConfig, InnescoTimer,
+    RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect, Trappola, SerieCollezione, SerieQr,
     A_vista, Attivata, MinigiocoQrConfig, MinigiocoBibliotecaImmagine,
+    MinigiocoPattern, MinigiocoPatternEntry, MinigiocoSezioneDefault,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
     abilita_tier,
@@ -74,6 +77,15 @@ from .serializers import (
     NodoStaffSerializer,
     NodoRewardConfigStaffSerializer,
     InnescoTimerStaffSerializer,
+    RandomQrPoolStaffSerializer,
+    RandomQrPoolEffectStaffSerializer,
+    RandomQrPoolMembershipStaffSerializer,
+    MinigiocoPatternStaffSerializer,
+    MinigiocoPatternEntryStaffSerializer,
+    MinigiocoSezioneDefaultStaffSerializer,
+    SerieCollezioneStaffSerializer,
+    TrappolaStaffSerializer,
+    SerieQrStaffSerializer,
     A_vistaSerializer,
     AttivataSerializer,
     PersonaggioPublicSerializer,
@@ -1171,13 +1183,27 @@ class SelezionaEffettoCasualeView(APIView):
 
 
 class ManifestoStaffViewSet(viewsets.ModelViewSet):
-    """CRUD manifesti (contenuto in `testo`, requisiti JSON opzionali)."""
+    """CRUD manifesti (contenuto in `testo`, requisiti JSON opzionali).
+
+    Di default esclude i Manifesto usati come gancio QR di un SottosistemaNave
+    (creati da Pilotaggio → associa-qr). Passare ``?include_pilot=1`` per
+    elencarli comunque (debug / manutenzione).
+    """
 
     serializer_class = ManifestoStaffSerializer
     permission_classes = [IsStaffOrMaster]
 
     def get_queryset(self):
-        return annotate_staff_avista_qr(Manifesto.objects.all().order_by("-id"))
+        qs = Manifesto.objects.all().order_by("-id")
+        include_pilot = str(self.request.query_params.get("include_pilot") or "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if not include_pilot:
+            # reverse OneToOne A_vista ← SottosistemaNave.a_vista
+            qs = qs.filter(sottosistema_nave__isnull=True)
+        return annotate_staff_avista_qr(qs)
 
 
 class NodoStaffViewSet(viewsets.ModelViewSet):
@@ -1259,6 +1285,298 @@ class InnescoTimerStaffViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             obj = serializer.save()
             self._apply_target_lists(obj, self.request.data)
+
+
+class RandomQrPoolStaffViewSet(viewsets.ModelViewSet):
+    """CRUD pool QR randomici (effetti + membership gestiti con action dedicate)."""
+
+    serializer_class = RandomQrPoolStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        qs = (
+            RandomQrPool.objects.prefetch_related("effetti", "memberships", "memberships__qr_code")
+            .order_by("nome")
+        )
+        active = _get_active_campaign(self.request)
+        base = _get_default_campaign()
+        if not active:
+            return qs
+        if base and active.id != base.id:
+            return qs.filter(Q(campagna=active) | Q(campagna=base))
+        return qs.filter(campagna=active)
+
+    def perform_create(self, serializer):
+        camp = _get_active_campaign(self.request) or _get_default_campaign()
+        serializer.save(campagna=camp)
+
+    @action(detail=True, methods=["post"], url_path="add-qr")
+    def add_qr(self, request, pk=None):
+        pool = self.get_object()
+        qr_id = (request.data.get("qr_code_id") or request.data.get("qr_id") or "").strip()
+        if not qr_id:
+            return Response({"error": "qr_code_id richiesto."}, status=status.HTTP_400_BAD_REQUEST)
+        qr = QrCode.objects.filter(pk=qr_id).first()
+        if not qr:
+            return Response({"error": "QR non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        existing = RandomQrPoolMembership.objects.filter(qr_code=qr).select_related("pool").first()
+        if existing and existing.pool_id != pool.pk:
+            return Response(
+                {
+                    "error": f"QR già nel pool «{existing.pool.nome}».",
+                    "pool_id": str(existing.pool_id),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        membership, created = RandomQrPoolMembership.objects.get_or_create(pool=pool, qr_code=qr)
+        warn = bool(qr.vista_id)
+        return Response(
+            {
+                "created": created,
+                "membership": RandomQrPoolMembershipStaffSerializer(membership).data,
+                "warning_has_vista": warn,
+                "message": (
+                    "QR aggiunto. Nota: ha già una vista collegata; il pool ha priorità alla scansione."
+                    if warn
+                    else "QR aggiunto al pool."
+                ),
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="remove-qr")
+    def remove_qr(self, request, pk=None):
+        pool = self.get_object()
+        qr_id = (request.data.get("qr_code_id") or request.data.get("qr_id") or "").strip()
+        deleted, _ = RandomQrPoolMembership.objects.filter(pool=pool, qr_code_id=qr_id).delete()
+        return Response({"deleted": deleted > 0})
+
+    @action(detail=True, methods=["post"], url_path="effetti")
+    def create_effetto(self, request, pk=None):
+        pool = self.get_object()
+        data = dict(request.data)
+        data["pool"] = str(pool.pk)
+        ser = RandomQrPoolEffectStaffSerializer(data=data)
+        ser.is_valid(raise_exception=True)
+        effetto = ser.save(pool=pool)
+        return Response(RandomQrPoolEffectStaffSerializer(effetto).data, status=status.HTTP_201_CREATED)
+
+
+class RandomQrPoolEffectStaffViewSet(viewsets.ModelViewSet):
+    serializer_class = RandomQrPoolEffectStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    http_method_names = ["get", "patch", "put", "delete", "head", "options"]
+
+    def get_queryset(self):
+        qs = RandomQrPoolEffect.objects.select_related("pool", "nodo", "serie").order_by("ordine", "id")
+        pool_id = self.request.query_params.get("pool")
+        if pool_id:
+            qs = qs.filter(pool_id=pool_id)
+        return qs
+
+
+class MinigiocoPatternStaffViewSet(viewsets.ModelViewSet):
+    """CRUD pattern minigioco (entry nested in create/update)."""
+
+    serializer_class = MinigiocoPatternStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        qs = MinigiocoPattern.objects.prefetch_related("entries").order_by("nome")
+        active = _get_active_campaign(self.request)
+        base = _get_default_campaign()
+        if not active:
+            return qs
+        if base and active.id != base.id:
+            return qs.filter(Q(campagna=active) | Q(campagna=base))
+        return qs.filter(campagna=active)
+
+    def perform_create(self, serializer):
+        camp = _get_active_campaign(self.request) or _get_default_campaign()
+        serializer.save(campagna=camp)
+
+
+class MinigiocoPatternEntryStaffViewSet(viewsets.ModelViewSet):
+    serializer_class = MinigiocoPatternEntryStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        qs = MinigiocoPatternEntry.objects.select_related("pattern").order_by("ordine", "id")
+        pattern_id = self.request.query_params.get("pattern")
+        if pattern_id:
+            qs = qs.filter(pattern_id=pattern_id)
+        return qs
+
+    def perform_create(self, serializer):
+        pattern_id = self.request.data.get("pattern") or self.request.query_params.get("pattern")
+        if not pattern_id:
+            raise ValidationError({"pattern": "pattern richiesto."})
+        pattern = get_object_or_404(MinigiocoPattern, pk=pattern_id)
+        serializer.save(pattern=pattern)
+
+
+class MinigiocoSezioneDefaultStaffViewSet(viewsets.ModelViewSet):
+    """
+    Default minigioco per pagina staff (uno per page_key+campagna).
+    Supporta upsert via POST/PUT con page_key.
+    """
+
+    serializer_class = MinigiocoSezioneDefaultStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    lookup_field = "pk"
+
+    def get_queryset(self):
+        qs = MinigiocoSezioneDefault.objects.select_related("pattern", "campagna").order_by("page_key")
+        active = _get_active_campaign(self.request)
+        base = _get_default_campaign()
+        page_key = self.request.query_params.get("page_key")
+        if page_key:
+            qs = qs.filter(page_key=page_key)
+        if not active:
+            return qs
+        if base and active.id != base.id:
+            return qs.filter(Q(campagna=active) | Q(campagna=base))
+        return qs.filter(campagna=active)
+
+    def create(self, request, *args, **kwargs):
+        """Upsert per (page_key, campagna attiva)."""
+        page_key = str(request.data.get("page_key") or "").strip()
+        if page_key not in dict(MinigiocoSezioneDefault.PAGE_KEY_CHOICES):
+            return Response({"error": "page_key non valida."}, status=status.HTTP_400_BAD_REQUEST)
+        camp = _get_active_campaign(request) or _get_default_campaign()
+        if not camp:
+            return Response({"error": "Campagna attiva non trovata."}, status=status.HTTP_400_BAD_REQUEST)
+        obj = MinigiocoSezioneDefault.objects.filter(page_key=page_key, campagna=camp).first()
+        if obj:
+            ser = self.get_serializer(obj, data=request.data, partial=True)
+            ser.is_valid(raise_exception=True)
+            ser.save()
+            return Response(ser.data)
+        ser = self.get_serializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        ser.save(campagna=camp)
+        return Response(ser.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["get"], url_path="by-page/(?P<page_key>[^/.]+)")
+    def by_page(self, request, page_key=None):
+        camp = _get_active_campaign(request) or _get_default_campaign()
+        qs = self.get_queryset().filter(page_key=page_key)
+        if camp:
+            obj = qs.filter(campagna=camp).first() or qs.first()
+        else:
+            obj = qs.first()
+        if not obj:
+            return Response({"page_key": page_key, "config": None, "apply_to_new": False})
+        data = self.get_serializer(obj).data
+        from personaggi.qr_minigioco import sezione_default_to_config_dict
+
+        return Response(
+            {
+                "page_key": page_key,
+                "apply_to_new": bool(obj.apply_to_new),
+                "config": sezione_default_to_config_dict(obj),
+                "row": data,
+            }
+        )
+
+
+class SerieCollezioneStaffViewSet(viewsets.ModelViewSet):
+    serializer_class = SerieCollezioneStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        qs = SerieCollezione.objects.annotate(
+            _pezzi_assegnati=Count("assegnazioni"),
+        ).order_by("nome")
+        active = _get_active_campaign(self.request)
+        base = _get_default_campaign()
+        if not active:
+            return qs
+        if base and active.id != base.id:
+            return qs.filter(Q(campagna=active) | Q(campagna=base))
+        return qs.filter(campagna=active)
+
+    def perform_create(self, serializer):
+        camp = _get_active_campaign(self.request) or _get_default_campaign()
+        serializer.save(campagna=camp)
+
+
+class TrappolaStaffViewSet(viewsets.ModelViewSet):
+    serializer_class = TrappolaStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        return Trappola.objects.select_related("qr_code").order_by("-created_at")
+
+    @action(detail=True, methods=["post"], url_path="associa-qr")
+    def associa_qr(self, request, pk=None):
+        from personaggi.models import QrCode
+        from personaggi import qr_random_pool
+
+        trappola = self.get_object()
+        qr_id = request.data.get("qr_id")
+        force = bool(request.data.get("force", False))
+
+        if qr_id in (None, ""):
+            qr_random_pool.scollega_qr_da_trappola(trappola)
+            return Response({"status": "success", "message": "QR scollegato.", "qr_id": None})
+
+        try:
+            qr = QrCode.objects.select_related("vista").get(pk=qr_id)
+        except QrCode.DoesNotExist:
+            return Response({"error": "QR Code non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+        ok, conflict = qr_random_pool.associa_qr_a_trappola(trappola, qr, force=force)
+        if not ok:
+            return Response(conflict, status=status.HTTP_409_CONFLICT)
+
+        return Response(
+            {
+                "status": "success",
+                "message": "QR associato alla trappola.",
+                "qr_id": str(qr.id),
+                "trappola_id": str(trappola.id),
+            }
+        )
+
+
+class SerieQrStaffViewSet(viewsets.ModelViewSet):
+    serializer_class = SerieQrStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        return SerieQr.objects.select_related("serie", "qr_code").order_by("-created_at")
+
+    @action(detail=True, methods=["post"], url_path="associa-qr")
+    def associa_qr(self, request, pk=None):
+        from personaggi.models import QrCode
+        from personaggi import qr_random_pool
+
+        serie_qr = self.get_object()
+        qr_id = request.data.get("qr_id")
+        force = bool(request.data.get("force", False))
+
+        if qr_id in (None, ""):
+            qr_random_pool.scollega_qr_da_serie_qr(serie_qr)
+            return Response({"status": "success", "message": "QR scollegato.", "qr_id": None})
+
+        try:
+            qr = QrCode.objects.select_related("vista").get(pk=qr_id)
+        except QrCode.DoesNotExist:
+            return Response({"error": "QR Code non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+        ok, conflict = qr_random_pool.associa_qr_a_serie_qr(serie_qr, qr, force=force)
+        if not ok:
+            return Response(conflict, status=status.HTTP_409_CONFLICT)
+
+        return Response(
+            {
+                "status": "success",
+                "message": "QR associato alla serie.",
+                "qr_id": str(qr.id),
+                "serie_qr_id": str(serie_qr.id),
+            }
+        )
 
 
 class FormulaBuilderSchemaView(APIView):
@@ -1429,6 +1747,7 @@ class StaffMinigiocoQrConfigView(APIView):
             "modalita_sblocco": config.modalita_sblocco,
             "sblocco_secondi": config.sblocco_secondi,
             "usa_default_pagina": config.usa_default_pagina,
+            "pattern_id": str(config.pattern_id) if config.pattern_id else None,
             "immagine_url": img_url,
         }
 
@@ -1498,6 +1817,18 @@ class StaffMinigiocoQrConfigView(APIView):
                 config.difficolta = max(1, min(4, int(data.get("difficolta"))))
             except (TypeError, ValueError):
                 pass
+        if "pattern_id" in data or "pattern" in data:
+            raw_pat = data.get("pattern_id", data.get("pattern"))
+            if raw_pat in (None, "", "null", "none"):
+                config.pattern = None
+            else:
+                pattern = MinigiocoPattern.objects.filter(pk=raw_pat).first()
+                if not pattern:
+                    return Response(
+                        {"error": "pattern non trovato."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                config.pattern = pattern
         if "esclusioni_minigioco" in data:
             parsed = self._parse_json_list(data.get("esclusioni_minigioco"))
             if parsed is None:

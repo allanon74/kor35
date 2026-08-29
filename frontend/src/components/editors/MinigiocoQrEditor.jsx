@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Puzzle, Save, Loader } from 'lucide-react';
 import RequisitiListaEditor, { RegoleGruppoListaEditor } from './RequisitiAccessoEditor';
-import { staffGetMinigiocoQrConfig, staffSaveMinigiocoQrConfig } from '../../api';
+import { staffGetMinigiocoQrConfig, staffSaveMinigiocoQrConfig, staffGetMinigiocoPatterns } from '../../api';
 import useRequisitiAccessoLookup from '../../hooks/useRequisitiAccessoLookup';
 
 const TIPO_OPTS = [
@@ -11,6 +11,8 @@ const TIPO_OPTS = [
   { id: 'simon', label: 'Sequenza (Simon)' },
   { id: 'pattern_lock', label: 'Pattern lock' },
   { id: 'pipe_connect', label: 'Collega i tubi' },
+  { id: 'wire_match', label: 'Collega i fili' },
+  { id: 'tap_order', label: 'Tocca in ordine' },
 ];
 
 const DIFFICOLTA_INFO = {
@@ -18,6 +20,22 @@ const DIFFICOLTA_INFO = {
   2: 'media',
   3: 'difficile',
   4: 'molto difficile',
+};
+
+/** Preview testuale per tipo×diff (allineata a qr_minigioco.grid_size). */
+const previewDifficolta = (tipo, d) => {
+  const n = Math.max(1, Math.min(4, Number(d) || 2));
+  const map = {
+    sliding_puzzle: { 1: '2×2', 2: '3×3', 3: '4×4', 4: '4×4' },
+    rotate_tiles: { 1: '2×2', 2: '3×3', 3: '4×4', 4: '5×5' },
+    memory: { 1: '2×2 (2 coppie)', 2: '3×4 (6 coppie)', 3: '4×4 (8 coppie)', 4: '4×5 (10 coppie)' },
+    simon: { 1: '3 simboli · 4 tasti', 2: '4 · 4', 3: '5 · 5', 4: '6 · 6' },
+    pattern_lock: { 1: '4 nodi', 2: '5 nodi', 3: '6 nodi', 4: '7 nodi' },
+    pipe_connect: { 1: '3×3 tubi', 2: '4×4 tubi', 3: '5×5 tubi', 4: '6×6 tubi' },
+    wire_match: { 1: '3 fili', 2: '4 fili', 3: '5 fili', 4: '6 fili' },
+    tap_order: { 1: '4 tap', 2: '6 tap', 3: '8 tap', 4: '10 tap' },
+  };
+  return map[tipo]?.[n] || `livello ${n}`;
 };
 
 const TIMER_AZIONE_OPTS = [
@@ -39,6 +57,7 @@ export const emptyMinigiocoConfig = () => ({
   attivo: false,
   tipi_abilitati: [...ALL_TIPI],
   difficolta: 4,
+  pattern_id: null,
   requisiti_attivazione: [],
   messaggio_accesso_negato: '',
   esclusioni_minigioco: [],
@@ -83,6 +102,24 @@ const MinigiocoQrEditor = ({
   const [msg, setMsg] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [removeImage, setRemoveImage] = useState(false);
+  const [patterns, setPatterns] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await staffGetMinigiocoPatterns(onLogout);
+        if (cancelled) return;
+        const list = Array.isArray(data) ? data : data?.results || [];
+        setPatterns(list.filter((p) => p.attivo !== false));
+      } catch {
+        if (!cancelled) setPatterns([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onLogout]);
 
   useEffect(() => {
     if (!templateMode) return;
@@ -139,8 +176,9 @@ const MinigiocoQrEditor = ({
 
   const save = async () => {
     if (!qrId) return;
-    if (!config.tipi_abilitati?.length) {
-      setMsg('Seleziona almeno un tipo di gioco.');
+    const hasPattern = Boolean(config.pattern_id);
+    if (!hasPattern && !config.tipi_abilitati?.length) {
+      setMsg('Seleziona un pattern oppure almeno un tipo di gioco.');
       return;
     }
     if (config.modalita_sblocco === 'temporaneo') {
@@ -160,6 +198,7 @@ const MinigiocoQrEditor = ({
       fd.append('usa_biblioteca_se_vuota', config.usa_biblioteca_se_vuota ? 'true' : 'false');
       fd.append('tipi_abilitati', JSON.stringify(config.tipi_abilitati));
       fd.append('difficolta', String(Number(config.difficolta) || 4));
+      fd.append('pattern_id', config.pattern_id ? String(config.pattern_id) : '');
       fd.append('messaggio_pre', config.messaggio_pre || '');
       fd.append('messaggio_vittoria', config.messaggio_vittoria || '');
       fd.append('timer_scadenza_azione', config.timer_scadenza_azione);
@@ -272,6 +311,32 @@ const MinigiocoQrEditor = ({
             <span>Se senza immagine dedicata, usa libreria casuale</span>
           </label>
 
+          <label className="block">
+            <span className="text-gray-500 text-xs">Pattern estrazione (opzionale)</span>
+            <select
+              className="w-full mt-0.5 bg-gray-900 border border-gray-600 rounded px-2 py-1"
+              value={config.pattern_id || ''}
+              onChange={(e) =>
+                setConfig((c) => ({
+                  ...c,
+                  pattern_id: e.target.value || null,
+                }))
+              }
+            >
+              <option value="">— Nessuno (usa tipi + difficoltà legacy) —</option>
+              {patterns.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome} ({(p.entries || []).length} entry)
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-gray-500 mt-1">
+              Con pattern attivo, tipo e difficoltà escono dalle entry pesate (tool Minigioco — Pattern).
+            </p>
+          </label>
+
+          {!config.pattern_id ? (
+            <>
           <div>
             <span className="text-gray-500 text-xs block mb-1">
               Giochi nel pool casuale (a ogni tentativo ne viene scelto uno)
@@ -308,7 +373,29 @@ const MinigiocoQrEditor = ({
                 <option key={n} value={n}>{n} — {DIFFICOLTA_INFO[n]}</option>
               ))}
             </select>
+            <p className="text-[10px] text-gray-500 mt-1">
+              In bosco preferire tipi senza immagine + diff ≤3.
+            </p>
+            {(config.tipi_abilitati || []).length > 0 && (
+              <ul className="mt-1 text-[10px] text-indigo-300/90 space-y-0.5">
+                {(config.tipi_abilitati || []).map((tid) => {
+                  const label = TIPO_OPTS.find((o) => o.id === tid)?.label || tid;
+                  return (
+                    <li key={tid}>
+                      {label}: {previewDifficolta(tid, config.difficolta)}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </label>
+            </>
+          ) : (
+            <div className="text-[11px] text-indigo-200/90 bg-indigo-950/40 border border-indigo-800/50 rounded px-2 py-2">
+              Estrazione da pattern «{patterns.find((p) => String(p.id) === String(config.pattern_id))?.nome || '…'}».
+              Tipi e difficoltà legacy nascosti.
+            </div>
+          )}
 
           <div>
             <span className="text-gray-500 text-xs block mb-1">

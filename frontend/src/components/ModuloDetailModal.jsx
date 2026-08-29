@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Loader2, Zap, Swords, Lock, Battery, Clock } from 'lucide-react';
 import { getOggettoDetail } from '../api';
 import PunteggioDisplay from './PunteggioDisplay';
+import RichHtml from './RichHtml';
 import { useCharacter } from './CharacterContext';
 import ActivationCostPreview from './ActivationCostPreview';
 import { evaluateActivationCosts } from '../lib/activationCostUtils';
@@ -199,11 +200,9 @@ const ModuloDetailModal = ({ moduloId, onClose, onLogout }) => {
               {/* Descrizione */}
               <div className="bg-black/20 border border-gray-700/50 p-3 rounded-lg">
                 <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Descrizione</h4>
-                <div 
+                <RichHtml
+                  content={modulo.testo_formattato_personaggio || modulo.testo || modulo.descrizione || "Nessuna descrizione disponibile."}
                   className="text-sm text-gray-300 prose prose-invert prose-sm max-w-none leading-relaxed"
-                  dangerouslySetInnerHTML={{ 
-                    __html: modulo.testo_formattato_personaggio || modulo.testo || modulo.descrizione || "Nessuna descrizione disponibile." 
-                  }} 
                 />
               </div>
 

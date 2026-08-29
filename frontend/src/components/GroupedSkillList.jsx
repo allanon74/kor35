@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import PunteggioDisplay from './PunteggioDisplay';
+import RichHtml from './RichHtml';
 
 // Sotto-componente per la riga singola (Gestisce lo stato di espansione)
 const SkillRow = ({ 
@@ -46,14 +47,13 @@ const SkillRow = ({
         
         {/* Descrizione Collassabile (Logica Accordion) */}
         {showDescription && skill.descrizione && (
-          <div
+          <RichHtml
+            content={skill.descrizione}
             onClick={handleDescriptionClick}
             className={`text-xs text-gray-400 pl-7 mt-1 prose prose-invert prose-sm leading-snug cursor-pointer hover:text-gray-200 transition-colors select-none ${
               isExpanded ? '' : 'line-clamp-1'
             }`}
             title={isExpanded ? "Clicca per ridurre" : "Clicca per espandere"}
-            // Usa dangerouslySetInnerHTML per supportare eventuali tag HTML nella descrizione
-            dangerouslySetInnerHTML={{ __html: skill.descrizione }}
           />
         )}
       </div>

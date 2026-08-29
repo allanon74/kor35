@@ -5,11 +5,13 @@ import { VitePWA } from 'vite-plugin-pwa'
 import packageJson from './package.json'
 
 export default defineConfig(({ command, mode }) => {
+  const isTest = mode === 'test';
+
   const plugins = [
     
     react(),
-    // Configurazione PWA
-    VitePWA({
+    // Configurazione PWA (non serve nei test unitari: eviterebbe build del service worker)
+    !isTest && VitePWA({
       // --- MODIFICHE PER WEB PUSH (Livello 2) ---
       strategies: 'injectManifest', // Usa il nostro service worker custom
       srcDir: 'src',                // Cartella dove si trova il file sorgente
@@ -76,7 +78,7 @@ export default defineConfig(({ command, mode }) => {
         ]
       }
     })
-  ];
+  ].filter(Boolean);
 
   // Attiva basicSsl SOLO se stiamo eseguendo il server di sviluppo ('serve')
   if (command === 'serve') {
@@ -85,6 +87,11 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     plugins: plugins,
+    test: {
+      environment: 'jsdom',
+      include: ['src/**/*.test.{js,jsx}'],
+      restoreMocks: true,
+    },
     build: {
       sourcemap: true,
       rollupOptions: {
@@ -96,7 +103,6 @@ export default defineConfig(({ command, mode }) => {
             // di montare subito StaffDashboard/MainPage.
             if (id.includes('html5-qrcode')) return 'vendor-html5-qrcode';
             if (id.includes('leaflet') || id.includes('react-leaflet')) return 'vendor-leaflet';
-            if (id.includes('react-quill') || id.includes('/quill')) return 'vendor-quill';
             if (id.includes('lucide-react')) return 'vendor-lucide';
             if (id.includes('@heroicons/react')) return 'vendor-heroicons';
             return undefined;

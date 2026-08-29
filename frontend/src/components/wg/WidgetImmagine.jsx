@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getWikiImage } from '../../api';
 import { getMediaUrl } from '../../api';
+import RichHtml from '../RichHtml';
 
 export default function WidgetImmagine({ id }) {
   const [data, setData] = useState(null);
@@ -60,7 +61,7 @@ export default function WidgetImmagine({ id }) {
         <figcaption className="mt-2 text-sm text-gray-600 italic text-center">
           {data.titolo && <strong>{data.titolo}</strong>}
           {data.titolo && data.descrizione && ' — '}
-          {data.descrizione && <span dangerouslySetInnerHTML={{ __html: data.descrizione }} />}
+          {data.descrizione && <RichHtml content={data.descrizione} as="span" tone="onLight" />}
         </figcaption>
       )}
     </figure>

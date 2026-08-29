@@ -29,6 +29,7 @@ import { putOfflineMessages, getOfflineMessages } from '../lib/offlineMessagesDb
 import { activateWebPush, isWebPushSupported } from '../lib/webpush';
 import { ensureAppServiceWorker } from '../lib/appServiceWorker';
 import { canAccessModuloMode, getModuloAccesso } from '../lib/campagnaModuli';
+import { htmlToPlainText } from '../utils/htmlSanitizer';
 
 import { 
   usePunteggi, 
@@ -108,6 +109,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
     activeCampaignRole === 'STAFFER' ||
     activeCampaignRole === 'MASTER' ||
     activeCampaignRole === 'HEAD_MASTER';
+  const isCampaignHelper = activeCampaignRole === 'HELPER';
+  const canSeeStaffCompiti = isCampaignStaffer || isCampaignHelper;
   const isCampaignRedactor = isCampaignStaffer || activeCampaignRole === 'REDACTOR';
   const canUseWizardTest = isGlobalSuperuser || isDjangoStaff || isCampaignStaffer;
   const moduliAccesso = useMemo(
@@ -134,7 +137,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
         ...prev,
         [timerData.nome]: {
             ...timerData,
-            endTime: new Date(timerData.data_fine).getTime()
+            endTime: new Date(timerData.data_fine || timerData.endsAt || timerData.endTime).getTime(),
+            variant: timerData.variant || prev[timerData.nome]?.variant,
         }
     }));
   }, []);
@@ -222,7 +226,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
   useEffect(() => {
     const loadInitialTimers = async () => {
       try {
-        const data = await fetchAuthenticated('/api/personaggi/api/timers/active/', onLogout);
+        const qs = selectedCharacterId ? `?personaggio_id=${selectedCharacterId}` : '';
+        const data = await fetchAuthenticated(`/api/personaggi/api/timers/active/${qs}`, onLogout);
         if (Array.isArray(data)) {
           data.forEach(t => updateTimerState(t));
         }
@@ -231,7 +236,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
       }
     };
     loadInitialTimers();
-  }, [onLogout, updateTimerState]);
+  }, [onLogout, updateTimerState, selectedCharacterId]);
 
 
   // --- REACT QUERY HOOKS ---
@@ -715,8 +720,24 @@ export const CharacterProvider = ({ children, onLogout }) => {
                 nome: payload.nome,
                 data_fine: payload.data_fine,
                 alert_suono: true,
-                notifica_push: true,
+                // Push scadenza: worker server (dispatch_timer_expiry), evita doppia Notification locale
+                notifica_push: false,
                 messaggio_in_app: true,
+              });
+            }
+        }
+
+        if (action === 'TIMER_TRAPPOLA_SYNC' && payload) {
+            const ids = payload.recipient_personaggio_ids || [];
+            const myId = parseInt(selectedCharacterId, 10);
+            if (!ids.length || ids.includes(myId)) {
+              updateTimerState({
+                nome: payload.nome,
+                data_fine: payload.data_fine,
+                alert_suono: payload.alert_suono !== false,
+                notifica_push: payload.notifica_push !== false,
+                messaggio_in_app: payload.messaggio_in_app !== false,
+                variant: 'danger',
               });
             }
         }
@@ -769,8 +790,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
              (msg.tipo === 'INDV' && (msg.destinatario_id === myId || !msg.destinatario_id));
            if (forMe) {
               setNotification(msg);
-              const plain = String(msg.testo || '').replace(/<[^>]+>/g, '');
-              sendSystemNotification(msg.titolo, plain);
+              sendSystemNotification(msg.titolo, htmlToPlainText(msg.testo));
               fetchUserMessages(selectedCharacterId);
               queryClient.invalidateQueries(['personaggio', selectedCharacterId]);
            }
@@ -820,6 +840,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
     isCampaignMaster,
     isCampaignHeadMaster,
     isCampaignStaffer,
+    isCampaignHelper,
+    canSeeStaffCompiti,
     isCampaignRedactor,
     activeCampaignRole,
     staffWorkMode,
@@ -880,6 +902,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
     isCampaignMaster,
     isCampaignHeadMaster,
     isCampaignStaffer,
+    isCampaignHelper,
+    canSeeStaffCompiti,
     isCampaignRedactor,
     activeCampaignRole,
     staffWorkMode,

@@ -19,7 +19,6 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
     personaggiList,
     isCampaignStaffer,
     handleToggleRead,
-    handleMarkAsRead,
     handleDeleteMessage: contextDeleteMessage,
   } = useCharacter();
   const isOnline = useOnlineStatus();
@@ -198,7 +197,7 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-200px)] relative">
+    <div className="flex flex-col h-[calc(100dvh-200px)] min-h-[420px] relative">
       {!isOnline && (
         <div className="px-2 mb-2">
           <OfflineConsultBanner />

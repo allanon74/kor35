@@ -127,10 +127,10 @@ const DichiarazioniGlossarioManager = ({ onBack, onLogout }) => {
   useEffect(() => { loadItems(); }, []);
 
   const columns = useMemo(() => [
-    { header: 'Nome', render: (x) => <span className="font-bold">{x.nome}</span> },
-    { header: 'Tipo', render: (x) => TIPO_OPZIONI.find((opt) => opt.value === x.tipo)?.label || x.tipo, width: 220 },
-    { header: 'Termine', render: (x) => x.dichiarazione, width: 260 },
-    { header: 'Descrizione', render: (x) => <span className="text-gray-300">{(x.descrizione || '').slice(0, 90)}{(x.descrizione || '').length > 90 ? '...' : ''}</span> },
+    { key: 'nome', header: 'Nome', getSortValue: (x) => x.nome || '', render: (x) => <span className="font-bold">{x.nome}</span> },
+    { key: 'tipo', header: 'Tipo', getSortValue: (x) => TIPO_OPZIONI.find((opt) => opt.value === x.tipo)?.label || x.tipo, render: (x) => TIPO_OPZIONI.find((opt) => opt.value === x.tipo)?.label || x.tipo, width: 220 },
+    { key: 'termine', header: 'Termine', getSortValue: (x) => x.dichiarazione || '', render: (x) => x.dichiarazione, width: 260 },
+    { key: 'descrizione', header: 'Descrizione', getSortValue: (x) => x.descrizione || '', render: (x) => <span className="text-gray-300">{(x.descrizione || '').slice(0, 90)}{(x.descrizione || '').length > 90 ? '...' : ''}</span> },
   ], []);
 
   const isGlossarioTab = activeTab === 'glossario';

@@ -3,37 +3,55 @@ import { createPortal } from 'react-dom';
 import { Puzzle, Save, X } from 'lucide-react';
 import MinigiocoQrEditor, { emptyMinigiocoConfig } from './MinigiocoQrEditor';
 import {
-  loadPageMinigiocoSettings,
-  savePageMinigiocoSettings,
+  loadPageMinigiocoSettingsAsync,
+  savePageMinigiocoSettingsAsync,
 } from '../../utils/staffMinigiocoDefaults';
 
 /**
- * Editor template minigioco (senza QR): salva in localStorage per pagina staff.
+ * Editor template minigioco (senza QR): salva in DB (MinigiocoSezioneDefault).
  */
 const StaffMinigiocoDefaultModal = ({ pageKey, pageLabel, open, onClose, onLogout }) => {
   const [draftConfig, setDraftConfig] = useState(null);
+  const [applyToNew, setApplyToNew] = useState(false);
   const [msg, setMsg] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    const { config } = loadPageMinigiocoSettings(pageKey);
-    setDraftConfig(config || emptyMinigiocoConfig());
-    setMsg('');
-  }, [open, pageKey]);
+    let cancelled = false;
+    (async () => {
+      const data = await loadPageMinigiocoSettingsAsync(pageKey, onLogout);
+      if (cancelled) return;
+      setDraftConfig(data.config || emptyMinigiocoConfig());
+      setApplyToNew(Boolean(data.applyToNew));
+      setMsg('');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, pageKey, onLogout]);
 
-  const handleSaveTemplate = useCallback(() => {
+  const handleSaveTemplate = useCallback(async () => {
     if (!draftConfig) {
       setMsg('Nessuna configurazione da salvare.');
       return;
     }
-    const current = loadPageMinigiocoSettings(pageKey);
-    savePageMinigiocoSettings(pageKey, {
-      applyToNew: current.applyToNew,
-      config: draftConfig,
-    });
-    setMsg('Default pagina salvato.');
-    setTimeout(onClose, 400);
-  }, [draftConfig, pageKey, onClose]);
+    setSaving(true);
+    setMsg('');
+    try {
+      await savePageMinigiocoSettingsAsync(
+        pageKey,
+        { applyToNew, config: draftConfig },
+        onLogout,
+      );
+      setMsg('Default pagina salvato (condiviso).');
+      setTimeout(onClose, 400);
+    } catch (e) {
+      setMsg(e.message || 'Errore salvataggio default');
+    } finally {
+      setSaving(false);
+    }
+  }, [draftConfig, pageKey, applyToNew, onLogout, onClose]);
 
   if (!open) return null;
 
@@ -50,7 +68,8 @@ const StaffMinigiocoDefaultModal = ({ pageKey, pageLabel, open, onClose, onLogou
           <button
             type="button"
             onClick={handleSaveTemplate}
-            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm flex items-center gap-1"
+            disabled={saving}
+            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm flex items-center gap-1 disabled:opacity-50"
           >
             <Save size={14} />
             Salva default
@@ -62,8 +81,8 @@ const StaffMinigiocoDefaultModal = ({ pageKey, pageLabel, open, onClose, onLogou
       </div>
       <div className="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full">
         <p className="text-xs text-gray-400 mb-3">
-          Questo modello non è legato a un QR: viene copiato sui nuovi QR se attivi
-          «Applica default ai nuovi QR» nella barra della pagina.
+          Template condiviso da tutto lo staff (sincronizzato). Viene copiato sui nuovi QR se
+          attivi «Applica default ai nuovi QR» nella barra della pagina.
         </p>
         <MinigiocoQrEditor
           templateMode

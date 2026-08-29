@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Check, Lock, ChevronRight, Loader2 } from 'lucide-react';
 import { acquireAbilita } from '../api'; 
+import RichHtml from './RichHtml';
 
 export default function AuraTraitsModal({ aura, personaggio, onClose, onUpdateCharacter, currentValue }) {
   const [selectedStep, setSelectedStep] = useState(null);
@@ -83,9 +84,9 @@ export default function AuraTraitsModal({ aura, personaggio, onClose, onUpdateCh
                                         <h4 className={`font-bold ${isSelected ? 'text-amber-400' : 'text-slate-200'}`}>{trait.nome}</h4>
                                         {isSelected && <Check size={18} className="text-amber-500" />}
                                     </div>
-                                    <div 
+                                    <RichHtml
+                                        content={trait.descrizione || "Nessuna descrizione."}
                                         className="text-xs text-slate-400 line-clamp-3 mb-2 prose prose-invert prose-p:my-1 prose-strong:text-slate-200"
-                                        dangerouslySetInnerHTML={{ __html: trait.descrizione || "Nessuna descrizione." }}
                                     />
                                     
                                     {trait.statistica_modificata && (

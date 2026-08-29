@@ -13,7 +13,8 @@ export const useTimers = () => {
             endsAt, 
             alert_suono, 
             notifica_push, 
-            messaggio_in_app 
+            messaggio_in_app,
+            variant,
         } = config;
 
         const timerNome = nome || label || "Operazione";
@@ -32,6 +33,7 @@ export const useTimers = () => {
                 alert_suono,
                 notifica_push,
                 messaggio_in_app,
+                variant: variant || undefined,
                 notified: false
             }
         }));

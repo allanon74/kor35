@@ -69,31 +69,25 @@ def notify_instafame_mentions(citer, mentioned_ids, source_kind, *, post=None, c
         .only("id", "nome", "proprietario_id", "proprietario__id")
     )
 
-    try:
-        from webpush import send_user_notification
-    except ImportError:
-        send_user_notification = None
-
     for target in targets:
         cited_name = social_display_name(target)
         message = format_mention_message(citer_name, cited_name, source_kind)
         user = getattr(target, "proprietario", None)
-        if not user or not send_user_notification:
+        if not user:
             continue
         try:
-            send_user_notification(
-                user=user,
-                payload={
-                    "head": "Citazione InstaFame",
-                    "body": message,
-                    "icon": "/pwa-192x192.png",
-                    "url": push_url,
-                },
-                ttl=1000,
+            from personaggi.notify import notify_user
+
+            notify_user(
+                user,
+                category="social",
+                head="Citazione InstaFame",
+                body=message,
+                url=push_url,
             )
         except Exception:
             logger.exception(
-                "Web push citazione InstaFame fallita (citer=%s target=%s kind=%s)",
+                "Notifica citazione InstaFame fallita (citer=%s target=%s kind=%s)",
                 citer.id,
                 target.id,
                 source_kind,

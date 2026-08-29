@@ -66,7 +66,7 @@ class Command(BaseCommand):
             return user
 
     def get_or_create_page(self, slug, titolo, contenuto, parent=None, ordine=0, 
-                          public=True, visibile_solo_staff=False, force=False):
+                          public=True, visibile_solo_staff=False, visibile_solo_autenticati=False, force=False):
         """Crea o aggiorna una pagina wiki"""
         try:
             page = PaginaRegolamento.objects.get(slug=slug)
@@ -77,6 +77,7 @@ class Command(BaseCommand):
                 page.ordine = ordine
                 page.public = public
                 page.visibile_solo_staff = visibile_solo_staff
+                page.visibile_solo_autenticati = visibile_solo_autenticati
                 page.save()
                 self.stdout.write(self.style.WARNING(f'  ↻ Pagina "{titolo}" aggiornata'))
                 return page
@@ -92,6 +93,7 @@ class Command(BaseCommand):
                 ordine=ordine,
                 public=public,
                 visibile_solo_staff=visibile_solo_staff,
+                visibile_solo_autenticati=visibile_solo_autenticati,
             )
             self.stdout.write(self.style.SUCCESS(f'  ✓ Pagina "{titolo}" creata'))
             return page
@@ -136,6 +138,7 @@ class Command(BaseCommand):
     <li><a href="/regolamento/istruzioni/infusioni">Infusioni</a> - Potenziamenti temporanei</li>
     <li><a href="/regolamento/istruzioni/cerimoniali">Cerimoniali</a> - Riti e rituali</li>
     <li><a href="/regolamento/istruzioni/messaggi">Messaggi</a> - Comunicazione con altri giocatori</li>
+    <li><a href="/regolamento/istruzioni/notifiche">Notifiche, Telegram e calendario</a> - Push, bot e iCal</li>
     <li><a href="/regolamento/istruzioni/scanner-qr">Scanner QR</a> - Come usare lo scanner</li>
     <li><a href="/regolamento/istruzioni/diario">Diario</a> - Log delle azioni</li>
     <li><a href="/regolamento/istruzioni/transazioni">Transazioni</a> - Scambi e trasferimenti</li>
@@ -499,6 +502,53 @@ class Command(BaseCommand):
                 ordine=5,
                 public=True,
                 visibile_solo_staff=False,
+                force=force
+            )
+
+            # Pagina: Notifiche / Telegram / calendario (solo utenti loggati)
+            self.get_or_create_page(
+                slug='notifiche',
+                titolo='Notifiche, Telegram e calendario',
+                contenuto='''
+<h2>Notifiche KOR35</h2>
+<p>Dalla scheda <strong>Notifiche</strong> dell'app (menu giocatore, oppure pulsante in home) scegli come ricevere gli avvisi: web push, Telegram ed email. Il web push è acceso di default; Telegram ed email restano spenti finché non li attivi.</p>
+<p>Questa guida è visibile solo dopo il login.</p>
+
+<h3>Categorie</h3>
+<ul>
+    <li><strong>Messaggi</strong> — privati e di gruppo</li>
+    <li><strong>Avvisi in-game</strong> — broadcast e timer</li>
+    <li><strong>Compiti off-game</strong> — scadenze assegnate ad aiuto staff / staff / master</li>
+    <li><strong>InstaFame</strong> — citazioni</li>
+    <li><strong>Messaggi staff</strong></li>
+</ul>
+
+<h3>Collegare il calendario (iCal)</h3>
+<p>Il link è personale: non condividerlo. I giocatori vedono gli <strong>eventi</strong>; aiuto staff, staff e master vedono anche i <strong>compiti</strong>. Le modifiche fatte sul telefono <em>non</em> tornano in KOR35.</p>
+<ol>
+    <li>Apri la scheda Notifiche e tocca <strong>Copia link iscrizione</strong>.</li>
+    <li><strong>Google Calendar (computer)</strong>: Altri calendari → Da URL → incolla il link → Aggiungi calendario.</li>
+    <li><strong>Android (app Google Calendar)</strong>: menu → Impostazioni → Aggiungi account / Calendario → Da URL, oppure apri il link dal computer e sincronizza lo stesso account Google.</li>
+    <li><strong>iPhone / iPad</strong>: Impostazioni → Calendario → Account → Aggiungi account → Altro → Aggiungi calendario iscritto → incolla il link.</li>
+    <li>Se rigeneri il link in app, il vecchio smette di funzionare: aggiorna la sottoscrizione sul telefono.</li>
+</ol>
+
+<h3>Abilitare il bot Telegram</h3>
+<ol>
+    <li>Nella scheda Notifiche tocca <strong>Collega Telegram</strong> (serve che lo staff abbia configurato il bot sul server).</li>
+    <li>Si apre Telegram sul bot KOR35: premi <strong>Avvia</strong>. In alternativa cerca il bot e invia <code>/start CODICE</code> con il codice mostrato in app (scade in 30 minuti).</li>
+    <li>Quando lo stato è «Collegato», accendi le categorie nella colonna Telegram (restano spente di default).</li>
+    <li>Per scollegare: pulsante in app oppure scrivi <code>/stop</code> al bot.</li>
+</ol>
+
+<h3>Email</h3>
+<p>Canale spento di default. Serve un indirizzo sul tuo account KOR35. Le mail partono dalla casella Gmail di campagna configurata dallo staff.</p>
+                ''',
+                parent=pagina_istruzioni,
+                ordine=6,
+                public=True,
+                visibile_solo_staff=False,
+                visibile_solo_autenticati=True,
                 force=force
             )
 

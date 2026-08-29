@@ -1562,16 +1562,25 @@ FEATURE_MODE_CHOICES = [
 
 CAMPAGNA_ROLE_PLAYER = "PLAYER"
 CAMPAGNA_ROLE_REDACTOR = "REDACTOR"
+CAMPAGNA_ROLE_HELPER = "HELPER"
 CAMPAGNA_ROLE_STAFFER = "STAFFER"
 CAMPAGNA_ROLE_MASTER = "MASTER"
 CAMPAGNA_ROLE_HEAD_MASTER = "HEAD_MASTER"
 CAMPAGNA_ROLE_CHOICES = [
     (CAMPAGNA_ROLE_PLAYER, "Giocatore"),
     (CAMPAGNA_ROLE_REDACTOR, "Redactor"),
+    (CAMPAGNA_ROLE_HELPER, "Aiuto staff"),
     (CAMPAGNA_ROLE_STAFFER, "Staffer"),
     (CAMPAGNA_ROLE_MASTER, "Master"),
     (CAMPAGNA_ROLE_HEAD_MASTER, "Head Master"),
 ]
+# Utenti a cui si possono assegnare i compiti del calendario operativo.
+CAMPAGNA_ROLES_COMPITO = (
+    CAMPAGNA_ROLE_HELPER,
+    CAMPAGNA_ROLE_STAFFER,
+    CAMPAGNA_ROLE_MASTER,
+    CAMPAGNA_ROLE_HEAD_MASTER,
+)
 
 
 def get_default_campagna_id():
@@ -1690,6 +1699,74 @@ class CampagnaFeaturePolicy(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.campagna.nome} - {self.feature_key}: {self.mode}"
+
+
+NOTIFICA_CATEGORIE = ("messaggi", "in_game", "compiti", "social", "staff")
+NOTIFICA_CANALI = ("webpush", "telegram", "email")
+NOTIFICA_CATEGORIA_LABELS = {
+    "messaggi": "Messaggi (privati e di gruppo)",
+    "in_game": "Avvisi in-game (broadcast, timer)",
+    "compiti": "Compiti off-game (scadenze)",
+    "social": "InstaFame (citazioni)",
+    "staff": "Messaggi staff",
+}
+
+
+def _default_notifica_canali():
+    return {
+        "webpush": {key: True for key in NOTIFICA_CATEGORIE},
+        "telegram": {key: False for key in NOTIFICA_CATEGORIE},
+        "email": {key: False for key in NOTIFICA_CATEGORIE},
+    }
+
+
+class NotificaPreferenze(SyncableModel, models.Model):
+    """Preferenze canale/categoria per le notifiche dell'utente (web push, Telegram, email)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="notifica_preferenze",
+    )
+    canali = models.JSONField(default=_default_notifica_canali, blank=True)
+    telegram_chat_id = models.CharField(max_length=32, blank=True, default="", db_index=True)
+    telegram_username = models.CharField(max_length=64, blank=True, default="")
+    telegram_link_code = models.CharField(max_length=16, blank=True, default="", db_index=True)
+    telegram_link_expires = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Preferenze notifiche"
+        verbose_name_plural = "Preferenze notifiche"
+
+    def __str__(self):
+        return f"Notifiche {self.user_id}"
+
+    def normalized_canali(self):
+        defaults = _default_notifica_canali()
+        raw = self.canali if isinstance(self.canali, dict) else {}
+        out = {}
+        for canale in NOTIFICA_CANALI:
+            src = raw.get(canale) if isinstance(raw.get(canale), dict) else {}
+            out[canale] = {
+                cat: bool(src[cat]) if cat in src else defaults[canale][cat]
+                for cat in NOTIFICA_CATEGORIE
+            }
+        return out
+
+    def is_enabled(self, canale, categoria) -> bool:
+        if canale not in NOTIFICA_CANALI or categoria not in NOTIFICA_CATEGORIE:
+            return False
+        return bool(self.normalized_canali().get(canale, {}).get(categoria))
+
+    def set_canale(self, canale, categoria, enabled: bool):
+        data = self.normalized_canali()
+        if canale not in data or categoria not in data[canale]:
+            return
+        data[canale][categoria] = bool(enabled)
+        self.canali = data
+
 
 class Tabella(A_modello):
     nome = models.CharField(max_length=90)
@@ -3950,6 +4027,8 @@ def _default_tipi_minigioco_qr():
         "simon",
         "pattern_lock",
         "pipe_connect",
+        "wire_match",
+        "tap_order",
     ]
 
 
@@ -3962,6 +4041,8 @@ class MinigiocoQrConfig(SyncableModel, models.Model):
     TIPO_SIMON = "simon"
     TIPO_PATTERN = "pattern_lock"
     TIPO_PIPE = "pipe_connect"
+    TIPO_WIRE = "wire_match"
+    TIPO_TAP_ORDER = "tap_order"
     TIPO_CHOICES = (
         (TIPO_SLIDING, "Sliding puzzle"),
         (TIPO_MEMORY, "Memory"),
@@ -3969,6 +4050,8 @@ class MinigiocoQrConfig(SyncableModel, models.Model):
         (TIPO_SIMON, "Sequenza (Simon)"),
         (TIPO_PATTERN, "Pattern lock"),
         (TIPO_PIPE, "Collega i tubi"),
+        (TIPO_WIRE, "Collega i fili"),
+        (TIPO_TAP_ORDER, "Tocca in ordine"),
     )
     TIPI_DEFAULT = [
         TIPO_SLIDING,
@@ -3977,6 +4060,8 @@ class MinigiocoQrConfig(SyncableModel, models.Model):
         TIPO_SIMON,
         TIPO_PATTERN,
         TIPO_PIPE,
+        TIPO_WIRE,
+        TIPO_TAP_ORDER,
     ]
 
     TIMER_ATTIVA = "attiva_qr"
@@ -4087,6 +4172,14 @@ class MinigiocoQrConfig(SyncableModel, models.Model):
         default=False,
         help_text="Se True, la config segue il template minigioco di pagina staff (copiato in DB al toggle).",
     )
+    pattern = models.ForeignKey(
+        "MinigiocoPattern",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="qr_configs",
+        help_text="Se valorizzato, tipo/difficoltà vengono estratti dalle entry del pattern (non da tipi_abilitati).",
+    )
 
     class Meta:
         verbose_name = "Configurazione minigioco QR"
@@ -4094,6 +4187,140 @@ class MinigiocoQrConfig(SyncableModel, models.Model):
 
     def __str__(self):
         return f"Minigioco @ QR {self.qr_code_id}"
+
+
+class MinigiocoPattern(SyncableModel, models.Model):
+    """Catalogo pattern di estrazione minigioco (tipo + peso + difficoltà per entry)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=120)
+    descrizione = models.TextField(blank=True, default="")
+    attivo = models.BooleanField(default=True, db_index=True)
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.PROTECT,
+        related_name="minigioco_patterns",
+        default=get_default_campagna_id,
+        db_index=True,
+    )
+
+    class Meta:
+        verbose_name = "Pattern minigioco"
+        verbose_name_plural = "Pattern minigioco"
+        ordering = ["nome"]
+
+    def __str__(self):
+        return self.nome
+
+
+class MinigiocoPatternEntry(SyncableModel, models.Model):
+    """Entry pesata di un pattern: (tipo, difficoltà) con peso di estrazione."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    pattern = models.ForeignKey(
+        MinigiocoPattern,
+        on_delete=models.CASCADE,
+        related_name="entries",
+    )
+    tipo = models.CharField(max_length=32, choices=MinigiocoQrConfig.TIPO_CHOICES)
+    peso = models.PositiveIntegerField(
+        default=1,
+        help_text="Peso relativo nell'estrazione (≥1).",
+    )
+    difficolta = models.PositiveSmallIntegerField(
+        default=3,
+        help_text="Difficoltà base 1–4 per questa entry.",
+    )
+    ordine = models.PositiveIntegerField(default=0)
+    attivo = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Entry pattern minigioco"
+        verbose_name_plural = "Entry pattern minigioco"
+        ordering = ["ordine", "id"]
+
+    def __str__(self):
+        return f"{self.pattern_id}:{self.tipo}@{self.difficolta} (peso {self.peso})"
+
+
+class MinigiocoSezioneDefault(SyncableModel, models.Model):
+    """
+    Template minigioco condiviso per pagina staff (sostituisce localStorage come fonte di verità).
+    Pattern = estrazione; campi policy allineati a MinigiocoQrConfig.
+    """
+
+    PAGE_MANIFESTI = "manifesti"
+    PAGE_NODI = "nodi"
+    PAGE_INNESCO_TIMER = "innesco-timer"
+    PAGE_PILOT_SOTTOSISTEMI = "pilot-sottosistemi"
+    PAGE_PILOT_EVENTI = "pilot-eventi"
+    PAGE_KEY_CHOICES = (
+        (PAGE_MANIFESTI, "Manifesti"),
+        (PAGE_NODI, "Nodi"),
+        (PAGE_INNESCO_TIMER, "Innesco timer"),
+        (PAGE_PILOT_SOTTOSISTEMI, "Pilot sottosistemi"),
+        (PAGE_PILOT_EVENTI, "Pilot eventi"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    page_key = models.CharField(max_length=64, choices=PAGE_KEY_CHOICES, db_index=True)
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.PROTECT,
+        related_name="minigioco_sezione_defaults",
+        default=get_default_campagna_id,
+        db_index=True,
+    )
+    pattern = models.ForeignKey(
+        MinigiocoPattern,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sezione_defaults",
+    )
+    apply_to_new = models.BooleanField(
+        default=False,
+        help_text="Se True, i nuovi QR associati in questa pagina staff ricevono il template.",
+    )
+    sezione_attiva = models.BooleanField(default=False)
+    attivo = models.BooleanField(default=False)
+    tipi_abilitati = models.JSONField(default=_default_tipi_minigioco_qr, blank=True)
+    difficolta = models.PositiveSmallIntegerField(default=4)
+    requisiti_attivazione = models.JSONField(default=list, blank=True)
+    messaggio_accesso_negato = models.TextField(blank=True, default="")
+    esclusioni_minigioco = models.JSONField(default=list, blank=True)
+    regole_difficolta = models.JSONField(default=list, blank=True)
+    messaggio_pre = models.TextField(blank=True, default="")
+    messaggio_vittoria = models.TextField(blank=True, default="")
+    timer_secondi = models.PositiveIntegerField(null=True, blank=True)
+    timer_scadenza_azione = models.CharField(
+        max_length=32,
+        choices=MinigiocoQrConfig.TIMER_SAZIONE_CHOICES,
+        default=MinigiocoQrConfig.TIMER_RESET,
+    )
+    usa_biblioteca_se_vuota = models.BooleanField(default=True)
+    modalita_sblocco = models.CharField(
+        max_length=24,
+        choices=MinigiocoQrConfig.SBLOCCO_CHOICES,
+        default=MinigiocoQrConfig.SBLOCCO_PERMANENTE,
+    )
+    sblocco_secondi = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Default sezione minigioco"
+        verbose_name_plural = "Default sezione minigioco"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["page_key", "campagna"],
+                name="uniq_minigioco_sezione_default_page_campagna",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Default minigioco «{self.page_key}»"
 
 
 class MinigiocoBibliotecaImmagine(SyncableModel, models.Model):
@@ -4270,6 +4497,20 @@ class InnescoTimer(A_vista):
         verbose_name="Segnale luminoso in-app",
         help_text="Il client può evidenziare il timer in modo più visibile.",
     )
+    # Broadcast attivo: usato per ripristino overlay e push web all'expiry (worker dispatch_timer_expiry).
+    broadcast_data_fine = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="Scadenza ultimo broadcast",
+        help_text="Fine countdown dell'ultima attivazione inviata a tutti i destinatari.",
+    )
+    broadcast_push_inviata = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name="Push scadenza già inviata",
+        help_text="False dopo attivazione; True dopo che il worker ha inviato le web push di scadenza.",
+    )
     campagna = models.ForeignKey(
         "Campagna",
         on_delete=models.PROTECT,
@@ -4318,6 +4559,346 @@ class StatoInnescoTimerPersonaggio(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.personaggio_id} / {self.innesco_timer_id} fino {self.data_fine}"
+
+
+def _default_tipi_minigioco_pool():
+    return list(_default_tipi_minigioco_qr())
+
+
+class RandomQrPool(SyncableModel, models.Model):
+    """
+    Pool di QR fisici che, alla scansione, estraggono un effetto pesato.
+    Il minigioco può essere configurato a monte sul pool (override per-QR via MinigiocoQrConfig).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=120)
+    attivo = models.BooleanField(default=True, db_index=True)
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.PROTECT,
+        related_name="random_qr_pools",
+        default=get_default_campagna_id,
+        db_index=True,
+    )
+
+    # Minigioco a monte (stessi campi essenziali di MinigiocoQrConfig)
+    minigioco_sezione_attiva = models.BooleanField(
+        default=False,
+        help_text="Se True, la sezione minigiochi governa l'accesso ai QR del pool (salvo override per-QR).",
+    )
+    minigioco_attivo = models.BooleanField(
+        default=False,
+        help_text="Se True (con sezione attiva), richiede il minigioco prima dell'effetto pool.",
+    )
+    minigioco_tipi_abilitati = models.JSONField(default=_default_tipi_minigioco_pool, blank=True)
+    minigioco_difficolta = models.PositiveSmallIntegerField(default=4)
+    minigioco_requisiti_attivazione = models.JSONField(default=list, blank=True)
+    minigioco_messaggio_accesso_negato = models.TextField(blank=True, default="")
+    minigioco_esclusioni = models.JSONField(default=list, blank=True)
+    minigioco_regole_difficolta = models.JSONField(default=list, blank=True)
+    minigioco_messaggio_pre = models.TextField(blank=True, default="")
+    minigioco_messaggio_vittoria = models.TextField(blank=True, default="")
+    minigioco_timer_secondi = models.PositiveIntegerField(null=True, blank=True)
+    minigioco_timer_scadenza_azione = models.CharField(
+        max_length=32,
+        choices=MinigiocoQrConfig.TIMER_SAZIONE_CHOICES,
+        default=MinigiocoQrConfig.TIMER_RESET,
+    )
+    minigioco_usa_biblioteca_se_vuota = models.BooleanField(default=True)
+    minigioco_modalita_sblocco = models.CharField(
+        max_length=24,
+        choices=MinigiocoQrConfig.SBLOCCO_CHOICES,
+        default=MinigiocoQrConfig.SBLOCCO_PERMANENTE,
+    )
+    minigioco_sblocco_secondi = models.PositiveIntegerField(null=True, blank=True)
+    minigioco_immagine = models.ImageField(
+        upload_to="minigioco_qr_pool/%Y/%m/",
+        blank=True,
+        null=True,
+    )
+    minigioco_pattern = models.ForeignKey(
+        "MinigiocoPattern",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="random_qr_pools",
+        help_text="Pattern estrazione minigioco a monte del pool (override per-QR via MinigiocoQrConfig).",
+    )
+
+    class Meta:
+        verbose_name = "Pool QR randomico"
+        verbose_name_plural = "Pool QR randomici"
+        ordering = ["nome"]
+
+    def __str__(self):
+        return self.nome
+
+
+class RandomQrPoolMembership(SyncableModel, models.Model):
+    """Associa un QR fisico a un solo pool (membership unica sul qr_code)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    pool = models.ForeignKey(
+        RandomQrPool,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    qr_code = models.OneToOneField(
+        "QrCode",
+        on_delete=models.CASCADE,
+        related_name="random_pool_membership",
+    )
+
+    class Meta:
+        verbose_name = "Membership pool QR"
+        verbose_name_plural = "Membership pool QR"
+
+    def __str__(self):
+        return f"{self.qr_code_id} → {self.pool_id}"
+
+
+class RandomQrPoolEffect(SyncableModel, models.Model):
+    """Effetto pesato all'interno di un pool randomico."""
+
+    TIPO_TESTO = "testo"
+    TIPO_NODO = "nodo"
+    TIPO_TRAPPOLA = "trappola"
+    TIPO_SERIE = "serie"
+    TIPO_CHOICES = (
+        (TIPO_TESTO, "Testo"),
+        (TIPO_NODO, "Nodo"),
+        (TIPO_TRAPPOLA, "Trappola"),
+        (TIPO_SERIE, "Serie"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    pool = models.ForeignKey(
+        RandomQrPool,
+        on_delete=models.CASCADE,
+        related_name="effetti",
+    )
+    tipo = models.CharField(max_length=16, choices=TIPO_CHOICES, db_index=True)
+    frequenza = models.PositiveIntegerField(
+        default=1,
+        help_text="Peso relativo: più alto = più comune (es. 10 vs 1 → ~10:1).",
+    )
+    ordine = models.PositiveIntegerField(default=0)
+    attivo = models.BooleanField(default=True)
+
+    # Payload tipizzato
+    titolo = models.CharField(max_length=120, blank=True, default="")
+    testo = models.TextField(blank=True, default="")
+    nodo = models.ForeignKey(
+        "Nodo",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+    )
+    durata_secondi = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Solo trappola: durata timer personale (vuoto = solo messaggio).",
+    )
+    serie = models.ForeignKey(
+        "SerieCollezione",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+    )
+
+    class Meta:
+        verbose_name = "Effetto pool QR"
+        verbose_name_plural = "Effetti pool QR"
+        ordering = ["ordine", "id"]
+
+    def __str__(self):
+        return f"{self.pool_id}:{self.tipo}×{self.frequenza}"
+
+
+class Trappola(SyncableModel, models.Model):
+    """
+    QR (o effetto pool) che mostra un testo e può avviare un timer personale contro lo scanner.
+    PK UUID: non usa A_vista MTI (AutoField) per restare allineati a sync master↔replica.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=100)
+    testo = models.TextField(blank=True, default="")
+    durata_secondi = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Durata timer (secondi)",
+        help_text="Vuoto = solo messaggio descrittivo, senza countdown.",
+    )
+    qr_code = models.OneToOneField(
+        "QrCode",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="configurazione_trappola",
+    )
+
+    class Meta:
+        verbose_name = "Trappola QR"
+        verbose_name_plural = "Trappole QR"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Trappola: {self.nome}"
+
+
+class StatoTrappolaPersonaggio(SyncableModel, models.Model):
+    """Timer personale attivo dopo scansione trappola."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="stati_trappola",
+    )
+    # Chiave stabile per ripresa/reload (trappola UUID oppure effetto pool sync_id)
+    chiave = models.CharField(max_length=64, db_index=True)
+    nome = models.CharField(max_length=120)
+    testo = models.TextField(blank=True, default="")
+    data_fine = models.DateTimeField(verbose_name="Scadenza countdown")
+    trappola = models.ForeignKey(
+        Trappola,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="stati_personaggio",
+    )
+
+    class Meta:
+        verbose_name = "Stato trappola (personaggio)"
+        verbose_name_plural = "Stati trappola (personaggio)"
+        unique_together = [("personaggio", "chiave")]
+        indexes = [
+            models.Index(fields=["personaggio", "data_fine"]),
+        ]
+
+    def __str__(self):
+        return f"{self.personaggio_id} / {self.nome} fino {self.data_fine}"
+
+
+class SerieCollezione(SyncableModel, models.Model):
+    """Collezione a pezzi unici globali (es. Pecora 1..30)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=120)
+    totale = models.PositiveIntegerField(
+        help_text="Numero totale di pezzi unici (N in 'X di N').",
+    )
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.PROTECT,
+        related_name="serie_collezioni",
+        default=get_default_campagna_id,
+        db_index=True,
+    )
+    descrizione = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Serie collezione"
+        verbose_name_plural = "Serie collezioni"
+        ordering = ["nome"]
+
+    def __str__(self):
+        return f"{self.nome} (1–{self.totale})"
+
+    @property
+    def pezzi_assegnati(self):
+        return self.assegnazioni.count()
+
+    @property
+    def pezzi_rimanenti(self):
+        return max(0, int(self.totale or 0) - self.pezzi_assegnati)
+
+
+class SerieAssegnazione(SyncableModel, models.Model):
+    """Assegnazione unica globale di un indice di serie a un personaggio."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    serie = models.ForeignKey(
+        SerieCollezione,
+        on_delete=models.CASCADE,
+        related_name="assegnazioni",
+    )
+    indice = models.PositiveIntegerField()
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="serie_assegnazioni",
+    )
+    oggetto = models.ForeignKey(
+        "Oggetto",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="serie_assegnazioni",
+    )
+    assegnato_at = models.DateTimeField(auto_now_add=True)
+    qr_code = models.ForeignKey(
+        "QrCode",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="serie_assegnazioni",
+    )
+
+    class Meta:
+        verbose_name = "Assegnazione serie"
+        verbose_name_plural = "Assegnazioni serie"
+        unique_together = [("serie", "indice")]
+        indexes = [
+            models.Index(fields=["serie", "indice"]),
+            models.Index(fields=["personaggio", "serie"]),
+        ]
+
+    def __str__(self):
+        return f"{self.serie.nome} {self.indice}/{self.serie.totale} → {self.personaggio_id}"
+
+
+class SerieQr(SyncableModel, models.Model):
+    """
+    QR standalone che assegna un pezzo unico di una SerieCollezione.
+    PK UUID + OneToOne QrCode (non A_vista MTI) per sync master↔replica.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=100)
+    testo = models.TextField(blank=True, default="")
+    serie = models.ForeignKey(
+        SerieCollezione,
+        on_delete=models.PROTECT,
+        related_name="qr_standalone",
+    )
+    qr_code = models.OneToOneField(
+        "QrCode",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="configurazione_serie",
+    )
+
+    class Meta:
+        verbose_name = "QR Serie"
+        verbose_name_plural = "QR Serie"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"SerieQr: {self.nome} ({self.serie_id})"
 
 
 class ClasseOggetto(SyncableModel, models.Model):

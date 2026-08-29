@@ -1,7 +1,9 @@
 /**
  * Stili condivisi per la visualizzazione di contenuto HTML ricco
  * (liste, hr, link wiki, sezioni collapsible).
- * Usato da RichTextDisplay (.ql-editor-view) e WikiRenderer (.wiki-content).
+ * Usato da RichTextDisplay (.ql-editor-view), WikiRenderer (.wiki-content)
+ * e dall'area editabile del RichTextEditor, che porta la classe `.ql-editor-view`
+ * proprio per garantire che quello che si scrive sia identico a quello che si vede.
  * Un solo posto per evitare duplicazione e mantenere coerenza.
  */
 export const RICH_TEXT_SHARED_STYLES = `
@@ -251,5 +253,147 @@ export const RICH_TEXT_SHARED_STYLES = `
   .wiki-content .wiki-widget-slot .wiki-widget-tier details > div {
     padding: 0;
     background: transparent;
+  }
+
+  /* --- Blocchi vuoti = a capo voluti dall'autore: devono conservare altezza --- */
+  .ql-editor-view p:empty,
+  .ql-editor-view div:empty,
+  .wiki-content p:empty,
+  .wiki-content div:empty {
+    min-height: 1em;
+  }
+
+  /* --- Elementi tipografici aggiuntivi --- */
+  .ql-editor-view blockquote,
+  .wiki-content blockquote {
+    margin: 0.75em 0;
+    padding: 0.25em 0 0.25em 1em;
+    border-left: 3px solid #6366f1;
+    font-style: italic;
+  }
+  .ql-editor-view code,
+  .wiki-content code {
+    font-family: ui-monospace, monospace;
+    font-size: 0.92em;
+    padding: 0.1em 0.35em;
+    border-radius: 0.25rem;
+    background: rgba(0, 0, 0, 0.25);
+  }
+  .wiki-content code {
+    background: rgba(0, 0, 0, 0.07);
+  }
+  .ql-editor-view pre code,
+  .wiki-content pre code {
+    padding: 0;
+    background: transparent;
+  }
+  .ql-editor-view mark,
+  .wiki-content mark {
+    background: #fef08a;
+    color: #111827;
+    padding: 0 0.15em;
+    border-radius: 2px;
+  }
+  .ql-editor-view s, .ql-editor-view del,
+  .wiki-content s, .wiki-content del {
+    text-decoration: line-through;
+  }
+  .ql-editor-view sub, .ql-editor-view sup,
+  .wiki-content sub, .wiki-content sup {
+    font-size: 0.75em;
+    line-height: 0;
+  }
+  .ql-editor-view img,
+  .wiki-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.375rem;
+  }
+  .ql-editor-view figure,
+  .wiki-content figure {
+    margin: 0.75em 0;
+  }
+  .ql-editor-view figcaption,
+  .wiki-content figcaption {
+    font-size: 0.8em;
+    opacity: 0.8;
+    margin-top: 0.25em;
+  }
+
+  /* --- Tabelle: contenitore scrollabile (su smartphone sfonderebbero il layout) --- */
+  .rich-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 1em 0;
+    max-width: 100%;
+  }
+  .rich-table-scroll > table {
+    margin: 0;
+    min-width: 20rem;
+  }
+
+  /* --- Area editabile del RichTextEditor --- */
+  .kor-rich-editor {
+    position: relative;
+    outline: none;
+    caret-color: #a5b4fc;
+    /*
+     * Stessa gestione degli spazi del viewer: gli a capo arrivano come <br>/blocchi
+     * (normalizzati al caricamento e in fase di incolla), non come newline nel testo.
+     * Con pre-wrap l'indentazione scritta in modalita codice si vedeva come righe extra.
+     */
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  /*
+   * Placeholder pilotato da data-empty e non da :empty: dopo aver scritto e cancellato,
+   * i browser lasciano un <br> residuo e con :empty il testo guida non ricompariva.
+   */
+  .kor-rich-editor[data-empty="true"]:before {
+    content: attr(data-placeholder);
+    position: absolute;
+    top: 0;
+    left: 0;
+    color: #9ca3af;
+    font-style: italic;
+    pointer-events: none;
+    max-width: 100%;
+  }
+
+  /* Toolbar: barra di scorrimento discreta su mobile, invisibile a riposo */
+  .kor-rich-toolbar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(156, 163, 175, 0.45) transparent;
+  }
+  .kor-rich-toolbar-scroll::-webkit-scrollbar {
+    height: 3px;
+  }
+  .kor-rich-toolbar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .kor-rich-toolbar-scroll::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.45);
+    border-radius: 3px;
+  }
+  .kor-rich-editor [data-kor-rt-marker] {
+    display: none;
+  }
+  .kor-rich-editor > *:first-child {
+    margin-top: 0;
+  }
+  .kor-rich-editor > *:last-child {
+    margin-bottom: 0;
+  }
+  /* Celle sempre cliccabili anche se vuote, e tabelle ridimensionabili in scrittura */
+  .kor-rich-editor th,
+  .kor-rich-editor td {
+    min-width: 2.5rem;
+  }
+  .kor-rich-editor details {
+    /* In scrittura i collapsible restano aperti: servono modificabili. */
+    width: 100%;
+  }
+  .kor-rich-editor summary {
+    list-style: none;
   }
 `;
