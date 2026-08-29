@@ -20,6 +20,7 @@ from .models import (
     OggettoStatistica,
     OggettoStatisticaBase,
     Personaggio,
+    PersonaggioAbilita,
     Infusione,
     InfusioneCostoAttivazione,
     PersonaggioStatisticaBase,
@@ -36,6 +37,7 @@ from .models import (
     TIPO_OGGETTO_MOD,
     TIPO_OGGETTO_MATERIA,
     abilita_punteggio,
+    abilita_prerequisito,
     CARATTERISTICA,
     formatta_testo_generico,
     raccogli_modificatori_solo_oggetto,
@@ -320,6 +322,13 @@ class AINTraitPcDeltaTests(APITestCase):
             tipologia=self.tipologia,
             campagna=self.campagna,
         )
+        CampagnaUtente.objects.create(
+            campagna=self.campagna,
+            user=self.user,
+            ruolo="PLAYER",
+            attivo=True,
+        )
+        self.client.defaults["HTTP_X_CAMPAGNA"] = self.campagna.slug
         self.tratto_negativo = Abilita.objects.create(
             nome="Archetipo - Negativo",
             caratteristica=self.caratteristica,
@@ -362,6 +371,116 @@ class AINTraitPcDeltaTests(APITestCase):
         self.assertEqual(r2.status_code, status.HTTP_200_OK)
         self.personaggio.refresh_from_db()
         self.assertEqual(self.personaggio.punti_caratteristica, 8)
+
+
+class AINFormaSwapTests(APITestCase):
+    """Cambio forma AIN: ignora il prerequisito catalogo 'Aura Innata II (Forma)'."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="ain-forma-player", password="x")
+        self.client.force_authenticate(user=self.user)
+        self.campagna = Campagna.objects.create(
+            slug="kor35-ain-forma",
+            nome="Kor35 AIN Forma",
+            is_default=True,
+            is_base=True,
+            attiva=True,
+        )
+        CampagnaUtente.objects.create(
+            campagna=self.campagna,
+            user=self.user,
+            ruolo="PLAYER",
+            attivo=True,
+        )
+        self.client.defaults["HTTP_X_CAMPAGNA"] = self.campagna.slug
+        self.tipologia = TipologiaPersonaggio.objects.create(
+            nome="Giocante AIN Forma",
+            caratteristiche_iniziali=8,
+            crediti_iniziali=0,
+            giocante=True,
+        )
+        self.ca = Punteggio.objects.create(nome="Istinto Test Forma", sigla="IST", tipo="CA")
+        self.aura_innata = Punteggio.objects.create(nome="Aura Innata Forma", sigla="AIN", tipo="AU")
+        self.personaggio = Personaggio.objects.create(
+            nome="PG Forma",
+            proprietario=self.user,
+            tipologia=self.tipologia,
+            campagna=self.campagna,
+        )
+        grant = Abilita.objects.create(
+            nome="Grant AIN e Istinto",
+            caratteristica=self.ca,
+            costo_pc=0,
+            costo_crediti=0,
+            campagna=self.campagna,
+        )
+        abilita_punteggio.objects.create(abilita=grant, punteggio=self.aura_innata, valore=2)
+        abilita_punteggio.objects.create(abilita=grant, punteggio=self.ca, valore=2)
+        PersonaggioAbilita.objects.create(personaggio=self.personaggio, abilita=grant)
+
+        dummy_prereq = Abilita.objects.create(
+            nome="Aura Innata II (Forma)",
+            caratteristica=self.ca,
+            costo_pc=0,
+            costo_crediti=0,
+            campagna=self.campagna,
+        )
+        self.forma_a = Abilita.objects.create(
+            nome="Forma - Della Luce Test",
+            caratteristica=self.ca,
+            caratteristica_2=self.ca,
+            costo_pc=0,
+            costo_crediti=0,
+            is_tratto_aura=True,
+            aura_riferimento=self.aura_innata,
+            livello_riferimento=2,
+            campagna=self.campagna,
+        )
+        self.forma_b = Abilita.objects.create(
+            nome="Forma - Del Gelo Test",
+            caratteristica=self.ca,
+            caratteristica_2=self.ca,
+            costo_pc=0,
+            costo_crediti=0,
+            is_tratto_aura=True,
+            aura_riferimento=self.aura_innata,
+            livello_riferimento=2,
+            campagna=self.campagna,
+        )
+        abilita_prerequisito.objects.create(abilita=self.forma_a, prerequisito=dummy_prereq)
+        abilita_prerequisito.objects.create(abilita=self.forma_b, prerequisito=dummy_prereq)
+
+    def test_forma_swap_ignores_catalog_prereq_skill(self):
+        r1 = self.client.post(
+            "/api/personaggi/api/personaggio/me/acquisisci_abilita/",
+            {"personaggio_id": self.personaggio.id, "abilita_id": self.forma_a.id},
+            format="json",
+        )
+        self.assertEqual(r1.status_code, status.HTTP_200_OK, r1.data)
+        self.assertTrue(
+            PersonaggioAbilita.objects.filter(personaggio=self.personaggio, abilita=self.forma_a).exists()
+        )
+
+        r2 = self.client.post(
+            "/api/personaggi/api/personaggio/me/acquisisci_abilita/",
+            {"personaggio_id": self.personaggio.id, "abilita_id": self.forma_b.id},
+            format="json",
+        )
+        self.assertEqual(r2.status_code, status.HTTP_200_OK, r2.data)
+        self.assertTrue(
+            PersonaggioAbilita.objects.filter(personaggio=self.personaggio, abilita=self.forma_b).exists()
+        )
+        self.assertFalse(
+            PersonaggioAbilita.objects.filter(personaggio=self.personaggio, abilita=self.forma_a).exists()
+        )
+        self.assertEqual(
+            PersonaggioAbilita.objects.filter(
+                personaggio=self.personaggio,
+                abilita__is_tratto_aura=True,
+                abilita__livello_riferimento=2,
+            ).count(),
+            1,
+        )
 
 
 class TessituraRuntimeTests(APITestCase):

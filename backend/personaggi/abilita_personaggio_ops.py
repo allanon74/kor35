@@ -123,11 +123,25 @@ def revoca_abilita_personaggio(
     return AbilitaOpResult(ok=True, personaggio=personaggio)
 
 
+def _clip_movimento_descrizione(text: str, max_len: int = 200) -> str:
+    """PuntiCaratteristicaMovimento.descrizione e CreditoMovimento.descrizione sono CharField(200)."""
+    text = str(text or "")
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1] + "…"
+
+
+def _clear_personaggio_score_cache(personaggio) -> None:
+    for attr in ("_punteggi_base_cache", "_modificatori_calcolati_cache"):
+        if hasattr(personaggio, attr):
+            delattr(personaggio, attr)
+
+
 @transaction.atomic
 def acquisisci_abilita_personaggio(personaggio, abilita_id, request, *, staff: bool = False, motivo_staff: str = "") -> AbilitaOpResult:
     """
     Stessa logica di AcquisisciAbilitaView (validazioni, costi, rimborsi swap AIN).
-  `request` serve per filtri campagna; può essere None solo in contesti staff senza filtro.
+    `request` serve per filtri campagna; può essere None solo in contesti staff senza filtro.
     """
     from django.utils import timezone
 
@@ -143,15 +157,23 @@ def acquisisci_abilita_personaggio(personaggio, abilita_id, request, *, staff: b
     except Abilita.DoesNotExist:
         return AbilitaOpResult(ok=False, error="Abilità non trovata.")
 
+    is_tratto_ain = (
+        abilita.is_tratto_aura
+        and abilita.aura_riferimento_id
+        and str(getattr(abilita.aura_riferimento, "sigla", "") or "").upper() == "AIN"
+    )
+
     if request is not None:
         abilita_qs = _campaign_feature_filter(request, Abilita.objects.filter(id=abilita_id), FEATURE_ABILITA)
         if not abilita_qs.exists():
             return AbilitaOpResult(ok=False, error="Abilità non disponibile nella campagna attiva.")
 
-    try:
-        verifica_abilita_accademia(abilita)
-    except ValidationError as exc:
-        return AbilitaOpResult(ok=False, error=str(exc))
+    # I tratti AIN (archetipo/forma) non passano dall'Accademia: hanno regole dedicate.
+    if not is_tratto_ain:
+        try:
+            verifica_abilita_accademia(abilita)
+        except ValidationError as exc:
+            return AbilitaOpResult(ok=False, error=str(exc))
 
     era_ids_abilita = set(EraAbilita.objects.filter(abilita_id=abilita.id).values_list("era_id", flat=True))
     if era_ids_abilita:
@@ -182,12 +204,6 @@ def acquisisci_abilita_personaggio(personaggio, abilita_id, request, *, staff: b
 
     if personaggio.abilita_possedute.filter(id=abilita_id).exists():
         return AbilitaOpResult(ok=False, error="Abilità già posseduta.")
-
-    is_tratto_ain = (
-        abilita.is_tratto_aura
-        and abilita.aura_riferimento_id
-        and getattr(abilita.aura_riferimento, "sigla", None) == "AIN"
-    )
 
     if is_tratto_ain and not personaggio_scheda_modifica_libera(personaggio):
         now = timezone.now()
@@ -254,12 +270,12 @@ def acquisisci_abilita_personaggio(personaggio, abilita_id, request, *, staff: b
                     error=f"Requisito non soddisfatto: {punteggio_nome} {valore_richiesto} (possiedi {punteggio_pg})",
                 )
 
-    required_prereqs = [p.prerequisito for p in abilita.abilita_prerequisiti.all()]
-    if required_prereqs:
-        possessed_skill_ids = set(personaggio.abilita_possedute.values_list("id", flat=True))
-        for prereq in required_prereqs:
-            if prereq.id not in possessed_skill_ids:
-                return AbilitaOpResult(ok=False, error=f"Prerequisito non soddisfatto: {prereq.nome}")
+        required_prereqs = [p.prerequisito for p in abilita.abilita_prerequisiti.all()]
+        if required_prereqs:
+            possessed_skill_ids = set(personaggio.abilita_possedute.values_list("id", flat=True))
+            for prereq in required_prereqs:
+                if prereq.id not in possessed_skill_ids:
+                    return AbilitaOpResult(ok=False, error=f"Prerequisito non soddisfatto: {prereq.nome}")
 
     log_suffix = f" ({motivo_staff})" if staff and motivo_staff else ""
 
@@ -284,16 +300,13 @@ def acquisisci_abilita_personaggio(personaggio, abilita_id, request, *, staff: b
             )
 
         ain_label = "Staff: cambio tratto AIN" if staff else "Cambio tratto AIN"
+        ain_motivo = _clip_movimento_descrizione(
+            f"{ain_label}: {old_abilita.nome if old_abilita else 'Nessuno'} -> {abilita.nome}{log_suffix}"
+        )
         if pc_delta:
-            personaggio.modifica_pc(
-                pc_delta,
-                f"{ain_label}: {old_abilita.nome if old_abilita else 'Nessuno'} -> {abilita.nome}{log_suffix}",
-            )
+            personaggio.modifica_pc(pc_delta, ain_motivo)
         if crediti_delta:
-            personaggio.modifica_crediti(
-                crediti_delta,
-                f"{ain_label}: {old_abilita.nome if old_abilita else 'Nessuno'} -> {abilita.nome}{log_suffix}",
-            )
+            personaggio.modifica_crediti(crediti_delta, ain_motivo)
         costo_pc_pagato = int(abilita.costo_pc or 0)
         costo_crediti_pagato = Decimal(abilita.costo_crediti or 0)
     else:
@@ -319,11 +332,15 @@ def acquisisci_abilita_personaggio(personaggio, abilita_id, request, *, staff: b
         acquire_label = "Staff: acquisita abilità" if staff else "Acquisito abilità"
         personaggio.modifica_pc(
             -costo_pc_finale,
-            f"{acquire_label}: {abilita.nome} (Costo: {costo_pc_finale} PC){log_suffix}",
+            _clip_movimento_descrizione(
+                f"{acquire_label}: {abilita.nome} (Costo: {costo_pc_finale} PC){log_suffix}"
+            ),
         )
         personaggio.modifica_crediti(
             -costo_crediti_finale,
-            f"{acquire_label}: {abilita.nome} (Costo: {costo_crediti_finale} Crediti){log_suffix}",
+            _clip_movimento_descrizione(
+                f"{acquire_label}: {abilita.nome} (Costo: {costo_crediti_finale} Crediti){log_suffix}"
+            ),
         )
         costo_pc_pagato = int(costo_pc_finale)
         costo_crediti_pagato = costo_crediti_finale
@@ -346,4 +363,5 @@ def acquisisci_abilita_personaggio(personaggio, abilita_id, request, *, staff: b
 
     _sync_coma_state(personaggio)
     personaggio.refresh_from_db()
+    _clear_personaggio_score_cache(personaggio)
     return AbilitaOpResult(ok=True, personaggio=personaggio)

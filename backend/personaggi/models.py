@@ -5956,6 +5956,8 @@ class Personaggio(Inventario):
         if liv == 1:
             if ain_val < 1:
                 return False, "Serve aura innata almeno 1 per questo archetipo."
+            if not abilita.caratteristica_id:
+                return False, "Archetipo senza caratteristica configurata."
             excl = self._ids_tratti_aura_innata_slot('archetipo')
             chars = self._caratteristiche_dict_da_punteggi_nomi(
                 self.get_punteggi_base_escludendo_abilita(excl)
@@ -5968,8 +5970,8 @@ class Personaggio(Inventario):
         if liv == 2:
             if ain_val < 2:
                 return False, "Serve aura innata almeno 2 per selezionare una forma."
-            if not abilita.caratteristica_2_id:
-                return False, "Forma senza seconda caratteristica configurata."
+            if not abilita.caratteristica_id or not abilita.caratteristica_2_id:
+                return False, "Forma senza caratteristiche configurate."
             excl = self._ids_tratti_aura_innata_slot('forma')
             chars = self._caratteristiche_dict_da_punteggi_nomi(
                 self.get_punteggi_base_escludendo_abilita(excl)
@@ -5992,7 +5994,7 @@ class Personaggio(Inventario):
         # Tratto aura innata (AIN): regole dedicate; lo swap è gestito in AcquisisciAbilitaView.
         if abilita.is_tratto_aura and abilita.aura_riferimento_id:
             ar = abilita.aura_riferimento
-            if getattr(ar, 'sigla', None) == 'AIN':
+            if str(getattr(ar, 'sigla', '') or '').upper() == 'AIN':
                 return self.valida_tratto_aura_innata(abilita)
 
         from personaggi.carriere_tier_sblocco import (
@@ -6891,7 +6893,7 @@ class PersonaggioAbilita(SyncableModel, models.Model):
                 bool(ab)
                 and ab.is_tratto_aura
                 and ab.aura_riferimento_id
-                and getattr(ab.aura_riferimento, "sigla", None) == "AIN"
+                and str(getattr(ab.aura_riferimento, "sigla", "") or "").upper() == "AIN"
             )
             if is_ain_trait:
                 liv = ab.livello_riferimento
