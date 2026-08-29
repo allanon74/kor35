@@ -482,6 +482,36 @@ class AINFormaSwapTests(APITestCase):
             1,
         )
 
+    def test_acquire_forma_camaleonte_serializes_without_500(self):
+        """La forma camaleonte innesca 'forma del giorno': Abilita non ha TestoFormattato."""
+        camaleonte = Abilita.objects.create(
+            nome="Forma - Camaleonte Test",
+            descrizione="<p>Cambia aspetto ogni giorno.</p>",
+            caratteristica=self.ca,
+            caratteristica_2=self.ca,
+            costo_pc=0,
+            costo_crediti=0,
+            is_tratto_aura=True,
+            aura_riferimento=self.aura_innata,
+            livello_riferimento=2,
+            camaleontica=True,
+            campagna=self.campagna,
+        )
+        self.forma_a.descrizione = "<p>Forma del giorno di test.</p>"
+        self.forma_a.save(update_fields=["descrizione"])
+
+        r = self.client.post(
+            "/api/personaggi/api/personaggio/me/acquisisci_abilita/",
+            {"personaggio_id": self.personaggio.id, "abilita_id": camaleonte.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertTrue(
+            PersonaggioAbilita.objects.filter(personaggio=self.personaggio, abilita=camaleonte).exists()
+        )
+        html = self.personaggio.get_testo_formattato_per_item(camaleonte)
+        self.assertIn("Forma del giorno", html)
+
 
 class TessituraRuntimeTests(APITestCase):
     def setUp(self):
