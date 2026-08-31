@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 from kor35.syncing import (
     apply_natural_pk_precheck,
     build_model_sync_records,
+    can_align_sync_id_on_merge,
     ensure_qrcode_natural_pk_aligned,
     pagina_regolamento_sync_field_allowed,
     touch_sync_updated_at,
@@ -597,7 +598,7 @@ class EdgeSyncView(APIView):
                 existing = model.objects.filter(**kwargs).first()
                 if existing and str(existing.sync_id) != str(sync_id):
                     patch = dict(update_data)
-                    if model._meta.label_lower == "personaggi.campagna":
+                    if can_align_sync_id_on_merge(model):
                         patch["sync_id"] = sync_id
                     for f in model._meta.concrete_fields:
                         if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
@@ -734,17 +735,11 @@ class EdgeSyncView(APIView):
             if not existing:
                 continue
 
-            # NOTE:
-            # On natural-key merge we never force sync_id alignment for existing rows.
-            # With multi-table inheritance (Tabella/Tier/*) sync_id uniqueness lives on parent
-            # tables too, and forcing sync_id can trigger cross-table collisions.
+            # Stessa chiave naturale = stesso record logico: i due nodi devono convergere
+            # sulla stessa identità di sync, altrimenti tombstone e delete non si propagano.
+            # Restano esclusi i figli MTI, dove sync_id appartiene alla tabella genitore.
             patch = dict(update_data)
-            # Campagna e' radice di moltissime FK: quando coincide la natural key (slug),
-            # riallineiamo esplicitamente il sync_id al peer per sbloccare la cascata.
-            if model._meta.label_lower in (
-                "personaggi.campagna",
-                "personaggi.tipocarriera",
-            ):
+            if can_align_sync_id_on_merge(model):
                 patch["sync_id"] = sync_id
             # Never patch parent-link fields on existing rows.
             for f in model._meta.concrete_fields:

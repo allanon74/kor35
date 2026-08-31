@@ -198,6 +198,17 @@ def natural_primary_key_field(model: type[models.Model]) -> str | None:
     return pk.name
 
 
+def can_align_sync_id_on_merge(model: type[models.Model]) -> bool:
+    """
+    Dice se, in un merge per chiave naturale, la riga locale può adottare il sync_id remoto.
+
+    Con l'ereditarietà multi-tabella (Tessitura → A_vista, Tier → Tabella) il campo
+    sync_id vive sulla tabella genitore, che ha una propria identità di sync: riscriverlo
+    dal payload del figlio corromperebbe il record padre e può violare l'unique.
+    """
+    return any(field.name == "sync_id" for field in model._meta.local_concrete_fields)
+
+
 def _iter_qrcode_referencing_fk_fields() -> Iterator[tuple[type[models.Model], str]]:
     """Modelli con FK/OneToOne verso QrCode.id (codice corto stampato)."""
     QrCode = apps.get_model("personaggi", "QrCode")

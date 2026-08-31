@@ -47,6 +47,26 @@ class EdgeSyncScalarUniqueMergeTests(TestCase):
         self.assertEqual(str(obj.sync_id), str(edge_sync_id))
         self.assertEqual(obj.nome, "Sottosistema edge")
 
+    def test_merge_non_allinea_sync_id_sui_figli_mti(self):
+        """Su Punteggio (figlio di Tabella) il sync_id vive sul padre: non va riscritto."""
+        Punteggio.objects.filter(sigla="MTI").delete()
+        punteggio = Punteggio.objects.create(nome="Punteggio locale", sigla="MTI", tipo="AU")
+        sync_id_locale = punteggio.sync_id
+        remote_sync_id = uuid.uuid4()
+
+        view = EdgeSyncView()
+        merged = view._merge_by_unique_together_key(
+            Punteggio,
+            remote_sync_id,
+            {"sigla": "MTI", "nome": "Punteggio remoto"},
+            None,
+        )
+        self.assertTrue(merged)
+
+        punteggio.refresh_from_db()
+        self.assertEqual(punteggio.nome, "Punteggio remoto")
+        self.assertEqual(str(punteggio.sync_id), str(sync_id_locale))
+
     def test_find_existing_after_merge_by_codice(self):
         SottosistemaNave.objects.filter(codice="2").delete()
         master_sync_id = uuid.uuid4()
