@@ -155,6 +155,34 @@ class ArticoloScritturaTests(RubricheTestBase):
         self.assertIsNone(articolo.autore_personaggio_id)
         self.assertEqual(articolo.firma, "La Redazione")
 
+    def test_hero_immagine_con_path_uuid_non_supera_max_length(self):
+        """
+        Path tipico: social/rubriche/<uuid>/articoli/<uuid>/<file>.jpg (>100 char).
+        Senza max_length=255 Django risponde 400 SuspiciousFileOperation.
+        """
+        from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        buf = BytesIO()
+        Image.new("RGB", (320, 200), (30, 60, 90)).save(buf, format="JPEG", quality=85)
+        hero = SimpleUploadedFile("copertina.jpg", buf.getvalue(), content_type="image/jpeg")
+
+        view = RubricaArticoloViewSet.as_view({"post": "create"})
+        request = self.factory.post(
+            f"/api/social/rubriche-articoli/?personaggio_id={self.pg_master.id}",
+            self._payload(firma_libera="Redazione", hero_immagine=hero),
+            format="multipart",
+        )
+        response = self._chiama(view, request, self.user_master)
+        self.assertEqual(response.status_code, 201, getattr(response, "data", None))
+        articolo = RubricaArticolo.objects.get(id=response.data["id"])
+        self.assertTrue(articolo.hero_immagine.name)
+        self.assertLessEqual(len(articolo.hero_immagine.name), 255)
+        self.assertIn(str(self.rubrica.id), articolo.hero_immagine.name)
+        self.assertIn(str(articolo.id), articolo.hero_immagine.name)
+
     def test_bozza_non_visibile_agli_altri_personaggi(self):
         RubricaArticolo.objects.create(
             rubrica=self.rubrica,

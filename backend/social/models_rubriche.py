@@ -95,7 +95,9 @@ class Rubrica(SyncableModel, models.Model):
     slug = models.SlugField(max_length=80, unique=True, blank=True)
     sottotitolo = models.CharField(max_length=200, blank=True)
     descrizione = models.TextField(blank=True)
-    logo = models.ImageField(upload_to=rubrica_logo_upload_to, null=True, blank=True)
+    logo = models.ImageField(
+        upload_to=rubrica_logo_upload_to, null=True, blank=True, max_length=255
+    )
     colore_accento = models.CharField(
         max_length=9,
         default="#b91c1c",
@@ -175,9 +177,13 @@ class RubricaArticolo(SyncableModel, models.Model):
     sommario = models.TextField(blank=True)
     corpo = models.TextField(blank=True, help_text="HTML dell'articolo (editor wiki).")
 
-    hero_immagine = models.ImageField(upload_to=rubrica_articolo_hero_upload_to, null=True, blank=True)
+    hero_immagine = models.ImageField(
+        upload_to=rubrica_articolo_hero_upload_to, null=True, blank=True, max_length=255
+    )
     hero_didascalia = models.CharField(max_length=300, blank=True)
-    video = models.FileField(upload_to=rubrica_articolo_hero_upload_to, null=True, blank=True)
+    video = models.FileField(
+        upload_to=rubrica_articolo_hero_upload_to, null=True, blank=True, max_length=255
+    )
 
     autore_personaggio = models.ForeignKey(
         "personaggi.Personaggio",
@@ -284,7 +290,7 @@ class RubricaArticolo(SyncableModel, models.Model):
 class RubricaArticoloImmagine(SyncableModel, models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     articolo = models.ForeignKey(RubricaArticolo, on_delete=models.CASCADE, related_name="immagini")
-    immagine = models.ImageField(upload_to=rubrica_articolo_gallery_upload_to)
+    immagine = models.ImageField(upload_to=rubrica_articolo_gallery_upload_to, max_length=255)
     didascalia = models.CharField(max_length=300, blank=True)
     ordine = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(default=timezone.now)

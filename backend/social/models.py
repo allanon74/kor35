@@ -571,12 +571,21 @@ def is_new_file_upload(field_file) -> bool:
 def normalize_media_field_path(field_file, upload_prefix: str) -> None:
     """
     Ripara path annidati (upload_to riapplicato a ogni save) e sposta il file se serve.
+
+    Sui file non ancora commitati (nuovo upload) lascia solo il basename: sarà
+    ``upload_to`` a costruire il path. Se qui si scrive già il path completo,
+    al save successivo Django lo raddoppia e può superare ``max_length``.
     """
     if not field_file or not field_file.name:
         return
     prefix = upload_prefix.rstrip("/")
     basename = os.path.basename(field_file.name.replace("\\", "/"))
     if not basename:
+        return
+    # Nuovo upload in memoria: non anticipare il path di destinazione.
+    if getattr(field_file, "_committed", True) is False:
+        if field_file.name != basename:
+            field_file.name = basename
         return
     normalized = f"{prefix}/{basename}"
     if field_file.name == normalized:
