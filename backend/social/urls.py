@@ -9,8 +9,9 @@ from .views import (
     SocialProfileMeView,
     SocialPublicPostDetailView,
     SocialStaffEventReportView,
-  SocialStoryViewSet,
+    SocialStoryViewSet,
 )
+from .views_rubriche import RubricaArticoloViewSet, RubricaViewSet
 
 app_name = "social"
 
@@ -18,6 +19,8 @@ router = DefaultRouter()
 router.register(r"posts", SocialPostViewSet, basename="social-posts")
 router.register(r"groups", SocialGroupViewSet, basename="social-groups")
 router.register(r"stories", SocialStoryViewSet, basename="social-stories")
+router.register(r"rubriche", RubricaViewSet, basename="social-rubriche")
+router.register(r"rubriche-articoli", RubricaArticoloViewSet, basename="social-rubriche-articoli")
 
 urlpatterns = [
     path("profile/me/", SocialProfileMeView.as_view(), name="social-profile-me"),

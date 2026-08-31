@@ -62,6 +62,7 @@ const RegoleTransazioneStaffManager = lazy(() => import('./editors/RegoleTransaz
 const EconomiaCreditiManager = lazy(() => import('./editors/EconomiaCreditiManager'));
 const StaffAppLinksPanel = lazy(() => import('./editors/StaffAppLinksPanel'));
 const StaffCalendarioCompitiManager = lazy(() => import('./editors/StaffCalendarioCompitiManager'));
+const StaffRubricheManager = lazy(() => import('./editors/StaffRubricheManager'));
 
 const STAFF_COMPONENT_MAP = {
     plot: PlotTab,
@@ -87,6 +88,7 @@ const STAFF_COMPONENT_MAP = {
     'calendario-compiti': StaffCalendarioCompitiManager,
     'effetti-casuali': EffettiCasualiManager,
     'social-report': SocialEventReportTab,
+    rubriche: StaffRubricheManager,
     'risorse-pool': StaffRisorsaPoolTab,
     'ere-prefetture': EraManager,
     'carriere-korps': CarriereKorpsManager,

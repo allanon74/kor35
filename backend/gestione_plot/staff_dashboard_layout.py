@@ -53,6 +53,7 @@ KNOWN_STAFF_TOOL_IDS = frozenset({
     "regole-transazioni",
     "economia-crediti",
     "calendario-compiti",
+    "rubriche",
 })
 
 DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
@@ -131,7 +132,7 @@ DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
             "palette": "emerald",
             "order": 3,
             "collapsed_default": False,
-            "tool_ids": ["messaggi", "social-report"],
+            "tool_ids": ["messaggi", "social-report", "rubriche"],
         },
         {
             "id": "sistema",

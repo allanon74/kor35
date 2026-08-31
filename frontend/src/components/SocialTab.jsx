@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Bell, Camera, Copy, Heart, ImagePlus, MessageCircle, Pencil, PlusSquare, Send, Sparkles, Star, Trash2, Users, Video } from 'lucide-react';
+import { Bell, Camera, Copy, Heart, ImagePlus, MessageCircle, Newspaper, Pencil, PlusSquare, Send, Sparkles, Star, Trash2, Users, Video } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import {
   socialAcceptGroupInvite,
@@ -47,6 +47,8 @@ import {
   updatePersonaggio,
   resolveMediaUrl,
 } from '../api';
+import RubricheSection from './rubriche/RubricheSection';
+import ArticoloRubricaCard from './rubriche/ArticoloRubricaCard';
 import StoryViewerModal from './StoryViewerModal';
 import StoryMediaCaptureModal from './StoryMediaCaptureModal';
 import InstafameMediaCarousel from './InstafameMediaCarousel';
@@ -240,6 +242,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const [likingCommentById, setLikingCommentById] = useState({});
   const [likedFxByComment, setLikedFxByComment] = useState({});
   const [socialViewMode, setSocialViewMode] = useState('FEED');
+  const [articoloRubricaAperto, setArticoloRubricaAperto] = useState(null);
   const [groups, setGroups] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [groupPosts, setGroupPosts] = useState([]);
@@ -1209,7 +1212,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       const raw = localStorage.getItem(groupPrefsKey);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (parsed?.mode && ['FEED', 'GROUPS'].includes(parsed.mode)) {
+      if (parsed?.mode && ['FEED', 'GROUPS', 'RUBRICHE'].includes(parsed.mode)) {
         setSocialViewMode(parsed.mode);
       }
       if (parsed?.selectedGroupId) {
@@ -1746,6 +1749,16 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           className={`px-3 py-1.5 rounded-lg border text-xs md:text-sm inline-flex items-center gap-1 whitespace-nowrap ${socialViewMode === 'GROUPS' ? 'bg-fuchsia-700 border-fuchsia-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'}`}
         >
           <Users size={14} /> Gruppi
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setArticoloRubricaAperto(null);
+            setSocialViewMode('RUBRICHE');
+          }}
+          className={`px-3 py-1.5 rounded-lg border text-xs md:text-sm inline-flex items-center gap-1 whitespace-nowrap ${socialViewMode === 'RUBRICHE' ? 'bg-fuchsia-700 border-fuchsia-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'}`}
+        >
+          <Newspaper size={14} /> Rubriche
         </button>
         <button
           type="button"
@@ -2353,6 +2366,21 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               </p>
             )}
 
+            {post.articolo_preview && (
+              <div
+                className={`px-3 md:px-4 py-2 ${hasMedia ? 'order-3 lg:order-none lg:clear-both' : ''}`}
+              >
+                <ArticoloRubricaCard
+                  articolo={post.articolo_preview}
+                  compatta
+                  onOpen={(articolo) => {
+                    setArticoloRubricaAperto(articolo.id);
+                    setSocialViewMode('RUBRICHE');
+                  }}
+                />
+              </div>
+            )}
+
             {Array.isArray(post.hashtags) && post.hashtags.length > 0 && (
               <div
                 className={`flex flex-wrap gap-2 px-3 md:px-4 py-1 ${
@@ -2655,6 +2683,13 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           </div>
         )}
       </section>
+      )}
+      {socialViewMode === 'RUBRICHE' && (
+        <RubricheSection
+          personaggio={personaggiList?.find((p) => Number(p.id) === Number(selectedCharacterId)) || { id: selectedCharacterId }}
+          onLogout={onLogout}
+          articoloIniziale={articoloRubricaAperto}
+        />
       )}
       {socialViewMode === 'GROUPS' && (
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">

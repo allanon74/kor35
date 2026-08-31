@@ -49,24 +49,23 @@ def _sum_like_peso(qs):
     return int(qs.aggregate(total=Sum("peso_like"))["total"] or 0)
 
 
-def total_post_likes(post, exclude_like_pk=None):
-    qs = post.likes.all()
+def total_likes_contenuto(contenuto, exclude_like_pk=None):
+    """likes_base + somma peso_like: vale per post, commenti e articoli di rubrica."""
+    qs = contenuto.likes.all()
     if exclude_like_pk:
         qs = qs.exclude(pk=exclude_like_pk)
-    likes_base = getattr(post, "likes_base", None)
+    likes_base = getattr(contenuto, "likes_base", None)
     if likes_base is None:
         likes_base = 1
     return int(likes_base or 0) + _sum_like_peso(qs)
+
+
+def total_post_likes(post, exclude_like_pk=None):
+    return total_likes_contenuto(post, exclude_like_pk)
 
 
 def total_comment_likes(comment, exclude_like_pk=None):
-    qs = comment.likes.all()
-    if exclude_like_pk:
-        qs = qs.exclude(pk=exclude_like_pk)
-    likes_base = getattr(comment, "likes_base", None)
-    if likes_base is None:
-        likes_base = 1
-    return int(likes_base or 0) + _sum_like_peso(qs)
+    return total_likes_contenuto(comment, exclude_like_pk)
 
 
 def _rigenera_post_likes_queryset(qs):

@@ -21,6 +21,13 @@ from .models import (
     SocialStoryTag,
     SocialStoryView,
 )
+from .models_rubriche import (
+    Rubrica,
+    RubricaArticolo,
+    RubricaArticoloComment,
+    RubricaArticoloImmagine,
+    RubricaPermessoScrittura,
+)
 
 
 @admin.register(SocialProfile)
@@ -242,3 +249,43 @@ class SocialStoryReplyAdmin(SummernoteModelAdmin):
     autocomplete_fields = ("story", "autore")
     readonly_fields = ("created_at",)
     summernote_fields = ("testo",)
+
+
+class RubricaPermessoScritturaInline(admin.TabularInline):
+    model = RubricaPermessoScrittura
+    extra = 0
+    autocomplete_fields = ("personaggio",)
+    readonly_fields = ("created_at",)
+
+
+@admin.register(Rubrica)
+class RubricaAdmin(admin.ModelAdmin):
+    list_display = ("nome", "slug", "attiva", "pubblica_in_wiki", "ordine", "created_at")
+    list_filter = ("attiva", "pubblica_in_wiki", "wiki_visibilita")
+    search_fields = ("nome", "sottotitolo", "descrizione")
+    readonly_fields = ("slug", "created_at", "wiki_pagina")
+    inlines = [RubricaPermessoScritturaInline]
+
+
+class RubricaArticoloImmagineInline(admin.TabularInline):
+    model = RubricaArticoloImmagine
+    extra = 0
+    readonly_fields = ("created_at",)
+
+
+@admin.register(RubricaArticolo)
+class RubricaArticoloAdmin(SummernoteModelAdmin):
+    list_display = ("titolo", "rubrica", "stato", "firma", "data_pubblicazione", "created_at")
+    list_filter = ("stato", "rubrica")
+    search_fields = ("titolo", "occhiello", "sommario", "corpo", "firma_libera")
+    autocomplete_fields = ("rubrica", "autore_personaggio", "evento", "post_annuncio")
+    readonly_fields = ("slug", "tempo_lettura_min", "created_at")
+    summernote_fields = ("corpo",)
+    inlines = [RubricaArticoloImmagineInline]
+
+
+@admin.register(RubricaArticoloComment)
+class RubricaArticoloCommentAdmin(admin.ModelAdmin):
+    list_display = ("articolo", "autore", "created_at")
+    search_fields = ("testo", "autore__nome", "articolo__titolo")
+    autocomplete_fields = ("articolo", "autore", "evento")

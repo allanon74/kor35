@@ -106,6 +106,7 @@ export const STAFF_TOOLS_REGISTRY = {
   'calendario-compiti': { id: 'calendario-compiti', label: 'Calendario compiti', icon: Calendar, color: 'bg-sky-700', componentKey: 'calendario-compiti' },
   'effetti-casuali': { id: 'effetti-casuali', label: 'Effetti casuali', icon: Sparkles, color: 'bg-amber-700', componentKey: 'effetti-casuali' },
   'social-report': { id: 'social-report', label: 'Report social eventi', icon: Sparkles, color: 'bg-fuchsia-700', componentKey: 'social-report' },
+  rubriche: { id: 'rubriche', label: 'Rubriche', icon: BookText, color: 'bg-rose-900', componentKey: 'rubriche' },
   'risorse-pool': { id: 'risorse-pool', label: 'Risorse pool (Fortuna)', icon: Gem, color: 'bg-amber-800', componentKey: 'risorse-pool' },
   'ere-prefetture': { id: 'ere-prefetture', label: 'Ere e prefetture', icon: Globe2, color: 'bg-violet-700', componentKey: 'ere-prefetture' },
   'carriere-korps': { id: 'carriere-korps', label: 'Carriere e KORP', icon: Users, color: 'bg-violet-800', componentKey: 'carriere-korps' },
@@ -168,7 +169,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       palette: 'emerald',
       order: 3,
       collapsed_default: false,
-      tool_ids: ['messaggi', 'social-report'],
+      tool_ids: ['messaggi', 'social-report', 'rubriche'],
     },
     {
       id: 'sistema',
@@ -184,7 +185,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
 };
 
 const GLOBAL_ONLY_TOOLS = new Set(['arcana-profiles', 'campagne', 'maintenance']);
-const STAFFER_TOOLS = new Set(['messaggi', 'plot', 'tasks', 'app-links', 'calendario-compiti']);
+const STAFFER_TOOLS = new Set(['messaggi', 'plot', 'tasks', 'app-links', 'calendario-compiti', 'rubriche']);
 const MASTER_EXCLUDED = new Set(['campagne', 'arcana-profiles', 'maintenance']);
 const HEAD_EXCLUDED = new Set(['arcana-profiles', 'maintenance']);
 

@@ -110,3 +110,12 @@ class StaffDashboardLayoutTests(SimpleTestCase):
         evento_tools = layout["groups"][0]["tool_ids"]
         self.assertIn("calendario-compiti", evento_tools)
         validate_staff_dashboard_layout(layout)
+
+    def test_rubriche_tool_nel_default(self):
+        from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
+
+        self.assertIn("rubriche", KNOWN_STAFF_TOOL_IDS)
+        layout = default_staff_dashboard_layout()
+        comunicazione_tools = layout["groups"][3]["tool_ids"]
+        self.assertIn("rubriche", comunicazione_tools)
+        validate_staff_dashboard_layout(layout)

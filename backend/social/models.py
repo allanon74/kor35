@@ -107,6 +107,14 @@ class SocialPost(SyncableModel, models.Model):
         default=1,
         help_text="Like iniziali simulati (statici) alla creazione del post.",
     )
+    articolo_collegato = models.ForeignKey(
+        "social.RubricaArticolo",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="post_collegati",
+        help_text="Articolo di rubrica linkato dal post (card anteprima nel feed).",
+    )
 
     class Meta:
         verbose_name = "Post Social"
@@ -610,3 +618,25 @@ def optimize_uploaded_image(uploaded_file):
         return ContentFile(output.read(), name=new_name)
     except Exception:
         return uploaded_file
+
+
+# Import in coda: models_rubriche usa le utility definite sopra (prepare_image_upload, limiti media).
+from .models_rubriche import (  # noqa: E402,F401
+    MAX_ARTICOLO_IMAGES,
+    RUBRICA_ARTICOLO_ARCHIVIATO,
+    RUBRICA_ARTICOLO_BOZZA,
+    RUBRICA_ARTICOLO_PUBBLICATO,
+    RUBRICA_ARTICOLO_STATO_CHOICES,
+    RUBRICA_WIKI_AUTENTICATI,
+    RUBRICA_WIKI_PUBBLICA,
+    RUBRICA_WIKI_VISIBILITA_CHOICES,
+    Rubrica,
+    RubricaArticolo,
+    RubricaArticoloComment,
+    RubricaArticoloCommentLike,
+    RubricaArticoloImmagine,
+    RubricaArticoloLike,
+    RubricaPermessoScrittura,
+    calcola_tempo_lettura,
+    testo_semplice_da_html,
+)

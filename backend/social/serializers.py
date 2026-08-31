@@ -274,6 +274,7 @@ class SocialPostSerializer(serializers.ModelSerializer):
     evento_titolo = serializers.CharField(source="evento.titolo", read_only=True)
     hashtags = serializers.SerializerMethodField()
     immagini = serializers.SerializerMethodField()
+    articolo_preview = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialPost
@@ -299,8 +300,19 @@ class SocialPostSerializer(serializers.ModelSerializer):
             "tags",
             "hashtags",
             "public_url",
+            "articolo_collegato",
+            "articolo_preview",
         )
-        read_only_fields = ("autore", "evento", "created_at", "likes_count", "comments_count", "liked_by_me", "immagini")
+        read_only_fields = (
+            "autore",
+            "evento",
+            "created_at",
+            "likes_count",
+            "comments_count",
+            "liked_by_me",
+            "immagini",
+            "articolo_preview",
+        )
 
     def get_liked_by_me(self, obj):
         personaggio = self.context.get("personaggio")
@@ -348,6 +360,13 @@ class SocialPostSerializer(serializers.ModelSerializer):
     def get_hashtags(self, obj):
         text = f"{obj.titolo or ''} {obj.testo or ''}".strip()
         return extract_hashtags(text)
+
+    def get_articolo_preview(self, obj):
+        if not obj.articolo_collegato_id:
+            return None
+        from .serializers_rubriche import articolo_preview_data
+
+        return articolo_preview_data(obj.articolo_collegato, self.context.get("request"))
 
     def get_immagini(self, obj):
         request = self.context.get("request")
@@ -751,7 +770,14 @@ def resolve_active_personaggio(user, explicit_personaggio_id=None, request=None)
 
 
 def visible_posts_queryset_for_personaggio(personaggio, request=None):
-    base = SocialPost.objects.select_related("autore", "autore__social_profile", "evento", "korp_visibilita").prefetch_related(
+    base = SocialPost.objects.select_related(
+        "autore",
+        "autore__social_profile",
+        "evento",
+        "korp_visibilita",
+        "articolo_collegato",
+        "articolo_collegato__rubrica",
+    ).prefetch_related(
         "post_images",
     ).annotate(
         _likes_user_sum=Coalesce(Sum("likes__peso_like"), Value(0)),
