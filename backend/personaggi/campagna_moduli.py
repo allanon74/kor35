@@ -39,6 +39,7 @@ MODULO_SOCIAL = "social"
 MODULO_NEGOZI = "negozi"
 MODULO_CREAZIONE_GUIDATA = "creazione_guidata"
 MODULO_CONTO_DEPOSITO = "conto_deposito"
+MODULO_RUBRICHE = "rubriche"
 
 # tool staff id → chiave modulo (None = non gated)
 STAFF_TOOL_TO_MODULO = {
@@ -50,6 +51,7 @@ STAFF_TOOL_TO_MODULO = {
     "creazione-guidata": MODULO_CREAZIONE_GUIDATA,
     "social-report": MODULO_SOCIAL,
     "economia-crediti": MODULO_CONTO_DEPOSITO,
+    "rubriche": MODULO_RUBRICHE,
 }
 
 # tab player id → chiave modulo
@@ -60,6 +62,7 @@ PLAYER_TAB_TO_MODULO = {
     "social": MODULO_SOCIAL,
     "tasks": MODULO_TASKS,
     "economia": MODULO_CONTO_DEPOSITO,
+    "rubriche": MODULO_RUBRICHE,
 }
 
 CAMPAGNA_MODULI_REGISTRY: list[dict[str, Any]] = [
@@ -92,6 +95,15 @@ CAMPAGNA_MODULI_REGISTRY: list[dict[str, Any]] = [
         "key": MODULO_SOCIAL,
         "label": "Social (InstaFame)",
         "descrizione": "Feed social e report eventi.",
+        "default": MODULO_ACCESSO_OPEN,
+    },
+    {
+        "key": MODULO_RUBRICHE,
+        "label": "Rubriche",
+        "descrizione": (
+            "Sezione Rubriche in InstaFame (articoli, like, commenti) e tool staff. "
+            "Le pagine wiki già generate restano consultabili off-game."
+        ),
         "default": MODULO_ACCESSO_OPEN,
     },
     {

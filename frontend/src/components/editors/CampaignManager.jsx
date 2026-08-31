@@ -66,6 +66,7 @@ const STAFF_TOOL_LABELS = {
   'negozi-mercante': 'Negozi mercante',
   'creazione-guidata': 'Creazione guidata',
   'social-report': 'Report social',
+  rubriche: 'Rubriche',
 };
 
 const PLAYER_TAB_LABELS = {
@@ -74,6 +75,7 @@ const PLAYER_TAB_LABELS = {
   negozi: 'Negozi',
   social: 'Social',
   tasks: 'Tasks (solo evento aperto)',
+  rubriche: 'Rubriche (sezione InstaFame)',
 };
 
 const impattiTesto = (key) => {

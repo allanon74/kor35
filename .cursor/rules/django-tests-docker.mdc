@@ -20,12 +20,35 @@ In `docker compose exec -T` **non c'è stdin interattivo**: il comando resta in 
 1. Esegui i test **sempre** nel container backend (`docker compose exec -T`, mai `manage.py` sull'host).
 2. Aggiungi **sempre** `--keepdb` a `python manage.py test` (salvo richiesta esplicita di ricreare il DB test).
 3. Usa **`-T`** (no TTY) su `exec` — coerente con automazione e CI.
-4. Lancia compose dalla directory `config/docker` con i file del profilo (`compose.base.yml` + `compose.dev-home.yml`, ecc.).
+4. Lancia compose dalla directory `config/docker` con i file del profilo (`compose.base.yml` + `compose.<profilo>.yml`).
+5. **Riconosci la postazione dal path del workspace** (vedi tabella) e usa il profilo corrispondente: entrambe le postazioni sono in uso.
+6. Passa `KOR35_BACKEND_ENV_FILE` come fa il `Makefile`, così il container legge l'env del profilo giusto.
 
-## Comando canonico (dev-home)
+## Postazioni di sviluppo
+
+| Path del repo | Profilo | Env backend |
+|---|---|---|
+| `/home/django/progetti/kor35` (WSL) | `dev-home` | `backend/.env.dev-home` |
+| `/home/giorgio_leifers/Documenti/kor35-1` (Linux ufficio) | `dev-office` | `backend/.env.dev-office` |
+
+Tutti i profili locali condividono il project name Compose `docker`: `exec backend` può quindi
+colpire il container attivo **anche con il file compose sbagliato**. Non fidarti del fatto che
+il comando risponda — verifica il profilo.
+
+## Comando canonico (dev-office, postazione Linux ufficio)
+
+```bash
+cd /home/giorgio_leifers/Documenti/kor35-1/config/docker
+KOR35_BACKEND_ENV_FILE="$(pwd)/../../backend/.env.dev-office" \
+docker compose -f compose.base.yml -f compose.dev-office.yml exec -T backend \
+  python manage.py test <modulo_o_classe> -v 2 --keepdb
+```
+
+## Comando canonico (dev-home, postazione WSL)
 
 ```bash
 cd /home/django/progetti/kor35/config/docker
+KOR35_BACKEND_ENV_FILE="$(pwd)/../../backend/.env.dev-home" \
 docker compose -f compose.base.yml -f compose.dev-home.yml exec -T backend \
   python manage.py test <modulo_o_classe> -v 2 --keepdb
 ```
@@ -45,7 +68,7 @@ python manage.py test kor35.tests_edge_sync_integrity.EdgeSyncMtiChildLwwTests -
 Solo quando l'utente lo chiede o le migrazioni test falliscono in modo inspiegabile:
 
 ```bash
-docker compose -f compose.base.yml -f compose.dev-home.yml exec -T backend \
+docker compose -f compose.base.yml -f compose.<profilo>.yml exec -T backend \
   python manage.py test <modulo> -v 2 --noinput
 ```
 
@@ -56,3 +79,4 @@ Oppure elimina manualmente `test_kor35_dev` nel container Postgres, poi test sen
 - `python manage.py test` senza `--keepdb` in automazione
 - `docker compose exec backend ...` **senza** `-T` negli script degli agenti
 - Ignorare un comando test “appeso” — controllare subito se manca `--keepdb`
+- Assumere `dev-home` come default: sulla postazione ufficio il profilo è `dev-office`

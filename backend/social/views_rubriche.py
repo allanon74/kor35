@@ -12,6 +12,11 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
+from personaggi.campagna_moduli import (
+    MODULO_RUBRICHE,
+    ModuloStaffGateMixin,
+    modulo_accesso_error,
+)
 from personaggi.models import Korp, Personaggio, PersonaggioCarrieraMembership
 
 from .influencer import compute_like_peso, random_likes_base
@@ -55,7 +60,23 @@ from .views import (
 logger = logging.getLogger(__name__)
 
 
-class RubricheContextMixin:
+def gate_modulo_rubriche(request, personaggio):
+    """
+    Modulo campagna «rubriche»: in TEST la sezione in-game resta ai soli staff/PnG.
+    Il caso OFF è già respinto da ModuloStaffGateMixin, che copre anche gli utenti
+    senza personaggio attivo.
+    """
+    if not personaggio:
+        return None
+    msg = modulo_accesso_error(personaggio, MODULO_RUBRICHE, user=getattr(request, "user", None))
+    if msg:
+        raise PermissionDenied(msg)
+    return personaggio
+
+
+class RubricheContextMixin(ModuloStaffGateMixin):
+    modulo_key = MODULO_RUBRICHE
+
     def get_personaggio(self):
         if not self.request.user.is_authenticated:
             return None
@@ -63,7 +84,8 @@ class RubricheContextMixin:
             "personaggio_id"
         )
         personaggio = resolve_active_personaggio(self.request.user, requested, request=self.request)
-        return gate_modulo_social(self.request, personaggio)
+        personaggio = gate_modulo_social(self.request, personaggio)
+        return gate_modulo_rubriche(self.request, personaggio)
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()

@@ -5,6 +5,11 @@ from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from gestione_plot.models import PaginaRegolamento
+from personaggi.campagna_moduli import (
+    MODULO_RUBRICHE,
+    apply_moduli_accesso,
+    staff_tool_abilitato,
+)
 from personaggi.models import (
     CAMPAGNA_ROLE_MASTER,
     CAMPAGNA_ROLE_PLAYER,
@@ -386,3 +391,56 @@ class RubricaWikiTests(RubricheTestBase):
         self.assertFalse(
             PaginaRegolamento.objects.filter(sync_id=sync_id_pagina_articolo(self.articolo)).exists()
         )
+
+
+class ModuloRubricheTests(RubricheTestBase):
+    """Interruttore campagna OFF / TEST (staff only) / OPEN."""
+
+    def setUp(self):
+        Rubrica.objects.create(nome="Rubrica gated")
+
+    def _imposta_modulo(self, modo):
+        apply_moduli_accesso(self.campagna, {MODULO_RUBRICHE: modo})
+
+    def _lista_rubriche(self, user, personaggio):
+        view = RubricaViewSet.as_view({"get": "list"})
+        request = self.factory.get(f"/api/social/rubriche/?personaggio_id={personaggio.id}")
+        return self._chiama(view, request, user)
+
+    def test_default_aperto_a_tutti(self):
+        response = self._lista_rubriche(self.user_player, self.pg_lettore)
+        self.assertEqual(response.status_code, 200, getattr(response, "data", None))
+
+    def test_off_blocca_anche_lo_staff(self):
+        self._imposta_modulo("OFF")
+        for user, personaggio in (
+            (self.user_player, self.pg_lettore),
+            (self.user_master, self.pg_master),
+        ):
+            with self.subTest(user=user.username):
+                response = self._lista_rubriche(user, personaggio)
+                self.assertEqual(response.status_code, 403, getattr(response, "data", None))
+
+    def test_test_riservato_a_staff_e_master(self):
+        self._imposta_modulo("TEST")
+
+        response = self._lista_rubriche(self.user_player, self.pg_lettore)
+        self.assertEqual(response.status_code, 403, getattr(response, "data", None))
+
+        response = self._lista_rubriche(self.user_master, self.pg_master)
+        self.assertEqual(response.status_code, 200, getattr(response, "data", None))
+
+    def test_articoli_seguono_lo_stesso_interruttore(self):
+        self._imposta_modulo("OFF")
+        view = RubricaArticoloViewSet.as_view({"get": "list"})
+        request = self.factory.get(
+            f"/api/social/rubriche-articoli/?personaggio_id={self.pg_lettore.id}"
+        )
+        response = self._chiama(view, request, self.user_player)
+        self.assertEqual(response.status_code, 403, getattr(response, "data", None))
+
+    def test_tool_staff_nascosto_solo_con_off(self):
+        self._imposta_modulo("OFF")
+        self.assertFalse(staff_tool_abilitato(self.campagna, "rubriche"))
+        self._imposta_modulo("TEST")
+        self.assertTrue(staff_tool_abilitato(self.campagna, "rubriche"))

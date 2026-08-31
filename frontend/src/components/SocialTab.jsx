@@ -179,7 +179,8 @@ const compressImageFile = (file, maxEdge = STORY_IMAGE_MAX_EDGE, quality = 0.82)
 const SocialTab = ({ onLogout, onOpenMessages }) => {
   const PAGE_SIZE = 30;
   const MAX_POST_IMAGES = 8;
-  const { selectedCharacterId, isAdmin, personaggiList, selectCharacter, preferredCharacterId } = useCharacter();
+  const { selectedCharacterId, isAdmin, personaggiList, selectCharacter, preferredCharacterId, canAccessModulo } = useCharacter();
+  const rubricheAbilitate = canAccessModulo ? canAccessModulo('rubriche') : true;
   const [posts, setPosts] = useState([]);
   const [stories, setStories] = useState([]);
   const [storiesLoading, setStoriesLoading] = useState(false);
@@ -1231,6 +1232,14 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     );
   }, [groupPrefsKey, socialViewMode, selectedGroupId, selectedCharacterId]);
 
+  useEffect(() => {
+    // La modalità è ripristinata da localStorage: senza questo, chi era sulle Rubriche
+    // quando il modulo viene spento resterebbe su una schermata vuota.
+    if (!rubricheAbilitate && socialViewMode === 'RUBRICHE') {
+      setSocialViewMode('FEED');
+    }
+  }, [rubricheAbilitate, socialViewMode]);
+
   const loadNotifications = useCallback(async () => {
     if (!selectedCharacterId) return;
     try {
@@ -1750,6 +1759,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
         >
           <Users size={14} /> Gruppi
         </button>
+        {rubricheAbilitate && (
         <button
           type="button"
           onClick={() => {
@@ -1760,6 +1770,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
         >
           <Newspaper size={14} /> Rubriche
         </button>
+        )}
         <button
           type="button"
           onClick={() => onOpenMessages?.()}
@@ -2366,7 +2377,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               </p>
             )}
 
-            {post.articolo_preview && (
+            {post.articolo_preview && rubricheAbilitate && (
               <div
                 className={`px-3 md:px-4 py-2 ${hasMedia ? 'order-3 lg:order-none lg:clear-both' : ''}`}
               >
@@ -2684,7 +2695,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
         )}
       </section>
       )}
-      {socialViewMode === 'RUBRICHE' && (
+      {socialViewMode === 'RUBRICHE' && rubricheAbilitate && (
         <RubricheSection
           personaggio={personaggiList?.find((p) => Number(p.id) === Number(selectedCharacterId)) || { id: selectedCharacterId }}
           onLogout={onLogout}
