@@ -348,7 +348,6 @@ jobs:
           ssh $SSH_OPTS "${USER}@${HOST}" "mkdir -p '${REMOTE_DIR}'"
           rsync -avz -e "ssh $SSH_OPTS" "$SRC" "${USER}@${HOST}:${REMOTE_DIR}/app-release.apk"
 
-      - name: Backup and deploy on Production via SSH
       - name: Deploy production over SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
