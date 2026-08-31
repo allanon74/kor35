@@ -236,6 +236,18 @@ jobs:
           REMOTE_PREP
           rsync -avz --delete -e "ssh $SSH_OPTS" \
             dist-upload/ "${USER}@${HOST}:${REMOTE}/"
+          # Non lasciare nginx spento: se lo step SSH successivo fallisce (es. git fetch),
+          # il sito resterebbe down fino a intervento manuale.
+          ssh $SSH_OPTS "${USER}@${HOST}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_START'
+          set -euo pipefail
+          REMOTE_BASE="${1:?}"
+          CPN="${2:?}"
+          cd "${REMOTE_BASE}/config/docker"
+          export COMPOSE_PROJECT_NAME="${CPN}"
+          export KOR35_BACKEND_ENV_FILE="${REMOTE_BASE}/backend/.env.prod"
+          docker compose -f compose.base.yml -f compose.prod.yml start frontend \
+            || docker compose -f compose.base.yml -f compose.prod.yml up -d frontend
+          REMOTE_START
 
       - name: Rsync console pilota verso produzione
         env:
@@ -275,6 +287,16 @@ jobs:
           REMOTE_PREP
           rsync -avz --delete -e "ssh $SSH_OPTS" \
             dist-upload-pilot/ "${USER}@${HOST}:${REMOTE}/"
+          ssh $SSH_OPTS "${USER}@${HOST}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_START'
+          set -euo pipefail
+          REMOTE_BASE="${1:?}"
+          CPN="${2:?}"
+          cd "${REMOTE_BASE}/config/docker"
+          export COMPOSE_PROJECT_NAME="${CPN}"
+          export KOR35_BACKEND_ENV_FILE="${REMOTE_BASE}/backend/.env.prod"
+          docker compose -f compose.base.yml -f compose.prod.yml start frontend \
+            || docker compose -f compose.base.yml -f compose.prod.yml up -d frontend
+          REMOTE_START
 
       - name: Rsync firmware OTA verso produzione
         env:
@@ -327,13 +349,18 @@ jobs:
           rsync -avz -e "ssh $SSH_OPTS" "$SRC" "${USER}@${HOST}:${REMOTE_DIR}/app-release.apk"
 
       - name: Backup and deploy on Production via SSH
+      - name: Deploy production over SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          # Token job-scoped: consente git fetch HTTPS sul server senza deploy key permanente.
+          DEPLOY_GIT_TOKEN: ${{ github.token }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT || 22 }}
           command_timeout: 40m
+          envs: DEPLOY_GIT_TOKEN
           script: |
             set -euo pipefail
             REF="main"
@@ -377,7 +404,13 @@ jobs:
                   || true
               fi
             done
-            git fetch --all --tags
+            # origin è HTTPS senza credenziali sul server: usa il token del job CI (una tantum).
+            if [ -n "${DEPLOY_GIT_TOKEN:-}" ]; then
+              git -c "url.https://x-access-token:${DEPLOY_GIT_TOKEN}@github.com/.insteadOf=https://github.com/" \
+                fetch --all --tags
+            else
+              git fetch --all --tags
+            fi
             PREVIOUS_SHA="$(git rev-parse HEAD)"
             echo "PREVIOUS_SHA=${PREVIOUS_SHA}"
             if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
@@ -436,6 +469,36 @@ jobs:
               curl -fsS "${HEALTHCHECK_URL}" >/dev/null
             fi
             echo "Production deploy OK"
+
+      - name: Recovery frontend se il deploy SSH fallisce
+        if: failure()
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          HOST: ${{ secrets.SERVER_HOST }}
+          USER: ${{ secrets.SERVER_USER }}
+          PORT: ${{ secrets.SERVER_SSH_PORT }}
+          PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+          PROD_COMPOSE_PROJECT_NAME: ${{ secrets.PROD_COMPOSE_PROJECT_NAME }}
+        run: |
+          set -euo pipefail
+          REMOTE_BASE="${PROJECT_PATH:-/srv/kor35}"
+          CPN="${PROD_COMPOSE_PROJECT_NAME:-kor35-prod}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          P="${PORT:-22}"
+          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
+          ssh $SSH_OPTS "${USER}@${HOST}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE'
+          set -euo pipefail
+          REMOTE_BASE="${1:?}"
+          CPN="${2:?}"
+          cd "${REMOTE_BASE}/config/docker"
+          export COMPOSE_PROJECT_NAME="${CPN}"
+          export KOR35_BACKEND_ENV_FILE="${REMOTE_BASE}/backend/.env.prod"
+          docker compose -f compose.base.yml -f compose.prod.yml up -d frontend
+          curl -fsS -o /dev/null https://www.kor35.it/ || curl -fsS -o /dev/null http://127.0.0.1/ || true
+          echo "Recovery frontend completato"
+          REMOTE
 
   # Mirror = monorepo completo su ROOT_PATH (non più solo backend_src): stesso repo di produzione.
   # Omada (compose.mirror.yml) condivide il progetto compose: `up -d --build` aggiorna kor35_* senza toccare
@@ -517,6 +580,16 @@ jobs:
           REMOTE_PREP
           rsync -avz --delete -e "ssh $SSH_OPTS" \
             dist-upload/ "${USER}@${HOST}:${REMOTE}/"
+          ssh $SSH_OPTS "${USER}@${HOST}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_START'
+          set -euo pipefail
+          REMOTE_BASE="${1:?}"
+          CPN="${2:?}"
+          cd "${REMOTE_BASE}/config/docker"
+          export COMPOSE_PROJECT_NAME="${CPN}"
+          export KOR35_BACKEND_ENV_FILE="${REMOTE_BASE}/backend/.env.mirror"
+          docker compose -f compose.base.yml -f compose.mirror.yml start frontend \
+            || docker compose -f compose.base.yml -f compose.mirror.yml up -d frontend
+          REMOTE_START
 
       - name: Rsync console pilota verso mirror
         env:
@@ -611,11 +684,14 @@ jobs:
 
       - name: Deploy backend to mirror via SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_GIT_TOKEN: ${{ github.token }}
         with:
           host: ${{ secrets.MIRROR_SERVER_HOST }}
           username: ${{ secrets.MIRROR_SERVER_USER }}
           key: ${{ secrets.MIRROR_SERVER_SSH_KEY }}
           port: ${{ secrets.MIRROR_SERVER_SSH_PORT || 10022 }}
+          envs: DEPLOY_GIT_TOKEN
           script: |
             set -euo pipefail
             REF="main"
@@ -658,7 +734,12 @@ jobs:
                   || true
               fi
             done
-            git fetch --all --tags
+            if [ -n "${DEPLOY_GIT_TOKEN:-}" ]; then
+              git -c "url.https://x-access-token:${DEPLOY_GIT_TOKEN}@github.com/.insteadOf=https://github.com/" \
+                fetch --all --tags
+            else
+              git fetch --all --tags
+            fi
             if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
               # reset prima del checkout: scarta modifiche locali (es. script copiati a mano sul Pi)
               git reset --hard "origin/${REF}"
