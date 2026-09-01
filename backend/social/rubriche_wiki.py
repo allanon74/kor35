@@ -82,7 +82,11 @@ def _data_leggibile(valore) -> str:
 
 def html_articolo(articolo) -> str:
     """Corpo HTML della pagina wiki di un articolo (nessuna interazione social)."""
-    from .rubriche_markers import expand_corpo_markers, immagini_non_posizionate
+    from .rubriche_markers import (
+        expand_corpo_markers,
+        figure_html_for_meta,
+        immagini_non_posizionate,
+    )
 
     colore = escape(articolo.rubrica.colore_accento or "#b91c1c")
     parti: list[str] = ['<div class="rubrica-articolo">']
@@ -140,17 +144,20 @@ def html_articolo(articolo) -> str:
 
     appendice = immagini_non_posizionate(articolo.corpo or "", immagini)
     if appendice:
-        parti.append('<div class="rubrica-galleria">')
+        parti.append('<div class="rubrica-galleria" style="clear:both;margin-top:1rem;">')
         for riga in appendice:
             src = _media_src(riga.immagine)
             if not src:
                 continue
-            didascalia = (
-                f"<figcaption>{escape(riga.didascalia)}</figcaption>" if riga.didascalia else ""
-            )
             parti.append(
-                f'<figure><img src="{escape(src)}" alt="{escape(riga.didascalia or articolo.titolo)}">'
-                f"{didascalia}</figure>"
+                figure_html_for_meta(
+                    {
+                        "url": src,
+                        "didascalia": riga.didascalia or "",
+                        "layout": riga.layout or "full",
+                    },
+                    titolo_fallback=articolo.titolo or "",
+                )
             )
         parti.append("</div>")
 

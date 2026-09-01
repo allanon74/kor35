@@ -542,6 +542,19 @@ class RubricaImgMarkerTests(RubricheTestBase):
         self.assertIn("Figura 1", html)
         self.assertNotIn(self.marker, html)
         self.assertEqual(html.count("<figure"), 1)
+        # Layout wide propagato come style inline (la Wiki non ha il CSS InstaFame).
+        self.assertIn('rubrica-img--wide', html)
+        self.assertIn('style=', html)
+        self.assertIn('width:100%', html)
+
+    def test_wiki_layout_float_inline(self):
+        from social.rubriche_wiki import html_articolo
+
+        self.img.layout = "float_left"
+        self.img.save(update_fields=["layout", "updated_at"])
+        html = html_articolo(self.articolo)
+        self.assertIn("float:left", html)
+        self.assertIn("rubrica-img--float-left", html)
 
     def test_extract_e_appendice(self):
         from io import BytesIO
