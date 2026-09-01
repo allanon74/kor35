@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { StaffToolShell, StaffToolSubnav } from '../../staff/StaffToolShell';
+import { StaffModalTabs } from '../../staff/StaffCrudUi';
+import StaffEditorModal from './StaffEditorModal';
 import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
@@ -48,6 +50,10 @@ const ManifestoManager = ({ onBack, onLogout }) => {
   const [scanningKind, setScanningKind] = useState('manifesto'); // manifesto | serie | trappola
   const [msg, setMsg] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [modalTab, setModalTab] = useState('dati');
+  const [serieEditing, setSerieEditing] = useState(null);
+  const [trappolaEditing, setTrappolaEditing] = useState(null);
+  const [serieQrEditing, setSerieQrEditing] = useState(null);
 
   const [serieList, setSerieList] = useState([]);
   const [serieForm, setSerieForm] = useState({ nome: '', totale: 30, descrizione: '' });
@@ -156,20 +162,19 @@ const ManifestoManager = ({ onBack, onLogout }) => {
 
   const renderManifesti = () => (
     <>
-      {!editing ? (
-        <>
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-bold">Manifesti (QR)</h2>
             <button
               type="button"
               className="px-3 py-2 bg-indigo-600 rounded text-sm"
-              onClick={() =>
+              onClick={() => {
+                setModalTab('dati');
                 setEditing({
                   nome: '',
                   testo: '',
                   requisiti_lettura_json: '[]',
-                })
-              }
+                });
+              }}
             >
               Nuovo
             </button>
@@ -208,12 +213,13 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                     <button
                       type="button"
                       className="text-xs px-2 py-1 bg-gray-700 rounded"
-                      onClick={() =>
+                      onClick={() => {
+                        setModalTab('dati');
                         setEditing({
                           ...m,
                           requisiti_lettura_json: JSON.stringify(m.requisiti_lettura || [], null, 2),
-                        })
-                      }
+                        });
+                      }}
                     >
                       Modifica
                     </button>
@@ -241,10 +247,25 @@ const ManifestoManager = ({ onBack, onLogout }) => {
               ))}
             </ul>
           )}
-        </>
-      ) : (
-        <div className="space-y-3 border border-gray-700 rounded-lg p-4 bg-gray-900/40">
-          <h3 className="font-bold">{editing.id ? 'Modifica manifesto' : 'Nuovo manifesto'}</h3>
+
+      {editing && (
+        <StaffEditorModal
+          title={editing.id ? `Manifesto: ${editing.nome || 'senza nome'}` : 'Nuovo manifesto'}
+          size="lg"
+          onClose={() => setEditing(null)}
+          onSave={save}
+          saveLabel="Salva"
+        >
+          <StaffModalTabs
+            tabs={[
+              { id: 'dati', label: 'Dati manifesto' },
+              { id: 'minigioco', label: 'Minigioco' },
+            ]}
+            active={modalTab}
+            onChange={setModalTab}
+          />
+          {modalTab === 'dati' && (
+          <div className="space-y-3">
           <label className="block text-sm">
             Nome
             <input
@@ -269,64 +290,42 @@ const ManifestoManager = ({ onBack, onLogout }) => {
               onChange={(e) => setEditing({ ...editing, requisiti_lettura_json: e.target.value })}
             />
           </label>
-          <StaffMinigiocoQrSection qrcodeId={editing.qrcode_id} onLogout={onLogout} />
-          <div className="flex gap-2">
-            <button type="button" className="px-4 py-2 bg-indigo-600 rounded" onClick={save}>
-              Salva
-            </button>
-            <button type="button" className="px-4 py-2 bg-gray-700 rounded" onClick={() => setEditing(null)}>
-              Annulla
-            </button>
           </div>
-        </div>
+          )}
+          {modalTab === 'minigioco' && (
+            <div>
+              {!editing.id || !editing.qrcode_id ? (
+                <p className="text-sm text-gray-400">
+                  Salva il manifesto e associa un QR dalla lista per configurare il minigioco.
+                </p>
+              ) : (
+                <StaffMinigiocoQrSection qrcodeId={editing.qrcode_id} onLogout={onLogout} />
+              )}
+            </div>
+          )}
+        </StaffEditorModal>
       )}
     </>
   );
 
   const renderSerie = () => (
     <div className="space-y-4">
-      <h2 className="text-xl font-bold">Serie (collezioni uniche)</h2>
+      <div className="flex justify-between items-center gap-2">
+        <h2 className="text-xl font-bold">Serie (collezioni uniche)</h2>
+        <button
+          type="button"
+          className="px-3 py-2 bg-indigo-600 rounded text-sm"
+          onClick={() => {
+            setSerieForm({ nome: '', totale: 30, descrizione: '' });
+            setSerieEditing(true);
+          }}
+        >
+          Nuova serie
+        </button>
+      </div>
       <p className="text-sm text-gray-400">
         Ogni pezzo («Nome X di N») viene assegnato una sola volta a livello globale. Usabile da QR standalone o come effetto di un pool randomico.
       </p>
-      <div className="bg-gray-900/50 border border-gray-700 rounded p-3 grid grid-cols-1 md:grid-cols-4 gap-2">
-        <input
-          className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-          placeholder="Nome serie (es. Pecora)"
-          value={serieForm.nome}
-          onChange={(e) => setSerieForm((f) => ({ ...f, nome: e.target.value }))}
-        />
-        <input
-          type="number"
-          min={1}
-          className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-          placeholder="Totale N"
-          value={serieForm.totale}
-          onChange={(e) => setSerieForm((f) => ({ ...f, totale: Number(e.target.value) }))}
-        />
-        <input
-          className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-          placeholder="Descrizione"
-          value={serieForm.descrizione}
-          onChange={(e) => setSerieForm((f) => ({ ...f, descrizione: e.target.value }))}
-        />
-        <button
-          type="button"
-          className="px-3 py-1 bg-indigo-600 rounded text-sm"
-          onClick={async () => {
-            try {
-              await staffCreateSerieCollezione(serieForm, onLogout);
-              setSerieForm({ nome: '', totale: 30, descrizione: '' });
-              setMsg('Serie creata.');
-              await loadSerieTrappole();
-            } catch (e) {
-              setMsg(e.message || 'Errore creazione serie');
-            }
-          }}
-        >
-          Crea serie
-        </button>
-      </div>
       <ul className="space-y-2">
         {serieList.map((s) => (
           <li key={s.id} className="flex items-center justify-between bg-gray-800/40 px-3 py-2 rounded text-sm">
@@ -347,41 +346,17 @@ const ManifestoManager = ({ onBack, onLogout }) => {
         ))}
       </ul>
 
-      <h3 className="font-bold text-amber-300 mt-4">QR Serie standalone</h3>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-        <input
-          className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-          placeholder="Nome QR"
-          value={serieQrForm.nome}
-          onChange={(e) => setSerieQrForm((f) => ({ ...f, nome: e.target.value }))}
-        />
-        <select
-          className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-          value={serieQrForm.serie}
-          onChange={(e) => setSerieQrForm((f) => ({ ...f, serie: e.target.value }))}
-        >
-          <option value="">Serie…</option>
-          {serieList.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.nome}
-            </option>
-          ))}
-        </select>
+      <div className="flex justify-between items-center gap-2 mt-4">
+        <h3 className="font-bold text-amber-300">QR Serie standalone</h3>
         <button
           type="button"
-          className="px-3 py-1 bg-indigo-600 rounded text-sm md:col-span-2"
-          onClick={async () => {
-            try {
-              await staffCreateSerieQr(serieQrForm, onLogout);
-              setSerieQrForm({ nome: '', testo: '', serie: '' });
-              setMsg('QR Serie creato.');
-              await loadSerieTrappole();
-            } catch (e) {
-              setMsg(e.message || 'Errore creazione QR Serie');
-            }
+          className="px-3 py-1.5 bg-indigo-600 rounded text-sm"
+          onClick={() => {
+            setSerieQrForm({ nome: '', testo: '', serie: '' });
+            setSerieQrEditing(true);
           }}
         >
-          Crea QR Serie
+          Nuovo QR serie
         </button>
       </div>
       <ul className="space-y-2">
@@ -405,54 +380,22 @@ const ManifestoManager = ({ onBack, onLogout }) => {
 
   const renderTrappole = () => (
     <div className="space-y-4">
-      <h2 className="text-xl font-bold">Trappole (QR)</h2>
+      <div className="flex justify-between items-center gap-2">
+        <h2 className="text-xl font-bold">Trappole (QR)</h2>
+        <button
+          type="button"
+          className="px-3 py-2 bg-indigo-600 rounded text-sm"
+          onClick={() => {
+            setTrappolaForm({ nome: '', testo: '', durata_secondi: 60 });
+            setTrappolaEditing(true);
+          }}
+        >
+          Nuova trappola
+        </button>
+      </div>
       <p className="text-sm text-gray-400">
         Alla scansione mostra un testo e, se impostata una durata, avvia un timer personale evidente. Usabile anche come effetto nei pool randomici.
       </p>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-        <input
-          className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-          placeholder="Nome"
-          value={trappolaForm.nome}
-          onChange={(e) => setTrappolaForm((f) => ({ ...f, nome: e.target.value }))}
-        />
-        <input
-          className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-          placeholder="Testo"
-          value={trappolaForm.testo}
-          onChange={(e) => setTrappolaForm((f) => ({ ...f, testo: e.target.value }))}
-        />
-        <input
-          type="number"
-          min={0}
-          className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-          placeholder="Durata s (vuoto = solo testo)"
-          value={trappolaForm.durata_secondi}
-          onChange={(e) => setTrappolaForm((f) => ({ ...f, durata_secondi: e.target.value }))}
-        />
-        <button
-          type="button"
-          className="px-3 py-1 bg-indigo-600 rounded text-sm"
-          onClick={async () => {
-            try {
-              await staffCreateTrappola(
-                {
-                  ...trappolaForm,
-                  durata_secondi: trappolaForm.durata_secondi === '' ? null : Number(trappolaForm.durata_secondi),
-                },
-                onLogout,
-              );
-              setTrappolaForm({ nome: '', testo: '', durata_secondi: 60 });
-              setMsg('Trappola creata.');
-              await loadSerieTrappole();
-            } catch (e) {
-              setMsg(e.message || 'Errore creazione trappola');
-            }
-          }}
-        >
-          Crea trappola
-        </button>
-      </div>
       <ul className="space-y-2">
         {trappole.map((t) => (
           <li key={t.id} className="flex items-center gap-2 bg-gray-800/40 px-3 py-2 rounded text-sm">
@@ -509,6 +452,134 @@ const ManifestoManager = ({ onBack, onLogout }) => {
       {tab === 'manifesti' && renderManifesti()}
       {tab === 'serie' && renderSerie()}
       {tab === 'trappole' && renderTrappole()}
+
+      {serieEditing && (
+        <StaffEditorModal
+          title="Nuova serie"
+          onClose={() => setSerieEditing(null)}
+          onSave={async () => {
+            try {
+              await staffCreateSerieCollezione(serieForm, onLogout);
+              setSerieForm({ nome: '', totale: 30, descrizione: '' });
+              setSerieEditing(null);
+              setMsg('Serie creata.');
+              await loadSerieTrappole();
+            } catch (e) {
+              setMsg(e.message || 'Errore creazione serie');
+            }
+          }}
+          saveLabel="Crea serie"
+        >
+          <div className="space-y-3">
+            <input
+              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
+              placeholder="Nome serie (es. Pecora)"
+              value={serieForm.nome}
+              onChange={(e) => setSerieForm((f) => ({ ...f, nome: e.target.value }))}
+            />
+            <input
+              type="number"
+              min={1}
+              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
+              placeholder="Totale N"
+              value={serieForm.totale}
+              onChange={(e) => setSerieForm((f) => ({ ...f, totale: Number(e.target.value) }))}
+            />
+            <input
+              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
+              placeholder="Descrizione"
+              value={serieForm.descrizione}
+              onChange={(e) => setSerieForm((f) => ({ ...f, descrizione: e.target.value }))}
+            />
+          </div>
+        </StaffEditorModal>
+      )}
+
+      {serieQrEditing && (
+        <StaffEditorModal
+          title="Nuovo QR serie"
+          onClose={() => setSerieQrEditing(null)}
+          onSave={async () => {
+            try {
+              await staffCreateSerieQr(serieQrForm, onLogout);
+              setSerieQrForm({ nome: '', testo: '', serie: '' });
+              setSerieQrEditing(null);
+              setMsg('QR Serie creato.');
+              await loadSerieTrappole();
+            } catch (e) {
+              setMsg(e.message || 'Errore creazione QR Serie');
+            }
+          }}
+          saveLabel="Crea QR"
+        >
+          <div className="space-y-3">
+            <input
+              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
+              placeholder="Nome QR"
+              value={serieQrForm.nome}
+              onChange={(e) => setSerieQrForm((f) => ({ ...f, nome: e.target.value }))}
+            />
+            <select
+              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
+              value={serieQrForm.serie}
+              onChange={(e) => setSerieQrForm((f) => ({ ...f, serie: e.target.value }))}
+            >
+              <option value="">Serie…</option>
+              {serieList.map((s) => (
+                <option key={s.id} value={s.id}>{s.nome}</option>
+              ))}
+            </select>
+          </div>
+        </StaffEditorModal>
+      )}
+
+      {trappolaEditing && (
+        <StaffEditorModal
+          title="Nuova trappola"
+          onClose={() => setTrappolaEditing(null)}
+          onSave={async () => {
+            try {
+              await staffCreateTrappola(
+                {
+                  ...trappolaForm,
+                  durata_secondi: trappolaForm.durata_secondi === '' ? null : Number(trappolaForm.durata_secondi),
+                },
+                onLogout,
+              );
+              setTrappolaForm({ nome: '', testo: '', durata_secondi: 60 });
+              setTrappolaEditing(null);
+              setMsg('Trappola creata.');
+              await loadSerieTrappole();
+            } catch (e) {
+              setMsg(e.message || 'Errore creazione trappola');
+            }
+          }}
+          saveLabel="Crea trappola"
+        >
+          <div className="space-y-3">
+            <input
+              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
+              placeholder="Nome"
+              value={trappolaForm.nome}
+              onChange={(e) => setTrappolaForm((f) => ({ ...f, nome: e.target.value }))}
+            />
+            <input
+              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
+              placeholder="Testo"
+              value={trappolaForm.testo}
+              onChange={(e) => setTrappolaForm((f) => ({ ...f, testo: e.target.value }))}
+            />
+            <input
+              type="number"
+              min={0}
+              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
+              placeholder="Durata s (vuoto = solo testo)"
+              value={trappolaForm.durata_secondi}
+              onChange={(e) => setTrappolaForm((f) => ({ ...f, durata_secondi: e.target.value }))}
+            />
+          </div>
+        </StaffEditorModal>
+      )}
 
       {scanningId && (
         <div className="fixed inset-0 z-50 bg-black flex flex-col">

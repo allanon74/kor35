@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { StaffToolShell } from '../../staff/StaffToolShell';
+import { StaffModalTabs } from '../../staff/StaffCrudUi';
+import StaffEditorModal from './StaffEditorModal';
 import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
@@ -98,6 +100,7 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
   const [pendingQrConflict, setPendingQrConflict] = useState(null);
   const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
   const [msg, setMsg] = useState('');
+  const [modalTab, setModalTab] = useState('dati');
   const [ereOptions, setEreOptions] = useState([]);
   const [regioniOptions, setRegioniOptions] = useState([]);
   const [korpOptions, setKorpOptions] = useState([]);
@@ -186,11 +189,10 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
     <StaffToolShell maxWidth="4xl" className="space-y-4">
       {msg && <div className="text-xs text-amber-200 border border-amber-800/40 rounded px-2 py-1">{msg}</div>}
 
-      {!editing ? (
-        <>
+      <>
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-bold">Innesco timer (QR)</h2>
-            <button type="button" className="px-3 py-2 bg-indigo-600 rounded text-sm" onClick={() => setEditing(emptyForm())}>
+            <button type="button" className="px-3 py-2 bg-indigo-600 rounded text-sm" onClick={() => { setModalTab('dati'); setEditing(emptyForm()); }}>
               Nuovo
             </button>
           </div>
@@ -223,7 +225,7 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
                       compact
                       onChange={(val) => patchStaffListMinigiocoDefault(setItems, t.id, val)}
                     />
-                    <button type="button" className="text-xs px-2 py-1 bg-gray-700 rounded" onClick={() => setEditing({ ...emptyForm(), ...t })}>
+                    <button type="button" className="text-xs px-2 py-1 bg-gray-700 rounded" onClick={() => { setModalTab('dati'); setEditing({ ...emptyForm(), ...t }); }}>
                       Modifica
                     </button>
                     <button
@@ -246,10 +248,26 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
               ))}
             </ul>
           )}
-        </>
-      ) : (
-        <div className="space-y-3 border border-gray-700 rounded-lg p-4 bg-gray-900/40">
-          <h3 className="font-bold">{editing.id ? 'Modifica innesco' : 'Nuovo innesco'}</h3>
+      </>
+
+      {editing && (
+        <StaffEditorModal
+          title={editing.id ? `Innesco: ${editing.nome || 'senza nome'}` : 'Nuovo innesco'}
+          size="lg"
+          onClose={() => setEditing(null)}
+          onSave={save}
+          saveLabel="Salva"
+        >
+          <StaffModalTabs
+            tabs={[
+              { id: 'dati', label: 'Dati timer' },
+              { id: 'minigioco', label: 'Minigioco' },
+            ]}
+            active={modalTab}
+            onChange={setModalTab}
+          />
+          {modalTab === 'dati' && (
+          <div className="space-y-3">
           <label className="block text-sm">
             Nome (mostrato sul timer)
             <input
@@ -342,16 +360,20 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
               </div>
             </div>
           )}
-          <StaffMinigiocoQrSection qrcodeId={editing.qrcode_id} onLogout={onLogout} />
-          <div className="flex gap-2">
-            <button type="button" className="px-4 py-2 bg-indigo-600 rounded" onClick={save}>
-              Salva
-            </button>
-            <button type="button" className="px-4 py-2 bg-gray-700 rounded" onClick={() => setEditing(null)}>
-              Annulla
-            </button>
           </div>
-        </div>
+          )}
+          {modalTab === 'minigioco' && (
+            <div className="space-y-3">
+              {!editing.id || !editing.qrcode_id ? (
+                <p className="text-sm text-gray-400">
+                  Salva l&apos;innesco e associa un QR dalla lista per configurare il minigioco.
+                </p>
+              ) : (
+                <StaffMinigiocoQrSection qrcodeId={editing.qrcode_id} onLogout={onLogout} />
+              )}
+            </div>
+          )}
+        </StaffEditorModal>
       )}
 
       {scanningId && (

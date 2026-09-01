@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { StaffToolShell } from '../../staff/StaffToolShell';
+import { StaffModalTabs } from '../../staff/StaffCrudUi';
+import StaffEditorModal from './StaffEditorModal';
 import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
@@ -23,6 +25,7 @@ import {
   staffDeleteNodo,
 } from '../../api';
 import { localDateTimeToApiIso } from '../../utils/italianDateTime';
+import { ItalianDateTimeInput } from '../ItalianDateTimeInputs';
 
 const emptyForm = () => ({
   nome: '',
@@ -53,6 +56,7 @@ const NodoManager = ({ onBack, onLogout }) => {
   const [expandedPhotoUrl, setExpandedPhotoUrl] = useState(null);
   const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
   const [msg, setMsg] = useState('');
+  const [modalTab, setModalTab] = useState('dati');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,8 +136,7 @@ const NodoManager = ({ onBack, onLogout }) => {
         <div className="text-xs text-amber-200 border border-amber-800/40 rounded px-2 py-1">{msg}</div>
       )}
 
-      {!editing ? (
-        <>
+      <>
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-bold">Nodi (QR)</h2>
             <button
@@ -141,6 +144,7 @@ const NodoManager = ({ onBack, onLogout }) => {
               className="px-3 py-2 bg-indigo-600 rounded text-sm"
               onClick={() => {
                 setFotoInputMode('camera');
+                setModalTab('dati');
                 setEditing(emptyForm());
               }}
             >
@@ -192,6 +196,7 @@ const NodoManager = ({ onBack, onLogout }) => {
                       className="text-xs px-2 py-1 bg-gray-700 rounded"
                       onClick={() => {
                         setFotoInputMode('camera');
+                        setModalTab('dati');
                         setEditing({
                           ...n,
                           disponibile_dal: toInputDateTimeLocal(n.disponibile_dal),
@@ -226,14 +231,29 @@ const NodoManager = ({ onBack, onLogout }) => {
               ))}
             </ul>
           )}
-        </>
-      ) : (
-        <div className="border border-gray-700 rounded-lg bg-gray-900/40 flex flex-col max-h-[calc(100dvh-8rem)] md:max-h-none">
-          <div className="px-4 pt-4 pb-2 shrink-0 border-b border-gray-800/80">
-            <h3 className="font-bold">{editing.id ? 'Modifica nodo' : 'Nuovo nodo'}</h3>
-          </div>
+      </>
 
-          <div className="px-4 py-3 space-y-3 overflow-y-auto overscroll-y-contain min-h-0 flex-1">
+      {editing && (
+        <StaffEditorModal
+          title={editing.id ? `Nodo: ${editing.nome || 'senza nome'}` : 'Nuovo nodo'}
+          size="lg"
+          onClose={() => {
+            setFotoInputMode('camera');
+            setEditing(null);
+          }}
+          onSave={save}
+          saveLabel="Salva"
+        >
+          <StaffModalTabs
+            tabs={[
+              { id: 'dati', label: 'Dati nodo' },
+              { id: 'minigioco', label: 'Minigioco' },
+            ]}
+            active={modalTab}
+            onChange={setModalTab}
+          />
+          {modalTab === 'dati' && (
+          <div className="space-y-3">
             <label className="block text-sm">
               Nome
               <input
@@ -353,25 +373,20 @@ const NodoManager = ({ onBack, onLogout }) => {
                 </button>
               </div>
             )}
-            <StaffMinigiocoQrSection qrcodeId={editing.qrcode_id} onLogout={onLogout} />
           </div>
-
-          <div className="px-4 py-3 shrink-0 border-t border-gray-800/80 bg-gray-950/95 backdrop-blur-sm sticky bottom-0 z-10 flex gap-2">
-            <button type="button" className="flex-1 px-4 py-3 bg-indigo-600 rounded font-bold" onClick={save}>
-              Salva
-            </button>
-            <button
-              type="button"
-              className="flex-1 px-4 py-3 bg-gray-700 rounded font-bold"
-              onClick={() => {
-                setFotoInputMode('camera');
-                setEditing(null);
-              }}
-            >
-              Annulla
-            </button>
-          </div>
-        </div>
+          )}
+          {modalTab === 'minigioco' && (
+            <div className="space-y-3">
+              {!editing.id || !editing.qrcode_id ? (
+                <p className="text-sm text-gray-400">
+                  Salva il nodo e associa un QR dalla lista per configurare il minigioco.
+                </p>
+              ) : (
+                <StaffMinigiocoQrSection qrcodeId={editing.qrcode_id} onLogout={onLogout} />
+              )}
+            </div>
+          )}
+        </StaffEditorModal>
       )}
 
       {scanningId && (

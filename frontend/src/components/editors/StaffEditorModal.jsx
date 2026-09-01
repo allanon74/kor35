@@ -17,6 +17,7 @@ export default function StaffEditorModal({
   size = null,
   saving = false,
   isDirty = false,
+  showSave = true,
 }) {
   const requestClose = () =>
     confirmCloseIfDirty(
@@ -62,16 +63,18 @@ export default function StaffEditorModal({
             onClick={requestClose}
             className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm"
           >
-            Annulla
+            {showSave ? 'Annulla' : 'Chiudi'}
           </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={saving}
-            className="px-4 py-2 rounded-lg bg-violet-700 hover:bg-violet-600 text-sm font-bold disabled:opacity-50"
-          >
-            {saving ? 'Salvataggio...' : saveLabel}
-          </button>
+          {showSave && onSave ? (
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving}
+              className="px-4 py-2 rounded-lg bg-violet-700 hover:bg-violet-600 text-sm font-bold disabled:opacity-50"
+            >
+              {saving ? 'Salvataggio...' : saveLabel}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

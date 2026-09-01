@@ -1,7 +1,7 @@
 import React, { memo, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
 import { StaffToolShell } from '../../staff/StaffToolShell';
 import MasterGenericList from './MasterGenericList';
+import StaffEditorModal from './StaffEditorModal';
 import EditorSaveActions from './EditorSaveActions';
 import RichTextEditor from '../RichTextEditor';
 import {
@@ -49,24 +49,9 @@ const DichiarazioneFormPanel = ({ value, onClose, onSave, isGlossario, statusMes
   };
 
   return (
-    <StaffToolShell className="h-full p-4 space-y-4 animate-in fade-in slide-in-from-bottom-4">
-      <button
-        onClick={onClose}
-        className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm font-bold uppercase"
-      >
-        <ArrowLeft size={16} /> Annulla e Torna alla Lista
-      </button>
-      <div className="h-full bg-gray-900 border border-gray-700 rounded-xl flex flex-col overflow-visible">
-        <div className="p-4 border-b border-gray-700 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-lg font-bold text-white">
-              {form?.id ? `Modifica ${isGlossario ? 'voce glossario' : 'dichiarazione'}` : `Nuova ${isGlossario ? 'voce glossario' : 'dichiarazione'}`}
-            </h3>
-          </div>
-          <EditorSaveActions {...actionProps} />
-        </div>
-        <div className="p-4 space-y-3 overflow-y-auto custom-scrollbar flex-1">
-          <input
+    <div className="space-y-3">
+      <EditorSaveActions {...actionProps} />
+      <input
             className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
             placeholder="Nome interno"
             value={form.nome || ''}
@@ -99,12 +84,7 @@ const DichiarazioneFormPanel = ({ value, onClose, onSave, isGlossario, statusMes
             onChange={(value) => setForm({ ...form, descrizione: value })}
             editorHeightClass="min-h-[260px] max-h-[60vh]"
           />
-        </div>
-        <div className="p-4 border-t border-gray-700 flex gap-2">
-          <EditorSaveActions {...actionProps} />
-        </div>
-      </div>
-    </StaffToolShell>
+    </div>
   );
 };
 
@@ -139,18 +119,11 @@ const DichiarazioniGlossarioManager = ({ onBack, onLogout }) => {
     [items, isGlossarioTab],
   );
 
-  if (editingItem) {
-    return (
-      <DichiarazioneFormPanel
-        value={editingItem}
-        isGlossario={isGlossarioTab}
-        onClose={() => {
-          setEditingItem(null);
-          setEditorStatus({ type: 'success', message: '' });
-        }}
-        statusMessage={editorStatus.message}
-        statusType={editorStatus.type}
-        onSave={async (form, mode = 'save_close') => {
+  const editorTitle = editingItem?.id
+    ? `Modifica ${isGlossarioTab ? 'voce glossario' : 'dichiarazione'}`
+    : `Nuova ${isGlossarioTab ? 'voce glossario' : 'dichiarazione'}`;
+
+  const saveEditor = async (form, mode = 'save_close') => {
           if (!form.nome?.trim()) {
             setEditorStatus({ type: 'warning', message: 'Il nome e obbligatorio.' });
             return;
@@ -187,10 +160,7 @@ const DichiarazioniGlossarioManager = ({ onBack, onLogout }) => {
             setEditingItem(saved);
           }
           await loadItems();
-        }}
-      />
-    );
-  }
+  };
 
   return (
     <StaffToolShell className="space-y-4" fill>
@@ -231,6 +201,30 @@ const DichiarazioniGlossarioManager = ({ onBack, onLogout }) => {
           emptyMessage="Nessuna voce presente."
         />
       </div>
+
+      {editingItem && (
+        <StaffEditorModal
+          title={editorTitle}
+          size="lg"
+          showSave={false}
+          onClose={() => {
+            setEditingItem(null);
+            setEditorStatus({ type: 'success', message: '' });
+          }}
+        >
+          <DichiarazioneFormPanel
+            value={editingItem}
+            isGlossario={isGlossarioTab}
+            onClose={() => {
+              setEditingItem(null);
+              setEditorStatus({ type: 'success', message: '' });
+            }}
+            statusMessage={editorStatus.message}
+            statusType={editorStatus.type}
+            onSave={saveEditor}
+          />
+        </StaffEditorModal>
+      )}
     </StaffToolShell>
   );
 };

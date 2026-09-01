@@ -1,6 +1,7 @@
 /**
  * Pattern staff CRUD KOR35: lista full-width + modale per create/edit.
  * Usare questo layout per tutti gli editor staff (no pannello affiancato).
+ * Record con sotto-liste: tab «Dati» + tab catalogo/figli (vedi StaffModalTabs).
  */
 import React from 'react';
 import { Pencil, Plus, Save, Trash2, X } from 'lucide-react';
@@ -144,6 +145,27 @@ export function staffInputClass(extra = '') {
 export function StaffFieldGrid({ children, cols = 2 }) {
   const cls = cols === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2';
   return <div className={`grid gap-3 ${cls}`}>{children}</div>;
+}
+
+/** Tab interne al modal di edit (dati generici vs lista figli). */
+export function StaffModalTabs({ tabs, active, onChange }) {
+  return (
+    <div className="flex flex-wrap gap-1 border-b border-gray-800 pb-2 -mt-1">
+      {(tabs || []).map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          onClick={() => onChange?.(t.id)}
+          className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wide ${
+            active === t.id ? 'bg-amber-700 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+          }`}
+        >
+          {t.label}
+          {t.count != null ? ` (${t.count})` : ''}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export function StaffSection({ title, hint, children }) {

@@ -18,6 +18,7 @@ import {
   staffSecondaryBtnClass,
   staffDangerBtnClass,
 } from '../../staff/StaffToolShell';
+import StaffEditorModal from './StaffEditorModal';
 import { campagnaRuoloLabel } from '../../lib/campagnaRuoli';
 import { UiErrorState, UiLoadingState } from '../ui/AsyncState';
 
@@ -151,7 +152,7 @@ export default function StaffCalendarioCompitiManager({ onLogout }) {
   };
 
   const submit = async (e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
     const scadenza = fromDatetimeLocal(form.scadenza);
     if (!form.titolo.trim() || !scadenza) {
       setError('Titolo e scadenza sono obbligatori.');
@@ -238,8 +239,17 @@ export default function StaffCalendarioCompitiManager({ onLogout }) {
       </div>
 
       {showForm && isCampaignMaster ? (
-        <form onSubmit={submit} className={`${staffPanelClass} mb-4 space-y-3`}>
-          <div className="text-sm font-bold text-white">{editingId ? 'Modifica compito' : 'Nuovo compito'}</div>
+        <StaffEditorModal
+          title={editingId ? 'Modifica compito' : 'Nuovo compito'}
+          saving={saving}
+          onClose={() => {
+            setShowForm(false);
+            setEditingId(null);
+          }}
+          onSave={submit}
+          saveLabel="Salva"
+        >
+        <div className="space-y-3">
           <input
             className="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-sm"
             placeholder="Titolo"
@@ -328,22 +338,8 @@ export default function StaffCalendarioCompitiManager({ onLogout }) {
               ) : null}
             </div>
           </div>
-          <div className="flex gap-2">
-            <button type="submit" disabled={saving} className={staffPrimaryBtnClass}>
-              {saving ? 'Salvataggio…' : 'Salva'}
-            </button>
-            <button
-              type="button"
-              className={staffSecondaryBtnClass}
-              onClick={() => {
-                setShowForm(false);
-                setEditingId(null);
-              }}
-            >
-              Annulla
-            </button>
-          </div>
-        </form>
+        </div>
+        </StaffEditorModal>
       ) : null}
 
       {loading ? (

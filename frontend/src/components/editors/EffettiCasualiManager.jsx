@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { StaffToolShell, StaffToolPageTitle } from '../../staff/StaffToolShell';
 import { Tab } from '@headlessui/react';
 import { fetchAuthenticated, getPersonaggiList } from '../../api';
-import { Loader2, Plus, Pencil, Trash2, X } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
 import ConfirmDialog from './ConfirmDialog';
+import StaffEditorModal from './StaffEditorModal';
 import RichHtml from '../RichHtml';
 
 const API_BASE = '/api/personaggi/api/staff';
@@ -336,8 +337,12 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
                 </button>
               </div>
               {showFormTipologia && (
-                <div className="mb-6 p-4 bg-gray-900 rounded-lg border border-gray-600 space-y-3">
-                  <h4 className="font-bold text-white">{editTipologiaId ? 'Modifica tipologia' : 'Nuova tipologia'}</h4>
+                <StaffEditorModal
+                  title={editTipologiaId ? 'Modifica tipologia' : 'Nuova tipologia'}
+                  saving={savingTipologia}
+                  onClose={() => setShowFormTipologia(false)}
+                  onSave={saveTipologia}
+                >
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Nome</label>
                     <input
@@ -372,24 +377,7 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
                       ))}
                     </select>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={saveTipologia}
-                      disabled={savingTipologia}
-                      className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded font-bold text-white disabled:opacity-50"
-                    >
-                      {savingTipologia ? <Loader2 className="animate-spin inline" size={18} /> : 'Salva'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowFormTipologia(false)}
-                      className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded font-bold text-white flex items-center gap-1"
-                    >
-                      <X size={16} /> Annulla
-                    </button>
-                  </div>
-                </div>
+                </StaffEditorModal>
               )}
               <ul className="space-y-2">
                 {tipologie.map((t) => (
@@ -443,8 +431,12 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
                 </button>
               </div>
               {showFormEffetto && (
-                <div className="mb-6 p-4 bg-gray-900 rounded-lg border border-gray-600 space-y-3">
-                  <h4 className="font-bold text-white">{editEffettoId ? 'Modifica effetto' : 'Nuovo effetto'}</h4>
+                <StaffEditorModal
+                  title={editEffettoId ? 'Modifica effetto' : 'Nuovo effetto'}
+                  saving={savingEffetto}
+                  onClose={() => setShowFormEffetto(false)}
+                  onSave={saveEffetto}
+                >
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Tipologia *</label>
                     <select
@@ -499,24 +491,7 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
                       ))}
                     </select>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={saveEffetto}
-                      disabled={savingEffetto}
-                      className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded font-bold text-white disabled:opacity-50"
-                    >
-                      {savingEffetto ? <Loader2 className="animate-spin inline" size={18} /> : 'Salva'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowFormEffetto(false)}
-                      className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded font-bold text-white flex items-center gap-1"
-                    >
-                      <X size={16} /> Annulla
-                    </button>
-                  </div>
-                </div>
+                </StaffEditorModal>
               )}
               <ul className="space-y-2">
                 {effetti.map((e) => (
