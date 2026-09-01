@@ -1884,7 +1884,10 @@ class InfusioneStaffListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Infusione
-        fields = ('id', 'nome', 'livello', 'aura_richiesta', 'has_qrcode', 'qrcode_id', 'non_acquistabile')
+        fields = (
+            'id', 'nome', 'livello', 'aura_richiesta', 'has_qrcode', 'qrcode_id',
+            'non_acquistabile', 'tipo_risultato', 'slot_corpo_permessi',
+        )
 
 
 class TessituraStaffListSerializer(serializers.ModelSerializer):

@@ -1440,6 +1440,13 @@ export const staffUpdateNegozioMercante = (id, data, onLogout) =>
     onLogout,
   );
 
+export const staffDeleteNegozioMercante = (id, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante/${id}/`,
+    { method: 'DELETE' },
+    onLogout,
+  );
+
 export const staffGetNegozioMercanteVoci = (negozioId, onLogout) =>
   fetchAuthenticated(
     `/api/personaggi/api/staff/negozi-mercante-voci/?negozio=${negozioId}`,

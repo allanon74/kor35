@@ -5,18 +5,26 @@ from personaggi.negozio_mercante_models import NegozioMercante, NegozioMercanteV
 
 class NegozioMercanteVoceSerializer(serializers.ModelSerializer):
     entita_nome = serializers.SerializerMethodField()
+    tipo_risultato = serializers.SerializerMethodField()
 
     class Meta:
         model = NegozioMercanteVoce
         fields = "__all__"
 
     def get_entita_nome(self, obj):
-        from personaggi.negozio_mercante_service import _voce_entita
+        from personaggi.negozio_mercante_service import _voce_consegna_istanza, _voce_entita
 
         ent = _voce_entita(obj)
-        if ent:
-            return getattr(ent, "nome", str(ent))
-        return obj.consumabile_nome or ""
+        nome = getattr(ent, "nome", None) or obj.consumabile_nome or ""
+        if obj.tipo_voce == "INF" and _voce_consegna_istanza(obj):
+            tipo = getattr(ent, "tipo_risultato", "")
+            suffisso = "aumento" if tipo == "AUM" else "istanza"
+            return f"{nome} ({suffisso})" if nome else suffisso
+        return nome
+
+    def get_tipo_risultato(self, obj):
+        inf = getattr(obj, "infusione", None)
+        return getattr(inf, "tipo_risultato", None) if inf else None
 
 
 class NegozioMercanteSerializer(serializers.ModelSerializer):

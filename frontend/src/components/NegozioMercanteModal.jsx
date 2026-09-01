@@ -8,7 +8,17 @@ import {
   acquistaNegozioMercante,
   vendiOggettoNegozioMercante,
   previewVenditaNegozioMercante,
+  searchPersonaggi,
+  getBodySlots,
 } from '../api';
+
+const BODY_SLOTS = getBodySlots();
+
+const fmtCr = (n) => {
+  const v = Number(n);
+  if (Number.isNaN(v)) return '0.00';
+  return v.toFixed(2);
+};
 
 const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout }) => {
   const { selectedCharacterId, selectedCharacterData: char, refreshCharacterData } = useCharacter();
@@ -20,7 +30,10 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
   const [sellSearch, setSellSearch] = useState('');
   const [sellPreview, setSellPreview] = useState(null);
   const [sellItemId, setSellItemId] = useState(null);
-  const [slotPick, setSlotPick] = useState(null);
+  const [checkout, setCheckout] = useState(null);
+  const [destQuery, setDestQuery] = useState('');
+  const [destResults, setDestResults] = useState([]);
+  const [destLoading, setDestLoading] = useState(false);
 
   const reload = useCallback(async () => {
     if (!negozioId || !selectedCharacterId) return;
@@ -55,6 +68,14 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
     );
   }, [oggettiVendibili, sellSearch]);
 
+  const duale = !!(listino?.economia?.modulo_attivo || char?.economia?.modulo_attivo);
+  const creditiCorrente = Number(
+    listino?.economia?.crediti_corrente ?? char?.crediti_corrente ?? char?.crediti ?? 0,
+  );
+  const creditiDeposito = Number(
+    listino?.economia?.crediti_deposito ?? char?.crediti_deposito ?? char?.riserva ?? 0,
+  );
+
   useEffect(() => {
     if (!sellItemId || !negozioId || !selectedCharacterId) {
       setSellPreview(null);
@@ -73,52 +94,111 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
     };
   }, [sellItemId, negozioId, selectedCharacterId, onLogout]);
 
-  const completePurchase = async (body) => {
-    const res = await acquistaNegozioMercante(negozioId, body, onLogout);
-    if (res.richiede_slot_corpo && res.slot_disponibili?.length) {
-      setSlotPick({ body, slots: res.slot_disponibili });
-      return;
+  useEffect(() => {
+    if (!checkout?.voce?.richiede_montaggio || !selectedCharacterId) {
+      setDestResults([]);
+      return undefined;
     }
-    await refreshCharacterData();
-    await reload();
+    const q = destQuery.trim();
+    if (q && q.length < 2) {
+      setDestResults([]);
+      return undefined;
+    }
+    let cancelled = false;
+    setDestLoading(true);
+    searchPersonaggi(q, selectedCharacterId, checkout.voce.infusione_id || null)
+      .then((rows) => {
+        if (!cancelled) setDestResults(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setDestResults([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDestLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [checkout, destQuery, selectedCharacterId]);
+
+  const slotOptionsForCheckout = useMemo(() => {
+    if (!checkout) return [];
+    const permessi = checkout.voce?.slot_corpo_permessi;
+    const allowed = Array.isArray(permessi) && permessi.length ? permessi : BODY_SLOTS.map((s) => s.code);
+    const isSelf = String(checkout.destinatarioId) === String(selectedCharacterId);
+    const occupati = isSelf
+      ? new Set()
+      : new Set(checkout.destinatario?.slots_occupati || []);
+    const liberiSelf = new Set((checkout.voce?.slot_disponibili || []).map((s) => s.code));
+    return BODY_SLOTS.filter((s) => allowed.includes(s.code)).map((s) => ({
+      ...s,
+      libero: isSelf ? liberiSelf.has(s.code) : !occupati.has(s.code),
+    }));
+  }, [checkout, selectedCharacterId]);
+
+  const openCheckout = (voce) => {
+    const depositoOk = duale && voce.deposito_ammesso;
+    setCheckout({
+      voce,
+      conto: 'CORRENTE',
+      destinatarioId: selectedCharacterId,
+      destinatario: { id: selectedCharacterId, nome: char?.nome || 'Tu', is_mine: true },
+      slot: (voce.slot_disponibili || []).length === 1 ? voce.slot_disponibili[0].code : '',
+      depositoOk,
+    });
+    setDestQuery('');
   };
 
-  const handleBuy = async (voce) => {
+  const handleBuy = (voce) => {
     if (!voce.acquistabile || busy) return;
+    if (duale || voce.richiede_montaggio) {
+      openCheckout(voce);
+      return;
+    }
     const label = voce.nome || 'Articolo';
     if (!window.confirm(`Acquistare "${label}" per ${voce.prezzo_crediti} CR?`)) return;
+    submitPurchase(voce, { conto: 'CORRENTE' });
+  };
+
+  const submitPurchase = async (voce, extras) => {
     setBusy(true);
     try {
       const body = {
         char_id: selectedCharacterId,
         voce_id: voce.tipo === 'voce' ? voce.id : undefined,
         stock_id: voce.tipo === 'stock' ? voce.id : undefined,
+        conto: extras.conto || 'CORRENTE',
       };
-      await completePurchase(body);
+      if (voce.richiede_montaggio) {
+        body.slot_corpo = extras.slot;
+        if (extras.destinatarioId && String(extras.destinatarioId) !== String(selectedCharacterId)) {
+          body.destinatario_id = extras.destinatarioId;
+        }
+      }
+      await acquistaNegozioMercante(negozioId, body, onLogout);
+      setCheckout(null);
+      await refreshCharacterData();
+      await reload();
     } catch (e) {
-      alert(e.message || 'Acquisto fallito.');
+      alert(e.message || 'Acquisto fallito. Nessun credito è stato addebitato.');
     } finally {
       setBusy(false);
     }
   };
 
-  const confirmSlot = async (code) => {
-    if (!slotPick) return;
-    setBusy(true);
-    try {
-      await acquistaNegozioMercante(
-        negozioId,
-        { ...slotPick.body, slot_corpo: code },
-        onLogout,
-      );
-      setSlotPick(null);
-      await refreshCharacterData();
-      await reload();
-    } catch (e) {
-      alert(e.message || 'Acquisto fallito.');
-    } finally {
-      setBusy(false);
+  const confirmCheckout = () => {
+    if (!checkout) return;
+    const { voce, conto, destinatarioId, slot } = checkout;
+    if (voce.richiede_montaggio && !slot) {
+      alert('Scegli lo slot corpo su cui montare innesto o mutazione.');
+      return;
     }
+    const opt = slotOptionsForCheckout.find((s) => s.code === slot);
+    if (voce.richiede_montaggio && opt && !opt.libero) {
+      alert('Quello slot è occupato: l’acquisto verrebbe annullato. Scegline un altro o un altro destinatario.');
+      return;
+    }
+    submitPurchase(voce, { conto, slot, destinatarioId });
   };
 
   const handleSellConfirm = async () => {
@@ -137,7 +217,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
         sellItemId,
         onLogout,
       );
-      alert(`Vendita completata: ${res.offerta_crediti} CR ricevuti.`);
+      alert(`Vendita completata: ${res.offerta_crediti} CR ricevuti sul deposito.`);
       setSellItemId(null);
       setSellPreview(null);
       await refreshCharacterData();
@@ -147,6 +227,13 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
     } finally {
       setBusy(false);
     }
+  };
+
+  const prezzoVoce = (v) => {
+    if (duale && v.deposito_ammesso && v.prezzo_deposito) {
+      return `${fmtCr(v.prezzo_corrente)} / ${fmtCr(v.prezzo_deposito)} dep`;
+    }
+    return `${v.prezzo_crediti} CR`;
   };
 
   const aperto = listino?.aperto !== false;
@@ -164,7 +251,15 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
               {listino?.nome || 'Negozio'}
             </Dialog.Title>
             <div className="flex items-center gap-3 text-sm">
-              <span className="text-yellow-400 font-mono">{char?.crediti ?? 0} CR</span>
+              {duale ? (
+                <span className="font-mono text-xs">
+                  <span className="text-emerald-300">{fmtCr(creditiCorrente)} corr.</span>
+                  <span className="text-gray-500"> · </span>
+                  <span className="text-amber-300">{fmtCr(creditiDeposito)} dep.</span>
+                </span>
+              ) : (
+                <span className="text-yellow-400 font-mono">{char?.crediti ?? 0} CR</span>
+              )}
               <span className="text-gray-500">|</span>
               <span className="text-gray-400">Cassa: {listino?.saldo_crediti ?? '—'} CR</span>
               <button type="button" onClick={onClose} className="text-gray-400 hover:text-white">
@@ -222,6 +317,11 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                   >
                     <div className="min-w-0">
                       <div className="font-semibold text-white truncate">{v.nome}</div>
+                      {v.richiede_montaggio && (
+                        <div className="text-[10px] uppercase tracking-wide text-fuchsia-300 mt-0.5">
+                          Innesto / mutazione · montaggio in locazione
+                        </div>
+                      )}
                       {v.messaggio_usabilita && (
                         <div
                           className={`text-xs mt-1 ${v.acquistabile ? 'text-gray-400' : 'text-amber-300'}`}
@@ -240,7 +340,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                       onClick={() => handleBuy(v)}
                       className="shrink-0 px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-40 text-white text-sm font-bold"
                     >
-                      {v.prezzo_crediti} CR
+                      {prezzoVoce(v)}
                     </button>
                   </div>
                 ))}
@@ -295,6 +395,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                           <span className="text-amber-300 font-mono">
                             {sellPreview.offerta_min}–{sellPreview.offerta_max} CR
                           </span>
+                          <span className="text-gray-500"> (accreditati sul deposito)</span>
                         </p>
                         {!sellPreview.cassa_sufficiente && (
                           <p className="text-amber-300 text-xs mt-1">
@@ -333,24 +434,161 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
         </Dialog.Panel>
       </div>
 
-      {slotPick && (
-        <Dialog open onClose={() => setSlotPick(null)} className="relative z-[60]">
+      {checkout && (
+        <Dialog open onClose={() => !busy && setCheckout(null)} className="relative z-[60]">
           <div className="fixed inset-0 bg-black/80" />
           <div className="fixed inset-0 flex items-center justify-center p-4">
-            <Dialog.Panel className="bg-gray-900 border border-gray-600 rounded-xl p-4 max-w-sm w-full">
-              <Dialog.Title className="font-bold text-white mb-2">Scegli slot corpo</Dialog.Title>
-              <div className="flex flex-wrap gap-2">
-                {slotPick.slots.map((s) => (
-                  <button
-                    key={s.code}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => confirmSlot(s.code)}
-                    className="px-3 py-2 rounded bg-amber-800 text-sm"
-                  >
-                    {s.label || s.code}
-                  </button>
-                ))}
+            <Dialog.Panel className="bg-gray-900 border border-gray-600 rounded-xl p-4 max-w-md w-full space-y-3">
+              <Dialog.Title className="font-bold text-white">
+                Acquisto: {checkout.voce.nome}
+              </Dialog.Title>
+
+              {duale && (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">Paga con</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      className={`px-3 py-2 rounded text-sm border ${
+                        checkout.conto === 'CORRENTE'
+                          ? 'border-emerald-500 bg-emerald-950/60 text-emerald-200'
+                          : 'border-gray-700 text-gray-300'
+                      }`}
+                      onClick={() => setCheckout({ ...checkout, conto: 'CORRENTE' })}
+                    >
+                      Corrente
+                      <div className="font-mono text-xs">{fmtCr(checkout.voce.prezzo_corrente)} CR</div>
+                      <div className="text-[10px] text-gray-500">saldo {fmtCr(creditiCorrente)}</div>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!checkout.voce.deposito_ammesso}
+                      className={`px-3 py-2 rounded text-sm border ${
+                        checkout.conto === 'DEPOSITO'
+                          ? 'border-amber-500 bg-amber-950/60 text-amber-200'
+                          : 'border-gray-700 text-gray-300'
+                      } disabled:opacity-40`}
+                      onClick={() => setCheckout({ ...checkout, conto: 'DEPOSITO' })}
+                    >
+                      Deposito
+                      <div className="font-mono text-xs">
+                        {checkout.voce.prezzo_deposito
+                          ? `${fmtCr(checkout.voce.prezzo_deposito)} CR`
+                          : 'non ammesso'}
+                      </div>
+                      <div className="text-[10px] text-gray-500">saldo {fmtCr(creditiDeposito)}</div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {checkout.voce.richiede_montaggio && (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">Montaggio in locazione</p>
+                  <p className="text-xs text-gray-500">
+                    Se il montaggio non riesce (slot occupato o destinatario incompatibile),
+                    l&apos;acquisto viene annullato e non paghi nulla.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={`px-3 py-1.5 rounded text-sm ${
+                        String(checkout.destinatarioId) === String(selectedCharacterId)
+                          ? 'bg-fuchsia-800 text-white'
+                          : 'bg-gray-800 text-gray-300'
+                      }`}
+                      onClick={() =>
+                        setCheckout({
+                          ...checkout,
+                          destinatarioId: selectedCharacterId,
+                          destinatario: {
+                            id: selectedCharacterId,
+                            nome: char?.nome || 'Tu',
+                            is_mine: true,
+                          },
+                          slot: (checkout.voce.slot_disponibili || [])[0]?.code || '',
+                        })
+                      }
+                    >
+                      Su di me
+                    </button>
+                  </div>
+                  <input
+                    className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-sm"
+                    placeholder="Cerca un altro personaggio…"
+                    value={destQuery}
+                    onChange={(e) => setDestQuery(e.target.value)}
+                  />
+                  {destLoading && <p className="text-xs text-gray-500">Ricerca…</p>}
+                  {destResults.length > 0 && (
+                    <ul className="max-h-28 overflow-y-auto text-sm space-y-1">
+                      {destResults.map((p) => (
+                        <li key={p.id}>
+                          <button
+                            type="button"
+                            className={`w-full text-left px-2 py-1 rounded ${
+                              String(checkout.destinatarioId) === String(p.id)
+                                ? 'bg-fuchsia-900/70'
+                                : 'hover:bg-gray-800'
+                            }`}
+                            onClick={() =>
+                              setCheckout({
+                                ...checkout,
+                                destinatarioId: p.id,
+                                destinatario: p,
+                                slot: '',
+                              })
+                            }
+                          >
+                            {p.nome}
+                            {p.is_mine ? ' (tuo PG)' : ''}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="text-xs text-gray-400">
+                    Destinatario: {checkout.destinatario?.nome || '—'}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {slotOptionsForCheckout.map((s) => (
+                      <button
+                        key={s.code}
+                        type="button"
+                        disabled={!s.libero}
+                        onClick={() => setCheckout({ ...checkout, slot: s.code })}
+                        className={`px-3 py-2 rounded text-sm ${
+                          checkout.slot === s.code
+                            ? 'bg-amber-700 text-white'
+                            : s.libero
+                              ? 'bg-gray-800 text-gray-200'
+                              : 'bg-gray-900 text-gray-600 line-through'
+                        }`}
+                      >
+                        {s.name || s.label || s.code}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  className="flex-1 py-2 rounded bg-gray-700 text-sm"
+                  disabled={busy}
+                  onClick={() => setCheckout(null)}
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 py-2 rounded bg-amber-700 font-bold text-sm disabled:opacity-40"
+                  disabled={busy}
+                  onClick={confirmCheckout}
+                >
+                  {busy ? '…' : 'Conferma acquisto'}
+                </button>
               </div>
             </Dialog.Panel>
           </div>

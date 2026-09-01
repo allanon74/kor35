@@ -476,6 +476,9 @@ class InfusioneMasterViewSet(viewsets.ModelViewSet):
                     'aura_richiesta__icona',
                     'aura_richiesta__icona_nome_originale',
                     'aura_richiesta__ordine',
+                    'non_acquistabile',
+                    'tipo_risultato',
+                    'slot_corpo_permessi',
                 )
             )
             qs = _campaign_feature_filter(self.request, qs, FEATURE_INFUSIONI)

@@ -28,10 +28,13 @@ from personaggi.negozio_mercante_models import (
     NEGOZIO_TIPO_CORPORATIVO,
 )
 from personaggi.models import (
+    SCELTA_RISULTATO_AUMENTO,
+    SLOT_CORPO_CHOICES,
     TIPO_OGGETTO_INNESTO,
     TIPO_OGGETTO_MUTAZIONE,
     ConsumabilePersonaggio,
     Oggetto,
+    Personaggio,
     PersonaggioAbilita,
     PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
 )
@@ -129,6 +132,130 @@ def _tecnica_listino_extra(personaggio, tecnica) -> dict:
     }
 
 
+def _slot_permessi_codes(infusione) -> set[str] | None:
+    if not infusione or not getattr(infusione, "slot_corpo_permessi", None):
+        return None
+    permessi = {
+        s.strip()
+        for s in infusione.slot_corpo_permessi.split(",")
+        if s.strip()
+    }
+    return permessi or None
+
+
+def _voce_consegna_istanza(voce: NegozioMercanteVoce) -> bool:
+    if voce.tipo_voce != VOCE_INFUSIONE or voce.infusione_id is None:
+        return False
+    if voce.consegna_istanza:
+        return True
+    return voce.infusione.tipo_risultato == SCELTA_RISULTATO_AUMENTO
+
+
+def _oggetto_e_aumento(oggetto) -> bool:
+    return bool(oggetto) and oggetto.tipo_oggetto in (
+        TIPO_OGGETTO_INNESTO,
+        TIPO_OGGETTO_MUTAZIONE,
+    )
+
+
+def _voce_richiede_montaggio(voce: NegozioMercanteVoce) -> bool:
+    if voce.tipo_voce == VOCE_OGGETTO:
+        return _oggetto_e_aumento(voce.oggetto)
+    if voce.tipo_voce == VOCE_INFUSIONE and voce.infusione_id:
+        return voce.infusione.tipo_risultato == SCELTA_RISULTATO_AUMENTO
+    return False
+
+
+def slot_aumento_disponibili(personaggio, *, infusione=None, oggetto=None) -> list:
+    """Slot corpo liberi sul personaggio, eventualmente filtrati dall'infusione."""
+    inf = infusione
+    if oggetto is not None:
+        if not _oggetto_e_aumento(oggetto) and not (
+            inf and getattr(inf, "tipo_risultato", None) == SCELTA_RISULTATO_AUMENTO
+        ):
+            return []
+        inf = inf or oggetto.infusione_generatrice
+    elif inf is None or inf.tipo_risultato != SCELTA_RISULTATO_AUMENTO:
+        return []
+    permessi = _slot_permessi_codes(inf)
+    liberi = []
+    for code, label in SLOT_CORPO_CHOICES:
+        if permessi and code not in permessi:
+            continue
+        occupante = Oggetto.objects.filter(
+            tracciamento_inventario__inventario=personaggio,
+            tracciamento_inventario__data_fine__isnull=True,
+            slot_corpo=code,
+            is_equipaggiato=True,
+        ).exists()
+        if not occupante:
+            liberi.append({"code": code, "label": label})
+    return liberi
+
+
+def _risolve_destinatario_montaggio(acquirente, destinatario_id):
+    if not destinatario_id or str(destinatario_id) == str(acquirente.id):
+        return acquirente
+    try:
+        dest = Personaggio.objects.get(pk=destinatario_id)
+    except (Personaggio.DoesNotExist, ValueError, TypeError) as exc:
+        raise ValidationError("Destinatario del montaggio non trovato.") from exc
+    if dest.eliminato_at:
+        raise ValidationError("Il destinatario non è più disponibile.")
+    if dest.campagna_id != acquirente.campagna_id:
+        raise ValidationError("Il destinatario deve appartenere alla stessa campagna.")
+    return dest
+
+
+def _monta_aumento_o_annulla(destinatario, oggetto, slot_corpo):
+    """
+    Installa innesto/mutazione sul destinatario.
+    Qualsiasi fallimento alza ValidationError: in transazione atomica
+    l'acquisto intero viene annullato.
+    """
+    from personaggi.services import GestioneOggettiService
+
+    if not slot_corpo:
+        raise ValidationError(
+            "Per innesti e mutazioni indica lo slot corpo su cui montare l'aumento."
+        )
+    inf = oggetto.infusione_generatrice
+    if inf and not GestioneOggettiService.verifica_requisiti_supporto_innesto(
+        destinatario, inf
+    ):
+        raise ValidationError(
+            f"{destinatario.nome} non può sostenere questo aumento corporeo."
+        )
+    if _inventario_corrente_pk(oggetto) != destinatario.id:
+        oggetto.sposta_in_inventario(destinatario)
+    GestioneOggettiService.installa_innesto(destinatario, oggetto, slot_corpo)
+
+
+def _meta_montaggio_listino(personaggio, *, infusione=None, oggetto=None) -> dict:
+    inf = infusione or (oggetto.infusione_generatrice if oggetto else None)
+    richiede = _oggetto_e_aumento(oggetto) or (
+        inf is not None and inf.tipo_risultato == SCELTA_RISULTATO_AUMENTO
+    )
+    if not richiede:
+        return {
+            "richiede_montaggio": False,
+            "infusione_id": str(inf.id) if inf else None,
+            "tipo_risultato": getattr(inf, "tipo_risultato", None),
+        }
+    permessi = _slot_permessi_codes(inf)
+    return {
+        "richiede_montaggio": True,
+        "infusione_id": str(inf.id) if inf else None,
+        "tipo_risultato": getattr(inf, "tipo_risultato", None),
+        "slot_corpo_permessi": sorted(permessi) if permessi else [
+            code for code, _label in SLOT_CORPO_CHOICES
+        ],
+        "slot_disponibili": slot_aumento_disponibili(
+            personaggio, infusione=inf, oggetto=oggetto
+        ),
+    }
+
+
 def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio, *, prezzi_ctx=None) -> dict:
     from personaggi.economia_crediti import CATEGORIA_NEGOZIO, prezzi_duali
 
@@ -149,6 +276,7 @@ def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio, *, prezzi_ct
             campagna,
             categoria=CATEGORIA_NEGOZIO,
         )
+    consegna_istanza = _voce_consegna_istanza(voce)
     payload = {
         "id": str(voce.id),
         "tipo": "voce",
@@ -161,9 +289,21 @@ def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio, *, prezzi_ct
         "quantita_residua": voce.quantita_residua,
         "acquistabile": True,
         "messaggio_usabilita": "",
+        "consegna_istanza": consegna_istanza,
+        "richiede_montaggio": False,
     }
     if voce.tipo_voce in (VOCE_INFUSIONE, VOCE_TESSITURA, VOCE_CERIMONIALE):
-        payload.update(_tecnica_listino_extra(personaggio, ent))
+        if voce.tipo_voce == VOCE_INFUSIONE and consegna_istanza:
+            payload.update(
+                _meta_montaggio_listino(personaggio, infusione=voce.infusione)
+            )
+            if payload.get("richiede_montaggio") and not payload.get("slot_disponibili"):
+                payload["messaggio_usabilita"] = (
+                    "Nessuno slot libero sul tuo corpo: scegli un altro destinatario "
+                    "oppure libera una locazione."
+                )
+        else:
+            payload.update(_tecnica_listino_extra(personaggio, ent))
     elif voce.tipo_voce == VOCE_ABILITA:
         if personaggio.abilita_possedute.filter(pk=ent.pk).exists():
             payload["acquistabile"] = False
@@ -175,6 +315,7 @@ def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio, *, prezzi_ct
         if voce.oggetto_id and _inventario_corrente_pk(voce.oggetto) != voce.negozio.inventario_id:
             payload["acquistabile"] = False
             payload["messaggio_usabilita"] = "Non più disponibile."
+        payload.update(_meta_montaggio_listino(personaggio, oggetto=voce.oggetto))
     elif voce.quantita_residua is not None and voce.quantita_residua <= 0:
         payload["acquistabile"] = False
         payload["messaggio_usabilita"] = "Esaurito."
@@ -195,7 +336,7 @@ def serializza_stock_listino(stock: NegozioMercanteStock, personaggio=None, *, p
         )
     else:
         duali = prezzi_duali(stock.prezzo_rivendita, campagna, categoria=CATEGORIA_NEGOZIO)
-    return {
+    payload = {
         "id": str(stock.id),
         "tipo": "stock",
         "tipo_voce": VOCE_OGGETTO,
@@ -207,7 +348,12 @@ def serializza_stock_listino(stock: NegozioMercanteStock, personaggio=None, *, p
         "acquistabile": stock.stato == STOCK_DISPONIBILE,
         "messaggio_usabilita": "Usato — rivendita" if stock.stato == STOCK_DISPONIBILE else "",
         "usato": True,
+        "consegna_istanza": True,
+        "richiede_montaggio": False,
     }
+    if personaggio is not None:
+        payload.update(_meta_montaggio_listino(personaggio, oggetto=stock.oggetto))
+    return payload
 
 
 def build_listino(negozio: NegozioMercante, personaggio) -> dict:
@@ -215,6 +361,9 @@ def build_listino(negozio: NegozioMercante, personaggio) -> dict:
         CATEGORIA_NEGOZIO,
         categoria_ammessa_deposito,
         get_economia_config,
+        modulo_conto_deposito_attivo,
+        saldo_corrente,
+        saldo_deposito,
     )
 
     ok, msg = negozio_e_aperto(negozio, personaggio)
@@ -233,6 +382,7 @@ def build_listino(negozio: NegozioMercante, personaggio) -> dict:
         for voce in negozio.voci.filter(attivo=True).select_related(
             "oggetto_base",
             "oggetto",
+            "oggetto__infusione_generatrice",
             "abilita",
             "infusione",
             "tessitura",
@@ -246,7 +396,9 @@ def build_listino(negozio: NegozioMercante, personaggio) -> dict:
             except ValidationError:
                 continue
             voci.append(serializza_voce_listino(voce, personaggio, prezzi_ctx=prezzi_ctx))
-        for stock in negozio.stock.filter(stato=STOCK_DISPONIBILE).select_related("oggetto"):
+        for stock in negozio.stock.filter(stato=STOCK_DISPONIBILE).select_related(
+            "oggetto", "oggetto__infusione_generatrice"
+        ):
             voci.append(serializza_stock_listino(stock, personaggio, prezzi_ctx=prezzi_ctx))
     return {
         "negozio_id": str(negozio.id),
@@ -258,34 +410,17 @@ def build_listino(negozio: NegozioMercante, personaggio) -> dict:
         "messaggio_accesso": msg,
         "saldo_crediti": float(negozio.saldo_crediti or 0),
         "voci": voci,
+        "economia": {
+            "modulo_attivo": modulo_conto_deposito_attivo(personaggio),
+            "crediti_corrente": str(saldo_corrente(personaggio)),
+            "crediti_deposito": str(saldo_deposito(personaggio)),
+        },
     }
 
 
 def slot_innesto_disponibili(personaggio, oggetto) -> list:
-    from personaggi.models import SLOT_CORPO_CHOICES
-
-    if oggetto.tipo_oggetto not in (TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE):
-        return []
-    permessi = set()
-    if oggetto.infusione_generatrice and oggetto.infusione_generatrice.slot_corpo_permessi:
-        permessi = {
-            s.strip()
-            for s in oggetto.infusione_generatrice.slot_corpo_permessi.split(",")
-            if s.strip()
-        }
-    liberi = []
-    for code, label in SLOT_CORPO_CHOICES:
-        if permessi and code not in permessi:
-            continue
-        occupante = Oggetto.objects.filter(
-            tracciamento_inventario__inventario=personaggio,
-            tracciamento_inventario__data_fine__isnull=True,
-            slot_corpo=code,
-            is_equipaggiato=True,
-        ).exists()
-        if not occupante:
-            liberi.append({"code": code, "label": label})
-    return liberi
+    """Alias storico: slot liberi per un oggetto innesto/mutazione già esistente."""
+    return slot_aumento_disponibili(personaggio, oggetto=oggetto)
 
 
 @transaction.atomic
@@ -296,6 +431,7 @@ def acquista_voce(
     *,
     slot_corpo: str | None = None,
     conto: str = "CORRENTE",
+    destinatario_id=None,
 ) -> dict:
     from personaggi.economia_crediti import (
         CATEGORIA_NEGOZIO,
@@ -315,7 +451,7 @@ def acquista_voce(
 
     conto = normalize_conto(conto)
     voce = (
-        NegozioMercanteVoce.objects.select_for_update()
+        NegozioMercanteVoce.objects.select_for_update(of=("self",))
         .select_related(
             "negozio",
             "oggetto_base",
@@ -328,6 +464,30 @@ def acquista_voce(
         )
         .get(pk=voce_id, negozio=negozio, attivo=True)
     )
+    richiede_montaggio = _voce_richiede_montaggio(voce)
+    consegna_istanza = _voce_consegna_istanza(voce)
+    destinatario = personaggio
+    if richiede_montaggio:
+        destinatario = _risolve_destinatario_montaggio(personaggio, destinatario_id)
+        if not slot_corpo:
+            raise ValidationError(
+                "Per innesti e mutazioni indica lo slot corpo e, se diverso da te, "
+                "il destinatario del montaggio."
+            )
+        inf_ref = voce.infusione
+        if voce.tipo_voce == VOCE_OGGETTO and voce.oggetto_id:
+            inf_ref = voce.oggetto.infusione_generatrice
+        liberi = {
+            s["code"]
+            for s in slot_aumento_disponibili(
+                destinatario, infusione=inf_ref, oggetto=voce.oggetto
+            )
+        }
+        if slot_corpo not in liberi:
+            raise ValidationError(
+                "Montaggio non possibile: slot occupato o non consentito. Acquisto annullato."
+            )
+
     prezzo = int(voce.prezzo_crediti)
     campagna = getattr(personaggio, "campagna", None)
     cfg = get_economia_config(campagna)
@@ -364,9 +524,10 @@ def acquista_voce(
         _assert_voce_globally_vendibile(og)
         if _inventario_corrente_pk(og) != negozio.inventario_id:
             raise ValidationError("Oggetto non più in vendita.")
-        og.sposta_in_inventario(personaggio)
-        if slot_corpo and og.tipo_oggetto in (TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE):
-            GestioneOggettiService.installa_innesto(personaggio, og, slot_corpo)
+        if richiede_montaggio:
+            _monta_aumento_o_annulla(destinatario, og, slot_corpo)
+        else:
+            og.sposta_in_inventario(personaggio)
         voce.oggetto = None
         voce.attivo = False
         voce.save(update_fields=["oggetto", "attivo", "updated_at"])
@@ -384,12 +545,19 @@ def acquista_voce(
     elif voce.tipo_voce == VOCE_INFUSIONE:
         t = voce.infusione
         _assert_voce_globally_vendibile(t)
-        ok_u, msg_u = personaggio.valida_acquisto_tecnica(t)
-        if not ok_u:
-            raise ValidationError(msg_u)
-        if personaggio.infusioni_possedute.filter(pk=t.pk).exists():
-            raise ValidationError("Infusione già posseduta.")
-        personaggio.infusioni_possedute.add(t)
+        if consegna_istanza:
+            entita_creata = GestioneOggettiService.crea_oggetto_da_infusione(
+                t, destinatario if richiede_montaggio else personaggio
+            )
+            if richiede_montaggio:
+                _monta_aumento_o_annulla(destinatario, entita_creata, slot_corpo)
+        else:
+            ok_u, msg_u = personaggio.valida_acquisto_tecnica(t)
+            if not ok_u:
+                raise ValidationError(msg_u)
+            if personaggio.infusioni_possedute.filter(pk=t.pk).exists():
+                raise ValidationError("Infusione già posseduta.")
+            personaggio.infusioni_possedute.add(t)
     elif voce.tipo_voce == VOCE_TESSITURA:
         t = voce.tessitura
         _assert_voce_globally_vendibile(t)
@@ -455,20 +623,24 @@ def acquista_voce(
         "prezzo_pagato": str(pagato),
         "conto": conto,
     }
+    if richiede_montaggio:
+        result["montato_su"] = destinatario.id
+        result["slot_corpo"] = slot_corpo
     if entita_creata and hasattr(entita_creata, "id"):
         result["oggetto_id"] = entita_creata.id
-        if entita_creata.tipo_oggetto in (TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE) and not slot_corpo:
-            slots = slot_innesto_disponibili(personaggio, entita_creata)
-            if len(slots) == 1:
-                GestioneOggettiService.installa_innesto(personaggio, entita_creata, slots[0]["code"])
-            elif len(slots) > 1:
-                result["richiede_slot_corpo"] = True
-                result["slot_disponibili"] = slots
     return result
 
 
 @transaction.atomic
-def acquista_stock(negozio, personaggio, stock_id, *, slot_corpo=None, conto: str = "CORRENTE") -> dict:
+def acquista_stock(
+    negozio,
+    personaggio,
+    stock_id,
+    *,
+    slot_corpo=None,
+    conto: str = "CORRENTE",
+    destinatario_id=None,
+) -> dict:
     from personaggi.economia_crediti import (
         CATEGORIA_NEGOZIO,
         CONTO_DEPOSITO,
@@ -479,17 +651,36 @@ def acquista_stock(negozio, personaggio, stock_id, *, slot_corpo=None, conto: st
         saldo_conto,
         saldo_spendibile,
     )
-    from personaggi.services import GestioneOggettiService
 
     ok, msg = negozio_e_aperto(negozio, personaggio)
     if not ok:
         raise ValidationError(msg or "Negozio chiuso.")
 
     stock = (
-        NegozioMercanteStock.objects.select_for_update()
+        NegozioMercanteStock.objects.select_for_update(of=("self",))
         .select_related("oggetto", "negozio")
         .get(pk=stock_id, negozio=negozio, stato=STOCK_DISPONIBILE)
     )
+    og = stock.oggetto
+    richiede_montaggio = _oggetto_e_aumento(og)
+    destinatario = personaggio
+    if richiede_montaggio:
+        destinatario = _risolve_destinatario_montaggio(personaggio, destinatario_id)
+        if not slot_corpo:
+            raise ValidationError(
+                "Per innesti e mutazioni indica lo slot corpo e, se diverso da te, "
+                "il destinatario del montaggio."
+            )
+        inf_ref = og.infusione_generatrice
+        liberi = {
+            s["code"]
+            for s in slot_aumento_disponibili(destinatario, infusione=inf_ref, oggetto=og)
+        }
+        if slot_corpo not in liberi:
+            raise ValidationError(
+                "Montaggio non possibile: slot occupato o non consentito. Acquisto annullato."
+            )
+
     prezzo = int(stock.prezzo_rivendita)
     conto = normalize_conto(conto)
     campagna = getattr(personaggio, "campagna", None)
@@ -508,10 +699,10 @@ def acquista_stock(negozio, personaggio, stock_id, *, slot_corpo=None, conto: st
     elif saldo_spendibile(personaggio) < da_pagare:
         raise ValidationError(f"Crediti insufficienti. Servono {da_pagare} CR.")
 
-    og = stock.oggetto
-    og.sposta_in_inventario(personaggio)
-    if slot_corpo and og.tipo_oggetto in (TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE):
-        GestioneOggettiService.installa_innesto(personaggio, og, slot_corpo)
+    if richiede_montaggio:
+        _monta_aumento_o_annulla(destinatario, og, slot_corpo)
+    else:
+        og.sposta_in_inventario(personaggio)
 
     stock.stato = STOCK_VENDUTO
     stock.save(update_fields=["stato", "updated_at"])
@@ -542,6 +733,11 @@ def acquista_stock(negozio, personaggio, stock_id, *, slot_corpo=None, conto: st
         "prezzo_pagato": str(pagato),
         "conto": conto,
         "oggetto_id": og.id,
+        **(
+            {"montato_su": destinatario.id, "slot_corpo": slot_corpo}
+            if richiede_montaggio
+            else {}
+        ),
     }
 
 

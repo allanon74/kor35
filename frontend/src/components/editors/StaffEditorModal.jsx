@@ -14,6 +14,7 @@ export default function StaffEditorModal({
   children,
   footerExtra = null,
   wide = false,
+  size = null,
   saving = false,
   isDirty = false,
 }) {
@@ -24,6 +25,13 @@ export default function StaffEditorModal({
       'Ci sono modifiche non salvate. Chiudere comunque?'
     );
 
+  const widthCls =
+    size === 'xl' || size === '5xl'
+      ? 'max-w-5xl'
+      : size === 'lg' || wide
+        ? 'max-w-3xl'
+        : 'max-w-2xl';
+
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm"
@@ -32,9 +40,7 @@ export default function StaffEditorModal({
       onClick={requestClose}
     >
       <div
-        className={`bg-gray-900 border border-gray-600 rounded-xl shadow-2xl w-full flex flex-col max-h-[92vh] ${
-          wide ? 'max-w-3xl' : 'max-w-2xl'
-        }`}
+        className={`bg-gray-900 border border-gray-600 rounded-xl shadow-2xl w-full flex flex-col max-h-[92vh] ${widthCls}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 shrink-0">

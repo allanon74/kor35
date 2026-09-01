@@ -85,6 +85,8 @@ class NegozioMercanteGiocatoreViewSet(viewsets.ViewSet):
         voce_id = request.data.get("voce_id")
         stock_id = request.data.get("stock_id")
         slot_corpo = request.data.get("slot_corpo")
+        destinatario_id = request.data.get("destinatario_id")
+        conto = request.data.get("conto")
         if not char_id:
             return Response({"error": "char_id richiesto."}, status=400)
         pg = _get_pg(request, char_id)
@@ -92,17 +94,28 @@ class NegozioMercanteGiocatoreViewSet(viewsets.ViewSet):
         try:
             if stock_id:
                 result = acquista_stock(
-                    negozio, pg, stock_id, slot_corpo=slot_corpo, conto=request.data.get("conto")
+                    negozio,
+                    pg,
+                    stock_id,
+                    slot_corpo=slot_corpo,
+                    conto=conto,
+                    destinatario_id=destinatario_id,
                 )
             elif voce_id:
                 result = acquista_voce(
-                    negozio, pg, voce_id, slot_corpo=slot_corpo, conto=request.data.get("conto")
+                    negozio,
+                    pg,
+                    voce_id,
+                    slot_corpo=slot_corpo,
+                    conto=conto,
+                    destinatario_id=destinatario_id,
                 )
             else:
                 return Response({"error": "voce_id o stock_id richiesto."}, status=400)
             return Response(result)
         except ValidationError as e:
-            return Response({"error": str(e)}, status=400)
+            msg = e.messages[0] if getattr(e, "messages", None) else str(e)
+            return Response({"error": msg}, status=400)
 
     @action(detail=True, methods=["post"], url_path="vendi")
     def vendi(self, request, pk=None):

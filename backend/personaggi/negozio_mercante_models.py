@@ -213,6 +213,14 @@ class NegozioMercanteVoce(SyncableModel, models.Model):
     )
     consumabile_nome = models.CharField(max_length=200, blank=True, default="")
     consumabile_livello = models.PositiveIntegerField(default=1)
+    consegna_istanza = models.BooleanField(
+        default=False,
+        help_text=(
+            "Se attivo su una voce Infusione, all'acquisto crea l'oggetto fisico "
+            "(Mod/Materia o Innesto/Mutazione) invece di assegnare la ricetta. "
+            "Le infusioni AUM (aumenti corporei) creano sempre un'istanza."
+        ),
+    )
 
     class Meta:
         verbose_name = "Voce negozio mercante"

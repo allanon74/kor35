@@ -20,6 +20,7 @@ from .models import (
     STATO_RICHIESTA_PENDENTE, STATO_RICHIESTA_COMPLETATA, STATO_RICHIESTA_RIFIUTATA,
     TIPO_OPERAZIONE_FORGIATURA, TIPO_OPERAZIONE_RIMOZIONE, TIPO_OPERAZIONE_INSTALLAZIONE, TIPO_OPERAZIONE_INNESTO,
     TIPO_OGGETTO_AUMENTO, TIPO_OGGETTO_POTENZIAMENTO,
+    SLOT_CORPO_CHOICES,
     Tessitura, CreazioneConsumabileInCorso, Punteggio, AURA,
     FALLBACK_STAT_COSTO_CONSUMABILI, FALLBACK_STAT_NUMERO_CONSUMABILI,
     FALLBACK_STAT_TEMPO_CREAZIONE_CONSUMABILI, FALLBACK_STAT_DURATA_CONSUMABILI,
@@ -664,20 +665,39 @@ class GestioneOggettiService:
     def installa_innesto(personaggio, innesto, slot):
         """
         Monta un Innesto/Mutazione su uno slot corporeo.
+        Fallisce (ValidationError) se lo slot non è valido, non è permesso
+        dall'infusione o è già occupato.
         """
         if innesto.tipo_oggetto not in [TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE]:
             raise ValidationError("Questo oggetto non è un innesto o mutazione.")
-        
+
+        slot = (slot or "").strip()
+        valid_slots = {code for code, _label in SLOT_CORPO_CHOICES}
+        if slot not in valid_slots:
+            raise ValidationError(f"Slot corpo non valido: {slot or '(vuoto)'}.")
+
+        infusione = innesto.infusione_generatrice
+        if infusione and infusione.slot_corpo_permessi:
+            permessi = {
+                s.strip()
+                for s in infusione.slot_corpo_permessi.split(",")
+                if s.strip()
+            }
+            if permessi and slot not in permessi:
+                raise ValidationError(
+                    f"Lo slot {slot} non è consentito per {innesto.nome}."
+                )
+
         occupante = Oggetto.objects.filter(
             tracciamento_inventario__inventario=personaggio,
             tracciamento_inventario__data_fine__isnull=True,
             slot_corpo=slot,
             is_equipaggiato=True
         ).first()
-        
+
         if occupante:
             raise ValidationError(f"Lo slot {slot} è già occupato da {occupante.nome}.")
-            
+
         innesto.slot_corpo = slot
         innesto.is_equipaggiato = True
         innesto.save()
