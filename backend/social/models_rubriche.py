@@ -41,7 +41,32 @@ RUBRICA_WIKI_VISIBILITA_CHOICES = [
 MAX_ARTICOLO_IMAGES = MAX_POST_IMAGES
 PAROLE_PER_MINUTO = 200
 
+# Marker nel corpo HTML: [[rubrica-img:<uuid>]] — posizione delle immagini di galleria.
+RUBRICA_IMG_MARKER_PREFIX = "[[rubrica-img:"
+RUBRICA_IMG_MARKER_SUFFIX = "]]"
+RUBRICA_IMG_MARKER_RE = re.compile(
+    r"\[\[rubrica-img:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]\]"
+)
+
+RUBRICA_IMG_LAYOUT_FULL = "full"
+RUBRICA_IMG_LAYOUT_WIDE = "wide"
+RUBRICA_IMG_LAYOUT_FLOAT_LEFT = "float_left"
+RUBRICA_IMG_LAYOUT_FLOAT_RIGHT = "float_right"
+RUBRICA_IMG_LAYOUT_GRID_PAIR = "grid_pair"
+RUBRICA_IMG_LAYOUT_CHOICES = [
+    (RUBRICA_IMG_LAYOUT_FULL, "A tutta colonna"),
+    (RUBRICA_IMG_LAYOUT_WIDE, "Ampia (full-bleed)"),
+    (RUBRICA_IMG_LAYOUT_FLOAT_LEFT, "Affiancata a sinistra"),
+    (RUBRICA_IMG_LAYOUT_FLOAT_RIGHT, "Affiancata a destra"),
+    (RUBRICA_IMG_LAYOUT_GRID_PAIR, "Metà griglia (in coppia)"),
+]
+
 _HTML_TAG_REGEX = re.compile(r"<[^>]+>")
+
+
+def rubrica_img_marker(immagine_id) -> str:
+    """Marker testuale da inserire nel corpo HTML per posizionare un'immagine."""
+    return f"{RUBRICA_IMG_MARKER_PREFIX}{immagine_id}{RUBRICA_IMG_MARKER_SUFFIX}"
 
 
 def rubrica_logo_upload_to(instance, filename):
@@ -60,7 +85,8 @@ def testo_semplice_da_html(html: str) -> str:
     """Testo leggibile da contenuto HTML (conteggio parole, sommari automatici)."""
     if not html:
         return ""
-    senza_tag = _HTML_TAG_REGEX.sub(" ", str(html))
+    senza_marker = RUBRICA_IMG_MARKER_RE.sub(" ", str(html))
+    senza_tag = _HTML_TAG_REGEX.sub(" ", senza_marker)
     senza_entita = senza_tag.replace("&nbsp;", " ").replace("&amp;", "&")
     return re.sub(r"\s+", " ", senza_entita).strip()
 
@@ -292,6 +318,12 @@ class RubricaArticoloImmagine(SyncableModel, models.Model):
     articolo = models.ForeignKey(RubricaArticolo, on_delete=models.CASCADE, related_name="immagini")
     immagine = models.ImageField(upload_to=rubrica_articolo_gallery_upload_to, max_length=255)
     didascalia = models.CharField(max_length=300, blank=True)
+    layout = models.CharField(
+        max_length=20,
+        choices=RUBRICA_IMG_LAYOUT_CHOICES,
+        default=RUBRICA_IMG_LAYOUT_FULL,
+        help_text="Preset editoriale in lettura (full, wide, float, metà griglia).",
+    )
     ordine = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(default=timezone.now)
 
@@ -300,6 +332,9 @@ class RubricaArticoloImmagine(SyncableModel, models.Model):
         verbose_name_plural = "Immagini articoli rubrica"
         ordering = ["ordine", "id"]
         unique_together = ("articolo", "ordine")
+
+    def marker(self) -> str:
+        return rubrica_img_marker(self.id)
 
     def save(self, *args, **kwargs):
         if self.immagine:

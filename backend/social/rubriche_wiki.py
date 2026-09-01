@@ -82,6 +82,8 @@ def _data_leggibile(valore) -> str:
 
 def html_articolo(articolo) -> str:
     """Corpo HTML della pagina wiki di un articolo (nessuna interazione social)."""
+    from .rubriche_markers import expand_corpo_markers, immagini_non_posizionate
+
     colore = escape(articolo.rubrica.colore_accento or "#b91c1c")
     parti: list[str] = ['<div class="rubrica-articolo">']
 
@@ -117,13 +119,29 @@ def html_articolo(articolo) -> str:
             f"{escape(articolo.sommario)}</blockquote>"
         )
 
-    if articolo.corpo:
-        parti.append(articolo.corpo)
-
     immagini = list(articolo.immagini.all())
-    if immagini:
+    immagini_by_id = {}
+    for riga in immagini:
+        src = _media_src(riga.immagine)
+        if not src:
+            continue
+        immagini_by_id[str(riga.id).lower()] = {
+            "url": src,
+            "didascalia": riga.didascalia or "",
+            "layout": riga.layout or "full",
+        }
+
+    if articolo.corpo:
+        parti.append(
+            expand_corpo_markers(
+                articolo.corpo, immagini_by_id, titolo_fallback=articolo.titolo or ""
+            )
+        )
+
+    appendice = immagini_non_posizionate(articolo.corpo or "", immagini)
+    if appendice:
         parti.append('<div class="rubrica-galleria">')
-        for riga in immagini:
+        for riga in appendice:
             src = _media_src(riga.immagine)
             if not src:
                 continue

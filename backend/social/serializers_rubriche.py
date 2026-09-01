@@ -264,7 +264,16 @@ class RubricaArticoloDetailSerializer(RubricaArticoloListSerializer):
         for riga in obj.immagini.all():
             url = _file_url(riga.immagine, request)
             if url:
-                righe.append({"id": str(riga.id), "url": url, "didascalia": riga.didascalia or ""})
+                righe.append(
+                    {
+                        "id": str(riga.id),
+                        "url": url,
+                        "didascalia": riga.didascalia or "",
+                        "layout": riga.layout or "full",
+                        "ordine": riga.ordine,
+                        "marker": riga.marker(),
+                    }
+                )
         return righe
 
     def get_video_url(self, obj):

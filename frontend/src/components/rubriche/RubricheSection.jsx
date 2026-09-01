@@ -68,9 +68,14 @@ export default function RubricheSection({ personaggio, onLogout, articoloInizial
     setComposerAperto(false);
   };
 
-  const dopoSalvataggio = async () => {
-    setComposerAperto(false);
-    setArticoloInModifica(null);
+  const dopoSalvataggio = async (salvato) => {
+    if (salvato?.id) {
+      setArticoloInModifica(salvato);
+      setComposerAperto(true);
+    } else {
+      setComposerAperto(false);
+      setArticoloInModifica(null);
+    }
     if (rubricaSelezionata?.id) await caricaArticoli(rubricaSelezionata.id);
     await caricaRubriche();
   };

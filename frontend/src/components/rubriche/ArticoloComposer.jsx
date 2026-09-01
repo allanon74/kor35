@@ -1,8 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ImagePlus, Megaphone, Save, Video, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ImagePlus, Megaphone, Save, Video, X, TextCursorInput } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor';
 import { searchPersonaggi } from '../../api';
 import { createArticolo, updateArticolo } from '../../api/rubriche';
+import {
+  RUBRICA_IMG_LAYOUTS,
+  extractRubricaImgIds,
+  rubricaImgMarkerHtml,
+} from '../../utils/rubricheMarkers';
 
 const STATI = [
   { id: 'BOZZA', label: 'Bozza' },
@@ -36,6 +41,14 @@ const formDaArticolo = (articolo) => ({
   autore_personaggio: articolo.autore_personaggio || '',
 });
 
+const metaDaImmagini = (lista) =>
+  (Array.isArray(lista) ? lista : []).map((img, index) => ({
+    id: img.id,
+    didascalia: img.didascalia || '',
+    layout: img.layout || 'full',
+    ordine: typeof img.ordine === 'number' ? img.ordine : index,
+  }));
+
 /**
  * Composer articoli: usato sia nella sezione Rubriche di InstaFame sia nel tool staff.
  * In modalità staff si può scegliere il personaggio firmatario o una firma libera.
@@ -50,6 +63,7 @@ export default function ArticoloComposer({
   onAnnulla,
   onLogout,
 }) {
+  const editorRef = useRef(null);
   const [form, setForm] = useState(() =>
     articolo ? formDaArticolo(articolo) : formVuoto(rubricaPreselezionata)
   );
@@ -57,8 +71,10 @@ export default function ArticoloComposer({
   const [galleriaFiles, setGalleriaFiles] = useState([]);
   const [videoFile, setVideoFile] = useState(null);
   const [pulisciGalleria, setPulisciGalleria] = useState(false);
+  const [galleriaMeta, setGalleriaMeta] = useState(() => metaDaImmagini(articolo?.immagini));
   const [salvataggio, setSalvataggio] = useState(false);
   const [errore, setErrore] = useState('');
+  const [avviso, setAvviso] = useState('');
 
   const [annuncioAttivo, setAnnuncioAttivo] = useState(false);
   const [annuncioTesto, setAnnuncioTesto] = useState('');
@@ -71,9 +87,18 @@ export default function ArticoloComposer({
 
   const inModifica = Boolean(articolo?.id);
   const haGiaAnnuncio = Boolean(articolo?.post_annuncio);
+  const immaginiEsistenti = useMemo(
+    () => (pulisciGalleria ? [] : Array.isArray(articolo?.immagini) ? articolo.immagini : []),
+    [articolo?.immagini, pulisciGalleria]
+  );
 
   useEffect(() => {
-    if (articolo) setForm(formDaArticolo(articolo));
+    if (articolo) {
+      setForm(formDaArticolo(articolo));
+      setGalleriaMeta(metaDaImmagini(articolo.immagini));
+      setPulisciGalleria(false);
+      setGalleriaFiles([]);
+    }
   }, [articolo]);
 
   const rubricheDisponibili = useMemo(
@@ -81,7 +106,27 @@ export default function ArticoloComposer({
     [rubriche, modalitaStaff]
   );
 
+  const markerIds = useMemo(() => new Set(extractRubricaImgIds(form.corpo)), [form.corpo]);
+
   const aggiorna = (campo, valore) => setForm((prec) => ({ ...prec, [campo]: valore }));
+
+  const aggiornaMetaImmagine = (imgId, patch) => {
+    setGalleriaMeta((prec) =>
+      prec.map((row) => (String(row.id) === String(imgId) ? { ...row, ...patch } : row))
+    );
+  };
+
+  const inserisciNelTesto = (img) => {
+    if (!img?.id) return;
+    const html = rubricaImgMarkerHtml(img.id);
+    if (editorRef.current?.insertHtml) {
+      editorRef.current.insertHtml(html);
+      setAvviso(`Marker inserito nel testo: ${img.marker || `[[rubrica-img:${img.id}]]`}`);
+    } else {
+      aggiorna('corpo', `${form.corpo || ''}${html}`);
+      setAvviso('Marker aggiunto in fondo al corpo (posiziona il cursore nell’editor per inserirlo dove serve).');
+    }
+  };
 
   const cercaAutore = useCallback(
     async (testo) => {
@@ -103,6 +148,7 @@ export default function ArticoloComposer({
   const salva = async (evento) => {
     evento.preventDefault();
     setErrore('');
+    setAvviso('');
 
     if (!form.rubrica) {
       setErrore('Scegli la rubrica.');
@@ -134,6 +180,9 @@ export default function ArticoloComposer({
     if (videoFile) dati.append('video', videoFile);
     galleriaFiles.forEach((file) => dati.append('immagini', file));
     if (pulisciGalleria) dati.append('clear_immagini', '1');
+    if (!pulisciGalleria && galleriaMeta.length > 0) {
+      dati.append('immagini_meta', JSON.stringify(galleriaMeta));
+    }
 
     const annuncioRichiesto = annuncioAttivo && form.stato === 'PUBBLICATO' && !haGiaAnnuncio;
     const firmatarioAnnuncio = modalitaStaff ? autoreScelto?.id : personaggioAttivo?.id;
@@ -152,6 +201,11 @@ export default function ArticoloComposer({
       const salvato = inModifica
         ? await updateArticolo(articolo.id, dati, personaggioAttivo?.id, onLogout)
         : await createArticolo(dati, personaggioAttivo?.id, onLogout);
+      if (!inModifica && Array.isArray(salvato?.immagini) && salvato.immagini.length > 0) {
+        setAvviso(
+          'Articolo creato. Usa «Inserisci qui» sulle immagini per posizionarle nel testo, poi salva di nuovo.'
+        );
+      }
       onSalvato?.(salvato);
     } catch (e) {
       setErrore(e?.message || 'Salvataggio non riuscito.');
@@ -176,6 +230,9 @@ export default function ArticoloComposer({
 
       {errore && (
         <p className="text-xs text-red-200 bg-red-950/40 border border-red-500/40 rounded-lg px-3 py-2">{errore}</p>
+      )}
+      {avviso && (
+        <p className="text-xs text-amber-100 bg-amber-950/30 border border-amber-500/30 rounded-lg px-3 py-2">{avviso}</p>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -248,8 +305,12 @@ export default function ArticoloComposer({
       </div>
 
       <div>
-        <label className={etichettaClass}>Corpo dell'articolo</label>
+        <label className={etichettaClass}>Corpo dell&apos;articolo</label>
+        <p className="text-[11px] text-gray-500 mb-1">
+          Posiziona il cursore e usa «Inserisci qui» sulle immagini salvate per collocarle nel pezzo.
+        </p>
         <RichTextEditor
+          ref={editorRef}
           value={form.corpo}
           onChange={(html) => aggiorna('corpo', html)}
           placeholder="Scrivi il pezzo…"
@@ -280,7 +341,7 @@ export default function ArticoloComposer({
         <div>
           <label className={etichettaClass}>
             <span className="inline-flex items-center gap-1">
-              <ImagePlus size={12} /> Galleria (max 8)
+              <ImagePlus size={12} /> Aggiungi alla galleria (max 8)
             </span>
           </label>
           <input
@@ -290,7 +351,7 @@ export default function ArticoloComposer({
             onChange={(e) => setGalleriaFiles(Array.from(e.target.files || []))}
             className="text-xs"
           />
-          {inModifica && (
+          {inModifica && immaginiEsistenti.length > 0 && (
             <label className="flex items-center gap-2 text-[11px] text-gray-400 mt-2">
               <input
                 type="checkbox"
@@ -299,6 +360,11 @@ export default function ArticoloComposer({
               />
               Svuota la galleria esistente
             </label>
+          )}
+          {!inModifica && (
+            <p className="text-[11px] text-gray-500 mt-2">
+              Dopo il primo salvataggio potrai posizionare le immagini nel testo con «Inserisci qui».
+            </p>
           )}
           <label className={`${etichettaClass} mt-3`}>
             <span className="inline-flex items-center gap-1">
@@ -313,6 +379,82 @@ export default function ArticoloComposer({
           />
         </div>
       </div>
+
+      {immaginiEsistenti.length > 0 && (
+        <div className="rounded-xl border border-white/10 bg-black/25 p-3 space-y-3">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-indigo-200 font-semibold">Immagini nel pezzo</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              Scegli il layout editoriale e inserisci il marker alla posizione del cursore nel corpo.
+              Le immagini senza marker restano in appendice in fondo.
+            </p>
+          </div>
+          <ul className="space-y-3">
+            {immaginiEsistenti.map((img) => {
+              const meta = galleriaMeta.find((m) => String(m.id) === String(img.id)) || {
+                didascalia: img.didascalia || '',
+                layout: img.layout || 'full',
+              };
+              const nelTesto = markerIds.has(String(img.id).toLowerCase());
+              return (
+                <li
+                  key={img.id}
+                  className="flex flex-col sm:flex-row gap-3 rounded-lg border border-gray-700 bg-gray-900/60 p-2"
+                >
+                  <img
+                    src={img.url}
+                    alt=""
+                    className="w-full sm:w-28 h-20 object-cover rounded-md border border-white/10 shrink-0"
+                  />
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                          nelTesto
+                            ? 'border-emerald-400/40 text-emerald-200 bg-emerald-950/40'
+                            : 'border-amber-400/40 text-amber-100 bg-amber-950/30'
+                        }`}
+                      >
+                        {nelTesto ? 'Nel testo' : 'Appendice'}
+                      </span>
+                      <code className="text-[10px] text-gray-500 truncate">
+                        {img.marker || `[[rubrica-img:${img.id}]]`}
+                      </code>
+                    </div>
+                    <input
+                      value={meta.didascalia}
+                      onChange={(e) => aggiornaMetaImmagine(img.id, { didascalia: e.target.value })}
+                      placeholder="Didascalia"
+                      className={campoClass}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-[11px] text-gray-400">Layout</label>
+                      <select
+                        value={meta.layout || 'full'}
+                        onChange={(e) => aggiornaMetaImmagine(img.id, { layout: e.target.value })}
+                        className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs"
+                      >
+                        {RUBRICA_IMG_LAYOUTS.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => inserisciNelTesto(img)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-800/80 hover:bg-indigo-700 border border-indigo-400/40 text-xs font-semibold"
+                      >
+                        <TextCursorInput size={13} /> Inserisci qui
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-t border-white/10 pt-3">
         {modalitaStaff ? (
@@ -388,12 +530,12 @@ export default function ArticoloComposer({
               checked={annuncioAttivo}
               onChange={(e) => setAnnuncioAttivo(e.target.checked)}
             />
-            <Megaphone size={15} /> Annuncia l'uscita con un post InstaFame
+            <Megaphone size={15} /> Annuncia l&apos;uscita con un post InstaFame
           </label>
           {annuncioAttivo && (
             <>
               <p className="text-[11px] text-fuchsia-200/70">
-                Il post riporta anteprima e link all'articolo. Se lasci vuoto il testo viene composto da
+                Il post riporta anteprima e link all&apos;articolo. Se lasci vuoto il testo viene composto da
                 occhiello, titolo e sommario.
               </p>
               <textarea

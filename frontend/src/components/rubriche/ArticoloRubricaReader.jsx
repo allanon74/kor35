@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Clock, Heart, MessageCircle, Send, Trash2 } from 'lucide-react';
-import RichHtml from '../RichHtml';
+import ArticoloCorpoConImmagini from './ArticoloCorpoConImmagini';
 import InstafameAuthorSignature from '../InstafameAuthorSignature';
 import { formatCount } from '../../utils/formatCount';
 import {
@@ -209,24 +209,13 @@ export default function ArticoloRubricaReader({
           </p>
         )}
 
-        {articolo.corpo && (
-          <RichHtml content={articolo.corpo} className="text-sm md:text-base leading-7 text-gray-200" />
-        )}
-
-        {Array.isArray(articolo.immagini) && articolo.immagini.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
-            {articolo.immagini.map((img) => (
-              <figure key={img.id} className="rounded-xl overflow-hidden border border-white/10">
-                <img src={img.url} alt={img.didascalia || articolo.titolo} className="w-full object-cover" />
-                {img.didascalia && (
-                  <figcaption className="px-2 py-1 text-[11px] text-gray-400 italic bg-black/40">
-                    {img.didascalia}
-                  </figcaption>
-                )}
-              </figure>
-            ))}
-          </div>
-        )}
+        {articolo.corpo || (Array.isArray(articolo.immagini) && articolo.immagini.length > 0) ? (
+          <ArticoloCorpoConImmagini
+            corpo={articolo.corpo}
+            immagini={articolo.immagini}
+            titolo={articolo.titolo}
+          />
+        ) : null}
 
         {articolo.video_url && (
           <video controls src={articolo.video_url} className="w-full rounded-xl mt-5 border border-white/10" />

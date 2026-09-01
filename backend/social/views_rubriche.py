@@ -235,11 +235,32 @@ class RubricaArticoloViewSet(RubricheContextMixin, viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         # Articolo e post di lancio nascono insieme: se l'annuncio fallisce non deve
         # restare un articolo salvato a metà.
-        return super().create(request, *args, **kwargs)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        articolo = (
+            self.get_queryset().filter(pk=serializer.instance.pk).first() or serializer.instance
+        )
+        return Response(
+            RubricaArticoloDetailSerializer(articolo, context=self.get_serializer_context()).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @transaction.atomic
     def update(self, request, *args, **kwargs):
-        return super().update(request, *args, **kwargs)
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        articolo = self.get_queryset().filter(pk=serializer.instance.pk).first() or serializer.instance
+        return Response(
+            RubricaArticoloDetailSerializer(articolo, context=self.get_serializer_context()).data
+        )
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs["partial"] = True
+        return self.update(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         personaggio = self.get_personaggio()
@@ -263,8 +284,8 @@ class RubricaArticoloViewSet(RubricheContextMixin, viewsets.ModelViewSet):
         personaggio = self.get_personaggio()
         self._verifica_permesso_modifica(articolo, personaggio)
         articolo = serializer.save()
-        nuove_immagini = bool(self.request.FILES.getlist("immagini"))
-        self._applica_media(articolo, replace_gallery=nuove_immagini)
+        # Append galleria; clear_immagini / immagini_meta gestiti in apply_articolo_media_from_request.
+        self._applica_media(articolo, replace_gallery=False)
         self._gestisci_annuncio_da_request(articolo)
 
     def perform_destroy(self, instance):

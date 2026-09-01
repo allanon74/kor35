@@ -1,4 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+    forwardRef,
+    useCallback,
+    useEffect,
+    useImperativeHandle,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { Info } from 'lucide-react';
 import RichTextToolbar from './richtext/RichTextToolbar';
 import RichTextLinkDialog from './richtext/RichTextLinkDialog';
@@ -35,6 +43,8 @@ import { closestBlock, getSelectionRangeWithin } from '../utils/richText/domRang
  *   su smartphone lo spazio di scrittura resta sempre utilizzabile;
  * - la modalita' schermo intero e' la via rapida per scrivere testi lunghi da telefono.
  *
+ * Ref imperativa: ``insertHtml(html)`` inserisce HTML alla selezione corrente.
+ *
  * @param {object} props
  * @param {string} props.value HTML corrente
  * @param {(html: string) => void} props.onChange
@@ -44,7 +54,7 @@ import { closestBlock, getSelectionRangeWithin } from '../utils/richText/domRang
  * @param {number|string} [props.maxHeight='50vh'] Altezza massima prima dello scroll interno.
  * @param {boolean} [props.fillHeight=false] Occupa tutta l'altezza disponibile del contenitore flex.
  */
-const RichTextEditor = ({
+const RichTextEditor = forwardRef(function RichTextEditor({
     value,
     onChange,
     placeholder = 'Scrivi qui…',
@@ -55,7 +65,7 @@ const RichTextEditor = ({
     maxHeight = '50vh',
     fillHeight = false,
     ariaLabel,
-}) => {
+}, ref) {
     ensureRichTextStyles();
 
     const editorRef = useRef(null);
@@ -192,6 +202,17 @@ const RichTextEditor = ({
         emitChange();
         refreshSelectionState();
     }, [emitChange, refreshSelectionState, restoreSelection]);
+
+    useImperativeHandle(ref, () => ({
+        insertHtml: (html) => {
+            if (!html) return;
+            runCommand((editor) => insertHtmlAtSelection(editor, html));
+        },
+        focus: () => {
+            editorRef.current?.focus({ preventScroll: true });
+            restoreSelection();
+        },
+    }), [restoreSelection, runCommand]);
 
     const handleInput = useCallback(() => {
         emitChange();
@@ -503,6 +524,6 @@ const RichTextEditor = ({
             />
         </div>
     );
-};
+});
 
 export default RichTextEditor;

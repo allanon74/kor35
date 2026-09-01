@@ -472,3 +472,94 @@ class ModuloRubricheTests(RubricheTestBase):
         self.assertFalse(staff_tool_abilitato(self.campagna, "rubriche"))
         self._imposta_modulo("TEST")
         self.assertTrue(staff_tool_abilitato(self.campagna, "rubriche"))
+
+
+class RubricaImgMarkerTests(RubricheTestBase):
+    def setUp(self):
+        from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        from social.models_rubriche import RubricaArticoloImmagine, rubrica_img_marker
+
+        self.rubrica = Rubrica.objects.create(nome="Marker Testata")
+        self.articolo = RubricaArticolo.objects.create(
+            rubrica=self.rubrica,
+            titolo="Con marker",
+            corpo="<p>Prima</p>",
+            firma_libera="Redazione",
+            stato=RUBRICA_ARTICOLO_PUBBLICATO,
+        )
+        buf = BytesIO()
+        Image.new("RGB", (120, 80), (10, 20, 30)).save(buf, format="JPEG")
+        uploaded = SimpleUploadedFile("g1.jpg", buf.getvalue(), content_type="image/jpeg")
+        self.img = RubricaArticoloImmagine.objects.create(
+            articolo=self.articolo,
+            immagine=uploaded,
+            didascalia="Figura 1",
+            layout="wide",
+            ordine=0,
+        )
+        self.marker = rubrica_img_marker(self.img.id)
+        self.articolo.corpo = f"<p>Prima</p><p>{self.marker}</p><p>Dopo</p>"
+        self.articolo.save(update_fields=["corpo", "updated_at", "tempo_lettura_min"])
+
+    def test_detail_espone_layout_e_marker(self):
+        view = RubricaArticoloViewSet.as_view({"get": "retrieve"})
+        request = self.factory.get(f"/api/social/rubriche-articoli/{self.articolo.id}/")
+        response = self._chiama(view, request, self.user_master, pk=str(self.articolo.id))
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(response.data["immagini"]), 1)
+        self.assertEqual(response.data["immagini"][0]["layout"], "wide")
+        self.assertEqual(response.data["immagini"][0]["marker"], self.marker)
+
+    def test_immagini_meta_aggiorna_layout(self):
+        import json
+
+        view = RubricaArticoloViewSet.as_view({"patch": "partial_update"})
+        request = self.factory.patch(
+            f"/api/social/rubriche-articoli/{self.articolo.id}/",
+            {
+                "titolo": self.articolo.titolo,
+                "immagini_meta": json.dumps(
+                    [{"id": str(self.img.id), "layout": "float_left", "didascalia": "Nuova"}]
+                ),
+            },
+            format="multipart",
+        )
+        response = self._chiama(view, request, self.user_master, pk=str(self.articolo.id))
+        self.assertEqual(response.status_code, 200, response.data)
+        self.img.refresh_from_db()
+        self.assertEqual(self.img.layout, "float_left")
+        self.assertEqual(self.img.didascalia, "Nuova")
+        self.assertEqual(response.data["immagini"][0]["layout"], "float_left")
+
+    def test_wiki_espande_marker_e_non_duplica_in_appendice(self):
+        from social.rubriche_wiki import html_articolo
+
+        html = html_articolo(self.articolo)
+        self.assertIn("Figura 1", html)
+        self.assertNotIn(self.marker, html)
+        self.assertEqual(html.count("<figure"), 1)
+
+    def test_extract_e_appendice(self):
+        from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        from social.models_rubriche import RubricaArticoloImmagine
+        from social.rubriche_markers import extract_rubrica_img_ids, immagini_non_posizionate
+
+        self.assertEqual(extract_rubrica_img_ids(self.articolo.corpo), [str(self.img.id).lower()])
+
+        buf = BytesIO()
+        Image.new("RGB", (40, 40), (1, 2, 3)).save(buf, format="JPEG")
+        orphan = RubricaArticoloImmagine.objects.create(
+            articolo=self.articolo,
+            immagine=SimpleUploadedFile("g2.jpg", buf.getvalue(), content_type="image/jpeg"),
+            ordine=1,
+        )
+        orphans = immagini_non_posizionate(self.articolo.corpo, list(self.articolo.immagini.all()))
+        self.assertEqual([o.id for o in orphans], [orphan.id])

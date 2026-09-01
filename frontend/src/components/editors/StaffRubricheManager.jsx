@@ -568,9 +568,14 @@ export default function StaffRubricheManager({ onLogout }) {
                     rubricaPreselezionata={rubricaSelezionata.id}
                     personaggioAttivo={selectedCharacterId ? { id: selectedCharacterId } : null}
                     modalitaStaff
-                    onSalvato={async () => {
-                      setComposerAperto(false);
-                      setArticoloInModifica(null);
+                    onSalvato={async (salvato) => {
+                      if (salvato?.id) {
+                        setArticoloInModifica(salvato);
+                        setComposerAperto(true);
+                      } else {
+                        setComposerAperto(false);
+                        setArticoloInModifica(null);
+                      }
                       await caricaDettaglio(rubricaSelezionata);
                       await caricaRubriche();
                     }}

@@ -271,6 +271,7 @@ class RubricaArticoloImmagineInline(admin.TabularInline):
     model = RubricaArticoloImmagine
     extra = 0
     readonly_fields = ("created_at",)
+    fields = ("immagine", "didascalia", "layout", "ordine", "created_at")
 
 
 @admin.register(RubricaArticolo)
