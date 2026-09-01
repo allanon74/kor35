@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from personaggi.serializers import _personaggio_avatar_url
 
-from .author_display import get_personaggio_badge_instafame
+from .author_display import get_personaggio_badge_instafame, social_firma_for_personaggio
 from .display_names import social_display_name
 from .influencer import total_likes_contenuto
 from .models_rubriche import (
@@ -147,6 +147,8 @@ class RubricaArticoloListSerializer(serializers.ModelSerializer):
     firma = serializers.CharField(read_only=True)
     autore_avatar = serializers.SerializerMethodField()
     autore_badge_instafame = serializers.SerializerMethodField()
+    autore_firma_testo = serializers.SerializerMethodField()
+    autore_firma_banner = serializers.SerializerMethodField()
     hero_url = serializers.SerializerMethodField()
     sommario_effettivo = serializers.SerializerMethodField()
     likes_count = serializers.SerializerMethodField()
@@ -176,6 +178,8 @@ class RubricaArticoloListSerializer(serializers.ModelSerializer):
             "firma",
             "autore_avatar",
             "autore_badge_instafame",
+            "autore_firma_testo",
+            "autore_firma_banner",
             "data_pubblicazione",
             "created_at",
             "tempo_lettura_min",
@@ -196,6 +200,16 @@ class RubricaArticoloListSerializer(serializers.ModelSerializer):
         if not obj.autore_personaggio_id:
             return ""
         return get_personaggio_badge_instafame(obj.autore_personaggio)
+
+    def get_autore_firma_testo(self, obj):
+        if not obj.autore_personaggio_id:
+            return ""
+        return social_firma_for_personaggio(obj.autore_personaggio, self.context.get("request")).get("testo") or ""
+
+    def get_autore_firma_banner(self, obj):
+        if not obj.autore_personaggio_id:
+            return None
+        return social_firma_for_personaggio(obj.autore_personaggio, self.context.get("request")).get("banner")
 
     def get_hero_url(self, obj):
         return _file_url(obj.hero_immagine, self.context.get("request"))

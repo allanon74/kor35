@@ -15,7 +15,7 @@ from personaggi.models import (
 
 from .display_names import social_display_name, social_display_name_from_profile
 from .nickname_validation import clean_nickname_value
-from .author_display import get_personaggio_badge_instafame, social_cariche_for_personaggio
+from .author_display import get_personaggio_badge_instafame, social_cariche_for_personaggio, social_firma_for_personaggio
 from personaggi.serializers import _personaggio_avatar_url
 from .models import (
     SOCIAL_GROUP_STATUS_ACTIVE,
@@ -89,6 +89,8 @@ class SocialProfileSerializer(serializers.ModelSerializer):
             "prefettura_esterna",
             "descrizione",
             "professioni",
+            "firma_testo",
+            "firma_banner",
             "era_provenienza",
             "era",
             "era_nome",
@@ -178,6 +180,8 @@ class SocialProfilePublicSerializer(serializers.ModelSerializer):
             "prefettura_regione_sigla",
             "descrizione",
             "professioni",
+            "firma_testo",
+            "firma_banner",
             "era_provenienza",
             "era_nome",
             "korp_nome",
@@ -266,6 +270,8 @@ class SocialPostSerializer(serializers.ModelSerializer):
     autore_nome = serializers.SerializerMethodField()
     autore_avatar = serializers.SerializerMethodField()
     autore_badge_instafame = serializers.SerializerMethodField()
+    autore_firma_testo = serializers.SerializerMethodField()
+    autore_firma_banner = serializers.SerializerMethodField()
     likes_count = serializers.SerializerMethodField()
     comments_count = serializers.IntegerField(read_only=True)
     liked_by_me = serializers.SerializerMethodField()
@@ -284,6 +290,8 @@ class SocialPostSerializer(serializers.ModelSerializer):
             "autore_nome",
             "autore_avatar",
             "autore_badge_instafame",
+            "autore_firma_testo",
+            "autore_firma_banner",
             "titolo",
             "testo",
             "immagine",
@@ -344,6 +352,12 @@ class SocialPostSerializer(serializers.ModelSerializer):
 
     def get_autore_badge_instafame(self, obj):
         return get_personaggio_badge_instafame(obj.autore)
+
+    def get_autore_firma_testo(self, obj):
+        return social_firma_for_personaggio(obj.autore, self.context.get("request")).get("testo") or ""
+
+    def get_autore_firma_banner(self, obj):
+        return social_firma_for_personaggio(obj.autore, self.context.get("request")).get("banner")
 
     def get_tags(self, obj):
         return _personaggio_tag_rows(obj.tags)
@@ -689,6 +703,8 @@ class SocialProfileStaffSerializer(serializers.ModelSerializer):
             "foto_principale",
             "descrizione",
             "professioni",
+            "firma_testo",
+            "firma_banner",
             "regione",
             "prefettura_nome",
             "prefettura_regione_sigla",

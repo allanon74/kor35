@@ -57,6 +57,10 @@ def social_profile_image_upload_to(instance, filename):
     return f"social/profiles/{instance.personaggio_id}/{filename}"
 
 
+def social_profile_firma_banner_upload_to(instance, filename):
+    return f"social/profiles/{instance.personaggio_id}/firma/{filename}"
+
+
 def social_story_media_upload_to(instance, filename):
     return f"social/stories/{instance.autore_id}/{filename}"
 
@@ -69,6 +73,18 @@ class SocialProfile(SyncableModel, models.Model):
     prefettura = models.CharField(max_length=120, null=True, blank=True)
     descrizione = models.TextField(null=True, blank=True)
     professioni = models.TextField(null=True, blank=True)
+    firma_testo = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Testo firma mostrato sotto post e articoli di rubrica del personaggio.",
+    )
+    firma_banner = models.ImageField(
+        upload_to=social_profile_firma_banner_upload_to,
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Banner firma mostrato sotto post e articoli di rubrica del personaggio.",
+    )
     era_provenienza = models.CharField(max_length=120, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -88,6 +104,10 @@ class SocialProfile(SyncableModel, models.Model):
         if self.foto_principale:
             self.foto_principale = prepare_image_upload(
                 self.foto_principale, f"social/profiles/{self.personaggio_id}"
+            )
+        if self.firma_banner:
+            self.firma_banner = prepare_image_upload(
+                self.firma_banner, f"social/profiles/{self.personaggio_id}/firma"
             )
         super().save(*args, **kwargs)
 

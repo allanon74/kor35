@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { socialGetPublicPostBySlug, resolveMediaUrl } from '../api';
 import InstafameMediaCarousel from '../components/InstafameMediaCarousel';
+import InstafameAuthorSignature from '../components/InstafameAuthorSignature';
 import { formatCount } from '../utils/formatCount';
 
 export default function SocialPublicPostPage() {
@@ -110,6 +111,16 @@ export default function SocialPublicPostPage() {
             >
               {post.testo}
             </p>
+          )}
+
+          {(post.autore_firma_testo || post.autore_firma_banner) && (
+            <div className={`px-5 ${hasMedia ? 'order-3 lg:order-none lg:pl-6' : ''}`}>
+              <InstafameAuthorSignature
+                testo={post.autore_firma_testo}
+                bannerUrl={post.autore_firma_banner}
+                light
+              />
+            </div>
           )}
 
           <div

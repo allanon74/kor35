@@ -32,3 +32,26 @@ def social_cariche_for_personaggio(personaggio):
         }
         for m in memberships
     ]
+
+
+def social_firma_for_personaggio(personaggio, request=None):
+    """Testo e URL banner firma social del personaggio (vuoto se assente)."""
+    if not personaggio:
+        return {"testo": "", "banner": None}
+    profile = getattr(personaggio, "social_profile", None)
+    if profile is None:
+        return {"testo": "", "banner": None}
+    testo = (profile.firma_testo or "").strip()
+    banner = None
+    field = profile.firma_banner
+    if field and getattr(field, "name", ""):
+        try:
+            if field.storage.exists(field.name):
+                banner = field.url
+                if request:
+                    banner = request.build_absolute_uri(banner)
+        except Exception:
+            banner = None
+    if not testo and not banner:
+        return {"testo": "", "banner": None}
+    return {"testo": testo, "banner": banner}

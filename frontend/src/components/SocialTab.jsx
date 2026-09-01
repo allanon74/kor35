@@ -53,6 +53,8 @@ import StoryViewerModal from './StoryViewerModal';
 import StoryMediaCaptureModal from './StoryMediaCaptureModal';
 import InstafameMediaCarousel from './InstafameMediaCarousel';
 import InstafameAuthorBadge, { InstafameSocialCariche } from './InstafameAuthorBadge';
+import InstafameAuthorSignature from './InstafameAuthorSignature';
+import InstafameFirmaEditor from './InstafameFirmaEditor';
 import InstafameTextArea from './InstafameTextArea';
 import InstafameNicknameInput from './InstafameNicknameInput';
 import ProfileImageField from './ProfileImageField';
@@ -374,6 +376,10 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     professioni: '',
     foto_principale: null,
     foto_rotazione: 0,
+    firma_testo: '',
+    firma_banner: null,
+    firma_banner_rotazione: 0,
+    clear_firma_banner: false,
   });
   const [ere, setEre] = useState([]);
   const [characterLocation, setCharacterLocation] = useState({
@@ -604,6 +610,10 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           professioni: profileData.professioni || '',
           foto_principale: null,
           foto_rotazione: 0,
+          firma_testo: profileData.firma_testo || '',
+          firma_banner: null,
+          firma_banner_rotazione: 0,
+          clear_firma_banner: false,
         });
         setCharacterLocation({
           era: profileData.era || '',
@@ -1110,16 +1120,23 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       nickname: profileForm.nickname || '',
       descrizione: profileForm.descrizione || '',
       professioni: profileForm.professioni || '',
+      firma_testo: profileForm.firma_testo || '',
     };
     let preparedPhoto = null;
+    let preparedFirmaBanner = null;
     try {
       preparedPhoto = await prepareProfileImageForUpload({
         file: profileForm.foto_principale,
         remoteUrl: profile?.foto_principale || null,
         rotationDegrees: profileForm.foto_rotazione,
       });
+      preparedFirmaBanner = await prepareProfileImageForUpload({
+        file: profileForm.firma_banner,
+        remoteUrl: profileForm.clear_firma_banner ? null : profile?.firma_banner || null,
+        rotationDegrees: profileForm.firma_banner_rotazione,
+      });
     } catch (err) {
-      alert(err?.message || 'Impossibile elaborare la foto profilo.');
+      alert(err?.message || 'Impossibile elaborare le immagini del profilo.');
       return;
     }
     const locationChanged =
@@ -1145,6 +1162,14 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
         photoFd.append('foto_principale', preparedPhoto);
         await socialUpdateMyProfile(photoFd, selectedCharacterId, onLogout);
       }
+      if (profileForm.clear_firma_banner) {
+        await socialUpdateMyProfile({ clear_firma_banner: true }, selectedCharacterId, onLogout);
+      }
+      if (preparedFirmaBanner) {
+        const firmaFd = new FormData();
+        firmaFd.append('firma_banner', preparedFirmaBanner);
+        await socialUpdateMyProfile(firmaFd, selectedCharacterId, onLogout);
+      }
       const refreshed = await socialGetMyProfile(selectedCharacterId, onLogout);
       setProfile(refreshed || updated || null);
       if (refreshed) {
@@ -1155,7 +1180,14 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           can_edit_era: refreshed.can_edit_era !== false,
         });
       }
-      setProfileForm((prev) => ({ ...prev, foto_principale: null, foto_rotazione: 0 }));
+      setProfileForm((prev) => ({
+        ...prev,
+        foto_principale: null,
+        foto_rotazione: 0,
+        firma_banner: null,
+        firma_banner_rotazione: 0,
+        clear_firma_banner: false,
+      }));
       setShowMyProfileModal(false);
       setProfileSavedNotice(true);
     } catch (err) {
@@ -2377,6 +2409,17 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               </p>
             )}
 
+            {(post.autore_firma_testo || post.autore_firma_banner) && (
+              <div
+                className={`px-3 md:px-4 ${hasMedia ? 'order-3 lg:order-none lg:clear-both lg:pl-5' : ''}`}
+              >
+                <InstafameAuthorSignature
+                  testo={post.autore_firma_testo}
+                  bannerUrl={post.autore_firma_banner}
+                />
+              </div>
+            )}
+
             {post.articolo_preview && rubricheAbilitate && (
               <div
                 className={`px-3 md:px-4 py-2 ${hasMedia ? 'order-3 lg:order-none lg:clear-both' : ''}`}
@@ -3041,6 +3084,20 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               eraReadonlyClassName="w-full bg-gray-800 rounded p-2 border border-gray-700 text-sm text-gray-200"
             />
             <textarea className="w-full bg-gray-800 rounded p-2 border border-gray-700 min-h-20" placeholder="Descrizione" value={profileForm.descrizione} onChange={(e) => setProfileForm((p) => ({ ...p, descrizione: e.target.value }))} />
+            <InstafameFirmaEditor
+              firmaTesto={profileForm.firma_testo}
+              firmaBannerFile={profileForm.firma_banner}
+              firmaBannerRemoteUrl={profileForm.clear_firma_banner ? null : profile?.firma_banner || null}
+              firmaBannerRotation={profileForm.firma_banner_rotazione}
+              onTestoChange={(firmaTesto) => setProfileForm((p) => ({ ...p, firma_testo: firmaTesto }))}
+              onBannerFileChange={(firmaBanner) =>
+                setProfileForm((p) => ({ ...p, firma_banner: firmaBanner, clear_firma_banner: false }))
+              }
+              onBannerRotationChange={(firmaBannerRotazione) =>
+                setProfileForm((p) => ({ ...p, firma_banner_rotazione: firmaBannerRotazione }))
+              }
+              onClearBanner={() => setProfileForm((p) => ({ ...p, firma_banner: null, clear_firma_banner: true }))}
+            />
             <ProfileImageField
               label="Foto profilo"
               hint="Ruota l'immagine prima di salvare se necessario."

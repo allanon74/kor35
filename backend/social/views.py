@@ -1034,13 +1034,24 @@ class SocialProfileMeView(APIView):
         return Response(serializer.data)
 
     def patch(self, request):
+        from django.db import transaction
+
         profile = self._get_or_create_profile(request)
         if not profile:
             return Response({"detail": "Nessun personaggio trovato."}, status=status.HTTP_400_BAD_REQUEST)
-        serializer = SocialProfileSerializer(profile, data=request.data, partial=True)
+        serializer = SocialProfileSerializer(
+            profile, data=request.data, partial=True, context={"request": request}
+        )
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+        with transaction.atomic():
+            serializer.save()
+            if str(request.data.get("clear_firma_banner", "")).lower() in ("1", "true", "yes"):
+                if profile.firma_banner:
+                    profile.firma_banner.delete(save=False)
+                profile.firma_banner = None
+                profile.save(update_fields=["firma_banner", "updated_at"])
+        profile.refresh_from_db()
+        return Response(SocialProfileSerializer(profile, context={"request": request}).data)
 
 
 class SocialProfileDetailView(APIView):
@@ -1065,7 +1076,11 @@ class SocialPublicPostDetailView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, slug):
-        post = SocialPost.objects.filter(public_slug=slug, visibilita="PUB").first()
+        post = (
+            SocialPost.objects.select_related("autore", "autore__social_profile")
+            .filter(public_slug=slug, visibilita="PUB")
+            .first()
+        )
         if not post:
             return Response({"detail": "Post pubblico non trovato."}, status=status.HTTP_404_NOT_FOUND)
         serializer = SocialPostSerializer(post, context={"request": request, "personaggio": None})

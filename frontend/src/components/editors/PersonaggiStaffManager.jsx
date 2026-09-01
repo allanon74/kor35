@@ -11,6 +11,7 @@ import StaffQrTab from '../StaffQrTab';
 import SearchableSelect from './SearchableSelect';
 import InstafameNicknameInput from '../InstafameNicknameInput';
 import ProfileImageField from '../ProfileImageField';
+import InstafameFirmaEditor from '../InstafameFirmaEditor';
 import { prepareProfileImageForUpload } from '../../utils/profileImage';
 import { useStaffQrAssociation } from '../../hooks/useStaffQrAssociation';
 import { StaffToolHeader, StaffToolShell } from '../../staff/StaffToolShell';
@@ -125,6 +126,10 @@ const PersonaggiStaffManager = ({ onLogout }) => {
     descrizione: '',
     foto_principale: null,
     foto_rotazione: 0,
+    firma_testo: '',
+    firma_banner: null,
+    firma_banner_rotazione: 0,
+    clear_firma_banner: false,
   });
   const [socialProfileSaving, setSocialProfileSaving] = useState(false);
   const [abilitaAcquistabili, setAbilitaAcquistabili] = useState([]);
@@ -194,6 +199,10 @@ const PersonaggiStaffManager = ({ onLogout }) => {
       descrizione: sp.descrizione || '',
       foto_principale: null,
       foto_rotazione: 0,
+      firma_testo: sp.firma_testo || '',
+      firma_banner: null,
+      firma_banner_rotazione: 0,
+      clear_firma_banner: false,
     });
   }, [detail?.id, detail?.social_profile]);
 
@@ -375,8 +384,17 @@ const PersonaggiStaffManager = ({ onLogout }) => {
         nickname: socialProfileForm.nickname || '',
         professioni: socialProfileForm.professioni || '',
         descrizione: socialProfileForm.descrizione || '',
+        firma_testo: socialProfileForm.firma_testo || '',
       };
       let updatedProfile = await staffPatchPersonaggioSocialProfile(detail.id, textPayload, onLogout);
+
+      if (socialProfileForm.clear_firma_banner) {
+        updatedProfile = await staffPatchPersonaggioSocialProfile(
+          detail.id,
+          { clear_firma_banner: true },
+          onLogout
+        );
+      }
 
       if (socialProfileForm.foto_principale) {
         const preparedPhoto = await prepareProfileImageForUpload({
@@ -389,11 +407,25 @@ const PersonaggiStaffManager = ({ onLogout }) => {
         updatedProfile = await staffPatchPersonaggioSocialProfile(detail.id, fd, onLogout);
       }
 
+      if (socialProfileForm.firma_banner) {
+        const preparedFirmaBanner = await prepareProfileImageForUpload({
+          file: socialProfileForm.firma_banner,
+          remoteUrl: socialProfileForm.clear_firma_banner ? null : detail.social_profile?.firma_banner || null,
+          rotationDegrees: socialProfileForm.firma_banner_rotazione,
+        });
+        const firmaFd = new FormData();
+        firmaFd.append('firma_banner', preparedFirmaBanner);
+        updatedProfile = await staffPatchPersonaggioSocialProfile(detail.id, firmaFd, onLogout);
+      }
+
       setDetail((prev) => (prev ? { ...prev, social_profile: updatedProfile } : prev));
       setSocialProfileForm((prev) => ({
         ...prev,
         foto_principale: null,
         foto_rotazione: 0,
+        firma_banner: null,
+        firma_banner_rotazione: 0,
+        clear_firma_banner: false,
       }));
       setMessage('Profilo social salvato.');
     } catch (e) {
@@ -1341,6 +1373,41 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                                 onChange={(e) => setSocialProfileForm((p) => ({ ...p, descrizione: e.target.value }))}
                               />
                             </div>
+                            <InstafameFirmaEditor
+                              firmaTesto={socialProfileForm.firma_testo}
+                              firmaBannerFile={socialProfileForm.firma_banner}
+                              firmaBannerRemoteUrl={
+                                socialProfileForm.clear_firma_banner
+                                  ? null
+                                  : detail.social_profile.firma_banner || null
+                              }
+                              firmaBannerRotation={socialProfileForm.firma_banner_rotazione}
+                              onTestoChange={(firmaTesto) =>
+                                setSocialProfileForm((p) => ({ ...p, firma_testo: firmaTesto }))
+                              }
+                              onBannerFileChange={(firmaBanner) =>
+                                setSocialProfileForm((p) => ({
+                                  ...p,
+                                  firma_banner: firmaBanner,
+                                  clear_firma_banner: false,
+                                }))
+                              }
+                              onBannerRotationChange={(firmaBannerRotazione) =>
+                                setSocialProfileForm((p) => ({
+                                  ...p,
+                                  firma_banner_rotazione: firmaBannerRotazione,
+                                }))
+                              }
+                              onClearBanner={() =>
+                                setSocialProfileForm((p) => ({
+                                  ...p,
+                                  firma_banner: null,
+                                  clear_firma_banner: true,
+                                }))
+                              }
+                              accentClass="file:bg-pink-700"
+                              rotateButtonClass="bg-pink-900/50 hover:bg-pink-800/70 border-pink-700/50 text-pink-100"
+                            />
                             <ProfileImageField
                               label="Foto profilo social"
                               hint="Ruota l'immagine prima di salvare se necessario."

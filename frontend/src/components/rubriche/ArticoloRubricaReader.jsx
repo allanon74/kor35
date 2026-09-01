@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Clock, Heart, MessageCircle, Send, Trash2 } from 'lucide-react';
 import RichHtml from '../RichHtml';
+import InstafameAuthorSignature from '../InstafameAuthorSignature';
 import { formatCount } from '../../utils/formatCount';
 import {
   creaCommentoArticolo,
@@ -229,6 +230,14 @@ export default function ArticoloRubricaReader({
 
         {articolo.video_url && (
           <video controls src={articolo.video_url} className="w-full rounded-xl mt-5 border border-white/10" />
+        )}
+
+        {(articolo.autore_firma_testo || articolo.autore_firma_banner) && (
+          <InstafameAuthorSignature
+            testo={articolo.autore_firma_testo}
+            bannerUrl={articolo.autore_firma_banner}
+            className="mt-5"
+          />
         )}
       </div>
 

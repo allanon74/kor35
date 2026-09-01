@@ -2234,17 +2234,18 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
         ).get_or_create(personaggio=personaggio)
 
         payload = {}
-        for key in ("nickname", "descrizione", "professioni"):
+        for key in ("nickname", "descrizione", "professioni", "firma_testo"):
             if key in request.data:
                 payload[key] = request.data.get(key)
         if "foto_principale" in request.FILES:
             payload["foto_principale"] = request.FILES["foto_principale"]
+        if "firma_banner" in request.FILES:
+            payload["firma_banner"] = request.FILES["firma_banner"]
 
-        if not payload and str(request.data.get("clear_foto_principale", "")).lower() not in (
-            "1",
-            "true",
-            "yes",
-        ):
+        clear_foto = str(request.data.get("clear_foto_principale", "")).lower() in ("1", "true", "yes")
+        clear_firma = str(request.data.get("clear_firma_banner", "")).lower() in ("1", "true", "yes")
+
+        if not payload and not clear_foto and not clear_firma:
             return Response({"detail": "Nessun campo aggiornabile."}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = SocialProfileStaffSerializer(
@@ -2254,11 +2255,19 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             serializer.save()
-            if str(request.data.get("clear_foto_principale", "")).lower() in ("1", "true", "yes"):
+            update_fields = ["updated_at"]
+            if clear_foto:
                 if profile.foto_principale:
                     profile.foto_principale.delete(save=False)
                 profile.foto_principale = None
-                profile.save(update_fields=["foto_principale", "updated_at"])
+                update_fields.append("foto_principale")
+            if clear_firma:
+                if profile.firma_banner:
+                    profile.firma_banner.delete(save=False)
+                profile.firma_banner = None
+                update_fields.append("firma_banner")
+            if len(update_fields) > 1:
+                profile.save(update_fields=update_fields)
 
         profile.refresh_from_db()
         return Response(
