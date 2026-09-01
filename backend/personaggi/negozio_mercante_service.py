@@ -248,6 +248,43 @@ def _avviso_ate_listino(personaggio, *, infusione=None, oggetto=None) -> str:
     )
 
 
+MSG_SLOT_PIENO_LISTINO = (
+    "Nessuno slot libero sul tuo corpo: scegli un altro destinatario "
+    "oppure libera una locazione."
+)
+MSG_NON_DISPONIBILE_LISTINO = "Non più disponibile."
+MSG_ESAURITO_LISTINO = "Esaurito."
+MSG_USATO_LISTINO = "Usato — rivendita"
+
+
+def _unisci_messaggi_usabilita(*parti) -> str:
+    """Concatena vincoli di usabilità senza duplicati e senza sovrascriverli."""
+    visti = []
+    for parte in parti:
+        testo = (parte or "").strip()
+        if not testo or testo in visti:
+            continue
+        visti.append(testo)
+    return " ".join(visti)
+
+
+def _applica_avvisi_montaggio_listino(
+    payload, personaggio, *, infusione=None, oggetto=None
+):
+    precedente = payload.get("messaggio_usabilita") or ""
+    meta = _meta_montaggio_listino(
+        personaggio, infusione=infusione, oggetto=oggetto
+    )
+    meta_msg = meta.pop("messaggio_usabilita", "") or ""
+    payload.update(meta)
+    slot_msg = ""
+    if payload.get("richiede_montaggio") and not payload.get("slot_disponibili"):
+        slot_msg = MSG_SLOT_PIENO_LISTINO
+    payload["messaggio_usabilita"] = _unisci_messaggi_usabilita(
+        precedente, meta_msg, slot_msg
+    )
+
+
 def _monta_aumento_o_annulla(destinatario, oggetto, slot_corpo):
     """
     Installa innesto/mutazione sul destinatario.
@@ -339,40 +376,34 @@ def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio, *, prezzi_ct
     }
     if voce.tipo_voce in (VOCE_INFUSIONE, VOCE_TESSITURA, VOCE_CERIMONIALE):
         if voce.tipo_voce == VOCE_INFUSIONE and consegna_istanza:
-            payload.update(
-                _meta_montaggio_listino(personaggio, infusione=voce.infusione)
+            _applica_avvisi_montaggio_listino(
+                payload, personaggio, infusione=voce.infusione
             )
-            if payload.get("richiede_montaggio") and not payload.get("slot_disponibili"):
-                slot_msg = (
-                    "Nessuno slot libero sul tuo corpo: scegli un altro destinatario "
-                    "oppure libera una locazione."
-                )
-                prev = payload.get("messaggio_usabilita") or ""
-                payload["messaggio_usabilita"] = f"{prev} {slot_msg}".strip()
         else:
             payload.update(_tecnica_listino_extra(personaggio, ent))
     elif voce.tipo_voce == VOCE_ABILITA:
         if personaggio.abilita_possedute.filter(pk=ent.pk).exists():
             payload["acquistabile"] = False
-            payload["messaggio_usabilita"] = "Abilità già posseduta."
+            payload["messaggio_usabilita"] = _unisci_messaggi_usabilita(
+                payload.get("messaggio_usabilita"), "Abilità già posseduta."
+            )
             payload["gia_posseduta"] = True
         else:
             payload["gia_posseduta"] = False
     elif voce.tipo_voce == VOCE_OGGETTO:
-        payload.update(_meta_montaggio_listino(personaggio, oggetto=voce.oggetto))
-        if payload.get("richiede_montaggio") and not payload.get("slot_disponibili"):
-            slot_msg = (
-                "Nessuno slot libero sul tuo corpo: scegli un altro destinatario "
-                "oppure libera una locazione."
-            )
-            prev = payload.get("messaggio_usabilita") or ""
-            payload["messaggio_usabilita"] = f"{prev} {slot_msg}".strip()
+        _applica_avvisi_montaggio_listino(
+            payload, personaggio, oggetto=voce.oggetto
+        )
         if voce.oggetto_id and _inventario_corrente_pk(voce.oggetto) != voce.negozio.inventario_id:
             payload["acquistabile"] = False
-            payload["messaggio_usabilita"] = "Non più disponibile."
-    elif voce.quantita_residua is not None and voce.quantita_residua <= 0:
+            payload["messaggio_usabilita"] = _unisci_messaggi_usabilita(
+                payload.get("messaggio_usabilita"), MSG_NON_DISPONIBILE_LISTINO
+            )
+    if voce.quantita_residua is not None and voce.quantita_residua <= 0:
         payload["acquistabile"] = False
-        payload["messaggio_usabilita"] = "Esaurito."
+        payload["messaggio_usabilita"] = _unisci_messaggi_usabilita(
+            payload.get("messaggio_usabilita"), MSG_ESAURITO_LISTINO
+        )
     return payload
 
 
@@ -400,19 +431,17 @@ def serializza_stock_listino(stock: NegozioMercanteStock, personaggio=None, *, p
         "prezzo_deposito": duali["prezzo_deposito"],
         "deposito_ammesso": duali["deposito_ammesso"],
         "acquistabile": stock.stato == STOCK_DISPONIBILE,
-        "messaggio_usabilita": "Usato — rivendita" if stock.stato == STOCK_DISPONIBILE else "",
+        "messaggio_usabilita": (
+            MSG_USATO_LISTINO if stock.stato == STOCK_DISPONIBILE else ""
+        ),
         "usato": True,
         "consegna_istanza": True,
         "richiede_montaggio": False,
     }
     if personaggio is not None:
-        usato_msg = payload.get("messaggio_usabilita") or ""
-        payload.update(_meta_montaggio_listino(personaggio, oggetto=stock.oggetto))
-        extra = payload.get("messaggio_usabilita") or ""
-        if extra and extra != usato_msg:
-            payload["messaggio_usabilita"] = f"{usato_msg} {extra}".strip() if usato_msg else extra
-        elif usato_msg:
-            payload["messaggio_usabilita"] = usato_msg
+        _applica_avvisi_montaggio_listino(
+            payload, personaggio, oggetto=stock.oggetto
+        )
     return payload
 
 

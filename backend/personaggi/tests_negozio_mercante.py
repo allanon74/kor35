@@ -662,3 +662,106 @@ class NegozioMercanteAcquistoAumentoTests(TestCase):
         )
         self.assertEqual(res.status_code, 200, res.data)
         self.assertEqual(res.data["slot_corpo"], "HD1")
+
+    def test_listino_unisce_avvisi_disponibilita_e_montaggio(self):
+        from personaggi.models import (
+            AURA,
+            Infusione,
+            Oggetto,
+            Punteggio,
+            SCELTA_RISULTATO_AUMENTO,
+            TIPO_OGGETTO_INNESTO,
+            TIPO_OGGETTO_MUTAZIONE,
+        )
+        from personaggi.negozio_mercante_models import (
+            STOCK_DISPONIBILE,
+            NegozioMercanteStock,
+            NegozioMercanteVoce,
+            VOCE_OGGETTO,
+        )
+        from personaggi.negozio_mercante_service import (
+            MSG_ESAURITO_LISTINO,
+            MSG_NON_DISPONIBILE_LISTINO,
+            MSG_SLOT_PIENO_LISTINO,
+            MSG_USATO_LISTINO,
+            _unisci_messaggi_usabilita,
+            serializza_stock_listino,
+            serializza_voce_listino,
+        )
+
+        self.assertEqual(
+            _unisci_messaggi_usabilita(
+                MSG_USATO_LISTINO, MSG_USATO_LISTINO, "Avviso ATE"
+            ),
+            f"{MSG_USATO_LISTINO} Avviso ATE",
+        )
+
+        ate, _created = Punteggio.objects.get_or_create(
+            sigla="ATE",
+            defaults={
+                "nome": "Aura Tecnologica",
+                "tipo": AURA,
+                "colore": "#334455",
+            },
+        )
+        inf = Infusione.objects.create(
+            nome="Innesto listino avvisi",
+            aura_richiesta=ate,
+            tipo_risultato=SCELTA_RISULTATO_AUMENTO,
+            slot_corpo_permessi="HD1",
+            campagna=self.campagna,
+        )
+        occupante = Oggetto.objects.create(
+            nome="Occupante HD1 listino",
+            tipo_oggetto=TIPO_OGGETTO_MUTAZIONE,
+            slot_corpo="HD1",
+            is_equipaggiato=True,
+        )
+        occupante.sposta_in_inventario(self.pg)
+
+        voce_inf = self._voce(inf, prezzo=90)
+        voce_inf.quantita_residua = 0
+        voce_inf.save(update_fields=["quantita_residua", "updated_at"])
+        payload_inf = serializza_voce_listino(voce_inf, self.pg)
+        self.assertIn("Aura Tecnologica", payload_inf["messaggio_usabilita"])
+        self.assertIn(MSG_SLOT_PIENO_LISTINO, payload_inf["messaggio_usabilita"])
+        self.assertIn(MSG_ESAURITO_LISTINO, payload_inf["messaggio_usabilita"])
+        self.assertFalse(payload_inf["acquistabile"])
+
+        self.negozio.refresh_from_db()
+        og = Oggetto.objects.create(
+            nome="Innesto fuori magazzino",
+            tipo_oggetto=TIPO_OGGETTO_INNESTO,
+            infusione_generatrice=inf,
+        )
+        og.sposta_in_inventario(self.pg)
+        voce_ogg = NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_OGGETTO,
+            oggetto=og,
+            prezzo_crediti=50,
+            attivo=True,
+        )
+        payload_ogg = serializza_voce_listino(voce_ogg, self.pg)
+        self.assertIn("Aura Tecnologica", payload_ogg["messaggio_usabilita"])
+        self.assertIn(MSG_SLOT_PIENO_LISTINO, payload_ogg["messaggio_usabilita"])
+        self.assertIn(MSG_NON_DISPONIBILE_LISTINO, payload_ogg["messaggio_usabilita"])
+        self.assertFalse(payload_ogg["acquistabile"])
+
+        og_stock = Oggetto.objects.create(
+            nome="Innesto stock",
+            tipo_oggetto=TIPO_OGGETTO_INNESTO,
+            infusione_generatrice=inf,
+        )
+        og_stock.sposta_in_inventario(self.negozio.inventario)
+        stock = NegozioMercanteStock.objects.create(
+            negozio=self.negozio,
+            oggetto=og_stock,
+            stato=STOCK_DISPONIBILE,
+            prezzo_rivendita=40,
+            valore_riferimento=40,
+        )
+        payload_stock = serializza_stock_listino(stock, self.pg)
+        self.assertIn(MSG_USATO_LISTINO, payload_stock["messaggio_usabilita"])
+        self.assertIn("Aura Tecnologica", payload_stock["messaggio_usabilita"])
+        self.assertIn(MSG_SLOT_PIENO_LISTINO, payload_stock["messaggio_usabilita"])
