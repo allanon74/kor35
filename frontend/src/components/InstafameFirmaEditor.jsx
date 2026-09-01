@@ -81,7 +81,7 @@ export default function InstafameFirmaEditor({
               <img
                 src={previewBannerUrl}
                 alt=""
-                className="w-full max-h-28 object-cover transition-transform duration-200"
+                className="w-full h-auto max-h-40 object-contain transition-transform duration-200"
                 style={{ transform: `rotate(${normalizedRotation}deg)` }}
               />
             </div>
@@ -133,7 +133,9 @@ export default function InstafameFirmaEditor({
               </button>
             ) : null}
           </div>
-          <p className="text-[11px] text-gray-500">Formato consigliato: banner orizzontale (es. 3:1).</p>
+          <p className="text-[11px] text-gray-500">
+            Consigliato 1200×400 (3:1). L&apos;immagine viene mostrata intera, senza ritaglio.
+          </p>
         </div>
       </div>
 

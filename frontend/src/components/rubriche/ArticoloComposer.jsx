@@ -70,6 +70,7 @@ export default function ArticoloComposer({
   const [heroFile, setHeroFile] = useState(null);
   const [galleriaFiles, setGalleriaFiles] = useState([]);
   const [videoFile, setVideoFile] = useState(null);
+  const [pulisciHero, setPulisciHero] = useState(false);
   const [pulisciGalleria, setPulisciGalleria] = useState(false);
   const [galleriaMeta, setGalleriaMeta] = useState(() => metaDaImmagini(articolo?.immagini));
   const [salvataggio, setSalvataggio] = useState(false);
@@ -96,10 +97,15 @@ export default function ArticoloComposer({
     if (articolo) {
       setForm(formDaArticolo(articolo));
       setGalleriaMeta(metaDaImmagini(articolo.immagini));
+      setPulisciHero(false);
       setPulisciGalleria(false);
+      setHeroFile(null);
       setGalleriaFiles([]);
+      setVideoFile(null);
     }
   }, [articolo]);
+
+  const heroEsistenteUrl = !pulisciHero && !heroFile ? articolo?.hero_url || null : null;
 
   const rubricheDisponibili = useMemo(
     () => rubriche.filter((r) => modalitaStaff || r.can_write),
@@ -176,7 +182,11 @@ export default function ArticoloComposer({
       dati.append('autore_personaggio', personaggioAttivo.id);
     }
 
-    if (heroFile) dati.append('hero_immagine', heroFile);
+    if (heroFile) {
+      dati.append('hero_immagine', heroFile);
+    } else if (pulisciHero) {
+      dati.append('clear_hero', '1');
+    }
     if (videoFile) dati.append('video', videoFile);
     galleriaFiles.forEach((file) => dati.append('immagini', file));
     if (pulisciGalleria) dati.append('clear_immagini', '1');
@@ -325,10 +335,53 @@ export default function ArticoloComposer({
               <ImagePlus size={12} /> Immagine di apertura
             </span>
           </label>
+          {(heroEsistenteUrl || heroFile || pulisciHero) && (
+            <div className="mb-2 space-y-2">
+              {heroEsistenteUrl ? (
+                <img
+                  src={heroEsistenteUrl}
+                  alt=""
+                  className="w-full max-h-32 object-cover rounded-lg border border-white/10"
+                />
+              ) : null}
+              {heroFile ? (
+                <p className="text-[11px] text-emerald-200/80">
+                  Nuova immagine selezionata (verrà caricata al salvataggio).
+                </p>
+              ) : null}
+              {pulisciHero && !heroFile ? (
+                <p className="text-[11px] text-amber-200/80">
+                  L&apos;immagine di apertura sarà rimossa al salvataggio.{' '}
+                  <button
+                    type="button"
+                    className="underline hover:text-amber-100"
+                    onClick={() => setPulisciHero(false)}
+                  >
+                    Annulla
+                  </button>
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHeroFile(null);
+                    if (articolo?.hero_url) setPulisciHero(true);
+                  }}
+                  className="text-[11px] px-2 py-1 rounded-lg border border-red-500/40 bg-red-950/40 text-red-200 hover:bg-red-900/50"
+                >
+                  Rimuovi immagine di apertura
+                </button>
+              )}
+            </div>
+          )}
           <input
             type="file"
             accept="image/*"
-            onChange={(e) => setHeroFile(e.target.files?.[0] || null)}
+            onChange={(e) => {
+              const file = e.target.files?.[0] || null;
+              setHeroFile(file);
+              if (file) setPulisciHero(false);
+            }}
             className="text-xs"
           />
           <input
@@ -336,6 +389,7 @@ export default function ArticoloComposer({
             onChange={(e) => aggiorna('hero_didascalia', e.target.value)}
             placeholder="Didascalia"
             className={`${campoClass} mt-2`}
+            disabled={pulisciHero && !heroFile}
           />
         </div>
         <div>

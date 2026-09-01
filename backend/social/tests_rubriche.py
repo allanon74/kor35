@@ -183,6 +183,37 @@ class ArticoloScritturaTests(RubricheTestBase):
         self.assertIn(str(self.rubrica.id), articolo.hero_immagine.name)
         self.assertIn(str(articolo.id), articolo.hero_immagine.name)
 
+    def test_clear_hero_rimuove_immagine_apertura(self):
+        from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        buf = BytesIO()
+        Image.new("RGB", (80, 60), (1, 2, 3)).save(buf, format="JPEG")
+        hero = SimpleUploadedFile("hero.jpg", buf.getvalue(), content_type="image/jpeg")
+        create_view = RubricaArticoloViewSet.as_view({"post": "create"})
+        create_req = self.factory.post(
+            f"/api/social/rubriche-articoli/?personaggio_id={self.pg_master.id}",
+            self._payload(firma_libera="Redazione", hero_immagine=hero),
+            format="multipart",
+        )
+        created = self._chiama(create_view, create_req, self.user_master)
+        self.assertEqual(created.status_code, 201, getattr(created, "data", None))
+        articolo_id = created.data["id"]
+
+        patch_view = RubricaArticoloViewSet.as_view({"patch": "partial_update"})
+        patch_req = self.factory.patch(
+            f"/api/social/rubriche-articoli/{articolo_id}/",
+            {"titolo": "Il silenzio delle torri", "clear_hero": "1"},
+            format="multipart",
+        )
+        patched = self._chiama(patch_view, patch_req, self.user_master, pk=str(articolo_id))
+        self.assertEqual(patched.status_code, 200, getattr(patched, "data", None))
+        articolo = RubricaArticolo.objects.get(id=articolo_id)
+        self.assertFalse(bool(articolo.hero_immagine))
+        self.assertFalse(patched.data.get("hero_url"))
+
     def test_bozza_non_visibile_agli_altri_personaggi(self):
         RubricaArticolo.objects.create(
             rubrica=self.rubrica,

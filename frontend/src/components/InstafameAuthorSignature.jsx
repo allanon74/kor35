@@ -22,7 +22,9 @@ export default function InstafameAuthorSignature({
         <img
           src={bannerUrl}
           alt=""
-          className={`w-full object-cover rounded-lg mb-2 ${compact ? 'max-h-16' : 'max-h-28'}`}
+          className={`w-full h-auto object-contain rounded-lg mb-2 bg-black/20 ${
+            compact ? 'max-h-24' : 'max-h-48'
+          }`}
         />
       ) : null}
       {testoPulito ? (
