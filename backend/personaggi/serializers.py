@@ -1203,6 +1203,9 @@ class InfusioneStatisticaSerializer(serializers.ModelSerializer):
         model = InfusioneStatistica
         # Include tutti i campi del mixin per le condizioni (aure, elementi, etc)
         fields = '__all__'
+        # Il parent viene assegnato da InfusioneFullEditorSerializer.handle_nested_data
+        # (related manager). In POST di una infusione nuova il FK non esiste ancora.
+        read_only_fields = ['infusione']
         validators = [] 
     
     def to_representation(self, instance):
@@ -1953,6 +1956,9 @@ class TecnicaBaseMasterMixin:
                     # Estraiamo i campi M2M prima di creare l'oggetto
                     aure = mod.pop('limit_a_aure', [])
                     elementi = mod.pop('limit_a_elementi', [])
+                    # Il parent è già instance: non deve arrivare dal payload nested.
+                    mod.pop('infusione', None)
+                    mod.pop('id', None)
                     new_mod = instance.infusionestatistica_set.create(**mod)
                     # Impostiamo le relazioni M2M
                     if aure: new_mod.limit_a_aure.set(aure)
