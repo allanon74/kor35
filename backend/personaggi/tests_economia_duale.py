@@ -98,6 +98,43 @@ class EconomiaDualeTests(TestCase):
                 self.pg, Decimal("10.00"), self.evento, user=self.user
             )
 
+    def test_trasferimento_giocatore_senza_evento_bloccato(self):
+        modifica_crediti(self.pg, Decimal("80"), "fondi", conto=CONTO_DEPOSITO)
+        with self.assertRaises(ValidationError):
+            trasferisci_deposito_a_corrente(self.pg, Decimal("10.00"), None, user=self.user)
+
+    def test_trasferimento_staff_senza_evento_ne_tetto(self):
+        modifica_crediti(self.pg, Decimal("200"), "fondi", conto=CONTO_DEPOSITO)
+        corrente_prima = saldo_corrente(self.pg)
+        trasferito = trasferisci_deposito_a_corrente(
+            self.pg, Decimal("80.00"), None, force=True, user=self.user
+        )
+        self.assertEqual(trasferito, Decimal("80.00"))
+        self.assertEqual(saldo_deposito(self.pg), Decimal("120.00"))
+        self.assertEqual(saldo_corrente(self.pg), corrente_prima + Decimal("80.00"))
+        self.assertFalse(
+            EventoTrasferimentoDeposito.objects.filter(personaggio=self.pg).exists()
+        )
+
+    def test_trasferimento_staff_non_consuma_quota_evento(self):
+        modifica_crediti(self.pg, Decimal("200"), "fondi", conto=CONTO_DEPOSITO)
+        trasferisci_deposito_a_corrente(
+            self.pg, Decimal("80.00"), self.evento, force=True, user=self.user
+        )
+        self.assertFalse(
+            EventoTrasferimentoDeposito.objects.filter(
+                evento=self.evento, personaggio=self.pg
+            ).exists()
+        )
+        trasferisci_deposito_a_corrente(
+            self.pg, Decimal("40.00"), self.evento, user=self.user
+        )
+        self.assertTrue(
+            EventoTrasferimentoDeposito.objects.filter(
+                evento=self.evento, personaggio=self.pg
+            ).exists()
+        )
+
     def test_config_default(self):
         cfg = get_economia_config(self.campagna)
         self.assertEqual(cfg["fattore_valore_deposito"], "0.90")
@@ -152,3 +189,58 @@ class EconomiaDualeTests(TestCase):
         self.assertEqual(saldo_deposito(altro), dep_b + Decimal("20.00"))
         # Corrente invariata da questo scambio
         self.assertEqual(saldo_corrente(altro), saldo_corrente(altro))
+
+
+class StaffEconomiaTrasferimentoApiTests(TestCase):
+    """Dashboard staff: trasferimento senza evento attivo."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        from personaggi.models import CAMPAGNA_ROLE_MASTER, CampagnaUtente
+
+        self.user = User.objects.create_user(username="eco_master", password="x")
+        self.campagna = Campagna.objects.create(
+            slug="eco-staff-api",
+            nome="Eco Staff",
+            attiva=True,
+            is_default=True,
+        )
+        apply_moduli_accesso(self.campagna, {MODULO_CONTO_DEPOSITO: MODULO_ACCESSO_OPEN})
+        CampagnaUtente.objects.create(
+            user=self.user,
+            campagna=self.campagna,
+            ruolo=CAMPAGNA_ROLE_MASTER,
+            attivo=True,
+        )
+        self.tipologia = TipologiaPersonaggio.objects.create(
+            nome="EcoTipoStaff",
+            crediti_iniziali=Decimal("100.00"),
+            caratteristiche_iniziali=5,
+        )
+        self.pg = Personaggio.objects.create(
+            nome="Eco PG Staff",
+            proprietario=self.user,
+            tipologia=self.tipologia,
+            campagna=self.campagna,
+        )
+        modifica_crediti(self.pg, Decimal("75"), "fondi", conto=CONTO_DEPOSITO)
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_staff_post_senza_evento_attivo(self):
+        url = f"/api/personaggi/api/staff/personaggi/{self.pg.pk}/economia/"
+        resp = self.client.post(
+            url,
+            {"azione": "trasferisci", "importo": "60.00", "motivo": "Test staff"},
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
+        self.assertEqual(data["importo"], "60.00")
+        self.assertEqual(saldo_deposito(self.pg), Decimal("15.00"))
+        self.assertFalse(
+            EventoTrasferimentoDeposito.objects.filter(personaggio=self.pg).exists()
+        )
+

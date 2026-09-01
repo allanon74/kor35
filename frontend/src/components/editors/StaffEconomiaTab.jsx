@@ -143,10 +143,15 @@ export default function StaffEconomiaTab({ personaggioId, onLogout, onUpdated })
       </div>
 
       <div className="border border-gray-700 rounded p-3 space-y-2">
-        <p className="text-sm font-medium">Trasferimento forzato deposito → corrente</p>
+        <p className="text-sm font-medium">Trasferimento deposito → corrente</p>
+        <p className="text-xs text-gray-400">
+          Intervento staff: nessun tetto e nessun evento attivo. I limiti (evento, 1×, frazione stipendio)
+          valgono solo per i giocatori dalla tab Economia.
+        </p>
         {data?.trasferimento && (
-          <p className="text-xs text-gray-400">
-            Tetto evento: {data.trasferimento.tetto} (già fatto: {String(data.trasferimento.gia_effettuato)})
+          <p className="text-xs text-gray-500">
+            Quota giocatore sull&apos;evento in corso: tetto {data.trasferimento.tetto}
+            {data.trasferimento.gia_effettuato ? ' (già usata dal PG)' : ' (ancora disponibile)'}
           </p>
         )}
         <div className="flex gap-2 items-end">

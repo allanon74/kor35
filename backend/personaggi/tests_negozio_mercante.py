@@ -303,6 +303,80 @@ class NegozioMercanteAcquistoAumentoTests(TestCase):
         self.assertEqual(Decimal(result["prezzo_pagato"]), Decimal("100.00"))
         self.assertEqual(saldo_deposito(self.pg), prima - Decimal("100.00"))
 
+    def test_acquisto_mutazione_senza_requisiti_forgiatura(self):
+        """Istanza da vetrina: aura/mattoni da artigiano non bloccano il montaggio."""
+        from personaggi.economia_crediti import CONTO_CORRENTE
+        from personaggi.models import (
+            CARATTERISTICA,
+            Infusione,
+            InfusioneCaratteristica,
+            Oggetto,
+            Punteggio,
+            SCELTA_RISULTATO_AUMENTO,
+        )
+        from personaggi.negozio_mercante_service import acquista_voce
+
+        inf = Infusione.objects.create(
+            nome="Mutazione pesante vetrina",
+            aura_richiesta=self.aura,
+            tipo_risultato=SCELTA_RISULTATO_AUMENTO,
+            slot_corpo_permessi="HD1",
+            campagna=self.campagna,
+        )
+        car = Punteggio.objects.create(
+            nome="Forza negozio mut", tipo=CARATTERISTICA, sigla="FNM"
+        )
+        InfusioneCaratteristica.objects.create(
+            infusione=inf, caratteristica=car, valore=5
+        )
+        self.assertGreaterEqual(inf.livello, 5)
+        self._fondi()
+        voce = self._voce(inf, prezzo=90)
+        result = acquista_voce(
+            self.negozio, self.pg, voce.id, slot_corpo="HD1", conto=CONTO_CORRENTE
+        )
+        self.assertEqual(result["status"], "success")
+        og = Oggetto.objects.get(pk=result["oggetto_id"])
+        self.assertEqual(og.inventario_corrente.pk, self.pg.pk)
+        self.assertTrue(og.is_equipaggiato)
+
+    def test_acquisto_innesto_senza_ate_fallisce(self):
+        from personaggi.economia_crediti import saldo_corrente
+        from personaggi.models import (
+            AURA,
+            Infusione,
+            Oggetto,
+            Punteggio,
+            SCELTA_RISULTATO_AUMENTO,
+        )
+        from personaggi.negozio_mercante_service import acquista_voce
+
+        ate, _created = Punteggio.objects.get_or_create(
+            sigla="ATE",
+            defaults={
+                "nome": "Aura Tecnologica",
+                "tipo": AURA,
+                "colore": "#334455",
+            },
+        )
+        inf = Infusione.objects.create(
+            nome="Innesto vetrina",
+            aura_richiesta=ate,
+            tipo_risultato=SCELTA_RISULTATO_AUMENTO,
+            slot_corpo_permessi="HD1",
+            campagna=self.campagna,
+        )
+        self._fondi()
+        voce = self._voce(inf, prezzo=90)
+        prima = saldo_corrente(self.pg)
+        with self.assertRaises(ValidationError) as ctx:
+            acquista_voce(self.negozio, self.pg, voce.id, slot_corpo="HD1")
+        self.assertIn("Aura Tecnologica", " ".join(ctx.exception.messages))
+        self.assertEqual(saldo_corrente(self.pg), prima)
+        self.assertEqual(
+            Oggetto.objects.filter(infusione_generatrice=inf).count(), 0
+        )
+
     def test_infusione_pot_resta_ricetta(self):
         from personaggi.economia_crediti import CONTO_CORRENTE
         from personaggi.models import Oggetto
@@ -315,6 +389,258 @@ class NegozioMercanteAcquistoAumentoTests(TestCase):
         self.assertFalse(
             Oggetto.objects.filter(infusione_generatrice=self.inf_pot).exists()
         )
+
+    def _assegna_ate(self, pg, valore=1):
+        from personaggi.models import (
+            AURA,
+            CARATTERISTICA,
+            Abilita,
+            PersonaggioAbilita,
+            Punteggio,
+            abilita_punteggio,
+        )
+
+        ate, _created = Punteggio.objects.get_or_create(
+            sigla="ATE",
+            defaults={
+                "nome": "Aura Tecnologica",
+                "tipo": AURA,
+                "colore": "#334455",
+            },
+        )
+        car = Punteggio.objects.create(
+            nome="Car ATE negozio", tipo=CARATTERISTICA, sigla="ATN"
+        )
+        ab = Abilita.objects.create(
+            nome="Tratto ATE negozio",
+            caratteristica=car,
+            costo_pc=0,
+            costo_crediti=0,
+        )
+        abilita_punteggio.objects.create(abilita=ab, punteggio=ate, valore=valore)
+        PersonaggioAbilita.objects.create(personaggio=pg, abilita=ab)
+        if hasattr(pg, "_punteggi_base_cache"):
+            del pg._punteggi_base_cache
+        return ate
+
+    def _caratt(self, sigla, nome):
+        from personaggi.models import CARATTERISTICA, Punteggio
+
+        return Punteggio.objects.create(nome=nome, tipo=CARATTERISTICA, sigla=sigla)
+
+    def test_acquisto_innesto_con_ate_ok(self):
+        from personaggi.economia_crediti import CONTO_CORRENTE
+        from personaggi.models import Infusione, Oggetto, SCELTA_RISULTATO_AUMENTO
+        from personaggi.negozio_mercante_service import acquista_voce
+
+        ate = self._assegna_ate(self.pg, 1)
+        inf = Infusione.objects.create(
+            nome="Innesto con ATE",
+            aura_richiesta=ate,
+            tipo_risultato=SCELTA_RISULTATO_AUMENTO,
+            slot_corpo_permessi="HD1",
+            campagna=self.campagna,
+        )
+        self._fondi()
+        voce = self._voce(inf, prezzo=90)
+        result = acquista_voce(
+            self.negozio, self.pg, voce.id, slot_corpo="HD1", conto=CONTO_CORRENTE
+        )
+        self.assertEqual(result["status"], "success")
+        og = Oggetto.objects.get(pk=result["oggetto_id"])
+        self.assertEqual(og.tipo_oggetto, "INN")
+        self.assertTrue(og.is_equipaggiato)
+
+    def test_acquisto_innesto_oggetto_senza_infusione_richiede_ate(self):
+        from personaggi.economia_crediti import saldo_corrente
+        from personaggi.models import Oggetto, TIPO_OGGETTO_INNESTO
+        from personaggi.negozio_mercante_models import NegozioMercanteVoce, VOCE_OGGETTO
+        from personaggi.negozio_mercante_service import acquista_voce
+
+        self.negozio.refresh_from_db()
+        og = Oggetto.objects.create(nome="Innesto usato", tipo_oggetto=TIPO_OGGETTO_INNESTO)
+        og.sposta_in_inventario(self.negozio.inventario)
+        voce = NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_OGGETTO,
+            oggetto=og,
+            prezzo_crediti=50,
+            attivo=True,
+        )
+        self._fondi()
+        prima = saldo_corrente(self.pg)
+        with self.assertRaises(ValidationError) as ctx:
+            acquista_voce(self.negozio, self.pg, voce.id, slot_corpo="HD1")
+        self.assertIn("Aura Tecnologica", " ".join(ctx.exception.messages))
+        self.assertEqual(saldo_corrente(self.pg), prima)
+
+    def test_acquisto_materia_mod_oggetto_base_senza_requisiti(self):
+        from personaggi.economia_crediti import CONTO_CORRENTE
+        from personaggi.models import (
+            Oggetto,
+            OggettoBase,
+            TIPO_OGGETTO_FISICO,
+            TIPO_OGGETTO_MATERIA,
+            TIPO_OGGETTO_MOD,
+        )
+        from personaggi.negozio_mercante_models import (
+            NegozioMercanteVoce,
+            VOCE_OGGETTO,
+            VOCE_OGGETTO_BASE,
+        )
+        from personaggi.negozio_mercante_service import acquista_voce
+
+        self._fondi()
+        self.negozio.refresh_from_db()
+        ob = OggettoBase.objects.create(nome="Coltello base", tipo_oggetto=TIPO_OGGETTO_FISICO)
+        voce_ob = NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_OGGETTO_BASE,
+            oggetto_base=ob,
+            prezzo_crediti=10,
+            attivo=True,
+        )
+        r_ob = acquista_voce(self.negozio, self.pg, voce_ob.id, conto=CONTO_CORRENTE)
+        self.assertEqual(r_ob["status"], "success")
+
+        mat = Oggetto.objects.create(nome="Materia vetrina", tipo_oggetto=TIPO_OGGETTO_MATERIA)
+        mat.sposta_in_inventario(self.negozio.inventario)
+        voce_mat = NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_OGGETTO,
+            oggetto=mat,
+            prezzo_crediti=10,
+            attivo=True,
+        )
+        r_mat = acquista_voce(self.negozio, self.pg, voce_mat.id, conto=CONTO_CORRENTE)
+        self.assertEqual(r_mat["status"], "success")
+        mat.refresh_from_db()
+        self.assertEqual(mat.inventario_corrente.pk, self.pg.pk)
+
+        mod = Oggetto.objects.create(nome="Mod vetrina", tipo_oggetto=TIPO_OGGETTO_MOD)
+        mod.sposta_in_inventario(self.negozio.inventario)
+        voce_mod = NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_OGGETTO,
+            oggetto=mod,
+            prezzo_crediti=10,
+            attivo=True,
+        )
+        r_mod = acquista_voce(self.negozio, self.pg, voce_mod.id, conto=CONTO_CORRENTE)
+        self.assertEqual(r_mod["status"], "success")
+
+    def test_acquisto_ricetta_infusione_tessitura_cerimoniale_richiede_valida(self):
+        from personaggi.economia_crediti import CONTO_CORRENTE, saldo_corrente
+        from personaggi.models import (
+            Cerimoniale,
+            CerimonialeCaratteristica,
+            Infusione,
+            InfusioneCaratteristica,
+            Tessitura,
+            TessituraCaratteristica,
+        )
+        from personaggi.negozio_mercante_models import (
+            NegozioMercanteVoce,
+            VOCE_CERIMONIALE,
+            VOCE_TESSITURA,
+        )
+        from personaggi.negozio_mercante_service import acquista_voce, build_listino
+
+        car = self._caratt("NRQ", "Req negozio tecnica")
+        inf = Infusione.objects.create(
+            nome="Ricetta pesante",
+            aura_richiesta=self.aura,
+            campagna=self.campagna,
+        )
+        InfusioneCaratteristica.objects.create(infusione=inf, caratteristica=car, valore=4)
+        tess = Tessitura.objects.create(
+            nome="Tessitura pesante",
+            aura_richiesta=self.aura,
+            campagna=self.campagna,
+        )
+        TessituraCaratteristica.objects.create(tessitura=tess, caratteristica=car, valore=4)
+        cer = Cerimoniale.objects.create(
+            nome="Cerimoniale pesante",
+            aura_richiesta=self.aura,
+            campagna=self.campagna,
+        )
+        CerimonialeCaratteristica.objects.create(
+            cerimoniale=cer, caratteristica=car, valore=4
+        )
+
+        self._fondi()
+        prima = saldo_corrente(self.pg)
+        voce_inf = self._voce(inf, prezzo=40, consegna_istanza=False)
+        with self.assertRaises(ValidationError) as ctx_i:
+            acquista_voce(self.negozio, self.pg, voce_inf.id, conto=CONTO_CORRENTE)
+        self.assertIn("Aura", " ".join(ctx_i.exception.messages))
+
+        voce_tes = NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_TESSITURA,
+            tessitura=tess,
+            prezzo_crediti=40,
+            attivo=True,
+        )
+        with self.assertRaises(ValidationError) as ctx_t:
+            acquista_voce(self.negozio, self.pg, voce_tes.id, conto=CONTO_CORRENTE)
+        self.assertIn("Aura", " ".join(ctx_t.exception.messages))
+
+        voce_cer = NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_CERIMONIALE,
+            cerimoniale=cer,
+            prezzo_crediti=40,
+            attivo=True,
+        )
+        with self.assertRaises(ValidationError) as ctx_c:
+            acquista_voce(self.negozio, self.pg, voce_cer.id, conto=CONTO_CORRENTE)
+        self.assertIn("Aura", " ".join(ctx_c.exception.messages))
+        self.assertEqual(saldo_corrente(self.pg), prima)
+
+        data = build_listino(self.negozio, self.pg)
+        by_nome = {v["nome"]: v for v in data["voci"]}
+        self.assertFalse(by_nome["Ricetta pesante"]["acquistabile"])
+        self.assertFalse(by_nome["Tessitura pesante"]["acquistabile"])
+        self.assertFalse(by_nome["Cerimoniale pesante"]["acquistabile"])
+
+    def test_acquisto_istanza_materia_da_infusione_senza_requisiti(self):
+        from personaggi.economia_crediti import CONTO_CORRENTE
+        from personaggi.models import Infusione, InfusioneCaratteristica, Oggetto
+        from personaggi.negozio_mercante_service import acquista_voce, build_listino
+
+        car = self._caratt("NMT", "Mattone materia")
+        InfusioneCaratteristica.objects.create(
+            infusione=self.inf_pot, caratteristica=car, valore=5
+        )
+        self.assertGreaterEqual(self.inf_pot.livello, 5)
+        self._fondi()
+        voce = self._voce(self.inf_pot, prezzo=50, consegna_istanza=True)
+        data = build_listino(self.negozio, self.pg)
+        voce_l = next(v for v in data["voci"] if v["id"] == str(voce.id))
+        self.assertTrue(voce_l["acquistabile"])
+        self.assertFalse(voce_l.get("richiede_montaggio"))
+        result = acquista_voce(self.negozio, self.pg, voce.id, conto=CONTO_CORRENTE)
+        self.assertEqual(result["status"], "success")
+        self.assertTrue(
+            Oggetto.objects.filter(infusione_generatrice=self.inf_pot).exists()
+        )
+        self.assertFalse(self.pg.infusioni_possedute.filter(pk=self.inf_pot.pk).exists())
+
+    def test_listino_mutazione_istanza_ignorare_requisiti_tecnica(self):
+        from personaggi.models import InfusioneCaratteristica
+        from personaggi.negozio_mercante_service import build_listino
+
+        car = self._caratt("NMU", "Mattone mutazione")
+        InfusioneCaratteristica.objects.create(
+            infusione=self.inf_aum, caratteristica=car, valore=5
+        )
+        voce = self._voce(self.inf_aum, prezzo=90)
+        data = build_listino(self.negozio, self.pg)
+        voce_l = next(v for v in data["voci"] if v["id"] == str(voce.id))
+        self.assertTrue(voce_l["acquistabile"])
+        self.assertTrue(voce_l["richiede_montaggio"])
+        self.assertFalse(voce_l.get("richiede_ate"))
 
     def test_api_acquisto_mutazione(self):
         from personaggi.economia_crediti import CONTO_CORRENTE

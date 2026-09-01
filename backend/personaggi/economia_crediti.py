@@ -597,36 +597,44 @@ def trasferimento_gia_effettuato(personaggio, evento) -> bool:
 def trasferisci_deposito_a_corrente(
     personaggio,
     importo,
-    evento,
+    evento=None,
     *,
     force: bool = False,
     user=None,
     descrizione: str | None = None,
 ) -> Decimal:
     """
-    Sposta CR dal deposito al corrente (1× per evento salvo force staff).
-    Ritorna l'importo trasferito.
+    Sposta CR dal deposito al corrente.
+
+    Giocatori (force=False): solo in evento attivo, 1× per evento, tetto frazione × stipendio.
+    Staff (force=True): nessun evento, nessun tetto, non marca la quota evento del PG.
     """
     from gestione_plot.models import EventoTrasferimentoDeposito
 
     importo = _d2(importo)
     if importo <= 0:
         raise ValidationError("Importo trasferimento non valido.")
-    if evento is None:
-        raise ValidationError("Evento richiesto per il trasferimento.")
 
-    if not force and not modulo_conto_deposito_attivo(personaggio, user=user):
-        raise ValidationError("Il conto di deposito non è attivo.")
+    if not force:
+        if evento is None:
+            raise ValidationError(
+                "Trasferimento consentito solo durante un evento attivo a cui partecipi."
+            )
+        if not modulo_conto_deposito_attivo(personaggio, user=user):
+            raise ValidationError("Il conto di deposito non è attivo.")
 
     with transaction.atomic():
-        if not force and trasferimento_gia_effettuato(personaggio, evento):
-            raise ValidationError("Hai già effettuato il trasferimento deposito→corrente per questo evento.")
+        if not force:
+            if trasferimento_gia_effettuato(personaggio, evento):
+                raise ValidationError(
+                    "Hai già effettuato il trasferimento deposito→corrente per questo evento."
+                )
+            tetto = tetto_trasferimento_deposito(personaggio, evento)
+            if importo > tetto:
+                raise ValidationError(
+                    f"Importo oltre il tetto consentito ({tetto} CR = frazione × stipendio evento)."
+                )
 
-        tetto = tetto_trasferimento_deposito(personaggio, evento)
-        if importo > tetto:
-            raise ValidationError(
-                f"Importo oltre il tetto consentito ({tetto} CR = frazione × stipendio evento)."
-            )
         disp = saldo_deposito(personaggio)
         if importo > disp:
             raise ValidationError(f"Deposito insufficiente. Disponibile: {disp} CR.")
@@ -638,15 +646,19 @@ def trasferisci_deposito_a_corrente(
                 defaults={"importo": importo},
             )
             if not created:
-                raise ValidationError("Hai già effettuato il trasferimento deposito→corrente per questo evento.")
-        else:
-            EventoTrasferimentoDeposito.objects.update_or_create(
-                evento=evento,
-                personaggio=personaggio,
-                defaults={"importo": importo},
-            )
+                raise ValidationError(
+                    "Hai già effettuato il trasferimento deposito→corrente per questo evento."
+                )
 
-        desc = descrizione or f"Trasferimento deposito→corrente (evento «{getattr(evento, 'titolo', evento.pk)}»)"
+        if descrizione:
+            desc = descrizione
+        elif evento is not None:
+            desc = (
+                f"Trasferimento deposito→corrente "
+                f"(evento «{getattr(evento, 'titolo', evento.pk)}»)"
+            )
+        else:
+            desc = "Trasferimento staff deposito→corrente"
         modifica_crediti(personaggio, -importo, desc, conto=CONTO_DEPOSITO, evento=evento)
         modifica_crediti(personaggio, importo, desc, conto=CONTO_CORRENTE, evento=evento)
         return importo

@@ -213,13 +213,15 @@ class StaffEconomiaPersonaggioView(APIView):
         evento = None
         if evento_id:
             evento = Evento.objects.filter(pk=evento_id).first()
-        if not evento:
+        elif request.data.get("collega_evento"):
             evento = personaggio_in_evento_attivo(pg)
-        if not evento:
-            return Response({"error": "Evento richiesto per il trasferimento."}, status=400)
         try:
             trasferito = trasferisci_deposito_a_corrente(
-                pg, importo, evento, force=True, user=request.user,
+                pg,
+                importo,
+                evento,
+                force=True,
+                user=request.user,
                 descrizione=request.data.get("motivo") or "Trasferimento staff deposito→corrente",
             )
         except ValidationError as e:

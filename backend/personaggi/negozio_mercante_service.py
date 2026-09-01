@@ -158,6 +158,17 @@ def _oggetto_e_aumento(oggetto) -> bool:
     )
 
 
+def _e_innesto_corporeo(*, infusione=None, oggetto=None) -> bool:
+    """Innesto (ATE) vs mutazione: tipo oggetto vince sulla classificazione infusione."""
+    if oggetto is not None and oggetto.tipo_oggetto == TIPO_OGGETTO_INNESTO:
+        return True
+    if infusione is None:
+        return False
+    from personaggi.services import GestioneCraftingService
+
+    return GestioneCraftingService._classifica_risultato_infusione(infusione) == "INNESTO"
+
+
 def _voce_richiede_montaggio(voce: NegozioMercanteVoce) -> bool:
     if voce.tipo_voce == VOCE_OGGETTO:
         return _oggetto_e_aumento(voce.oggetto)
@@ -207,6 +218,36 @@ def _risolve_destinatario_montaggio(acquirente, destinatario_id):
     return dest
 
 
+def _motivo_impedimento_montaggio_negozio(destinatario, *, infusione=None, oggetto=None):
+    """
+    Requisiti per montare un aumento già prodotto dal negozio.
+
+    Mutazione: nessuno (basta lo slot libero).
+    Innesto: Aura Tecnologica del destinatario > 0.
+    Aura/mattoni della scheda tecnica restano requisiti di *acquisto ricetta*,
+    non di montaggio istanza.
+    """
+    if not _e_innesto_corporeo(infusione=infusione, oggetto=oggetto):
+        return None
+    if destinatario.get_valore_aura_per_sigla("ATE") < 1:
+        return (
+            f"{destinatario.nome} non può sostenere innesti: "
+            "serve almeno 1 punto di Aura Tecnologica."
+        )
+    return None
+
+
+def _avviso_ate_listino(personaggio, *, infusione=None, oggetto=None) -> str:
+    if not _e_innesto_corporeo(infusione=infusione, oggetto=oggetto):
+        return ""
+    if personaggio.get_valore_aura_per_sigla("ATE") >= 1:
+        return ""
+    return (
+        "Tu non hai Aura Tecnologica (serve almeno 1 per gli innesti). "
+        "Puoi montarlo su un altro personaggio."
+    )
+
+
 def _monta_aumento_o_annulla(destinatario, oggetto, slot_corpo):
     """
     Installa innesto/mutazione sul destinatario.
@@ -220,12 +261,11 @@ def _monta_aumento_o_annulla(destinatario, oggetto, slot_corpo):
             "Per innesti e mutazioni indica lo slot corpo su cui montare l'aumento."
         )
     inf = oggetto.infusione_generatrice
-    if inf and not GestioneOggettiService.verifica_requisiti_supporto_innesto(
-        destinatario, inf
-    ):
-        raise ValidationError(
-            f"{destinatario.nome} non può sostenere questo aumento corporeo."
-        )
+    motivo = _motivo_impedimento_montaggio_negozio(
+        destinatario, infusione=inf, oggetto=oggetto
+    )
+    if motivo:
+        raise ValidationError(motivo)
     if _inventario_corrente_pk(oggetto) != destinatario.id:
         oggetto.sposta_in_inventario(destinatario)
     GestioneOggettiService.installa_innesto(destinatario, oggetto, slot_corpo)
@@ -243,7 +283,8 @@ def _meta_montaggio_listino(personaggio, *, infusione=None, oggetto=None) -> dic
             "tipo_risultato": getattr(inf, "tipo_risultato", None),
         }
     permessi = _slot_permessi_codes(inf)
-    return {
+    ate_msg = _avviso_ate_listino(personaggio, infusione=inf, oggetto=oggetto)
+    meta = {
         "richiede_montaggio": True,
         "infusione_id": str(inf.id) if inf else None,
         "tipo_risultato": getattr(inf, "tipo_risultato", None),
@@ -253,7 +294,11 @@ def _meta_montaggio_listino(personaggio, *, infusione=None, oggetto=None) -> dic
         "slot_disponibili": slot_aumento_disponibili(
             personaggio, infusione=inf, oggetto=oggetto
         ),
+        "richiede_ate": _e_innesto_corporeo(infusione=inf, oggetto=oggetto),
     }
+    if ate_msg:
+        meta["messaggio_usabilita"] = ate_msg
+    return meta
 
 
 def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio, *, prezzi_ctx=None) -> dict:
@@ -298,10 +343,12 @@ def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio, *, prezzi_ct
                 _meta_montaggio_listino(personaggio, infusione=voce.infusione)
             )
             if payload.get("richiede_montaggio") and not payload.get("slot_disponibili"):
-                payload["messaggio_usabilita"] = (
+                slot_msg = (
                     "Nessuno slot libero sul tuo corpo: scegli un altro destinatario "
                     "oppure libera una locazione."
                 )
+                prev = payload.get("messaggio_usabilita") or ""
+                payload["messaggio_usabilita"] = f"{prev} {slot_msg}".strip()
         else:
             payload.update(_tecnica_listino_extra(personaggio, ent))
     elif voce.tipo_voce == VOCE_ABILITA:
@@ -312,10 +359,17 @@ def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio, *, prezzi_ct
         else:
             payload["gia_posseduta"] = False
     elif voce.tipo_voce == VOCE_OGGETTO:
+        payload.update(_meta_montaggio_listino(personaggio, oggetto=voce.oggetto))
+        if payload.get("richiede_montaggio") and not payload.get("slot_disponibili"):
+            slot_msg = (
+                "Nessuno slot libero sul tuo corpo: scegli un altro destinatario "
+                "oppure libera una locazione."
+            )
+            prev = payload.get("messaggio_usabilita") or ""
+            payload["messaggio_usabilita"] = f"{prev} {slot_msg}".strip()
         if voce.oggetto_id and _inventario_corrente_pk(voce.oggetto) != voce.negozio.inventario_id:
             payload["acquistabile"] = False
             payload["messaggio_usabilita"] = "Non più disponibile."
-        payload.update(_meta_montaggio_listino(personaggio, oggetto=voce.oggetto))
     elif voce.quantita_residua is not None and voce.quantita_residua <= 0:
         payload["acquistabile"] = False
         payload["messaggio_usabilita"] = "Esaurito."
@@ -352,7 +406,13 @@ def serializza_stock_listino(stock: NegozioMercanteStock, personaggio=None, *, p
         "richiede_montaggio": False,
     }
     if personaggio is not None:
+        usato_msg = payload.get("messaggio_usabilita") or ""
         payload.update(_meta_montaggio_listino(personaggio, oggetto=stock.oggetto))
+        extra = payload.get("messaggio_usabilita") or ""
+        if extra and extra != usato_msg:
+            payload["messaggio_usabilita"] = f"{usato_msg} {extra}".strip() if usato_msg else extra
+        elif usato_msg:
+            payload["messaggio_usabilita"] = usato_msg
     return payload
 
 
