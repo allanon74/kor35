@@ -6,6 +6,7 @@ import TransazioneDetailModal from './TransazioneDetailModal';
 import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 import { UiEmptyState, UiLoadingState } from './ui/AsyncState';
 import { ArrowLeftRight } from 'lucide-react';
+import { formatImportiCessione, importiDaProposta } from '../utils/creditiCessione';
 
 const TransazioniViewer = ({ onLogout, charId }) => {
   const [page, setPage] = useState(1);
@@ -93,7 +94,10 @@ const TransazioniViewer = ({ onLogout, charId }) => {
                 </div>
                 {t.ultima_proposta_iniziatore && (
                   <div className="text-xs text-gray-500 mt-1">
-                    Proposta: {t.ultima_proposta_iniziatore.crediti_da_dare} CR → {t.ultima_proposta_iniziatore.crediti_da_ricevere} CR
+                    Proposta: {(() => {
+                      const imp = importiDaProposta(t.ultima_proposta_iniziatore);
+                      return `${formatImportiCessione(imp.corrente, imp.deposito)} → ${formatImportiCessione(imp.ricevereCorrente, imp.ricevereDeposito)}`;
+                    })()}
                   </div>
                 )}
               </div>

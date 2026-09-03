@@ -4,6 +4,7 @@ import { X, Check, XCircle, MessageSquare, Send, Loader2 } from 'lucide-react';
 import { getTransazioneDetail, confermaTransazione, addPropostaTransazione } from '../api';
 import { useCharacter } from './CharacterContext';
 import PropostaEditorModal from './PropostaEditorModal';
+import { formatImportiCessione, importiDaProposta } from '../utils/creditiCessione';
 
 const PropostaBeniList = ({ label, oggetti = [], consumabili = [] }) => {
   if ((!oggetti || oggetti.length === 0) && (!consumabili || consumabili.length === 0)) {
@@ -199,27 +200,29 @@ const TransazioneDetailModal = ({ transazioneId, onClose, onLogout, onUpdate }) 
                       Proposta di {transazione.iniziatore_nome}
                     </h3>
                     <div className="space-y-2 text-sm">
-                      {transazione.ultima_proposta_iniziatore.crediti_da_dare > 0 && (
-                        <div>
-                          <span className="text-gray-400">Dà: </span>
-                          <span className="text-green-400 font-bold">
-                            {transazione.ultima_proposta_iniziatore.crediti_da_dare} CR
-                          </span>
-                          {transazione.ultima_proposta_iniziatore.conto_crediti && (
-                            <span className="text-xs text-gray-500 ml-1">
-                              ({transazione.ultima_proposta_iniziatore.conto_crediti === 'DEPOSITO' ? 'deposito' : 'corrente'})
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {transazione.ultima_proposta_iniziatore.crediti_da_ricevere > 0 && (
-                        <div>
-                          <span className="text-gray-400">Riceve: </span>
-                          <span className="text-yellow-400 font-bold">
-                            {transazione.ultima_proposta_iniziatore.crediti_da_ricevere} CR
-                          </span>
-                        </div>
-                      )}
+                      {(() => {
+                        const imp = importiDaProposta(transazione.ultima_proposta_iniziatore);
+                        return (
+                          <>
+                            {(imp.corrente > 0 || imp.deposito > 0) && (
+                              <div>
+                                <span className="text-gray-400">Dà: </span>
+                                <span className="text-green-400 font-bold">
+                                  {formatImportiCessione(imp.corrente, imp.deposito)}
+                                </span>
+                              </div>
+                            )}
+                            {(imp.ricevereCorrente > 0 || imp.ricevereDeposito > 0) && (
+                              <div>
+                                <span className="text-gray-400">Riceve: </span>
+                                <span className="text-yellow-400 font-bold">
+                                  {formatImportiCessione(imp.ricevereCorrente, imp.ricevereDeposito)}
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                       <PropostaBeniList
                         label="Oggetti / consumabili che dà"
                         oggetti={transazione.ultima_proposta_iniziatore.oggetti_da_dare}
@@ -246,27 +249,29 @@ const TransazioneDetailModal = ({ transazioneId, onClose, onLogout, onUpdate }) 
                       Proposta di {transazione.destinatario_nome}
                     </h3>
                     <div className="space-y-2 text-sm">
-                      {transazione.ultima_proposta_destinatario.crediti_da_dare > 0 && (
-                        <div>
-                          <span className="text-gray-400">Dà: </span>
-                          <span className="text-green-400 font-bold">
-                            {transazione.ultima_proposta_destinatario.crediti_da_dare} CR
-                          </span>
-                          {transazione.ultima_proposta_destinatario.conto_crediti && (
-                            <span className="text-xs text-gray-500 ml-1">
-                              ({transazione.ultima_proposta_destinatario.conto_crediti === 'DEPOSITO' ? 'deposito' : 'corrente'})
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {transazione.ultima_proposta_destinatario.crediti_da_ricevere > 0 && (
-                        <div>
-                          <span className="text-gray-400">Riceve: </span>
-                          <span className="text-yellow-400 font-bold">
-                            {transazione.ultima_proposta_destinatario.crediti_da_ricevere} CR
-                          </span>
-                        </div>
-                      )}
+                      {(() => {
+                        const imp = importiDaProposta(transazione.ultima_proposta_destinatario);
+                        return (
+                          <>
+                            {(imp.corrente > 0 || imp.deposito > 0) && (
+                              <div>
+                                <span className="text-gray-400">Dà: </span>
+                                <span className="text-green-400 font-bold">
+                                  {formatImportiCessione(imp.corrente, imp.deposito)}
+                                </span>
+                              </div>
+                            )}
+                            {(imp.ricevereCorrente > 0 || imp.ricevereDeposito > 0) && (
+                              <div>
+                                <span className="text-gray-400">Riceve: </span>
+                                <span className="text-yellow-400 font-bold">
+                                  {formatImportiCessione(imp.ricevereCorrente, imp.ricevereDeposito)}
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                       <PropostaBeniList
                         label="Oggetti / consumabili che dà"
                         oggetti={transazione.ultima_proposta_destinatario.oggetti_da_dare}
@@ -294,7 +299,10 @@ const TransazioneDetailModal = ({ transazioneId, onClose, onLogout, onUpdate }) 
                   <div className="space-y-2 max-h-40 overflow-y-auto">
                     {transazione.proposte.slice(2).map((proposta, idx) => (
                       <div key={proposta.id} className="text-xs text-gray-400 border-l-2 border-gray-700 pl-2">
-                        {proposta.autore_nome}: {proposta.crediti_da_dare} CR → {proposta.crediti_da_ricevere} CR
+                        {proposta.autore_nome}: {(() => {
+                          const imp = importiDaProposta(proposta);
+                          return `${formatImportiCessione(imp.corrente, imp.deposito)} → ${formatImportiCessione(imp.ricevereCorrente, imp.ricevereDeposito)}`;
+                        })()}
                       </div>
                     ))}
                   </div>

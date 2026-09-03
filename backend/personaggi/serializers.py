@@ -2734,6 +2734,8 @@ class PropostaTransazioneSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'autore', 'autore_nome', 'crediti_da_dare', 'crediti_da_ricevere',
             'conto_crediti',
+            'crediti_corrente_da_dare', 'crediti_deposito_da_dare',
+            'crediti_corrente_da_ricevere', 'crediti_deposito_da_ricevere',
             'oggetti_da_dare', 'oggetti_da_ricevere',
             'consumabili_da_dare', 'consumabili_da_ricevere',
             'messaggio', 
@@ -3610,10 +3612,22 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
     proposta = serializers.DictField()
     
     def validate_proposta(self, value):
-        required_fields = ['crediti_da_dare', 'crediti_da_ricevere']
-        for field in required_fields:
-            if field not in value:
-                raise serializers.ValidationError(f"Campo '{field}' mancante nella proposta")
+        from personaggi.economia_crediti import (
+            CONTO_DEPOSITO,
+            modulo_conto_deposito_attivo,
+            normalizza_payload_proposta,
+            valida_saldo_cessione,
+        )
+        from personaggi.regole_transazione import valida_proposta_transazione
+
+        try:
+            value = normalizza_payload_proposta(value)
+        except Exception as exc:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            if isinstance(exc, DjangoValidationError):
+                raise serializers.ValidationError(exc.messages[0] if exc.messages else str(exc))
+            raise
+
         iniziatore = self.context.get('iniziatore')
         if iniziatore:
             _valida_consumabili_proprieta(
@@ -3621,35 +3635,27 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
                 iniziatore,
                 'consumabili_da_dare',
             )
-            from personaggi.economia_crediti import (
-                CONTO_DEPOSITO,
-                modulo_conto_deposito_attivo,
-                normalize_conto,
-                saldo_conto,
-                saldo_spendibile,
-            )
-            from personaggi.regole_transazione import valida_proposta_transazione
             ok, msg = valida_proposta_transazione(iniziatore, value)
             if not ok:
                 raise serializers.ValidationError(msg)
-            dare = Decimal(str(value.get('crediti_da_dare') or 0))
-            if dare > 0:
-                conto = normalize_conto(value.get('conto_crediti'))
-                if conto == CONTO_DEPOSITO and not modulo_conto_deposito_attivo(iniziatore):
-                    raise serializers.ValidationError(
-                        "Il conto di deposito non è attivo: usa il conto corrente."
-                    )
-                disponibile = (
-                    saldo_conto(iniziatore, conto)
-                    if modulo_conto_deposito_attivo(iniziatore)
-                    else saldo_spendibile(iniziatore)
+            corr = value['crediti_corrente_da_dare']
+            dep = value['crediti_deposito_da_dare']
+            if dep > 0 and not modulo_conto_deposito_attivo(iniziatore):
+                raise serializers.ValidationError(
+                    "Il conto di deposito non è attivo: usa solo crediti correnti."
                 )
-                if dare > disponibile:
-                    raise serializers.ValidationError(
-                        f"Crediti insufficienti sul conto {conto.lower()} "
-                        f"(disponibili {disponibile}, richiesti {dare})."
-                    )
-                value['conto_crediti'] = conto
+            if corr > 0 or dep > 0:
+                try:
+                    valida_saldo_cessione(iniziatore, corr, dep)
+                except Exception as exc:
+                    from django.core.exceptions import ValidationError as DjangoValidationError
+                    if isinstance(exc, DjangoValidationError):
+                        raise serializers.ValidationError(
+                            exc.messages[0] if exc.messages else str(exc)
+                        )
+                    raise
+            if dep > 0 and corr == 0:
+                value['conto_crediti'] = CONTO_DEPOSITO
         return value
     
     def create(self, validated_data):
@@ -3658,7 +3664,6 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
         proposta_data = validated_data['proposta']
         
         from django.db import transaction as db_transaction
-        from personaggi.economia_crediti import normalize_conto
         
         with db_transaction.atomic():
             # Crea transazione
@@ -3674,7 +3679,11 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
                 autore=iniziatore,
                 crediti_da_dare=proposta_data.get('crediti_da_dare', 0),
                 crediti_da_ricevere=proposta_data.get('crediti_da_ricevere', 0),
-                conto_crediti=normalize_conto(proposta_data.get('conto_crediti')),
+                conto_crediti=proposta_data.get('conto_crediti') or 'CORRENTE',
+                crediti_corrente_da_dare=proposta_data.get('crediti_corrente_da_dare', 0),
+                crediti_deposito_da_dare=proposta_data.get('crediti_deposito_da_dare', 0),
+                crediti_corrente_da_ricevere=proposta_data.get('crediti_corrente_da_ricevere', 0),
+                crediti_deposito_da_ricevere=proposta_data.get('crediti_deposito_da_ricevere', 0),
                 messaggio=proposta_data.get('messaggio', ''),
                 is_attiva=True
             )
@@ -3693,12 +3702,24 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
 
 class PropostaTransazioneCreateSerializer(serializers.Serializer):
     """Serializer per creare una nuova proposta (controproposta o rilancio)"""
-    crediti_da_dare = serializers.DecimalField(max_digits=10, decimal_places=2, default=0)
-    crediti_da_ricevere = serializers.DecimalField(max_digits=10, decimal_places=2, default=0)
+    crediti_da_dare = serializers.DecimalField(max_digits=10, decimal_places=2, default=0, required=False)
+    crediti_da_ricevere = serializers.DecimalField(max_digits=10, decimal_places=2, default=0, required=False)
     conto_crediti = serializers.ChoiceField(
         choices=["CORRENTE", "DEPOSITO"],
         required=False,
         default="CORRENTE",
+    )
+    crediti_corrente_da_dare = serializers.DecimalField(
+        max_digits=10, decimal_places=2, default=0, required=False
+    )
+    crediti_deposito_da_dare = serializers.DecimalField(
+        max_digits=10, decimal_places=2, default=0, required=False
+    )
+    crediti_corrente_da_ricevere = serializers.DecimalField(
+        max_digits=10, decimal_places=2, default=0, required=False
+    )
+    crediti_deposito_da_ricevere = serializers.DecimalField(
+        max_digits=10, decimal_places=2, default=0, required=False
     )
     oggetti_da_dare = serializers.PrimaryKeyRelatedField(many=True, queryset=Oggetto.objects.all(), required=False)
     oggetti_da_ricevere = serializers.PrimaryKeyRelatedField(many=True, queryset=Oggetto.objects.all(), required=False)
@@ -3711,48 +3732,49 @@ class PropostaTransazioneCreateSerializer(serializers.Serializer):
     messaggio = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, data):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from personaggi.economia_crediti import (
+            CONTO_DEPOSITO,
+            modulo_conto_deposito_attivo,
+            normalizza_payload_proposta,
+            valida_saldo_cessione,
+        )
+        from personaggi.regole_transazione import valida_proposta_transazione
+
+        try:
+            data = normalizza_payload_proposta(data)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages[0] if exc.messages else str(exc))
+
         autore = self.context.get('autore')
         if autore:
             dare_ids = [c.id for c in data.get('consumabili_da_dare', [])]
             _valida_consumabili_proprieta(dare_ids, autore, 'consumabili_da_dare')
-            from personaggi.economia_crediti import (
-                CONTO_DEPOSITO,
-                modulo_conto_deposito_attivo,
-                normalize_conto,
-                saldo_conto,
-                saldo_spendibile,
-            )
-            from personaggi.regole_transazione import valida_proposta_transazione
             payload = {
                 'crediti_da_dare': data.get('crediti_da_dare', 0),
+                'crediti_corrente_da_dare': data.get('crediti_corrente_da_dare', 0),
+                'crediti_deposito_da_dare': data.get('crediti_deposito_da_dare', 0),
                 'oggetti_da_dare': [o.id for o in data.get('oggetti_da_dare', [])],
                 'consumabili_da_dare': dare_ids,
             }
             ok, msg = valida_proposta_transazione(autore, payload)
             if not ok:
                 raise serializers.ValidationError(msg)
-            dare = Decimal(str(data.get('crediti_da_dare') or 0))
-            conto = normalize_conto(data.get('conto_crediti'))
-            if dare > 0:
-                if conto == CONTO_DEPOSITO and not modulo_conto_deposito_attivo(autore):
-                    raise serializers.ValidationError(
-                        {"conto_crediti": "Il conto di deposito non è attivo."}
-                    )
-                disponibile = (
-                    saldo_conto(autore, conto)
-                    if modulo_conto_deposito_attivo(autore)
-                    else saldo_spendibile(autore)
+            corr = data.get('crediti_corrente_da_dare') or 0
+            dep = data.get('crediti_deposito_da_dare') or 0
+            if dep > 0 and not modulo_conto_deposito_attivo(autore):
+                raise serializers.ValidationError(
+                    {"crediti_deposito_da_dare": "Il conto di deposito non è attivo."}
                 )
-                if dare > disponibile:
+            if corr > 0 or dep > 0:
+                try:
+                    valida_saldo_cessione(autore, corr, dep)
+                except DjangoValidationError as exc:
                     raise serializers.ValidationError(
-                        {
-                            "crediti_da_dare": (
-                                f"Crediti insufficienti sul conto {conto.lower()} "
-                                f"(disponibili {disponibile})."
-                            )
-                        }
+                        exc.messages[0] if exc.messages else str(exc)
                     )
-            data['conto_crediti'] = conto
+            if dep > 0 and corr == 0:
+                data['conto_crediti'] = CONTO_DEPOSITO
         return data
     
     def create(self, validated_data):
@@ -4351,7 +4373,9 @@ class MessaggioSerializer(serializers.ModelSerializer):
             'mittente_is_staff', 'tipo_messaggio', 'titolo', 'testo', 
             'data_invio', 'data_creazione', 'destinatario_personaggio', 'destinatario_personaggio_id',
             'destinatario_gruppo', 'salva_in_cronologia', 'letto', 'is_staff_message',
-            'crediti_allegati', 'conto_crediti_allegati', 'oggetti_allegati_snapshot',
+            'crediti_allegati', 'conto_crediti_allegati',
+            'crediti_corrente_allegati', 'crediti_deposito_allegati',
+            'oggetti_allegati_snapshot',
             'in_risposta_a_id', 'risposte_count'
         )
         read_only_fields = ('mittente', 'data_invio', 'tipo_messaggio')
@@ -4511,11 +4535,19 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
     mittente_personaggio_id = serializers.PrimaryKeyRelatedField(
         queryset=Personaggio.objects.all(), source='mittente_personaggio', write_only=True, required=False, allow_null=True
     )
-    crediti_da_inviare = serializers.IntegerField(required=False, min_value=0, default=0)
+    crediti_da_inviare = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, min_value=0, default=0
+    )
     conto_crediti = serializers.ChoiceField(
         choices=["CORRENTE", "DEPOSITO"],
         required=False,
         default="CORRENTE",
+    )
+    crediti_corrente_da_inviare = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, min_value=0, default=0
+    )
+    crediti_deposito_da_inviare = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, min_value=0, default=0
     )
     mostra_proprietario_giocatore = serializers.BooleanField(required=False, allow_null=True, default=None)
     oggetti_ids = serializers.ListField(
@@ -4536,12 +4568,16 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
             'mostra_proprietario_giocatore',
             'crediti_da_inviare',
             'conto_crediti',
+            'crediti_corrente_da_inviare',
+            'crediti_deposito_da_inviare',
             'oggetti_ids',
         )
 
     def create(self, validated_data):
         validated_data.pop('crediti_da_inviare', None)
         validated_data.pop('conto_crediti', None)
+        validated_data.pop('crediti_corrente_da_inviare', None)
+        validated_data.pop('crediti_deposito_da_inviare', None)
         validated_data.pop('oggetti_ids', None)
         validated_data['mittente'] = self.context['request'].user
         campagna = None

@@ -4,6 +4,7 @@ import { X, Send, Loader2, Plus } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import { getOggettoDetail } from '../api';
 import { useDirtyModalClose } from '../hooks/useDirtyModalClose';
+import { numCredito } from '../utils/creditiCessione';
 
 const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
   const { selectedCharacterData, selectedCharacterId } = useCharacter();
@@ -14,9 +15,10 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
   const [manualConsumabileId, setManualConsumabileId] = useState('');
   const [consumabiliAltroPersonaggio, setConsumabiliAltroPersonaggio] = useState([]);
   const [formData, setFormData] = useState({
-    crediti_da_dare: 0,
-    crediti_da_ricevere: 0,
-    conto_crediti: 'CORRENTE',
+    crediti_corrente_da_dare: 0,
+    crediti_deposito_da_dare: 0,
+    crediti_corrente_da_ricevere: 0,
+    crediti_deposito_da_ricevere: 0,
     oggetti_da_dare: [],
     oggetti_da_ricevere: [],
     consumabili_da_dare: [],
@@ -28,15 +30,15 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
   const oggettiDisponibili = selectedCharacterData?.oggetti || [];
   const consumabiliDisponibili = selectedCharacterData?.consumabili || [];
   const duale = !!(selectedCharacterData?.economia?.modulo_attivo);
-  const saldoConto =
-    formData.conto_crediti === 'DEPOSITO'
-      ? Number(selectedCharacterData?.crediti_deposito ?? 0)
-      : Number(selectedCharacterData?.crediti_corrente ?? selectedCharacterData?.crediti ?? 0);
+  const saldoCorrente = Number(selectedCharacterData?.crediti_corrente ?? selectedCharacterData?.crediti ?? 0);
+  const saldoDeposito = Number(selectedCharacterData?.crediti_deposito ?? 0);
 
   const isDirty = useMemo(() => {
     return (
-      Number(formData.crediti_da_dare) > 0 ||
-      Number(formData.crediti_da_ricevere) > 0 ||
+      numCredito(formData.crediti_corrente_da_dare) > 0 ||
+      numCredito(formData.crediti_deposito_da_dare) > 0 ||
+      numCredito(formData.crediti_corrente_da_ricevere) > 0 ||
+      numCredito(formData.crediti_deposito_da_ricevere) > 0 ||
       (formData.oggetti_da_dare || []).length > 0 ||
       (formData.oggetti_da_ricevere || []).length > 0 ||
       (formData.consumabili_da_dare || []).length > 0 ||
@@ -169,23 +171,39 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
   };
 
   const handleSave = async () => {
-    if (formData.crediti_da_dare < 0 || formData.crediti_da_ricevere < 0) {
+    const corrDare = numCredito(formData.crediti_corrente_da_dare);
+    const depDare = duale ? numCredito(formData.crediti_deposito_da_dare) : 0;
+    const corrRic = numCredito(formData.crediti_corrente_da_ricevere);
+    const depRic = duale ? numCredito(formData.crediti_deposito_da_ricevere) : 0;
+
+    if (corrDare < 0 || depDare < 0 || corrRic < 0 || depRic < 0) {
       alert("I crediti non possono essere negativi!");
       return;
     }
 
-    if (formData.crediti_da_dare > saldoConto) {
-      alert(
-        duale
-          ? `Non hai abbastanza crediti sul conto ${formData.conto_crediti === 'DEPOSITO' ? 'deposito' : 'corrente'}!`
-          : 'Non hai abbastanza crediti!',
-      );
+    if (corrDare > saldoCorrente) {
+      alert(duale ? 'Non hai abbastanza crediti correnti!' : 'Non hai abbastanza crediti!');
+      return;
+    }
+    if (depDare > saldoDeposito) {
+      alert('Non hai abbastanza crediti di deposito!');
       return;
     }
 
+    const payload = {
+      ...formData,
+      crediti_corrente_da_dare: corrDare,
+      crediti_deposito_da_dare: depDare,
+      crediti_corrente_da_ricevere: corrRic,
+      crediti_deposito_da_ricevere: depRic,
+      crediti_da_dare: corrDare + depDare,
+      crediti_da_ricevere: corrRic + depRic,
+      conto_crediti: depDare > 0 && corrDare === 0 ? 'DEPOSITO' : 'CORRENTE',
+    };
+
     setLoading(true);
     try {
-      await onSave(formData);
+      await onSave(payload);
       onClose();
     } catch (error) {
       alert("Errore: " + error.message);
@@ -237,43 +255,91 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
                   Crediti che DAI
                 </label>
                 {duale && (
-                  <select
-                    className="w-full mb-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                    value={formData.conto_crediti}
-                    onChange={(e) => setFormData({ ...formData, conto_crediti: e.target.value })}
-                  >
-                    <option value="CORRENTE">Da conto corrente</option>
-                    <option value="DEPOSITO">Da conto deposito</option>
-                  </select>
+                  <label className="block text-xs font-bold text-emerald-400/90 mb-1">
+                    Correnti
+                  </label>
                 )}
                 <input
                   type="number"
                   min="0"
                   step="0.01"
-                  value={formData.crediti_da_dare}
-                  onChange={e => setFormData({...formData, crediti_da_dare: parseFloat(e.target.value) || 0})}
+                  value={formData.crediti_corrente_da_dare}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    crediti_corrente_da_dare: parseFloat(e.target.value) || 0,
+                  })}
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white"
                   placeholder="0.00"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Disponibili: {saldoConto.toFixed(2)} CR
-                  {duale ? ` (${formData.conto_crediti === 'DEPOSITO' ? 'deposito' : 'corrente'})` : ''}
-                  {duale ? ' — il destinatario riceve sullo stesso conto.' : ''}
+                  Correnti disponibili: {saldoCorrente.toFixed(2)} CR
                 </p>
+                {duale && (
+                  <>
+                    <label className="block text-xs font-bold text-amber-400/90 mt-3 mb-1">
+                      Di deposito
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.crediti_deposito_da_dare}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        crediti_deposito_da_dare: parseFloat(e.target.value) || 0,
+                      })}
+                      className="w-full bg-gray-800 border border-amber-900/40 rounded-lg px-3 py-2 text-amber-100"
+                      placeholder="0.00"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Deposito disponibile: {saldoDeposito.toFixed(2)} CR
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Il destinatario riceve ogni tipologia sullo stesso conto.
+                    </p>
+                  </>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-400 mb-2">
                   Crediti che RICEVI
                 </label>
+                {duale && (
+                  <label className="block text-xs font-bold text-emerald-400/90 mb-1">
+                    Correnti
+                  </label>
+                )}
                 <input
                   type="number"
                   min="0"
                   step="0.01"
-                  value={formData.crediti_da_ricevere}
-                  onChange={e => setFormData({...formData, crediti_da_ricevere: parseFloat(e.target.value) || 0})}
+                  value={formData.crediti_corrente_da_ricevere}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    crediti_corrente_da_ricevere: parseFloat(e.target.value) || 0,
+                  })}
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white"
                   placeholder="0.00"
                 />
+                {duale && (
+                  <>
+                    <label className="block text-xs font-bold text-amber-400/90 mt-3 mb-1">
+                      Di deposito
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.crediti_deposito_da_ricevere}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        crediti_deposito_da_ricevere: parseFloat(e.target.value) || 0,
+                      })}
+                      className="w-full bg-gray-800 border border-amber-900/40 rounded-lg px-3 py-2 text-amber-100"
+                      placeholder="0.00"
+                    />
+                  </>
+                )}
               </div>
             </div>
 

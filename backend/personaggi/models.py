@@ -7647,48 +7647,36 @@ class TransazioneSospesa(SyncableModel, models.Model):
         from django.db import transaction as db_transaction
         
         with db_transaction.atomic():
-            # Crediti: debit+credit sullo stesso conto della proposta (natura conservata)
-            from personaggi.economia_crediti import normalize_conto, saldo_conto
+            # Crediti: ogni tipologia resta sul proprio conto (corrente→corrente, deposito→deposito)
+            from personaggi.economia_crediti import (
+                importi_cessione_da_proposta,
+                trasferisci_cessione_p2p,
+            )
+            from django.core.exceptions import ValidationError as DjangoValidationError
 
-            if self.ultima_proposta_iniziatore.crediti_da_dare > 0:
-                amt = self.ultima_proposta_iniziatore.crediti_da_dare
-                conto = normalize_conto(
-                    getattr(self.ultima_proposta_iniziatore, "conto_crediti", None)
-                )
-                if saldo_conto(self.iniziatore, conto) < amt:
-                    raise Exception(
-                        f"Crediti {conto.lower()} insufficienti per l'iniziatore ({amt} CR)."
+            def _applica_crediti_proposta(mittente, destinatario, proposta):
+                corr, dep = importi_cessione_da_proposta(proposta)
+                if corr <= 0 and dep <= 0:
+                    return
+                try:
+                    trasferisci_cessione_p2p(
+                        mittente,
+                        destinatario,
+                        corr,
+                        dep,
+                        desc_out=f"Pagato in transazione #{self.id}",
+                        desc_in=f"Ricevuto da transazione #{self.id}",
                     )
-                self.iniziatore.modifica_crediti(
-                    -amt,
-                    f"Pagato in transazione #{self.id} ({conto.lower()})",
-                    conto=conto,
-                )
-                self.destinatario.modifica_crediti(
-                    amt,
-                    f"Ricevuto da transazione #{self.id} ({conto.lower()})",
-                    conto=conto,
-                )
+                except DjangoValidationError as exc:
+                    msg = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+                    raise Exception(msg) from exc
 
-            if self.ultima_proposta_destinatario.crediti_da_dare > 0:
-                amt = self.ultima_proposta_destinatario.crediti_da_dare
-                conto = normalize_conto(
-                    getattr(self.ultima_proposta_destinatario, "conto_crediti", None)
-                )
-                if saldo_conto(self.destinatario, conto) < amt:
-                    raise Exception(
-                        f"Crediti {conto.lower()} insufficienti per il destinatario ({amt} CR)."
-                    )
-                self.destinatario.modifica_crediti(
-                    -amt,
-                    f"Pagato in transazione #{self.id} ({conto.lower()})",
-                    conto=conto,
-                )
-                self.iniziatore.modifica_crediti(
-                    amt,
-                    f"Ricevuto da transazione #{self.id} ({conto.lower()})",
-                    conto=conto,
-                )
+            _applica_crediti_proposta(
+                self.iniziatore, self.destinatario, self.ultima_proposta_iniziatore
+            )
+            _applica_crediti_proposta(
+                self.destinatario, self.iniziatore, self.ultima_proposta_destinatario
+            )
             
             # Esegui scambi oggetti
             for oggetto in self.ultima_proposta_iniziatore.oggetti_da_dare.all():
@@ -7738,9 +7726,18 @@ class PropostaTransazione(SyncableModel, models.Model):
         default=CreditoMovimento.CONTO_CORRENTE,
         db_index=True,
         help_text=(
-            "Conto da cui partono i crediti_da_dare; il destinatario li riceve sullo stesso conto "
-            "(corrente resta corrente, deposito resta deposito)."
+            "Legacy: conto unico se si usa solo crediti_da_dare. "
+            "Con economia duale preferire crediti_corrente_da_dare + crediti_deposito_da_dare "
+            "(la natura dei crediti è conservata in cessione)."
         ),
+    )
+    crediti_corrente_da_dare = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Crediti correnti che l'autore cede (restano correnti per il destinatario).",
+    )
+    crediti_deposito_da_dare = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Crediti di deposito che l'autore cede (restano deposito per il destinatario).",
     )
     oggetti_da_dare = models.ManyToManyField('Oggetto', related_name='proposte_oggetti_dati', blank=True)
     consumabili_da_dare = models.ManyToManyField(
@@ -7749,6 +7746,14 @@ class PropostaTransazione(SyncableModel, models.Model):
     
     # Cosa l'autore RICEVE
     crediti_da_ricevere = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    crediti_corrente_da_ricevere = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Crediti correnti che l'autore si aspetta di ricevere.",
+    )
+    crediti_deposito_da_ricevere = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Crediti di deposito che l'autore si aspetta di ricevere.",
+    )
     oggetti_da_ricevere = models.ManyToManyField('Oggetto', related_name='proposte_oggetti_ricevuti', blank=True)
     consumabili_da_ricevere = models.ManyToManyField(
         'ConsumabilePersonaggio', related_name='proposte_consumabili_ricevuti', blank=True
@@ -7903,7 +7908,15 @@ class Messaggio(SyncableModel, models.Model):
         choices=CreditoMovimento.CONTO_CHOICES,
         default=CreditoMovimento.CONTO_CORRENTE,
         blank=True,
-        help_text="Conto usato per crediti_allegati (mittente e destinatario sullo stesso conto).",
+        help_text="Legacy: conto unico di crediti_allegati. Preferire i campi split corrente/deposito.",
+    )
+    crediti_corrente_allegati = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        help_text="Crediti correnti allegati (restano correnti per il destinatario).",
+    )
+    crediti_deposito_allegati = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        help_text="Crediti di deposito allegati (restano deposito per il destinatario).",
     )
     oggetti_allegati_snapshot = models.JSONField(default=list, blank=True)
     is_staff_message = models.BooleanField(default=False)

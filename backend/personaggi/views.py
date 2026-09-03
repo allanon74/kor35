@@ -3246,15 +3246,20 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
         validated = serializer.validated_data
         is_staff_message = bool(validated.get('is_staff_message'))
         requested_sender = validated.get('mittente_personaggio')
-        crediti_da_inviare = int(validated.get('crediti_da_inviare') or 0)
+        from django.core.exceptions import ValidationError as DjangoValidationError
         from personaggi.economia_crediti import (
             CONTO_DEPOSITO,
-            modulo_conto_deposito_attivo,
-            normalize_conto,
-            saldo_conto,
-            saldo_spendibile,
+            parse_importi_messaggio,
+            trasferisci_cessione_p2p,
         )
-        conto_crediti = normalize_conto(validated.get('conto_crediti') or 'CORRENTE')
+        try:
+            crediti_corrente, crediti_deposito = parse_importi_messaggio(validated)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(
+                {"crediti_da_inviare": exc.messages[0] if exc.messages else str(exc)}
+            )
+        crediti_totale = crediti_corrente + crediti_deposito
+        conto_crediti = CONTO_DEPOSITO if crediti_deposito > 0 and crediti_corrente == 0 else "CORRENTE"
         oggetti_ids = list(dict.fromkeys(validated.get('oggetti_ids') or []))
 
         # Mittente: usa il personaggio selezionato in UI, altrimenti fallback al primo.
@@ -3268,12 +3273,12 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
         if not personaggio_mittente:
             raise serializers.ValidationError({"detail": "Nessun personaggio mittente disponibile."})
 
-        if is_staff_message and (crediti_da_inviare > 0 or oggetti_ids):
+        if is_staff_message and (crediti_totale > 0 or oggetti_ids):
             raise serializers.ValidationError(
                 {"detail": "Non puoi allegare crediti o oggetti nei messaggi allo staff."}
             )
 
-        if not is_staff_message and (crediti_da_inviare > 0 or oggetti_ids):
+        if not is_staff_message and (crediti_totale > 0 or oggetti_ids):
             from .transazioni_evento import GIOCO_LIVE_BLOCCO_MSG, gioco_live_consentito
 
             if not gioco_live_consentito(
@@ -3296,29 +3301,6 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
             destinatario = validated.get('destinatario_personaggio')
             if destinatario:
                 destinatario = Personaggio.objects.select_for_update().get(id=destinatario.id)
-
-            # Validazioni allegati economici.
-            if not is_staff_message and crediti_da_inviare > 0:
-                if conto_crediti == CONTO_DEPOSITO and not modulo_conto_deposito_attivo(
-                    personaggio_mittente, user=self.request.user
-                ):
-                    raise serializers.ValidationError(
-                        {"conto_crediti": "Il conto di deposito non è attivo."}
-                    )
-                disponibile = (
-                    saldo_conto(personaggio_mittente, conto_crediti)
-                    if modulo_conto_deposito_attivo(personaggio_mittente, user=self.request.user)
-                    else saldo_spendibile(personaggio_mittente, user=self.request.user)
-                )
-                if disponibile < crediti_da_inviare:
-                    raise serializers.ValidationError(
-                        {
-                            "crediti_da_inviare": (
-                                f"Crediti insufficienti sul conto {conto_crediti.lower()}. "
-                                f"Disponibili: {disponibile}."
-                            )
-                        }
-                    )
 
             oggetti_da_trasferire = []
             if not is_staff_message and oggetti_ids:
@@ -3351,6 +3333,8 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
                     destinatario_personaggio=None,
                     mostra_proprietario_giocatore=mostra_proprietario,
                     crediti_allegati=0,
+                    crediti_corrente_allegati=0,
+                    crediti_deposito_allegati=0,
                     oggetti_allegati_snapshot=[],
                 )
             else:
@@ -3368,26 +3352,33 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
                     mittente_personaggio=personaggio_mittente,
                     destinatario_personaggio=destinatario,
                     mostra_proprietario_giocatore=mostra_proprietario,
-                    crediti_allegati=crediti_da_inviare,
+                    crediti_allegati=int(crediti_totale),
                     conto_crediti_allegati=conto_crediti,
+                    crediti_corrente_allegati=crediti_corrente,
+                    crediti_deposito_allegati=crediti_deposito,
                     oggetti_allegati_snapshot=oggetti_snapshot,
                 )
 
                 # Applica trasferimenti allegati in modo atomico con la creazione messaggio.
-                if crediti_da_inviare > 0:
-                    personaggio_mittente.modifica_crediti(
-                        -crediti_da_inviare,
-                        f"Invio crediti via messaggio a {destinatario.nome}",
-                        conto=conto_crediti,
-                    )
-                    destinatario.modifica_crediti(
-                        crediti_da_inviare,
-                        f"Ricezione crediti via messaggio da {personaggio_mittente.nome}",
-                        conto=conto_crediti,
-                    )
+                if crediti_totale > 0:
+                    try:
+                        trasferisci_cessione_p2p(
+                            personaggio_mittente,
+                            destinatario,
+                            crediti_corrente,
+                            crediti_deposito,
+                            desc_out=f"Invio crediti via messaggio a {destinatario.nome}",
+                            desc_in=f"Ricezione crediti via messaggio da {personaggio_mittente.nome}",
+                            user=self.request.user,
+                        )
+                    except DjangoValidationError as exc:
+                        raise serializers.ValidationError(
+                            {"crediti_da_inviare": exc.messages[0] if exc.messages else str(exc)}
+                        )
 
                 for oggetto in oggetti_da_trasferire:
                     oggetto.sposta_in_inventario(destinatario)
+
         
         
 class OggettoViewSet(viewsets.ModelViewSet):
