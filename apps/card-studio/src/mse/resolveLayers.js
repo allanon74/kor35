@@ -350,7 +350,11 @@ function resolveLayersFromStyles(stylesMap, options) {
         fieldName,
         z,
         box,
-        glyphs: resolveSymbolLayersForText(symbolText, layerSymbolPkg, font.size),
+        glyphs: resolveSymbolLayersForText(symbolText, layerSymbolPkg, font.size, {
+          boxHeight: box.height,
+          boxWidth: box.width,
+          fieldName,
+        }),
         font,
         alignment: String(evalMseProp(pickProp(styleDef, "alignment"), ctx, "left top")),
         wrap: renderStyle === "symbol" || /^(rules|rule_text|text|testo_gioco)$/i.test(normFieldKey(fieldName)),

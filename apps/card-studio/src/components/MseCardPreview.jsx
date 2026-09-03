@@ -104,7 +104,7 @@ export default function MseCardPreview({
                 display: "flex",
                 flexDirection: "row",
                 flexWrap: layer.wrap ? "wrap" : "nowrap",
-                alignContent: layer.wrap ? "flex-start" : "center",
+                alignContent: layer.wrap ? "flex-start" : "stretch",
                 justifyContent: flexAlign.justifyContent,
                 alignItems: flexAlign.alignItems,
                 gap: "2px",
@@ -129,7 +129,7 @@ export default function MseCardPreview({
                       color: layer.font.color,
                       fontWeight: layer.font.weight,
                       lineHeight: 1.25,
-                      whiteSpace: "pre-wrap",
+                      whiteSpace: layer.wrap ? "pre-wrap" : "pre",
                     }}
                   >
                     {g.value}
@@ -140,6 +140,7 @@ export default function MseCardPreview({
           );
         }
 
+        const isMultiline = /^(rules|rule_text|text|lore|testo_gioco)$/i.test(layer.fieldName);
         return (
           <div
             key={`${layer.fieldName}-${layer.z}`}
@@ -150,20 +151,16 @@ export default function MseCardPreview({
               overflow: "hidden",
               justifyContent: flexAlign.justifyContent,
               alignItems: flexAlign.alignItems,
+              fontFamily: layer.font.family,
+              fontSize: `${layer.font.size}px`,
+              color: layer.font.color,
+              fontWeight: layer.font.weight,
+              lineHeight: 1.25,
+              whiteSpace: isMultiline ? "pre-wrap" : "nowrap",
+              wordBreak: isMultiline ? "break-word" : "normal",
             }}
           >
-            <div
-              className="mse-layer-text-inner"
-              style={{
-                width: "100%",
-                fontFamily: layer.font.family,
-                fontSize: `${layer.font.size}px`,
-                color: layer.font.color,
-                fontWeight: layer.font.weight,
-              }}
-            >
-              {layer.text}
-            </div>
+            {layer.text}
           </div>
         );
       })}

@@ -58,7 +58,7 @@ def _aura_glyph_png(
     fill: tuple[int, int, int],
     ring: tuple[int, int, int],
     *,
-    size: int = 64,
+    size: int = 96,
 ) -> bytes:
     """Gemma circolare con bordo (simbolo aura per anteprima/PNG export)."""
     cx = cy = (size - 1) / 2.0
@@ -93,7 +93,7 @@ def _aura_glyph_png(
     return rgba_png(size, size, pixel)
 
 
-def _cost_digit_png(digit: str, *, size: int = 64) -> bytes:
+def _cost_digit_png(digit: str, *, size: int = 96) -> bytes:
     """Simbolo costo generico (cerchio dorato + cifra)."""
     meta = KOR35_COST_GLYPH_META
     fill = meta["rgb"]
@@ -151,7 +151,7 @@ def build_kor35_symbol_font_text() -> str:
         "game: kor35",
         "short name: KOR35 Aure",
         "full name: KOR35 Sette Aure Symbol Font",
-        "version: 1.0",
+        "version: 1.1",
         "creator: KOR35 Card Studio",
         "",
     ]

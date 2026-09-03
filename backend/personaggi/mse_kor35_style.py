@@ -26,7 +26,7 @@ CARTA_ENERGIA_ARCANA = "ARC"
 KOR35_TEMPLATE_SLUG = "kor35-standard"
 KOR35_TEMPLATE_NAME = "Sette Elegie Standard"
 KOR35_STYLE_GAME = "kor35"
-KOR35_STYLE_VERSION = "3.2"
+KOR35_STYLE_VERSION = "3.3"
 
 KOR35_FIELD_MAPPING = {
     "code": "codice",
@@ -190,9 +190,9 @@ def kor35_frame_png(
             g = _lerp(ink[1], ink2[1], t)
             b = _lerp(ink[2], ink2[2], t)
             if x < 28 or y < 28 or x >= width - 28 or y >= height - 28:
-                r = _lerp(r, accent[0], 0.42)
-                g = _lerp(g, accent[1], 0.42)
-                b = _lerp(b, accent[2], 0.42)
+                r = _lerp(r, accent[0], 0.68)
+                g = _lerp(g, accent[1], 0.68)
+                b = _lerp(b, accent[2], 0.68)
             return r, g, b, 255
 
         sep_tops = [art[1] - 2, type_line[1] - 2, rules[1] - 2]
@@ -450,25 +450,25 @@ card style:
 
 card style:
 	energy:
-		left: 24
-		top: 22
-		width: 44
-		height: 44
+		left: 20
+		top: 18
+		width: 50
+		height: 50
 		z index: 45
 		visible: {{{not_luo}}}
 		alignment: middle center
 		render style: symbol
 		font:
 			always symbol: true
-			size: 30
+			size: 36
 			color: rgb(255,255,255)
 			symbol font: KOR35 Aure
 
 card style:
 	name:
-		left: 68
+		left: 72
 		top: 22
-		width: 218
+		width: 210
 		height: 44
 		z index: 40
 		alignment: middle left
@@ -480,17 +480,17 @@ card style:
 
 card style:
 	cost:
-		left: 288
-		top: 22
-		width: 48
-		height: 44
+		left: 284
+		top: 20
+		width: 54
+		height: 46
 		z index: 40
 		visible: {{{not_luo}}}
 		alignment: middle center
 		render style: symbol
 		font:
 			always symbol: true
-			size: 28
+			size: 34
 			color: rgb(255,255,255)
 			symbol font: KOR35 Aure
 
@@ -568,7 +568,7 @@ card style:
 card style:
 	stat_badge_attack:
 		left: 40
-		top: 468
+		top: 476
 		width: 70
 		height: 36
 		z index: 55
@@ -579,7 +579,7 @@ card style:
 card style:
 	stat_badge_health:
 		left: 152
-		top: 468
+		top: 476
 		width: 70
 		height: 36
 		z index: 55
@@ -590,7 +590,7 @@ card style:
 card style:
 	stat_badge_initiative:
 		left: 264
-		top: 468
+		top: 476
 		width: 70
 		height: 36
 		z index: 55
@@ -601,7 +601,7 @@ card style:
 card style:
 	attack_label:
 		left: 40
-		top: 471
+		top: 479
 		width: 70
 		height: 11
 		z index: 58
@@ -617,7 +617,7 @@ card style:
 card style:
 	attack:
 		left: 40
-		top: 484
+		top: 493
 		width: 70
 		height: 18
 		z index: 60
@@ -632,7 +632,7 @@ card style:
 card style:
 	health_label:
 		left: 152
-		top: 471
+		top: 479
 		width: 70
 		height: 11
 		z index: 58
@@ -648,7 +648,7 @@ card style:
 card style:
 	health:
 		left: 152
-		top: 484
+		top: 493
 		width: 70
 		height: 18
 		z index: 60
@@ -663,7 +663,7 @@ card style:
 card style:
 	initiative_label:
 		left: 264
-		top: 471
+		top: 479
 		width: 70
 		height: 11
 		z index: 58
@@ -679,7 +679,7 @@ card style:
 card style:
 	initiative:
 		left: 264
-		top: 484
+		top: 493
 		width: 70
 		height: 18
 		z index: 60

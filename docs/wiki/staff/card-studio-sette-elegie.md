@@ -121,4 +121,4 @@ Aure: Marziale, Tecnologica, Innata, Magica, Sacra, Psionica, Arcana.
 | Preview vuota / stile Magic | riesegui `bootstrap-kor35-mse-template` sulla campagna |
 | 0 carte / 0 template | stesso bootstrap + seed; verifica `CAMPAGNA_SLUG` |
 | Export PNG fallisce | serve stylesheet MSE importato sul template attivo |
-| Art sempre neutra | template non aggiornato (serve v3.1+): rifai bootstrap |
+| Art sempre neutra / simboli `{2}` non renderizzati | template non aggiornato (serve v3.2+): rifai bootstrap |
