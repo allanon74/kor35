@@ -331,6 +331,36 @@ class Kor35AuraSymbolFontTests(SimpleTestCase):
         self.assertEqual(render.get("value"), "symbol")
         self.assertTrue(energy.get("font", {}).get("always_symbol"))
 
+    def test_kor35_style_sette_elegie_v3_frames_and_visibility(self):
+        from personaggi.mse_kor35_style import build_kor35_mse_style_zip, build_kor35_style_text
+        from personaggi.mse_style_import import parse_mse_style_spec
+
+        text = build_kor35_style_text()
+        self.assertIn("Sette Elegie", text)
+        self.assertIn("frame-mar.png", text)
+        spec = parse_mse_style_spec(text)
+        self.assertEqual(spec.get("game"), "kor35")
+        frame = spec["card_styles"]["card_frame"]
+        image = frame.get("image") or {}
+        expr = image.get("expr") if isinstance(image, dict) else str(image)
+        self.assertIn("frame-mar.png", expr)
+        self.assertIn("LUO", expr)
+        energy_vis = spec["card_styles"]["energy"].get("visible") or {}
+        self.assertIn("LUO", energy_vis.get("expr") if isinstance(energy_vis, dict) else str(energy_vis))
+        attack_vis = spec["card_styles"]["attack"].get("visible") or {}
+        atk_expr = attack_vis.get("expr") if isinstance(attack_vis, dict) else str(attack_vis)
+        self.assertIn("PG", atk_expr)
+
+        data = build_kor35_mse_style_zip()
+        import zipfile
+        from io import BytesIO
+
+        with zipfile.ZipFile(BytesIO(data)) as zf:
+            names = set(zf.namelist())
+            self.assertIn("images/frame-mar.png", names)
+            self.assertIn("images/frame-luo.png", names)
+            self.assertIn("images/badge-attack.png", names)
+
 
 class Kor35MseStyleGeneratorTests(SimpleTestCase):
     def test_build_style_zip_has_card_styles(self):
@@ -353,5 +383,6 @@ class Kor35MseStyleGeneratorTests(SimpleTestCase):
             names = zf.namelist()
             self.assertIn("style", names)
             self.assertIn("images/frame.png", names)
+            self.assertIn("images/frame-mar.png", names)
             self.assertIn("images/title-plate.png", names)
             self.assertTrue(zf.read("images/frame.png").startswith(b"\x89PNG"))

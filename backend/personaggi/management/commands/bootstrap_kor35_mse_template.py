@@ -67,6 +67,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Espansioni KOR35 senza default_studio_template → template KOR35.",
         )
+        parser.add_argument(
+            "--seed-demo",
+            action="store_true",
+            help="Dopo il template, esegue seed_carte_esempio (mazzo demo Sette Elegie).",
+        )
         parser.add_argument("--dry-run", action="store_true")
 
     @transaction.atomic
@@ -160,36 +165,95 @@ class Command(BaseCommand):
             self.stdout.write(f"Template allineati: layout refresh={refreshed}, campi_schema={schema_patched}")
 
         if options["link_expansions"] and template and not dry_run:
+            self._ensure_starter_expansion(campagna, gioco, template)
             linked = (
                 EspansioneCarte.objects.filter(campagna=campagna, gioco_definizione=gioco)
                 .filter(default_studio_template__isnull=True)
                 .update(default_studio_template=template)
             )
-            self.stdout.write(f"Espansioni collegate al template: {linked}")
+            # Collega anche espansioni senza gioco nella stessa campagna.
+            linked_orphan = (
+                EspansioneCarte.objects.filter(campagna=campagna, gioco_definizione__isnull=True)
+                .update(gioco_definizione=gioco, default_studio_template=template)
+            )
+            self.stdout.write(
+                f"Espansioni collegate al template: {linked} (+{linked_orphan} senza gioco)"
+            )
+
+        if options["seed_demo"] and not dry_run:
+            from personaggi.carte_esempio_seed import seed_carte_esempio
+
+            stats = seed_carte_esempio(campagna_slug=campagna.slug, force=True)
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Seed demo: create={stats.get('carte_create', 0)} "
+                    f"aggiornate={stats.get('carte_aggiornate', 0)} "
+                    f"totali={stats.get('carte_totali', 0)}"
+                )
+            )
 
         if dry_run:
             transaction.set_rollback(True)
             self.stdout.write(self.style.WARNING("Dry-run: nessuna modifica persistita."))
-        elif created:
+        else:
             self.stdout.write(self.style.SUCCESS("Bootstrap KOR35 MSE template completato."))
 
     def _resolve_gioco(self, campagna, gioco_slug: str) -> CarteGiocoDefinizione:
+        slug = (gioco_slug or "kor35").strip() or "kor35"
         if gioco_slug:
-            gioco = CarteGiocoDefinizione.objects.filter(campagna=campagna, slug=gioco_slug).first()
-            if not gioco:
-                raise CommandError(f"Gioco non trovato: {gioco_slug}")
+            gioco = CarteGiocoDefinizione.objects.filter(campagna=campagna, slug=slug).first()
+            if gioco:
+                return gioco
+            gioco = CarteGiocoDefinizione.objects.create(
+                campagna=campagna,
+                slug=slug[:80],
+                nome="Cronache delle Sette Elegie",
+                modello_base=MODELLO_BASE_KOR35,
+                studio_abilitato=True,
+                arena_abilitata=False,
+                mse_game_name="kor35",
+                descrizione="Gioco di carte KOR35 — 7 aure, tipi PG/OGG/LUO/EVT.",
+            )
+            self.stdout.write(self.style.SUCCESS(f"Gioco creato: {gioco.slug}"))
             return gioco
+
         gioco = (
             CarteGiocoDefinizione.objects.filter(campagna=campagna, modello_base=MODELLO_BASE_KOR35)
             .order_by("nome")
             .first()
         )
-        if not gioco:
-            raise CommandError(
-                "Nessun gioco modello_base=kor35 nella campagna. "
-                "Crea il gioco o passa --gioco-slug."
-            )
+        if gioco:
+            return gioco
+        gioco = CarteGiocoDefinizione.objects.create(
+            campagna=campagna,
+            slug="kor35",
+            nome="Cronache delle Sette Elegie",
+            modello_base=MODELLO_BASE_KOR35,
+            studio_abilitato=True,
+            arena_abilitata=False,
+            mse_game_name="kor35",
+            descrizione="Gioco di carte KOR35 — 7 aure, tipi PG/OGG/LUO/EVT.",
+        )
+        self.stdout.write(self.style.SUCCESS(f"Gioco creato: {gioco.slug}"))
         return gioco
+
+    def _ensure_starter_expansion(self, campagna, gioco, template) -> None:
+        """Crea set Core se non esistono espansioni per il gioco."""
+        if EspansioneCarte.objects.filter(campagna=campagna, gioco_definizione=gioco).exists():
+            return
+        if EspansioneCarte.objects.filter(campagna=campagna, slug="sette-elegie-demo").exists():
+            return
+        EspansioneCarte.objects.create(
+            campagna=campagna,
+            gioco_definizione=gioco,
+            nome="Sette Elegie — mazzo demo",
+            slug="sette-elegie-demo",
+            descrizione="Set demo Cronache delle Sette Elegie (Card Studio).",
+            attiva=True,
+            ordine=10,
+            default_studio_template=template,
+        )
+        self.stdout.write(self.style.SUCCESS("Espansione creata: sette-elegie-demo"))
 
     def _align_existing_templates(self, campagna, gioco, dry_run: bool) -> tuple[int, int]:
         refreshed = 0

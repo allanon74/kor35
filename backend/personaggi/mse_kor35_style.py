@@ -1,8 +1,9 @@
 """
-Genera package `.mse-style` KOR35 (clean-room) allineato a `kor35_mse_game_spec`.
+Genera package `.mse-style` KOR35 / Cronache delle Sette Elegie (clean-room).
 
-Layout ispirato ai TCG moderni (finestra art ampia, title bar, type line, rules box, PT):
-pulito, leggibile, senza cornici opache che nascondono testo/art.
+Allineato a `mse_kor35_game_spec` e al regolamento (PG/OGG/LUO/EVT, 7 aure).
+Layout TCG: art ampia, title bar, type line, rules, stats PG (FOR/ROB/INI).
+Cornici colorate per aura; Terra (LUO) senza simbolo energia e senza stats.
 """
 from __future__ import annotations
 
@@ -12,10 +13,20 @@ import zlib
 import zipfile
 from typing import Callable
 
+# Codici aura allineati a carte_collezionabili_models (niente import Django qui:
+# il modulo deve restare usabile anche in SimpleTestCase / generatori offline).
+CARTA_ENERGIA_MARZIALE = "MAR"
+CARTA_ENERGIA_TECNOLOGICA = "TEC"
+CARTA_ENERGIA_INNATA = "INN"
+CARTA_ENERGIA_MAGICA = "MAG"
+CARTA_ENERGIA_SACRA = "SAC"
+CARTA_ENERGIA_PSIONICA = "PSI"
+CARTA_ENERGIA_ARCANA = "ARC"
+
 KOR35_TEMPLATE_SLUG = "kor35-standard"
-KOR35_TEMPLATE_NAME = "KOR35 Standard"
+KOR35_TEMPLATE_NAME = "Sette Elegie Standard"
 KOR35_STYLE_GAME = "kor35"
-KOR35_STYLE_VERSION = "2.0"
+KOR35_STYLE_VERSION = "3.0"
 
 KOR35_FIELD_MAPPING = {
     "code": "codice",
@@ -30,6 +41,64 @@ KOR35_FIELD_MAPPING = {
     "initiative": "iniziativa",
     "rules": "testo_gioco",
     "lore": "testo_lore",
+}
+
+# Accenti cornice per aura (allineati a glyph font / game colors).
+_AURA_FRAME_PALETTE: dict[str, dict[str, tuple[int, int, int]]] = {
+    CARTA_ENERGIA_MARZIALE: {
+        "ink": (14, 18, 48),
+        "ink2": (28, 36, 90),
+        "accent": (76, 54, 245),
+        "accent_hi": (140, 130, 255),
+    },
+    CARTA_ENERGIA_TECNOLOGICA: {
+        "ink": (36, 34, 8),
+        "ink2": (58, 54, 14),
+        "accent": (250, 246, 16),
+        "accent_hi": (255, 252, 120),
+    },
+    CARTA_ENERGIA_INNATA: {
+        "ink": (42, 28, 8),
+        "ink2": (70, 46, 14),
+        "accent": (199, 158, 11),
+        "accent_hi": (240, 190, 70),
+    },
+    CARTA_ENERGIA_MAGICA: {
+        "ink": (10, 10, 14),
+        "ink2": (28, 28, 36),
+        "accent": (90, 90, 110),
+        "accent_hi": (180, 180, 200),
+    },
+    CARTA_ENERGIA_SACRA: {
+        "ink": (36, 40, 52),
+        "ink2": (58, 64, 82),
+        "accent": (248, 248, 252),
+        "accent_hi": (255, 255, 255),
+    },
+    CARTA_ENERGIA_PSIONICA: {
+        "ink": (36, 16, 48),
+        "ink2": (62, 28, 82),
+        "accent": (239, 170, 255),
+        "accent_hi": (250, 210, 255),
+    },
+    CARTA_ENERGIA_ARCANA: {
+        "ink": (12, 36, 18),
+        "ink2": (22, 58, 30),
+        "accent": (146, 250, 136),
+        "accent_hi": (190, 255, 180),
+    },
+    "neutral": {
+        "ink": (18, 22, 32),
+        "ink2": (28, 34, 48),
+        "accent": (212, 175, 95),
+        "accent_hi": (240, 214, 140),
+    },
+    "luo": {
+        "ink": (12, 28, 20),
+        "ink2": (22, 48, 34),
+        "accent": (74, 222, 128),
+        "accent_hi": (160, 240, 180),
+    },
 }
 
 
@@ -70,40 +139,44 @@ def _lerp(a: int, b: int, t: float) -> int:
     return int(a + (b - a) * max(0.0, min(1.0, t)))
 
 
-def kor35_frame_png(width: int = 375, height: int = 523) -> bytes:
+def kor35_frame_png(
+    width: int = 375,
+    height: int = 523,
+    *,
+    palette_key: str = "neutral",
+    include_stats_window: bool = True,
+) -> bytes:
     """
-    Cornice TCG: bordo scuro + filetto oro, finestre title/art/type/rules/stats
-    trasparenti (il testo e l'arte vivono sotto come layer CSS).
+    Cornice TCG: bordo tinto + filetto accento, finestre title/art/type/rules(/stats)
+    trasparenti (testo e arte vivono sotto come layer CSS).
     """
-    # Geometria allineata a build_kor35_style_text()
+    pal = _AURA_FRAME_PALETTE.get(palette_key) or _AURA_FRAME_PALETTE["neutral"]
+    ink = pal["ink"]
+    ink2 = pal["ink2"]
+    accent = pal["accent"]
+    accent_hi = pal["accent_hi"]
+
     margin = 12
-    art = (22, 78, 331, 210)  # left, top, w, h
+    art = (22, 78, 331, 210)
     title = (22, 18, 331, 52)
     type_line = (22, 292, 331, 28)
-    rules = (22, 326, 331, 130)
+    rules = (22, 326, 331, 130 if include_stats_window else 162)
     stats = (22, 464, 331, 44)
 
-    ink = (18, 22, 32)
-    ink2 = (28, 34, 48)
-    gold = (212, 175, 95)
-    gold_hi = (240, 214, 140)
-    gold_lo = (150, 118, 55)
-
-    windows = (title, art, type_line, rules, stats)
+    windows = [title, art, type_line, rules]
+    if include_stats_window:
+        windows.append(stats)
 
     def in_box(x: int, y: int, box: tuple[int, int, int, int]) -> bool:
         l, t, w, h = box
         return l <= x < l + w and t <= y < t + h
 
     def pixel(x: int, y: int) -> tuple[int, int, int, int]:
-        # Trasparente nelle finestre contenuto
         for box in windows:
             if in_box(x, y, box):
                 return 0, 0, 0, 0
 
-        # Bordo esterno pieno
         if x < margin or y < margin or x >= width - margin or y >= height - margin:
-            # Filetto oro sul bordo interno
             near_inner = (
                 x == margin - 1
                 or y == margin - 1
@@ -111,24 +184,24 @@ def kor35_frame_png(width: int = 375, height: int = 523) -> bytes:
                 or y == height - margin
             )
             if near_inner:
-                return gold_hi[0], gold_hi[1], gold_hi[2], 255
+                return accent_hi[0], accent_hi[1], accent_hi[2], 255
             t = (x + y) / max(width + height, 1)
             r = _lerp(ink[0], ink2[0], t)
             g = _lerp(ink[1], ink2[1], t)
             b = _lerp(ink[2], ink2[2], t)
-            # Angoli leggermente più chiari
             if x < 28 or y < 28 or x >= width - 28 or y >= height - 28:
-                r = _lerp(r, gold_lo[0], 0.18)
-                g = _lerp(g, gold_lo[1], 0.18)
-                b = _lerp(b, gold_lo[2], 0.18)
+                r = _lerp(r, accent[0], 0.22)
+                g = _lerp(g, accent[1], 0.22)
+                b = _lerp(b, accent[2], 0.22)
             return r, g, b, 255
 
-        # Separatori orizzontali sottili (tra finestre)
-        for top in (art[1] - 2, type_line[1] - 2, rules[1] - 2, stats[1] - 2):
+        sep_tops = [art[1] - 2, type_line[1] - 2, rules[1] - 2]
+        if include_stats_window:
+            sep_tops.append(stats[1] - 2)
+        for top in sep_tops:
             if abs(y - top) <= 1 and margin <= x < width - margin:
-                return gold[0], gold[1], gold[2], 230
+                return accent[0], accent[1], accent[2], 230
 
-        # Riempimento telaio interno (sottile)
         return ink2[0], ink2[1], ink2[2], 255
 
     return rgba_png(width, height, pixel)
@@ -145,7 +218,6 @@ def kor35_art_placeholder_png(width: int = 331, height: int = 210) -> bytes:
         r = _lerp(42, 70, t)
         g = _lerp(56, 88, t)
         b = _lerp(84, 120, t)
-        # Croce centrale sottile
         if abs(x - cx) < 1.2 or abs(y - cy) < 1.2:
             return 120, 140, 180, 200
         return r, g, b, 255
@@ -153,28 +225,110 @@ def kor35_art_placeholder_png(width: int = 331, height: int = 210) -> bytes:
     return rgba_png(width, height, pixel)
 
 
-def kor35_plate_png(width: int = 331, height: int = 52, *, alpha: int = 210) -> bytes:
+def kor35_plate_png(
+    width: int = 331,
+    height: int = 52,
+    *,
+    alpha: int = 210,
+    tint: tuple[int, int, int] = (24, 30, 46),
+) -> bytes:
     """Piastra semi-opaca per title / type / rules (layer sotto il testo)."""
 
     def pixel(x: int, y: int) -> tuple[int, int, int, int]:
         edge = x < 2 or y < 2 or x >= width - 2 or y >= height - 2
         if edge:
-            return 40, 48, 64, min(255, alpha + 20)
+            return (
+                min(255, tint[0] + 16),
+                min(255, tint[1] + 16),
+                min(255, tint[2] + 18),
+                min(255, alpha + 20),
+            )
         t = y / max(height - 1, 1)
-        r = _lerp(24, 36, t)
-        g = _lerp(30, 44, t)
-        b = _lerp(46, 62, t)
+        r = _lerp(tint[0], tint[0] + 12, t)
+        g = _lerp(tint[1], tint[1] + 14, t)
+        b = _lerp(tint[2], tint[2] + 16, t)
         return r, g, b, alpha
 
     return rgba_png(width, height, pixel)
 
 
+def kor35_stat_badge_png(
+    width: int = 70,
+    height: int = 36,
+    *,
+    fill: tuple[int, int, int] = (40, 24, 28),
+) -> bytes:
+    """Badge arrotondato per FOR / ROB / INI."""
+
+    def pixel(x: int, y: int) -> tuple[int, int, int, int]:
+        rx, ry = 8, 8
+        cx = min(max(x, rx), width - 1 - rx)
+        cy = min(max(y, ry), height - 1 - ry)
+        dx = abs(x - cx)
+        dy = abs(y - cy)
+        if (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) > 1.05:
+            return 0, 0, 0, 0
+        edge = (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) > 0.72
+        if edge:
+            return min(255, fill[0] + 40), min(255, fill[1] + 40), min(255, fill[2] + 40), 240
+        return fill[0], fill[1], fill[2], 220
+
+    return rgba_png(width, height, pixel)
+
+
+def _frame_select_script() -> str:
+    """Script MSE: cornice terra oppure per codice aura."""
+    parts = ['if card.type = "LUO" then "images/frame-luo.png"']
+    for code in (
+        CARTA_ENERGIA_MARZIALE,
+        CARTA_ENERGIA_TECNOLOGICA,
+        CARTA_ENERGIA_INNATA,
+        CARTA_ENERGIA_MAGICA,
+        CARTA_ENERGIA_SACRA,
+        CARTA_ENERGIA_PSIONICA,
+        CARTA_ENERGIA_ARCANA,
+    ):
+        parts.append(f'if card.energy = "{code}" then "images/frame-{code.lower()}.png"')
+    parts.append('"images/frame-neutral.png"')
+    expr = parts[-1]
+    for p in reversed(parts[:-1]):
+        expr = f"{p} else {expr}"
+    return expr
+
+
+def _type_label_script() -> str:
+    return (
+        'if card.type = "PG" then "Personaggio" else '
+        'if card.type = "OGG" then "Oggetto" else '
+        'if card.type = "LUO" then "Luogo" else '
+        'if card.type = "EVT" then "Evento" else card.type'
+    )
+
+
+def _rarity_label_script() -> str:
+    return (
+        'if card.rarity = "COM" then "Comune" else '
+        'if card.rarity = "NC" then "Non comune" else '
+        'if card.rarity = "RAR" then "Rara" else '
+        'if card.rarity = "EPI" then "Epica" else '
+        'if card.rarity = "LEG" then "Leggendaria" else '
+        'if card.rarity = "UNI" then "Unica" else card.rarity'
+    )
+
+
 def build_kor35_style_text() -> str:
-    """File `style` MSE — layout TCG leggibile."""
+    """File `style` MSE — layout Sette Elegie tipizzato."""
+    frame_script = _frame_select_script()
+    type_label = _type_label_script()
+    rarity_label = _rarity_label_script()
+    is_pg = 'card.type = "PG"'
+    not_luo = 'not (card.type = "LUO")'
+    show_stats = f"styling.show_stats and ({is_pg})"
+
     return f"""mse version: 2.0.0
 game: kor35
-short name: KOR35 Standard
-full name: KOR35 Standard Card Template
+short name: Sette Elegie
+full name: Cronache delle Sette Elegie — Template Standard
 version: {KOR35_STYLE_VERSION}
 creator: KOR35 Card Studio
 card width: 375
@@ -186,13 +340,13 @@ styling field:
 	type: boolean
 	name: show_stats
 	initial: true
-	description: Show attack / health / initiative badges.
+	description: Mostra FOR / ROB / INI (solo Personaggio).
 
 styling field:
 	type: boolean
 	name: show_lore
 	initial: false
-	description: Show flavor text under the rules box.
+	description: Mostra testo lore sotto il box regole.
 
 card style:
 	card_frame:
@@ -202,7 +356,7 @@ card style:
 		height: 523
 		z index: 100
 		render style: image
-		image: images/frame.png
+		image: {{{frame_script}}}
 
 card style:
 	title_plate:
@@ -251,12 +405,14 @@ card style:
 		width: 40
 		height: 40
 		z index: 45
+		visible: {{{not_luo}}}
 		alignment: middle center
 		render style: symbol
 		font:
 			always symbol: true
 			size: 28
 			color: rgb(255,255,255)
+			symbol font: KOR35 Aure
 
 card style:
 	name:
@@ -279,6 +435,7 @@ card style:
 		width: 54
 		height: 40
 		z index: 40
+		visible: {{{not_luo}}}
 		alignment: middle center
 		font:
 			name: Arial
@@ -303,10 +460,11 @@ card style:
 	type:
 		left: 30
 		top: 294
-		width: 220
+		width: 200
 		height: 24
 		z index: 35
 		alignment: middle left
+		text: {{{type_label}}}
 		font:
 			name: Arial
 			size: 13
@@ -315,12 +473,13 @@ card style:
 
 card style:
 	rarity:
-		left: 250
+		left: 230
 		top: 294
-		width: 96
+		width: 116
 		height: 24
 		z index: 35
 		alignment: middle right
+		text: {{{rarity_label}}}
 		font:
 			name: Arial
 			size: 12
@@ -354,47 +513,125 @@ card style:
 			color: rgb(148,163,184)
 
 card style:
+	stat_badge_attack:
+		left: 40
+		top: 468
+		width: 70
+		height: 36
+		z index: 55
+		visible: {{{show_stats}}}
+		render style: image
+		image: images/badge-attack.png
+
+card style:
+	stat_badge_health:
+		left: 152
+		top: 468
+		width: 70
+		height: 36
+		z index: 55
+		visible: {{{show_stats}}}
+		render style: image
+		image: images/badge-health.png
+
+card style:
+	stat_badge_initiative:
+		left: 264
+		top: 468
+		width: 70
+		height: 36
+		z index: 55
+		visible: {{{show_stats}}}
+		render style: image
+		image: images/badge-initiative.png
+
+card style:
+	attack_label:
+		left: 40
+		top: 466
+		width: 70
+		height: 12
+		z index: 58
+		visible: {{{show_stats}}}
+		alignment: middle center
+		text: FOR
+		font:
+			name: Arial
+			size: 8
+			color: rgb(254,202,202)
+
+card style:
 	attack:
 		left: 40
-		top: 470
+		top: 476
 		width: 70
-		height: 32
+		height: 24
 		z index: 60
-		visible: {{styling.show_stats}}
+		visible: {{{show_stats}}}
 		alignment: middle center
 		font:
 			name: Arial
-			size: 20
+			size: 18
 			color: rgb(254,226,226)
 			weight: bold
 
 card style:
+	health_label:
+		left: 152
+		top: 466
+		width: 70
+		height: 12
+		z index: 58
+		visible: {{{show_stats}}}
+		alignment: middle center
+		text: ROB
+		font:
+			name: Arial
+			size: 8
+			color: rgb(187,247,208)
+
+card style:
 	health:
 		left: 152
-		top: 470
+		top: 476
 		width: 70
-		height: 32
+		height: 24
 		z index: 60
-		visible: {{styling.show_stats}}
+		visible: {{{show_stats}}}
 		alignment: middle center
 		font:
 			name: Arial
-			size: 20
+			size: 18
 			color: rgb(220,252,231)
 			weight: bold
 
 card style:
+	initiative_label:
+		left: 264
+		top: 466
+		width: 70
+		height: 12
+		z index: 58
+		visible: {{{show_stats}}}
+		alignment: middle center
+		text: INI
+		font:
+			name: Arial
+			size: 8
+			color: rgb(191,219,254)
+
+card style:
 	initiative:
 		left: 264
-		top: 470
+		top: 476
 		width: 70
-		height: 32
+		height: 24
 		z index: 60
-		visible: {{styling.show_stats}}
+		visible: {{{show_stats}}}
 		alignment: middle center
 		font:
 			name: Arial
-			size: 20
+			size: 18
 			color: rgb(219,234,254)
 			weight: bold
 """
@@ -403,17 +640,42 @@ card style:
 def build_kor35_mse_style_zip() -> bytes:
     """Zip in-memory pronto per `import_mse_style_package`."""
     style_text = build_kor35_style_text()
-    frame = kor35_frame_png()
     art = kor35_art_placeholder_png()
     title_plate = kor35_plate_png(331, 52, alpha=200)
     type_plate = kor35_plate_png(331, 28, alpha=190)
     rules_plate = kor35_plate_png(331, 130, alpha=185)
+    badge_atk = kor35_stat_badge_png(fill=(72, 28, 36))
+    badge_hp = kor35_stat_badge_png(fill=(24, 56, 40))
+    badge_ini = kor35_stat_badge_png(fill=(28, 40, 72))
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("style", style_text)
-        zf.writestr("images/frame.png", frame)
+        zf.writestr("images/frame-neutral.png", kor35_frame_png(palette_key="neutral"))
+        zf.writestr(
+            "images/frame-luo.png",
+            kor35_frame_png(palette_key="luo", include_stats_window=False),
+        )
+        # Alias legacy usato da versioni precedenti / fallback
+        zf.writestr("images/frame.png", kor35_frame_png(palette_key="neutral"))
+        for code in (
+            CARTA_ENERGIA_MARZIALE,
+            CARTA_ENERGIA_TECNOLOGICA,
+            CARTA_ENERGIA_INNATA,
+            CARTA_ENERGIA_MAGICA,
+            CARTA_ENERGIA_SACRA,
+            CARTA_ENERGIA_PSIONICA,
+            CARTA_ENERGIA_ARCANA,
+        ):
+            zf.writestr(
+                f"images/frame-{code.lower()}.png",
+                kor35_frame_png(palette_key=code),
+            )
         zf.writestr("images/art-placeholder.png", art)
         zf.writestr("images/title-plate.png", title_plate)
         zf.writestr("images/type-plate.png", type_plate)
         zf.writestr("images/rules-plate.png", rules_plate)
+        zf.writestr("images/badge-attack.png", badge_atk)
+        zf.writestr("images/badge-health.png", badge_hp)
+        zf.writestr("images/badge-initiative.png", badge_ini)
     return buf.getvalue()

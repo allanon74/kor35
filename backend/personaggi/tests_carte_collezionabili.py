@@ -630,7 +630,7 @@ class CarteEsempioSeedTests(TestCase):
         from personaggi.carte_esempio_seed import seed_carte_esempio
 
         stats1 = seed_carte_esempio(campagna_slug="seed-carte")
-        self.assertEqual(stats1["carte_create"], 20)
+        self.assertEqual(stats1["carte_create"], 29)
         self.assertGreaterEqual(stats1["keywords_create"], 5)
 
         stats2 = seed_carte_esempio(campagna_slug="seed-carte", skip_if_complete=True)
@@ -665,7 +665,7 @@ class CarteEsempioSeedTests(TestCase):
             2,
         )
         esp = EspansioneCarte.objects.get(campagna=self.campagna, slug="sette-elegie-demo")
-        self.assertEqual(esp.carte.count(), 20)
+        self.assertEqual(esp.carte.count(), 29)
         self.assertTrue(
             KeywordCarta.objects.filter(campagna=self.campagna, codice="COLPO").exists()
         )

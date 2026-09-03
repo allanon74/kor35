@@ -61,7 +61,7 @@ help:
 	@echo "  make seed-carte-esempio ENV=dev-home    # 20 carte demo Sette Elegie + keyword MVP + combo reliquiario"
 	@echo "  make import-mse-dataset ENV=dev-office CAMPAGNA_SLUG=<slug> # import massivo ~/Scaricati/mse"
 	@echo "  make import-mse-dataset-dry-run ENV=dev-office CAMPAGNA_SLUG=<slug> # anteprima senza scrivere"
-	@echo "  make bootstrap-kor35-mse-template ENV=dev-home CAMPAGNA_SLUG=kor35 # template MSE KOR35 + allineamento DB"
+	@echo "  make bootstrap-kor35-mse-template ENV=dev-home CAMPAGNA_SLUG=kor35 # template MSE Sette Elegie + seed demo"
 	@echo "  make restart-be ENV=dev-home # riavvia backend + daphne (carica .py aggiornati)"
 	@echo "  make deploy-be ENV=prod      # rebuild backend/daphne + restart + migrate + collectstatic"
 	@echo "  make restart ENV=dev-home    # restart-fe + restart-be"
@@ -254,7 +254,7 @@ bootstrap-kor35-mse-template:
 		echo "Errore: specifica CAMPAGNA_SLUG=<slug>"; \
 		exit 1; \
 	fi
-	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py bootstrap_kor35_mse_template --campagna-slug "$(CAMPAGNA_SLUG)" --set-default --link-expansions $(if $(GIOCO_SLUG),--gioco-slug "$(GIOCO_SLUG)",)
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py bootstrap_kor35_mse_template --campagna-slug "$(CAMPAGNA_SLUG)" --set-default --link-expansions --seed-demo $(if $(GIOCO_SLUG),--gioco-slug "$(GIOCO_SLUG)",)
 
 bootstrap-kor35-mse-template-dry-run:
 	@if [ -z "$(CAMPAGNA_SLUG)" ]; then \
