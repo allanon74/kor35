@@ -26,7 +26,7 @@ CARTA_ENERGIA_ARCANA = "ARC"
 KOR35_TEMPLATE_SLUG = "kor35-standard"
 KOR35_TEMPLATE_NAME = "Sette Elegie Standard"
 KOR35_STYLE_GAME = "kor35"
-KOR35_STYLE_VERSION = "3.3"
+KOR35_STYLE_VERSION = "3.4"
 
 KOR35_FIELD_MAPPING = {
     "code": "codice",
@@ -325,6 +325,20 @@ def kor35_stat_badge_png(
     return rgba_png(width, height, pixel)
 
 
+def kor35_lore_divider_png(width: int = 315, height: int = 2) -> bytes:
+    """Linea separatrice tra regole e lore."""
+
+    def pixel(x: int, y: int) -> tuple[int, int, int, int]:
+        if y >= height:
+            return 0, 0, 0, 0
+        t = x / max(width - 1, 1)
+        fade = 0.55 + 0.45 * (1.0 - abs(t - 0.5) * 2.0)
+        a = int(140 * fade)
+        return 148, 163, 184, a
+
+    return rgba_png(width, height, pixel)
+
+
 def _frame_select_script() -> str:
     """Script MSE: cornice terra oppure per codice aura."""
     parts = ['if card.type = "LUO" then "images/frame-luo.png"']
@@ -374,6 +388,7 @@ def build_kor35_style_text() -> str:
     is_pg = 'card.type = "PG"'
     not_luo = 'not (card.type = "LUO")'
     show_stats = f"styling.show_stats and ({is_pg})"
+    show_lore = 'if card.lore != "" then true else false'
 
     return f"""mse version: 2.0.0
 game: kor35
@@ -395,8 +410,8 @@ styling field:
 styling field:
 	type: boolean
 	name: show_lore
-	initial: false
-	description: Mostra testo lore sotto il box regole.
+	initial: true
+	description: Mostra testo lore sotto il box regole (se compilato).
 
 card style:
 	card_frame:
@@ -541,7 +556,7 @@ card style:
 		left: 30
 		top: 334
 		width: 315
-		height: 110
+		height: 84
 		z index: 50
 		alignment: top left
 		render style: symbol
@@ -552,18 +567,30 @@ card style:
 			symbol font: KOR35 Aure
 
 card style:
+	lore_divider:
+		left: 30
+		top: 420
+		width: 315
+		height: 2
+		z index: 51
+		visible: {{{show_lore}}}
+		render style: image
+		image: images/lore-divider.png
+
+card style:
 	lore:
 		left: 30
-		top: 438
+		top: 426
 		width: 315
-		height: 18
-		z index: 45
-		visible: {{styling.show_lore}}
+		height: 36
+		z index: 52
+		visible: {{{show_lore}}}
 		alignment: top left
 		font:
 			name: Georgia
 			size: 10
 			color: rgb(148,163,184)
+			style: italic
 
 card style:
 	stat_badge_attack:
@@ -739,4 +766,5 @@ def build_kor35_mse_style_zip() -> bytes:
         zf.writestr("images/badge-attack.png", badge_atk)
         zf.writestr("images/badge-health.png", badge_hp)
         zf.writestr("images/badge-initiative.png", badge_ini)
+        zf.writestr("images/lore-divider.png", kor35_lore_divider_png())
     return buf.getvalue()

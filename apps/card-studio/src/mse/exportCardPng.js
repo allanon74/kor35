@@ -34,13 +34,18 @@ function parseAlignment(alignment) {
   return parseFlexAlignment(alignment);
 }
 
+function canvasFont(layer, size) {
+  const style = layer.font?.style === "italic" ? "italic " : "";
+  return `${style}${layer.font?.weight || "normal"} ${size}px ${layer.font?.family || "sans-serif"}`;
+}
+
 function measureSymbolGlyph(ctx, glyph, layer, scale) {
   if (glyph.type === "image") {
     const size = (glyph.size || 14) * scale;
     return { glyph, size, w: size, h: size };
   }
   const fs = (layer.font?.size || 14) * scale;
-  ctx.font = `${layer.font?.weight || "normal"} ${fs}px ${layer.font?.family || "sans-serif"}`;
+  ctx.font = canvasFont(layer, fs);
   const w = ctx.measureText(glyph.value || "").width;
   return { glyph, size: fs, w, h: fs * 1.25 };
 }
@@ -93,7 +98,7 @@ function drawSymbolGlyphs(ctx, layer, x, y, lw, lh, scale, imgMap) {
           const img = imgMap.get(item.glyph.src);
           if (img) ctx.drawImage(img, cursorX, midY - item.size / 2, item.size, item.size);
         } else if (item.glyph.value) {
-          ctx.font = `${layer.font?.weight || "normal"} ${item.size}px ${layer.font?.family || "sans-serif"}`;
+          ctx.font = canvasFont(layer, item.size);
           ctx.fillStyle = parseColor(layer.font?.color, "#000000");
           ctx.textBaseline = "middle";
           ctx.fillText(item.glyph.value, cursorX, midY);
@@ -123,7 +128,7 @@ function drawSymbolGlyphs(ctx, layer, x, y, lw, lh, scale, imgMap) {
       if (img) ctx.drawImage(img, cursorX, midY - item.size / 2, item.size, item.size);
       cursorX += item.size + gap;
     } else if (item.glyph.value) {
-      ctx.font = `${layer.font?.weight || "normal"} ${item.size}px ${layer.font?.family || "sans-serif"}`;
+      ctx.font = canvasFont(layer, item.size);
       ctx.fillStyle = parseColor(layer.font?.color, "#000000");
       ctx.textBaseline = "middle";
       ctx.fillText(item.glyph.value, cursorX, midY);
@@ -338,7 +343,7 @@ export async function renderCardToCanvas(render, { dpi = 300 } = {}) {
     if (layer.type === "text" && layer.text) {
       withAngle(() => {
         const fs = (layer.font?.size || 14) * scale;
-        ctx.font = `${layer.font?.weight || "normal"} ${fs}px ${layer.font?.family || "sans-serif"}`;
+        ctx.font = canvasFont(layer, fs);
         ctx.fillStyle = parseColor(layer.font?.color, "#000000");
         const lines = wrapTextLines(ctx, layer.text, lw);
         const lineH = fs * 1.25;

@@ -96,24 +96,21 @@ export default function MseCardsTab({
     packages,
   });
 
-  const handleExportPng = async () => {
+  const handleExportPng = async (targetDpi = 300) => {
     if (!hasMsePreview) {
       onStatusMessage?.("Importa uno stylesheet con layout MSE prima di esportare il PNG.");
       return;
     }
     setExporting(true);
     try {
-      const dpi =
-        Number(cardRender?.dpi) ||
-        Number(activeTemplate?.layout_spec?.dpi) ||
-        Number(activeTemplate?.layout_spec?.mse_v1?.card_size?.dpi) ||
-        300;
+      const dpi = Number(targetDpi) || 300;
       const safeName = String(cardForm.codice || cardForm.nome || "carta")
         .replace(/[^\w.-]+/g, "_")
         .replace(/^_+|_+$/g, "");
+      const suffix = dpi >= 600 ? "-600dpi" : dpi === 300 ? "" : `-${dpi}dpi`;
       const result = await exportCardPngFromRender(cardRender, {
         dpi,
-        fileName: `${safeName || "carta"}.png`,
+        fileName: `${safeName || "carta"}${suffix}.png`,
       });
       onStatusMessage?.(
         `PNG esportato a ${result.dpi} dpi (${result.width}×${result.height}px).`
@@ -295,15 +292,26 @@ export default function MseCardsTab({
       <aside className="mse-pane mse-pane-preview">
         <div className="mse-pane-title-row">
           <h2 className="mse-pane-title">Card preview</h2>
-          <button
-            type="button"
-            className="mse-btn-small"
-            onClick={handleExportPng}
-            disabled={exporting || !hasMsePreview}
-            title="Esporta PNG stampabile (300 dpi)"
-          >
-            {exporting ? "…" : "PNG 300dpi"}
-          </button>
+          <div className="mse-export-buttons">
+            <button
+              type="button"
+              className="mse-btn-small"
+              onClick={() => handleExportPng(300)}
+              disabled={exporting || !hasMsePreview}
+              title="Esporta PNG stampabile (300 dpi, 375×523 px)"
+            >
+              {exporting ? "…" : "PNG 300dpi"}
+            </button>
+            <button
+              type="button"
+              className="mse-btn-small"
+              onClick={() => handleExportPng(600)}
+              disabled={exporting || !hasMsePreview}
+              title="Esporta PNG alta risoluzione (600 dpi, 750×1046 px)"
+            >
+              {exporting ? "…" : "PNG 600dpi"}
+            </button>
+          </div>
         </div>
         <div
           className="mse-preview-frame"

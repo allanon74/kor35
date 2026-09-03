@@ -105,6 +105,18 @@ export function resolveSelectedSymbolFontPackage(packages, gameCardFields, cardF
 }
 
 const TOKEN_RE = /\{[^}]+\}/g;
+const TOKEN_TEST_RE = /\{[^}]+\}/;
+
+/** Espande `{12}` in `{1}{2}` per costi multi-cifra. */
+function expandSymbolToken(token) {
+  const inner = String(token || "")
+    .trim()
+    .replace(/^\{|\}$/g, "");
+  if (/^\d{2,}$/.test(inner)) {
+    return inner.split("").map((d) => `{${d}}`);
+  }
+  return [token];
+}
 
 export function tokenizeSymbolText(text) {
   const s = String(text || "");
@@ -113,7 +125,9 @@ export function tokenizeSymbolText(text) {
   let last = 0;
   for (const m of s.matchAll(TOKEN_RE)) {
     if (m.index > last) parts.push({ kind: "text", value: s.slice(last, m.index) });
-    parts.push({ kind: "symbol", value: m[0] });
+    for (const tok of expandSymbolToken(m[0])) {
+      parts.push({ kind: "symbol", value: tok });
+    }
     last = m.index + m[0].length;
   }
   if (last < s.length) parts.push({ kind: "text", value: s.slice(last) });
@@ -162,14 +176,18 @@ export function symbolImageUrl(symbolFontPkg, code) {
 export function normalizeSymbolFieldText(text, alwaysSymbol = false) {
   const s = String(text || "").trim();
   if (!s) return s;
-  if (textContainsSymbolTokens(s)) return s;
+  if (textContainsSymbolTokens(s)) {
+    return tokenizeSymbolText(s)
+      .map((p) => p.value)
+      .join("");
+  }
   if (alwaysSymbol && /^[A-Za-z]{2,4}$/.test(s)) return `{${s.toUpperCase()}}`;
-  if (alwaysSymbol && /^\d+$/.test(s)) return `{${s}}`;
+  if (alwaysSymbol && /^\d+$/.test(s)) return [...s].map((d) => `{${d}}`).join("");
   return s;
 }
 
 export function textContainsSymbolTokens(text) {
-  return TOKEN_RE.test(String(text || ""));
+  return TOKEN_TEST_RE.test(String(text || ""));
 }
 
 /** Dimensione glifo simbolo in px (anteprima / export PNG). */

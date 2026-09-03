@@ -580,6 +580,10 @@ body {
   box-sizing: border-box;
 }
 
+.mse-layer-lore {
+  font-style: italic;
+}
+
 .mse-layer-symbols img {
   object-fit: contain;
   vertical-align: middle;
@@ -828,6 +832,12 @@ button.btn-danger {
   border: none;
   padding: 0;
   background: none;
+}
+
+.mse-export-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
 }
 
 .mse-sub-title {

@@ -123,6 +123,7 @@ function resolveFont(styleDef) {
   const nameRaw = evalMseProp(font.name, {}, null);
   const familyRaw = evalMseProp(font.family, {}, null);
   const weightRaw = evalMseProp(font.weight, {}, "normal");
+  const styleRaw = evalMseProp(font.style, {}, "normal");
   const familyName =
     (typeof nameRaw === "string" && nameRaw) ||
     (typeof familyRaw === "string" && familyRaw) ||
@@ -137,11 +138,14 @@ function resolveFont(styleDef) {
   }
   let weight = typeof weightRaw === "string" || typeof weightRaw === "number" ? weightRaw : "normal";
   if (/bold/i.test(familyName) && weight === "normal") weight = "700";
+  const styleStr = String(styleRaw || "normal").toLowerCase();
+  const fontStyle = styleStr.includes("italic") ? "italic" : "normal";
   return {
     family: mapFontFamily(familyName || "inherit"),
     size: Number(sizeRaw) || 14,
     color,
     weight,
+    style: fontStyle,
   };
 }
 
@@ -184,6 +188,7 @@ function fieldValueForName(fieldName, card, cardFields) {
     cost: ["cost", "mana_cost", "casting_cost", "costo_gioco"],
     type: ["type", "card_type", "tipo"],
     rarity: ["rarity", "rarita"],
+    lore: ["lore", "testo_lore", "flavor", "flavor_text"],
   };
   const keys = aliases[nk] || [nk, fieldName];
   for (const key of keys) {

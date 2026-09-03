@@ -346,7 +346,7 @@ class Kor35AuraSymbolFontTests(SimpleTestCase):
 
         text = build_kor35_style_text()
         self.assertIn("Sette Elegie", text)
-        self.assertIn("version: 3.3", text)
+        self.assertIn("version: 3.4", text)
         self.assertIn("frame-mar.png", text)
         spec = parse_mse_style_spec(text)
         self.assertEqual(spec.get("game"), "kor35")

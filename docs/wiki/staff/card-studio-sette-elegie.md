@@ -26,7 +26,7 @@ make bootstrap-kor35-mse-template ENV=dev-office CAMPAGNA_SLUG=kor35
 
 Cosa fa:
 
-- crea/aggiorna il **gioco** `kor35` e il template `kor35-standard` (v3.3);
+- crea/aggiorna il **gioco** `kor35` e il template `kor35-standard` (v3.4);
 - collega le espansioni al gioco;
 - con `--seed-demo` (già nel Make) crea/aggiorna **29 carte** demo
   (12 PG, 6 OGG, 8 EVT, 3 LUO; 7 aure).
@@ -71,7 +71,8 @@ Criterio di ok preview:
 | `energy` / energia | `MAR` `TEC` `INN` `MAG` `SAC` `PSI` `ARC` (non usata su LUO) |
 | `rarity` / rarità | `COM` `NC` `RAR` `EPI` `LEG` `UNI` |
 | `name` / nome | titolo sulla title bar |
-| `rules` / regole | testo box regole |
+| `rules` / regole | testo box regole (simboli `{1}` `{2}` …) |
+| `lore` / testo_lore | flavor sotto le regole, *corsivo*, separato da linea |
 | `attack` / `health` / `initiative` | solo PG (FOR / ROB / INI) |
 | `image` | path media o lascia vuoto → placeholder per tipo |
 
@@ -80,12 +81,12 @@ Criterio di ok preview:
 
 ---
 
-## 4. Export PNG 300 dpi
+## 4. Export PNG 300 / 600 dpi
 
-1. Con preview MSE attiva, clicca **PNG 300dpi**.
-2. Il file ha pixel = layout carta × (`targetDpi` / `card dpi`); a 300→300 resta **375×523**.
-3. Il PNG include metadato **pHYs** a 300 dpi (per software di stampa).
-4. Messaggio di stato tipico: `PNG esportato a 300 dpi (375×523px)`.
+1. Con preview MSE attiva, clicca **PNG 300dpi** (stampa standard) oppure **PNG 600dpi** (alta risoluzione).
+2. A 300 dpi il file resta **375×523** px; a 600 dpi **750×1046** px (stessa dimensione fisica carta).
+3. Il PNG include metadato **pHYs** al dpi scelto (per software di stampa).
+4. Messaggio di stato tipico: `PNG esportato a 600 dpi (750×1046px)`.
 
 Non usare URL assoluti per le immagini in produzione: path relativi sotto `/media/…`
 (Nginx instrada master o edge).
@@ -121,6 +122,8 @@ Aure: Marziale, Tecnologica, Innata, Magica, Sacra, Psionica, Arcana.
 | Preview vuota / stile Magic | riesegui `bootstrap-kor35-mse-template` sulla campagna |
 | 0 carte / 0 template | stesso bootstrap + seed; verifica `CAMPAGNA_SLUG` |
 | Export PNG fallisce | serve stylesheet MSE importato sul template attivo |
-| Art sempre neutra / simboli `{2}` non renderizzati | template non aggiornato (serve v3.3+): rifai bootstrap |
-| Pallino nero al posto dell’aura / cornice grigia | bootstrap (font simboli v1.1 + style v3.3) + rebuild frontend |
+| Art sempre neutra / simboli `{2}` non renderizzati | template non aggiornato (serve v3.4+): rifai bootstrap |
+| Pallino nero al posto dell’aura / cornice grigia | bootstrap (font simboli v1.2 + style v3.4) + rebuild frontend |
+| Costo `12` mostra un solo simbolo | aggiorna Card Studio: `{12}` → `{1}{2}` automatico |
+| Lore non visibile in preview | compila `testo_lore` / campo lore; bootstrap v3.4 |
 | Chip simboli mancanti su costo/regole | rebuild Card Studio; chip `{MAR}`…`{ARC}` e `{0}`…`{9}` sotto i campi testo |

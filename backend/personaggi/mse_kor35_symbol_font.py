@@ -23,6 +23,7 @@ from personaggi.mse_kor35_style import rgba_png
 
 KOR35_SYMBOL_FONT_NAME = "KOR35 Aure"
 KOR35_SYMBOL_FONT_SLUG = "kor35-aure"
+KOR35_SYMBOL_GLYPH_PX = 256
 
 # Colori allineati ad AMZ/ATE/AIN/AMA/ASA/APS/AAR (tests_carte_collezionabili).
 KOR35_AURA_GLYPHS: dict[str, dict] = {
@@ -54,36 +55,43 @@ _DIGIT_BITMAP_5x7: dict[str, list[str]] = {
 }
 
 
+def _smoothstep(edge0: float, edge1: float, x: float) -> float:
+    if edge0 == edge1:
+        return 1.0 if x >= edge1 else 0.0
+    t = max(0.0, min(1.0, (x - edge0) / (edge1 - edge0)))
+    return t * t * (3.0 - 2.0 * t)
+
+
 def _aura_glyph_png(
     fill: tuple[int, int, int],
     ring: tuple[int, int, int],
     *,
-    size: int = 96,
+    size: int = KOR35_SYMBOL_GLYPH_PX,
 ) -> bytes:
     """Gemma circolare con bordo (simbolo aura per anteprima/PNG export)."""
     cx = cy = (size - 1) / 2.0
     outer = size * 0.46
     inner = size * 0.34
-    ring_w = max(2.0, size * 0.06)
+    ring_w = max(3.0, size * 0.08)
 
     def pixel(x: int, y: int) -> tuple[int, int, int, int]:
         dx = x - cx
         dy = y - cy
         dist = math.hypot(dx, dy)
-        if dist > outer + 1.5:
+        if dist > outer + 2.5:
+            return 0, 0, 0, 0
+        outer_a = _smoothstep(outer + 2.0, outer - ring_w, dist)
+        if outer_a <= 0.0:
             return 0, 0, 0, 0
         if dist > outer - ring_w:
-            t = max(0.0, min(1.0, (outer - dist) / ring_w))
-            a = int(255 * t)
+            a = int(255 * min(1.0, outer_a))
             return ring[0], ring[1], ring[2], a
         if dist <= inner:
-            # highlight toward top-left
             hl = max(0.0, 1.0 - (dx + dy * 0.6) / (inner * 1.4))
             r = min(255, int(fill[0] + hl * 40))
             g = min(255, int(fill[1] + hl * 40))
             b = min(255, int(fill[2] + hl * 40))
             return r, g, b, 255
-        # mid ring between inner gem and outer border
         t = (dist - inner) / max(outer - inner, 1)
         r = int(fill[0] * (1 - t * 0.25) + ring[0] * t * 0.25)
         g = int(fill[1] * (1 - t * 0.25) + ring[1] * t * 0.25)
@@ -93,8 +101,35 @@ def _aura_glyph_png(
     return rgba_png(size, size, pixel)
 
 
-def _cost_digit_png(digit: str, *, size: int = 96) -> bytes:
-    """Simbolo costo generico (cerchio dorato + cifra)."""
+def _digit_coverage(bitmap: list[str], x: float, y: float, scale: float, bx0: float, by0: float) -> float:
+    lx = x - bx0
+    ly = y - by0
+    if lx < 0 or ly < 0:
+        return 0.0
+    col = int(lx / scale)
+    row = int(ly / scale)
+    fx = (lx / scale) - col
+    fy = (ly / scale) - row
+    bh = len(bitmap)
+    bw = max(len(row) for row in bitmap)
+
+    def cell_on(c: int, r: int) -> float:
+        if r < 0 or r >= bh or c < 0 or c >= bw:
+            return 0.0
+        row_s = bitmap[r]
+        if c >= len(row_s):
+            return 0.0
+        return 1.0 if row_s[c] == "1" else 0.0
+
+    v00 = cell_on(col, row)
+    v10 = cell_on(col + 1, row)
+    v01 = cell_on(col, row + 1)
+    v11 = cell_on(col + 1, row + 1)
+    return (1 - fx) * (1 - fy) * v00 + fx * (1 - fy) * v10 + (1 - fx) * fy * v01 + fx * fy * v11
+
+
+def _cost_digit_png(digit: str, *, size: int = KOR35_SYMBOL_GLYPH_PX) -> bytes:
+    """Simbolo costo generico (cerchio dorato + cifra antialiased)."""
     meta = KOR35_COST_GLYPH_META
     fill = meta["rgb"]
     ring = meta["ring"]
@@ -102,7 +137,7 @@ def _cost_digit_png(digit: str, *, size: int = 96) -> bytes:
     cx = cy = (size - 1) / 2.0
     outer = size * 0.46
     inner = size * 0.34
-    ring_w = max(2.0, size * 0.06)
+    ring_w = max(3.0, size * 0.08)
     bitmap = _DIGIT_BITMAP_5x7.get(str(digit), _DIGIT_BITMAP_5x7["0"])
     bh = len(bitmap)
     bw = max(len(row) for row in bitmap)
@@ -110,26 +145,25 @@ def _cost_digit_png(digit: str, *, size: int = 96) -> bytes:
     bx0 = cx - (bw * scale) / 2
     by0 = cy - (bh * scale) / 2 + scale * 0.15
 
-    def in_digit(x: int, y: int) -> bool:
-        lx = x - bx0
-        ly = y - by0
-        col = int(lx / scale)
-        row = int(ly / scale)
-        if row < 0 or row >= bh or col < 0 or col >= len(bitmap[row]):
-            return False
-        return bitmap[row][col] == "1"
-
     def pixel(x: int, y: int) -> tuple[int, int, int, int]:
-        if in_digit(x, y):
-            return ink[0], ink[1], ink[2], 255
+        digit_a = _digit_coverage(bitmap, x + 0.25, y + 0.25, scale, bx0, by0)
+        digit_a = max(
+            digit_a,
+            _digit_coverage(bitmap, x + 0.75, y + 0.25, scale, bx0, by0),
+            _digit_coverage(bitmap, x + 0.25, y + 0.75, scale, bx0, by0),
+            _digit_coverage(bitmap, x + 0.75, y + 0.75, scale, bx0, by0),
+        )
+        if digit_a > 0.02:
+            a = int(255 * min(1.0, digit_a))
+            return ink[0], ink[1], ink[2], a
         dx = x - cx
         dy = y - cy
         dist = math.hypot(dx, dy)
-        if dist > outer + 1.5:
+        if dist > outer + 2.5:
             return 0, 0, 0, 0
         if dist > outer - ring_w:
-            t = max(0.0, min(1.0, (outer - dist) / ring_w))
-            return ring[0], ring[1], ring[2], int(255 * t)
+            t = _smoothstep(outer + 2.0, outer - ring_w, dist)
+            return ring[0], ring[1], ring[2], int(255 * min(1.0, t))
         if dist <= inner:
             hl = max(0.0, 1.0 - (dx + dy * 0.6) / (inner * 1.4))
             r = min(255, int(fill[0] + hl * 35))
@@ -151,7 +185,7 @@ def build_kor35_symbol_font_text() -> str:
         "game: kor35",
         "short name: KOR35 Aure",
         "full name: KOR35 Sette Aure Symbol Font",
-        "version: 1.1",
+        "version: 1.2",
         "creator: KOR35 Card Studio",
         "",
     ]
