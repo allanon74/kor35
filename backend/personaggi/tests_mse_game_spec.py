@@ -307,8 +307,7 @@ class Kor35AuraSymbolFontTests(SimpleTestCase):
         )
         from personaggi.mse_set_import import parse_mse_symbol_font
 
-        text = build_kor35_symbol_font_text()
-        parsed = parse_mse_symbol_font(text)
+        self.assertIn("version: 1.3", build_kor35_symbol_font_text())
         self.assertEqual(len(parsed["symbols"]), len(KOR35_AURA_GLYPHS) + len(KOR35_COST_DIGITS))
         self.assertIn("{MAR}", parsed["symbols"])
         self.assertIn("{MAG}", parsed["symbols"])
