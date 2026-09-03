@@ -629,6 +629,9 @@ class CartaCatalogoAutoCodiceApiTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         carta.refresh_from_db()
         self.assertTrue(bool(carta.immagine))
+
+
+class KeywordCartaParametriTests(TestCase):
     def test_mutazione_parametrica(self):
         from personaggi.carte_keyword_utils import (
             match_keyword_parametrizzata,
@@ -672,31 +675,31 @@ class CarteEsempioSeedTests(TestCase):
 
         self.assertEqual(
             CartaCollezionabile.objects.filter(campagna=self.campagna).count(),
-            20,
+            29,
         )
         self.assertEqual(
             CartaCollezionabile.objects.filter(
                 campagna=self.campagna, tipo=CARTA_TIPO_PERSONAGGIO
             ).count(),
-            10,
+            12,
         )
         self.assertEqual(
             CartaCollezionabile.objects.filter(
                 campagna=self.campagna, tipo=CARTA_TIPO_OGGETTO
             ).count(),
-            2,
+            6,
         )
         self.assertEqual(
             CartaCollezionabile.objects.filter(
                 campagna=self.campagna, tipo=CARTA_TIPO_EVENTO
             ).count(),
-            6,
+            8,
         )
         self.assertEqual(
             CartaCollezionabile.objects.filter(
                 campagna=self.campagna, tipo=CARTA_TIPO_LUOGO
             ).count(),
-            2,
+            3,
         )
         esp = EspansioneCarte.objects.get(campagna=self.campagna, slug="sette-elegie-demo")
         self.assertEqual(esp.carte.count(), 29)

@@ -279,7 +279,10 @@ export default function MseCardsTab({
           setValue={setValue}
           packages={packages}
           onPickFile={onPickFile}
-          onStatusChange={setStatusText}
+          onStatusChange={(t) => {
+            setStatusText(t);
+            onStatusMessage?.(t);
+          }}
         />
         <MseEditorActions
           saveLabel={saveCardLabel}
