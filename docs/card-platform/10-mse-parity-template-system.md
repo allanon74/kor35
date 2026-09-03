@@ -15,10 +15,11 @@ Piano operativo per portare Card Studio a un livello **omologo** a Magic Set Edi
 | Styling fields | `show_stats` / `show_lore` | UI styling tab base |
 | Include / package refs | Risoluzione include game stub | Absolute includes / multi-package incompleti |
 | Keyword expand | Keyword DB + effect script | Non equivalente a MSE `expand` |
-| Export stampa | PNG carta (parziale) | PDF foglio / bleed / cut marks |
+| Export stampa | PNG 300 dpi (pHYs) da Card Studio | PDF foglio / bleed / cut marks |
 
-**Template Sette Elegie v3** (`kor35-standard`): cornici per aura, visibilità per tipo
-(PG/OGG/LUO/EVT), label FOR/ROB/INI, symbol font aure. Seed demo: **29 carte**.
+**Template Sette Elegie v3.1** (`kor35-standard`): cornici per aura, visibilità per tipo
+(PG/OGG/LUO/EVT), art placeholder per tipo, label FOR/ROB/INI, symbol font aure.
+Seed demo: **29 carte**.
 
 ```bash
 make bootstrap-kor35-mse-template ENV=dev-office CAMPAGNA_SLUG=kor35
@@ -49,16 +50,18 @@ e set demo + canon.
 
 **Scopo:** playtest e stampa leggibili senza dipendere da Magic styles.
 
-- [x] Template v3 per-aura + visibilità tipo
+- [x] Template v3.1 per-aura + visibilità tipo
 - [x] Symbol font 7 aure
 - [x] Seed demo 29 carte (7 aure × tipi)
 - [x] Bootstrap crea gioco/template/set se mancanti
-- [ ] Asset art placeholder per tipo (opzionale)
-- [ ] Export PNG 300 dpi stabile da Card Studio
-- [ ] Wiki staff: «Come creare una carta Sette Elegie»
+- [x] Asset art placeholder per tipo (PG/OGG/LUO/EVT)
+- [x] Export PNG 300 dpi stabile da Card Studio (scale da `card dpi` + pHYs)
+- [x] Wiki staff: «Come creare una carta Sette Elegie»
+  (`docs/wiki/staff/card-studio-sette-elegie.md` → slug `staff-card-studio-sette-elegie`)
 
 **Criterio di fatto:** da DB vuoto, un comando bootstrap+seed apre Card Studio con
-carte preview corrette (cornice MAR ≠ TEC, LUO senza aura/stats).
+carte preview corrette (cornice MAR ≠ TEC, LUO senza aura/stats); export PNG 300 dpi
+scaricabile dalla preview.
 
 ### Fase B — Template System (authoring)
 

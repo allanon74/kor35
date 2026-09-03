@@ -372,7 +372,7 @@ export function resolveMseLayers({
   symbolFontPackage = null,
   packages = [],
 }) {
-  if (!mseV1) return { width: 375, height: 523, background: "#111827", layers: [] };
+  if (!mseV1) return { width: 375, height: 523, dpi: 300, background: "#111827", layers: [] };
 
   const ctxBase = { card, styling, set, card_style: {} };
   const cardStyles = { ...(mseV1.card_styles || {}), ...(mseV1.extra_card_styles || {}) };
@@ -414,6 +414,7 @@ export function resolveMseLayers({
   return {
     width: mseV1.card_size?.width || 375,
     height: mseV1.card_size?.height || 523,
+    dpi: Number(mseV1.card_size?.dpi) || 300,
     background: bg,
     layers: layers.sort((a, b) => a.z - b.z || a.box.top - b.box.top),
   };

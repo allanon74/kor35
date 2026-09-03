@@ -58,7 +58,7 @@ help:
 	@echo "  make timer-dispatch ENV=dev-home # one-shot webpush timer innesco scaduti"
 	@echo "  make timer-dispatch-restart ENV=dev-home # restart worker timer_dispatch"
 	@echo "  make seed-componenti-nave ENV=dev-home  # placeholder catalogo 10 componenti (once per nodo)"
-	@echo "  make seed-carte-esempio ENV=dev-home    # 20 carte demo Sette Elegie + keyword MVP + combo reliquiario"
+	@echo "  make seed-carte-esempio ENV=dev-home    # 29 carte demo Sette Elegie + keyword MVP + combo reliquiario"
 	@echo "  make import-mse-dataset ENV=dev-office CAMPAGNA_SLUG=<slug> # import massivo ~/Scaricati/mse"
 	@echo "  make import-mse-dataset-dry-run ENV=dev-office CAMPAGNA_SLUG=<slug> # anteprima senza scrivere"
 	@echo "  make bootstrap-kor35-mse-template ENV=dev-home CAMPAGNA_SLUG=kor35 # template MSE Sette Elegie + seed demo"
@@ -115,7 +115,7 @@ help:
 	@echo "  (timer systemd: config/systemd/kor35-scommesse-programmazione.timer)"
 	@echo ""
 	@echo "Catalogo carte demo:"
-	@echo "  make seed-carte-esempio ENV=dev-home              # espansione + 20 carte + keyword"
+	@echo "  make seed-carte-esempio ENV=dev-home              # espansione + 29 carte + keyword"
 	@echo "  make seed-carte-esempio ENV=dev-home CARTE_ESEMPIO_FORCE=1  # aggiorna se già presenti"
 
 setup:

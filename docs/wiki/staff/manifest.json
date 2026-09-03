@@ -41,6 +41,12 @@
       "titolo": "Componenti nave — stiva e riparazione",
       "source": "componenti-nave-riparazione.md",
       "ordine": 30
+    },
+    {
+      "slug": "staff-card-studio-sette-elegie",
+      "titolo": "Card Studio — carta Sette Elegie",
+      "source": "card-studio-sette-elegie.md",
+      "ordine": 35
     }
   ]
 }

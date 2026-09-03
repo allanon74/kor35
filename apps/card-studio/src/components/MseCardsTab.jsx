@@ -98,19 +98,28 @@ export default function MseCardsTab({
 
   const handleExportPng = async () => {
     if (!hasMsePreview) {
-      onStatusMessage?.("Import a stylesheet with MSE layout before exporting PNG.");
+      onStatusMessage?.("Importa uno stylesheet con layout MSE prima di esportare il PNG.");
       return;
     }
     setExporting(true);
     try {
-      const dpi = activeTemplate?.layout_spec?.dpi || activeTemplate?.layout_spec?.mse_v1?.card_size?.dpi || 300;
-      await exportCardPngFromRender(cardRender, {
+      const dpi =
+        Number(cardRender?.dpi) ||
+        Number(activeTemplate?.layout_spec?.dpi) ||
+        Number(activeTemplate?.layout_spec?.mse_v1?.card_size?.dpi) ||
+        300;
+      const safeName = String(cardForm.codice || cardForm.nome || "carta")
+        .replace(/[^\w.-]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+      const result = await exportCardPngFromRender(cardRender, {
         dpi,
-        fileName: `${(cardForm.codice || cardForm.nome || "card").replace(/[^\w.-]+/g, "_")}.png`,
+        fileName: `${safeName || "carta"}.png`,
       });
-      onStatusMessage?.("PNG exported.");
+      onStatusMessage?.(
+        `PNG esportato a ${result.dpi} dpi (${result.width}×${result.height}px).`
+      );
     } catch (err) {
-      onStatusMessage?.(err.message || "Export PNG failed.");
+      onStatusMessage?.(err.message || "Export PNG fallito.");
     } finally {
       setExporting(false);
     }
@@ -286,8 +295,14 @@ export default function MseCardsTab({
       <aside className="mse-pane mse-pane-preview">
         <div className="mse-pane-title-row">
           <h2 className="mse-pane-title">Card preview</h2>
-          <button type="button" className="mse-btn-small" onClick={handleExportPng} disabled={exporting || !hasMsePreview}>
-            {exporting ? "…" : "PNG"}
+          <button
+            type="button"
+            className="mse-btn-small"
+            onClick={handleExportPng}
+            disabled={exporting || !hasMsePreview}
+            title="Esporta PNG stampabile (300 dpi)"
+          >
+            {exporting ? "…" : "PNG 300dpi"}
           </button>
         </div>
         <div

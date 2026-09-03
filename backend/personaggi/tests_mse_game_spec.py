@@ -360,6 +360,16 @@ class Kor35AuraSymbolFontTests(SimpleTestCase):
             self.assertIn("images/frame-mar.png", names)
             self.assertIn("images/frame-luo.png", names)
             self.assertIn("images/badge-attack.png", names)
+            self.assertIn("images/art-pg.png", names)
+            self.assertIn("images/art-ogg.png", names)
+            self.assertIn("images/art-luo.png", names)
+            self.assertIn("images/art-evt.png", names)
+            self.assertTrue(zf.read("images/art-pg.png").startswith(b"\x89PNG"))
+
+        art = spec["card_styles"]["art"].get("image") or {}
+        art_expr = art.get("expr") if isinstance(art, dict) else str(art)
+        self.assertIn("art-pg.png", art_expr)
+        self.assertIn("art-evt.png", art_expr)
 
 
 class Kor35MseStyleGeneratorTests(SimpleTestCase):

@@ -26,7 +26,7 @@ CARTA_ENERGIA_ARCANA = "ARC"
 KOR35_TEMPLATE_SLUG = "kor35-standard"
 KOR35_TEMPLATE_NAME = "Sette Elegie Standard"
 KOR35_STYLE_GAME = "kor35"
-KOR35_STYLE_VERSION = "3.0"
+KOR35_STYLE_VERSION = "3.1"
 
 KOR35_FIELD_MAPPING = {
     "code": "codice",
@@ -207,22 +207,71 @@ def kor35_frame_png(
     return rgba_png(width, height, pixel)
 
 
-def kor35_art_placeholder_png(width: int = 331, height: int = 210) -> bytes:
-    """Placeholder art: gradiente freddo + croce guida."""
+def kor35_art_placeholder_png(
+    width: int = 331,
+    height: int = 210,
+    *,
+    card_type: str = "",
+) -> bytes:
+    """
+    Placeholder art per tipo carta:
+    PG (blu), OGG (ambra), LUO (verde), EVT (rosa), default neutro.
+    """
+    palettes = {
+        "PG": {"top": (36, 64, 120), "bot": (18, 32, 64), "accent": (120, 170, 240)},
+        "OGG": {"top": (90, 70, 24), "bot": (48, 36, 12), "accent": (240, 200, 90)},
+        "LUO": {"top": (28, 84, 56), "bot": (14, 42, 28), "accent": (120, 220, 160)},
+        "EVT": {"top": (96, 40, 78), "bot": (48, 18, 40), "accent": (240, 130, 190)},
+        "": {"top": (42, 56, 84), "bot": (28, 36, 52), "accent": (120, 140, 180)},
+    }
+    pal = palettes.get(str(card_type or "").upper(), palettes[""])
     cx, cy = width / 2, height / 2
+
+    def in_ellipse(x: int, y: int, ex: float, ey: float, rx: float, ry: float) -> bool:
+        return ((x - ex) / max(rx, 1)) ** 2 + ((y - ey) / max(ry, 1)) ** 2 <= 1.0
 
     def pixel(x: int, y: int) -> tuple[int, int, int, int]:
         if x < 1 or y < 1 or x >= width - 1 or y >= height - 1:
-            return 90, 110, 150, 255
+            return pal["accent"][0], pal["accent"][1], pal["accent"][2], 255
         t = y / max(height - 1, 1)
-        r = _lerp(42, 70, t)
-        g = _lerp(56, 88, t)
-        b = _lerp(84, 120, t)
-        if abs(x - cx) < 1.2 or abs(y - cy) < 1.2:
-            return 120, 140, 180, 200
+        r = _lerp(pal["top"][0], pal["bot"][0], t)
+        g = _lerp(pal["top"][1], pal["bot"][1], t)
+        b = _lerp(pal["top"][2], pal["bot"][2], t)
+        tip = str(card_type or "").upper()
+        mark = False
+        if tip == "PG":
+            # testa + busto stilizzati
+            mark = in_ellipse(x, y, cx, cy - 28, 22, 22) or in_ellipse(x, y, cx, cy + 28, 38, 48)
+        elif tip == "OGG":
+            # diamante
+            mark = abs(x - cx) / 40 + abs(y - cy) / 55 <= 1.0
+        elif tip == "LUO":
+            # colline
+            h1 = cy + 20 + 18 * ((x / max(width, 1)) ** 0.5)
+            h2 = cy + 40 + 12 * abs((x - cx) / max(cx, 1))
+            mark = y > h1 or y > h2
+        elif tip == "EVT":
+            # stella a 4 punte
+            mark = abs(x - cx) * 2.2 + abs(y - cy) * 0.6 < 48 or abs(y - cy) * 2.2 + abs(x - cx) * 0.6 < 48
+        else:
+            mark = abs(x - cx) < 1.2 or abs(y - cy) < 1.2
+        if mark:
+            return pal["accent"][0], pal["accent"][1], pal["accent"][2], 220
         return r, g, b, 255
 
     return rgba_png(width, height, pixel)
+
+
+def _art_select_script() -> str:
+    """Placeholder diverso per tipo se manca card.image."""
+    return (
+        'if card.image then card.image else '
+        'if card.type = "PG" then "images/art-pg.png" else '
+        'if card.type = "OGG" then "images/art-ogg.png" else '
+        'if card.type = "LUO" then "images/art-luo.png" else '
+        'if card.type = "EVT" then "images/art-evt.png" else '
+        '"images/art-placeholder.png"'
+    )
 
 
 def kor35_plate_png(
@@ -319,6 +368,7 @@ def _rarity_label_script() -> str:
 def build_kor35_style_text() -> str:
     """File `style` MSE — layout Sette Elegie tipizzato."""
     frame_script = _frame_select_script()
+    art_script = _art_select_script()
     type_label = _type_label_script()
     rarity_label = _rarity_label_script()
     is_pg = 'card.type = "PG"'
@@ -396,7 +446,7 @@ card style:
 		height: 210
 		z index: 5
 		render style: image
-		image: {{if card.image then card.image else "images/art-placeholder.png"}}
+		image: {{{art_script}}}
 
 card style:
 	energy:
@@ -672,6 +722,11 @@ def build_kor35_mse_style_zip() -> bytes:
                 kor35_frame_png(palette_key=code),
             )
         zf.writestr("images/art-placeholder.png", art)
+        for tip in ("PG", "OGG", "LUO", "EVT"):
+            zf.writestr(
+                f"images/art-{tip.lower()}.png",
+                kor35_art_placeholder_png(card_type=tip),
+            )
         zf.writestr("images/title-plate.png", title_plate)
         zf.writestr("images/type-plate.png", type_plate)
         zf.writestr("images/rules-plate.png", rules_plate)
