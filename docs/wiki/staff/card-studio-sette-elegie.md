@@ -113,6 +113,16 @@ Aure: Marziale, Tecnologica, Innata, Magica, Sacra, Psionica, Arcana.
 - Media (art custom) con `make sync-media` / rsync — non nel JSON sync.
 - Pubblica la guida in Wiki: `make wiki-staff-sync ENV=dev-office WIKI_STAFF_FORCE=1`.
 
+### Deploy produzione (CI)
+
+Merge su `main` → workflow **Safe Release Deploy**:
+
+- **Card Studio** (`/cardeditor/`): build e rsync **ad ogni deploy** (prod + mirror Pi).
+- **Bootstrap template KOR35**: automatico solo se cambiano i file Python del template/simboli; oppure *Run workflow* con **force_kor35_bootstrap** (senza `--seed-demo`, a differenza del Make locale).
+- Secret opzionale GitHub: `KOR35_CAMPAGNA_SLUG` (default `kor35`).
+
+Runbook completo: `docs/card-platform/09-kor35-mse-template-prod-runbook.md`.
+
 ---
 
 ## Troubleshooting

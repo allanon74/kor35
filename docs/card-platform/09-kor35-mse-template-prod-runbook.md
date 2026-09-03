@@ -57,11 +57,41 @@ Template allineati: layout refresh=<N>, campi_schema=<0 se solo MTG>
 Bootstrap KOR35 MSE template completato.
 ```
 
-## Produzione (DigitalOcean) — quando decidi di allineare
+## Produzione (DigitalOcean) — deploy automatico CI
 
-### 1. Deploy codice
+Merge su `main` → workflow **Safe Release Deploy** (`.github/workflows/deploy.yml`):
 
-Merge su `main` → CI deploy su prod (migrate + collectstatic + build frontend).
+| Step CI | Quando | Effetto |
+|---------|--------|---------|
+| Build Card Studio | **Ogni deploy** | `apps/card-studio` → rsync in `react_build/cardeditor/` (prod + mirror). Necessario perché il rsync frontend usa `--delete` su `react_build/`. |
+| Bootstrap KOR35 MSE | Se cambiano `mse_kor35_style.py`, `mse_kor35_symbol_font.py`, `mse_kor35_game_spec.py` o `bootstrap_kor35_mse_template.py`; oppure `workflow_dispatch` con **force_kor35_bootstrap** | `bootstrap_kor35_mse_template --set-default --link-expansions` (**senza** `--seed-demo`, per non sovrascrivere il mazzo demo a ogni deploy). |
+| Secret opzionale | — | `KOR35_CAMPAGNA_SLUG` (default `kor35` se assente). |
+
+Dopo merge su `main` **non serve** più eseguire manualmente `make card-editor-build ENV=prod` né `make bootstrap-kor35-mse-template ENV=prod` quando la CI ha già rilevato le modifiche rilevanti.
+
+### Bootstrap manuale (recovery / prima installazione)
+
+Se serve forzare il bootstrap senza commit sui file template (es. prod mai allineato):
+
+1. GitHub → Actions → **Safe Release Deploy** → **Run workflow**
+2. Attiva **force_kor35_bootstrap**
+3. Opzionale: imposta secret repo `KOR35_CAMPAGNA_SLUG` se la campagna non è `kor35`
+
+Oppure da shell sul server:
+
+```bash
+ssh -o BatchMode=yes kor35-prod 'cd /srv/kor35 && \
+  make bootstrap-kor35-mse-template-dry-run ENV=prod CAMPAGNA_SLUG=kor35'
+```
+
+```bash
+ssh -o BatchMode=yes kor35-prod 'cd /srv/kor35 && \
+  make bootstrap-kor35-mse-template ENV=prod CAMPAGNA_SLUG=kor35'
+```
+
+(`make bootstrap-kor35-mse-template` include `--seed-demo`; la CI **no**.)
+
+### Verifica post-deploy CI
 
 Verifica che il comando esista nel container:
 
@@ -73,7 +103,13 @@ ssh -o BatchMode=yes kor35-prod 'cd /srv/kor35/config/docker && \
   python manage.py help bootstrap_kor35_mse_template'
 ```
 
-### 2. Dry-run su prod (obbligatorio)
+Card Studio servito:
+
+```bash
+curl -fsSI https://www.kor35.it/cardeditor/ | head -5
+```
+
+### Dry-run su prod (prima del primo bootstrap manuale)
 
 ```bash
 ssh -o BatchMode=yes kor35-prod 'cd /srv/kor35 && \
@@ -97,7 +133,7 @@ Controlla:
 - Numero refresh coerente con i template importati
 - Nessun errore Python
 
-### 3. Esecuzione reale (finestra breve, idempotente)
+### 3. Esecuzione reale manuale (finestra breve, idempotente)
 
 ```bash
 ssh -o BatchMode=yes kor35-prod 'cd /srv/kor35 && \
@@ -201,9 +237,9 @@ Non c’è migrazione DB distruttiva. In caso di problemi:
 ## Checklist rapida prod
 
 - [ ] Codice con `bootstrap_kor35_mse_template` deployato
-- [ ] `migrate` prod OK
-- [ ] Dry-run prod OK
-- [ ] Bootstrap reale prod OK
-- [ ] Shell: `kor35-standard` → 13 styles
+- [ ] `migrate` prod OK (CI)
+- [ ] Card Studio: `https://www.kor35.it/cardeditor/` risponde (CI build + rsync)
+- [ ] Bootstrap: automatico se modificati style/symbol font; altrimenti dry-run + manuale o `force_kor35_bootstrap`
+- [ ] Shell: `kor35-standard` → 13 styles (dopo bootstrap)
 - [ ] Card Studio smoke test
 - [ ] `sync-db` (+ `sync-media` se serve) su mirror/replica
