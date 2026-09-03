@@ -123,7 +123,8 @@ Aure: Marziale, Tecnologica, Innata, Magica, Sacra, Psionica, Arcana.
 | 0 carte / 0 template | stesso bootstrap + seed; verifica `CAMPAGNA_SLUG` |
 | Export PNG fallisce | serve stylesheet MSE importato sul template attivo |
 | Art sempre neutra / simboli `{2}` non renderizzati | template non aggiornato (serve v3.4+): rifai bootstrap |
-| Pallino nero al posto dell’aura / cornice grigia | bootstrap (font simboli v1.2 + style v3.4) + rebuild frontend |
+| Pallino nero al posto dell’aura / cornice grigia | bootstrap (font simboli v1.3 + style v3.4) + rebuild frontend |
+| Simboli troppo generici | v1.3: medaglioni fantasy per aura (spada, ingranaggio, rune…) |
 | Costo `12` mostra un solo simbolo | aggiorna Card Studio: `{12}` → `{1}{2}` automatico |
 | Lore non visibile in preview | compila `testo_lore` / campo lore; bootstrap v3.4 |
 | Chip simboli mancanti su costo/regole | rebuild Card Studio; chip `{MAR}`…`{ARC}` e `{0}`…`{9}` sotto i campi testo |
