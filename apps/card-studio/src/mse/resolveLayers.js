@@ -181,6 +181,7 @@ function fieldValueForName(fieldName, card, cardFields) {
     pt: ["pt", "power_toughness"],
     power: ["power", "attack", "forza", "attacco"],
     toughness: ["toughness", "health", "robustezza", "salute"],
+    cost: ["cost", "mana_cost", "casting_cost", "costo_gioco"],
     type: ["type", "card_type", "tipo"],
     rarity: ["rarity", "rarita"],
   };
@@ -337,7 +338,7 @@ function resolveLayersFromStyles(stylesMap, options) {
     const alwaysSymbolProp = styleDef?.font?.always_symbol || styleDef?.font?.["always symbol"] || styleDef?.always_symbol;
     const alwaysSymbol =
       Boolean(evalMseProp(alwaysSymbolProp, ctx, false)) ||
-      /casting_cost|mana_cost/i.test(normFieldKey(fieldName));
+      /casting_cost|mana_cost|^cost$/i.test(normFieldKey(fieldName));
     const symbolText = normalizeSymbolFieldText(text, alwaysSymbol);
 
     if (
@@ -352,6 +353,7 @@ function resolveLayersFromStyles(stylesMap, options) {
         glyphs: resolveSymbolLayersForText(symbolText, layerSymbolPkg, font.size),
         font,
         alignment: String(evalMseProp(pickProp(styleDef, "alignment"), ctx, "left top")),
+        wrap: renderStyle === "symbol" || /^(rules|rule_text|text|testo_gioco)$/i.test(normFieldKey(fieldName)),
       });
       return;
     }

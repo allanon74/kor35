@@ -6,6 +6,9 @@
  * (300→300 ⇒ scale 1, dimensione di stampa stabile).
  */
 
+import { parseFlexAlignment } from "./layerAlignment";
+import { splitGlyphsIntoWrappableUnits } from "./symbolFonts";
+
 function loadImage(src) {
   return new Promise((resolve) => {
     if (!src) {
@@ -28,22 +31,105 @@ function parseColor(raw, fallback = "#ffffff") {
 }
 
 function parseAlignment(alignment) {
-  const parts = String(alignment || "top left")
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean);
-  let h = "left";
-  let v = "top";
-  if (parts.includes("right")) h = "right";
-  else if (parts.includes("center") || parts.includes("middle")) h = "center";
-  if (parts.includes("bottom")) v = "bottom";
-  else if (parts.includes("middle")) v = "middle";
-  else if (parts.includes("center") && !parts.includes("top") && !parts.includes("bottom")) v = "middle";
-  if (parts.length === 1 && parts[0] === "center") {
-    h = "center";
-    v = "middle";
+  return parseFlexAlignment(alignment);
+}
+
+function measureSymbolGlyph(ctx, glyph, layer, scale) {
+  if (glyph.type === "image") {
+    const size = (glyph.size || 14) * scale;
+    return { glyph, size, w: size, h: size };
   }
-  return { h, v };
+  const fs = (layer.font?.size || 14) * scale;
+  ctx.font = `${layer.font?.weight || "normal"} ${fs}px ${layer.font?.family || "sans-serif"}`;
+  const w = ctx.measureText(glyph.value || "").width;
+  return { glyph, size: fs, w, h: fs * 1.25 };
+}
+
+function layoutWrappedSymbolLines(ctx, glyphs, layer, maxWidth, scale) {
+  const gap = 2 * scale;
+  const units = splitGlyphsIntoWrappableUnits(glyphs);
+  const items = units.map((g) => measureSymbolGlyph(ctx, g, layer, scale));
+  const lines = [];
+  let line = [];
+  let lineW = 0;
+  let lineH = 0;
+
+  for (const item of items) {
+    const extra = line.length ? gap : 0;
+    if (line.length && lineW + extra + item.w > maxWidth) {
+      lines.push({ items: line, width: lineW, height: lineH });
+      line = [item];
+      lineW = item.w;
+      lineH = item.h;
+    } else {
+      line.push(item);
+      lineW += extra + item.w;
+      lineH = Math.max(lineH, item.h);
+    }
+  }
+  if (line.length) lines.push({ items: line, width: lineW, height: lineH });
+  return { lines, gap };
+}
+
+function drawSymbolGlyphs(ctx, layer, x, y, lw, lh, scale, imgMap) {
+  const gap = 2 * scale;
+  const align = parseAlignment(layer.alignment);
+  const glyphs = layer.wrap ? splitGlyphsIntoWrappableUnits(layer.glyphs || []) : layer.glyphs || [];
+
+  if (layer.wrap) {
+    const { lines, gap: lineGap } = layoutWrappedSymbolLines(ctx, glyphs, layer, lw, scale);
+    const blockH = lines.reduce((acc, ln, i) => acc + ln.height + (i ? lineGap : 0), 0);
+    let cursorY = y;
+    if (align.alignItems === "center") cursorY = y + (lh - blockH) / 2;
+    if (align.alignItems === "flex-end") cursorY = y + lh - blockH;
+
+    for (const line of lines) {
+      let cursorX = x;
+      if (align.justifyContent === "center") cursorX = x + (lw - line.width) / 2;
+      if (align.justifyContent === "flex-end") cursorX = x + lw - line.width;
+      const midY = cursorY + line.height / 2;
+      for (const item of line.items) {
+        if (item.glyph.type === "image" && item.glyph.src) {
+          const img = imgMap.get(item.glyph.src);
+          if (img) ctx.drawImage(img, cursorX, midY - item.size / 2, item.size, item.size);
+        } else if (item.glyph.value) {
+          ctx.font = `${layer.font?.weight || "normal"} ${item.size}px ${layer.font?.family || "sans-serif"}`;
+          ctx.fillStyle = parseColor(layer.font?.color, "#000000");
+          ctx.textBaseline = "middle";
+          ctx.fillText(item.glyph.value, cursorX, midY);
+        }
+        cursorX += item.w + gap;
+      }
+      cursorY += line.height + lineGap;
+    }
+    return;
+  }
+
+  const sized = glyphs.map((g) => measureSymbolGlyph(ctx, g, layer, scale));
+  const totalW = sized.reduce((acc, it) => acc + it.w, 0) + Math.max(0, sized.length - 1) * gap;
+  let cursorX = x;
+  if (align.justifyContent === "center") cursorX = x + (lw - totalW) / 2;
+  if (align.justifyContent === "flex-end") cursorX = x + lw - totalW;
+  const baseSize = sized[0]?.size || 14 * scale;
+  const midY =
+    align.alignItems === "flex-start"
+      ? y + baseSize / 2
+      : align.alignItems === "flex-end"
+        ? y + lh - baseSize / 2
+        : y + lh / 2;
+  for (const item of sized) {
+    if (item.glyph.type === "image" && item.glyph.src) {
+      const img = imgMap.get(item.glyph.src);
+      if (img) ctx.drawImage(img, cursorX, midY - item.size / 2, item.size, item.size);
+      cursorX += item.size + gap;
+    } else if (item.glyph.value) {
+      ctx.font = `${layer.font?.weight || "normal"} ${item.size}px ${layer.font?.family || "sans-serif"}`;
+      ctx.fillStyle = parseColor(layer.font?.color, "#000000");
+      ctx.textBaseline = "middle";
+      ctx.fillText(item.glyph.value, cursorX, midY);
+      cursorX += item.w + gap;
+    }
+  }
 }
 
 function wrapTextLines(ctx, text, maxWidth) {
@@ -244,38 +330,7 @@ export async function renderCardToCanvas(render, { dpi = 300 } = {}) {
 
     if (layer.type === "symbols" && layer.glyphs?.length) {
       withAngle(() => {
-        const align = parseAlignment(layer.alignment);
-        const sized = layer.glyphs.map((g) => {
-          if (g.type === "image") {
-            const size = (g.size || 14) * scale;
-            return { g, size, w: size };
-          }
-          const fs = (layer.font?.size || 14) * scale;
-          ctx.font = `${layer.font?.weight || "normal"} ${fs}px ${layer.font?.family || "sans-serif"}`;
-          return { g, size: fs, w: ctx.measureText(g.value || "").width };
-        });
-        const gap = 2 * scale;
-        const totalW =
-          sized.reduce((acc, it) => acc + it.w, 0) + Math.max(0, sized.length - 1) * gap;
-        let cursorX = x;
-        if (align.h === "center") cursorX = x + (lw - totalW) / 2;
-        if (align.h === "right") cursorX = x + lw - totalW;
-        const baseSize = sized[0]?.size || 14 * scale;
-        const midY =
-          align.v === "top" ? y + baseSize / 2 : align.v === "bottom" ? y + lh - baseSize / 2 : y + lh / 2;
-        for (const item of sized) {
-          if (item.g.type === "image" && item.g.src) {
-            const img = imgMap.get(item.g.src);
-            if (img) ctx.drawImage(img, cursorX, midY - item.size / 2, item.size, item.size);
-            cursorX += item.size + gap;
-          } else if (item.g.value) {
-            ctx.font = `${layer.font?.weight || "normal"} ${item.size}px ${layer.font?.family || "sans-serif"}`;
-            ctx.fillStyle = parseColor(layer.font?.color, "#000000");
-            ctx.textBaseline = "middle";
-            ctx.fillText(item.g.value, cursorX, midY);
-            cursorX += item.w + gap;
-          }
-        }
+        drawSymbolGlyphs(ctx, layer, x, y, lw, lh, scale, imgMap);
       });
       continue;
     }
@@ -290,14 +345,14 @@ export async function renderCardToCanvas(render, { dpi = 300 } = {}) {
         const blockH = lines.length * lineH;
         const align = parseAlignment(layer.alignment);
         let startY = y;
-        if (align.v === "middle") startY = y + (lh - blockH) / 2;
-        if (align.v === "bottom") startY = y + lh - blockH;
+        if (align.alignItems === "center") startY = y + (lh - blockH) / 2;
+        if (align.alignItems === "flex-end") startY = y + lh - blockH;
         ctx.textBaseline = "top";
         lines.forEach((line, i) => {
           let tx = x;
           const tw = ctx.measureText(line).width;
-          if (align.h === "center") tx = x + (lw - tw) / 2;
-          if (align.h === "right") tx = x + lw - tw;
+          if (align.justifyContent === "center") tx = x + (lw - tw) / 2;
+          if (align.justifyContent === "flex-end") tx = x + lw - tw;
           ctx.fillText(line, tx, startY + i * lineH);
         });
       });

@@ -142,6 +142,7 @@ export function normalizeSymbolFieldText(text, alwaysSymbol = false) {
   if (!s) return s;
   if (textContainsSymbolTokens(s)) return s;
   if (alwaysSymbol && /^[A-Za-z]{2,4}$/.test(s)) return `{${s.toUpperCase()}}`;
+  if (alwaysSymbol && /^\d+$/.test(s)) return `{${s}}`;
   return s;
 }
 
@@ -159,6 +160,24 @@ export function resolveSymbolLayersForText(text, symbolFontPkg, fontSize = 14) {
       : { type: "text", value: part.value };
   });
   return glyphs;
+}
+
+/** Spezza testo in parole/spazi per permettere il wrap in anteprima/export. */
+export function splitGlyphsIntoWrappableUnits(glyphs) {
+  const out = [];
+  for (const g of glyphs || []) {
+    if (g.type === "image") {
+      out.push(g);
+      continue;
+    }
+    const raw = String(g.value || "");
+    if (!raw) continue;
+    const chunks = raw.split(/(\s+)/);
+    for (const chunk of chunks) {
+      if (chunk) out.push({ type: "text", value: chunk });
+    }
+  }
+  return out;
 }
 
 /** Token comuni per inserimento rapido (Magic + generici). */

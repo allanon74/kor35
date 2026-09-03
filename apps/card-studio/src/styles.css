@@ -565,14 +565,25 @@ body {
 
 .mse-layer-text {
   display: flex;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.mse-layer-text-inner {
+  width: 100%;
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.15;
+  line-height: 1.25;
+}
+
+.mse-layer-symbols {
+  box-sizing: border-box;
 }
 
 .mse-layer-symbols img {
   object-fit: contain;
   vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .mse-image-field {

@@ -26,7 +26,7 @@ CARTA_ENERGIA_ARCANA = "ARC"
 KOR35_TEMPLATE_SLUG = "kor35-standard"
 KOR35_TEMPLATE_NAME = "Sette Elegie Standard"
 KOR35_STYLE_GAME = "kor35"
-KOR35_STYLE_VERSION = "3.1"
+KOR35_STYLE_VERSION = "3.2"
 
 KOR35_FIELD_MAPPING = {
     "code": "codice",
@@ -64,10 +64,10 @@ _AURA_FRAME_PALETTE: dict[str, dict[str, tuple[int, int, int]]] = {
         "accent_hi": (240, 190, 70),
     },
     CARTA_ENERGIA_MAGICA: {
-        "ink": (10, 10, 14),
-        "ink2": (28, 28, 36),
-        "accent": (90, 90, 110),
-        "accent_hi": (180, 180, 200),
+        "ink": (36, 12, 68),
+        "ink2": (58, 22, 98),
+        "accent": (168, 85, 247),
+        "accent_hi": (216, 180, 254),
     },
     CARTA_ENERGIA_SACRA: {
         "ink": (36, 40, 52),
@@ -190,9 +190,9 @@ def kor35_frame_png(
             g = _lerp(ink[1], ink2[1], t)
             b = _lerp(ink[2], ink2[2], t)
             if x < 28 or y < 28 or x >= width - 28 or y >= height - 28:
-                r = _lerp(r, accent[0], 0.22)
-                g = _lerp(g, accent[1], 0.22)
-                b = _lerp(b, accent[2], 0.22)
+                r = _lerp(r, accent[0], 0.42)
+                g = _lerp(g, accent[1], 0.42)
+                b = _lerp(b, accent[2], 0.42)
             return r, g, b, 255
 
         sep_tops = [art[1] - 2, type_line[1] - 2, rules[1] - 2]
@@ -450,11 +450,41 @@ card style:
 
 card style:
 	energy:
-		left: 26
-		top: 24
-		width: 40
-		height: 40
+		left: 24
+		top: 22
+		width: 44
+		height: 44
 		z index: 45
+		visible: {{{not_luo}}}
+		alignment: middle center
+		render style: symbol
+		font:
+			always symbol: true
+			size: 30
+			color: rgb(255,255,255)
+			symbol font: KOR35 Aure
+
+card style:
+	name:
+		left: 68
+		top: 22
+		width: 218
+		height: 44
+		z index: 40
+		alignment: middle left
+		font:
+			name: Beleren
+			size: 19
+			color: rgb(255,248,230)
+			weight: bold
+
+card style:
+	cost:
+		left: 288
+		top: 22
+		width: 48
+		height: 44
+		z index: 40
 		visible: {{{not_luo}}}
 		alignment: middle center
 		render style: symbol
@@ -463,35 +493,6 @@ card style:
 			size: 28
 			color: rgb(255,255,255)
 			symbol font: KOR35 Aure
-
-card style:
-	name:
-		left: 72
-		top: 24
-		width: 210
-		height: 40
-		z index: 40
-		alignment: middle left
-		font:
-			name: Georgia
-			size: 20
-			color: rgb(255,248,230)
-			weight: bold
-
-card style:
-	cost:
-		left: 290
-		top: 24
-		width: 54
-		height: 40
-		z index: 40
-		visible: {{{not_luo}}}
-		alignment: middle center
-		font:
-			name: Arial
-			size: 22
-			color: rgb(250,204,21)
-			weight: bold
 
 card style:
 	code:
@@ -516,8 +517,8 @@ card style:
 		alignment: middle left
 		text: {{{type_label}}}
 		font:
-			name: Arial
-			size: 13
+			name: Beleren
+			size: 14
 			color: rgb(186,230,253)
 			weight: bold
 
@@ -531,9 +532,9 @@ card style:
 		alignment: middle right
 		text: {{{rarity_label}}}
 		font:
-			name: Arial
-			size: 12
-			color: rgb(226,232,240)
+			name: Beleren
+			size: 13
+			color: rgb(250,204,21)
 
 card style:
 	rules:
@@ -543,10 +544,12 @@ card style:
 		height: 110
 		z index: 50
 		alignment: top left
+		render style: symbol
 		font:
-			name: Georgia
+			name: MPlantin
 			size: 13
 			color: rgb(241,245,249)
+			symbol font: KOR35 Aure
 
 card style:
 	lore:
@@ -598,90 +601,93 @@ card style:
 card style:
 	attack_label:
 		left: 40
-		top: 466
+		top: 471
 		width: 70
-		height: 12
+		height: 11
 		z index: 58
 		visible: {{{show_stats}}}
 		alignment: middle center
 		text: FOR
 		font:
 			name: Arial
-			size: 8
+			size: 7
 			color: rgb(254,202,202)
+			weight: bold
 
 card style:
 	attack:
 		left: 40
-		top: 476
+		top: 484
 		width: 70
-		height: 24
+		height: 18
 		z index: 60
 		visible: {{{show_stats}}}
 		alignment: middle center
 		font:
 			name: Arial
-			size: 18
+			size: 17
 			color: rgb(254,226,226)
 			weight: bold
 
 card style:
 	health_label:
 		left: 152
-		top: 466
+		top: 471
 		width: 70
-		height: 12
+		height: 11
 		z index: 58
 		visible: {{{show_stats}}}
 		alignment: middle center
 		text: ROB
 		font:
 			name: Arial
-			size: 8
+			size: 7
 			color: rgb(187,247,208)
+			weight: bold
 
 card style:
 	health:
 		left: 152
-		top: 476
+		top: 484
 		width: 70
-		height: 24
+		height: 18
 		z index: 60
 		visible: {{{show_stats}}}
 		alignment: middle center
 		font:
 			name: Arial
-			size: 18
+			size: 17
 			color: rgb(220,252,231)
 			weight: bold
 
 card style:
 	initiative_label:
 		left: 264
-		top: 466
+		top: 471
 		width: 70
-		height: 12
+		height: 11
 		z index: 58
 		visible: {{{show_stats}}}
 		alignment: middle center
 		text: INI
 		font:
 			name: Arial
-			size: 8
+			size: 7
 			color: rgb(191,219,254)
+			weight: bold
 
 card style:
 	initiative:
 		left: 264
-		top: 476
+		top: 484
 		width: 70
-		height: 24
+		height: 18
 		z index: 60
 		visible: {{{show_stats}}}
 		alignment: middle center
 		font:
 			name: Arial
-			size: 18
+			size: 17
 			color: rgb(219,234,254)
 			weight: bold
 """

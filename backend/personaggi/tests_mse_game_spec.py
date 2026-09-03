@@ -296,11 +296,12 @@ symbol:
 
 
 class Kor35AuraSymbolFontTests(SimpleTestCase):
-    def test_build_symbol_font_zip_has_seven_aure(self):
+    def test_build_symbol_font_zip_has_aure_and_cost_digits(self):
         from io import BytesIO
 
         from personaggi.mse_kor35_symbol_font import (
             KOR35_AURA_GLYPHS,
+            KOR35_COST_DIGITS,
             build_kor35_symbol_font_text,
             build_kor35_symbol_font_zip,
         )
@@ -308,9 +309,11 @@ class Kor35AuraSymbolFontTests(SimpleTestCase):
 
         text = build_kor35_symbol_font_text()
         parsed = parse_mse_symbol_font(text)
-        self.assertEqual(len(parsed["symbols"]), len(KOR35_AURA_GLYPHS))
+        self.assertEqual(len(parsed["symbols"]), len(KOR35_AURA_GLYPHS) + len(KOR35_COST_DIGITS))
         self.assertIn("{MAR}", parsed["symbols"])
-        self.assertIn("{ARC}", parsed["symbols"])
+        self.assertIn("{MAG}", parsed["symbols"])
+        self.assertIn("{2}", parsed["symbols"])
+        self.assertIn("{5}", parsed["symbols"])
 
         data = build_kor35_symbol_font_zip()
         import zipfile
@@ -319,17 +322,23 @@ class Kor35AuraSymbolFontTests(SimpleTestCase):
             names = zf.namelist()
             self.assertIn("symbol font", names)
             self.assertIn("symbols/mar.png", names)
+            self.assertIn("symbols/cost-2.png", names)
             self.assertTrue(zf.read("symbols/mar.png").startswith(b"\x89PNG"))
+            self.assertTrue(zf.read("symbols/cost-2.png").startswith(b"\x89PNG"))
 
-    def test_kor35_style_energy_uses_symbol_render(self):
+    def test_kor35_style_energy_and_cost_use_symbol_render(self):
         from personaggi.mse_kor35_style import build_kor35_style_text
         from personaggi.mse_style_import import parse_mse_style_spec
 
         spec = parse_mse_style_spec(build_kor35_style_text())
-        energy = spec["card_styles"]["energy"]
-        render = energy.get("render_style") or {}
-        self.assertEqual(render.get("value"), "symbol")
-        self.assertTrue(energy.get("font", {}).get("always_symbol"))
+        for key in ("energy", "cost"):
+            layer = spec["card_styles"][key]
+            render = layer.get("render_style") or {}
+            self.assertEqual(render.get("value"), "symbol", key)
+            self.assertTrue(layer.get("font", {}).get("always_symbol"), key)
+
+        rules = spec["card_styles"]["rules"]
+        self.assertEqual((rules.get("render_style") or {}).get("value"), "symbol")
 
     def test_kor35_style_sette_elegie_v3_frames_and_visibility(self):
         from personaggi.mse_kor35_style import build_kor35_mse_style_zip, build_kor35_style_text
@@ -337,6 +346,7 @@ class Kor35AuraSymbolFontTests(SimpleTestCase):
 
         text = build_kor35_style_text()
         self.assertIn("Sette Elegie", text)
+        self.assertIn("version: 3.2", text)
         self.assertIn("frame-mar.png", text)
         spec = parse_mse_style_spec(text)
         self.assertEqual(spec.get("game"), "kor35")

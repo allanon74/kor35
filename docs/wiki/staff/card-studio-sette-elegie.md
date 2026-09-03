@@ -26,7 +26,7 @@ make bootstrap-kor35-mse-template ENV=dev-office CAMPAGNA_SLUG=kor35
 
 Cosa fa:
 
-- crea/aggiorna il **gioco** `kor35` e il template `kor35-standard` (v3.1);
+- crea/aggiorna il **gioco** `kor35` e il template `kor35-standard` (v3.2);
 - collega le espansioni al gioco;
 - con `--seed-demo` (già nel Make) crea/aggiorna **29 carte** demo
   (12 PG, 6 OGG, 8 EVT, 3 LUO; 7 aure).
