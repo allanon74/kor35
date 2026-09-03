@@ -6,7 +6,13 @@ import {
   packageDisplayName,
 } from "../mse/symbolFonts";
 import { mseColorToCss, wildcardMatch } from "../mse/fieldUtils";
-import { fieldStatusDescription, fieldTypeLabel, filterEditorCardFields, sortCardFieldsForEditor } from "../mse/fieldMeta";
+import {
+  FIELD_DESCRIPTION_PLACEHOLDER,
+  fieldStatusDescription,
+  fieldTypeLabel,
+  filterEditorCardFields,
+  sortCardFieldsForEditor,
+} from "../mse/fieldMeta";
 
 function packageOptions(field, packages) {
   const staticChoices = (field.choices || []).map((c) => c.name).filter(Boolean);
@@ -34,12 +40,13 @@ function SymbolInsertBar({ onInsert }) {
   );
 }
 
-function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
+function FieldValueEditor({ field, value, packages, onChange, onPickFile, onFocusField }) {
   const fType = String(field.type || "text").toLowerCase();
   const editable = field.editable !== false;
   const options = (field.choices || []).map((c) => c.name).filter(Boolean);
   const fileRef = useRef(null);
   const showSymbols = fieldWantsSymbolInsert(field);
+  const focusProps = { onFocus: () => onFocusField?.(field) };
 
   if (!editable) {
     return <span className="mse-field-readonly">{String(value ?? "—")}</span>;
@@ -55,7 +62,7 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
     const emptyLabel = field.empty_name || "None";
     const strVal = fType === "boolean" ? (value === true || value === "yes" ? "yes" : "no") : String(value || "");
     return (
-      <select className="mse-field-input" value={strVal} onChange={(e) => onChange(e.target.value)}>
+      <select className="mse-field-input" value={strVal} onChange={(e) => onChange(e.target.value)} {...focusProps}>
         {!required && fType !== "boolean" && <option value="">{emptyLabel}</option>}
         {choiceOpts.map((opt) => (
           <option key={opt} value={opt}>
@@ -80,6 +87,7 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
         size={Math.min(6, Math.max(3, options.length))}
         value={selected}
         onChange={(e) => onChange(Array.from(e.target.selectedOptions).map((o) => o.value))}
+        {...focusProps}
       >
         {options.map((opt) => (
           <option key={opt} value={opt}>
@@ -95,7 +103,7 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
     const required = field.required !== false;
     const emptyLabel = field.empty_name || "None";
     return (
-      <select className="mse-field-input" value={String(value || "")} onChange={(e) => onChange(e.target.value)}>
+      <select className="mse-field-input" value={String(value || "")} onChange={(e) => onChange(e.target.value)} {...focusProps}>
         {!required && <option value="">{emptyLabel}</option>}
         {pkgOpts.map((opt) => (
           <option key={opt} value={opt}>
@@ -110,9 +118,9 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
     const css = mseColorToCss(value) || "#808080";
     return (
       <div className="mse-color-row">
-        <input type="color" value={css.startsWith("#") ? css : "#808080"} onChange={(e) => onChange(e.target.value)} />
+        <input type="color" value={css.startsWith("#") ? css : "#808080"} onChange={(e) => onChange(e.target.value)} {...focusProps} />
         {options.length > 0 ? (
-          <select className="mse-field-input" value={String(value || "")} onChange={(e) => onChange(e.target.value)}>
+          <select className="mse-field-input" value={String(value || "")} onChange={(e) => onChange(e.target.value)} {...focusProps}>
             <option value="">— custom —</option>
             {options.map((opt) => (
               <option key={opt} value={opt}>
@@ -121,7 +129,7 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
             ))}
           </select>
         ) : (
-          <input className="mse-field-input" value={String(value || "")} onChange={(e) => onChange(e.target.value)} />
+          <input className="mse-field-input" value={String(value || "")} onChange={(e) => onChange(e.target.value)} {...focusProps} />
         )}
       </div>
     );
@@ -137,6 +145,7 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
           value={display.startsWith("blob:") && !preview ? "" : display}
           placeholder="Percorso o URL…"
           onChange={(e) => onChange(e.target.value)}
+          {...focusProps}
         />
         <input
           ref={fileRef}
@@ -164,6 +173,7 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
         type="number"
         value={value ?? 0}
         onChange={(e) => onChange(Number(e.target.value))}
+        {...focusProps}
       />
     );
   }
@@ -180,6 +190,7 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
           value={String(value || "")}
           onChange={(e) => onChange(e.target.value)}
           placeholder={showSymbols ? "Es. Deal {R} damage. Usa i chip sotto per i simboli." : undefined}
+          {...focusProps}
         />
       </div>
     );
@@ -193,6 +204,7 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
         value={String(value || "")}
         onChange={(e) => onChange(e.target.value)}
         placeholder={showSymbols ? "Es. {2}{W}{U}" : undefined}
+        {...focusProps}
       />
     </div>
   );
@@ -206,17 +218,40 @@ export default function MseFieldTable({
   onPickFile,
   onStatusChange,
   extraRows,
+  descriptionPlaceholder = FIELD_DESCRIPTION_PLACEHOLDER,
 }) {
-  const [hoverField, setHoverField] = useState(null);
+  const [hintText, setHintText] = useState(descriptionPlaceholder);
+  const [hintIsPlaceholder, setHintIsPlaceholder] = useState(true);
   const sorted = sortCardFieldsForEditor(filterEditorCardFields(fields));
 
-  const showStatus = (field) => {
-    setHoverField(field);
-    onStatusChange?.(fieldStatusDescription(field));
+  const showHint = (text, { placeholder = false } = {}) => {
+    const next = String(text || "").trim() || descriptionPlaceholder;
+    setHintText(next);
+    setHintIsPlaceholder(placeholder || next === descriptionPlaceholder);
+    onStatusChange?.(placeholder ? "" : next);
+  };
+
+  const showFieldHint = (field) => {
+    showHint(fieldStatusDescription(field));
+  };
+
+  const resetHint = () => {
+    showHint(descriptionPlaceholder, { placeholder: true });
   };
 
   return (
-    <div className="mse-field-table-wrap">
+    <div
+      className="mse-field-table-wrap"
+      onMouseLeave={() => {
+        resetHint();
+      }}
+    >
+      <div
+        className={`mse-field-description-panel${hintIsPlaceholder ? " is-placeholder" : ""}`}
+        aria-live="polite"
+      >
+        {hintText}
+      </div>
       <table className="mse-field-table">
         <thead>
           <tr>
@@ -226,7 +261,10 @@ export default function MseFieldTable({
         </thead>
         <tbody>
           {(extraRows || []).map((row) => (
-            <tr key={row.key} onMouseEnter={() => onStatusChange?.(row.status || row.label)}>
+            <tr
+              key={row.key}
+              onMouseEnter={() => showHint(row.status || row.label)}
+            >
               <td className="mse-field-name">{row.label}</td>
               <td>{row.render()}</td>
             </tr>
@@ -245,11 +283,7 @@ export default function MseFieldTable({
               <tr
                 key={field.name}
                 className={field.editable === false ? "mse-field-row-readonly" : ""}
-                onMouseEnter={() => showStatus(field)}
-                onMouseLeave={() => {
-                  setHoverField(null);
-                  onStatusChange?.("");
-                }}
+                onMouseEnter={() => showFieldHint(field)}
               >
                 <td className="mse-field-name">
                   {String(field.type || "").toLowerCase() === "image" ? "Illustrazione" : field.name}
@@ -262,6 +296,7 @@ export default function MseFieldTable({
                     packages={packages}
                     onChange={(v) => setValue(field, v)}
                     onPickFile={onPickFile}
+                    onFocusField={showFieldHint}
                   />
                 </td>
               </tr>
@@ -276,7 +311,6 @@ export default function MseFieldTable({
           )}
         </tbody>
       </table>
-      {hoverField && <p className="mse-field-hover-hint">{fieldStatusDescription(hoverField)}</p>}
     </div>
   );
 }

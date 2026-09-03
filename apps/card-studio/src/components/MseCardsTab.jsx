@@ -279,10 +279,7 @@ export default function MseCardsTab({
           setValue={setValue}
           packages={packages}
           onPickFile={onPickFile}
-          onStatusChange={(t) => {
-            setStatusText(t);
-            onStatusMessage?.(t);
-          }}
+          onStatusChange={setStatusText}
         />
         <MseEditorActions
           saveLabel={saveCardLabel}
@@ -341,7 +338,10 @@ export default function MseCardsTab({
         </p>
       </details>
 
-      <footer className="mse-statusbar">{statusText || "Move the mouse over a field to see its description."}</footer>
+      <footer className="mse-statusbar mse-statusbar-static">
+        {statusText ||
+          "Le descrizioni dei campi compaiono nel riquadro sopra la tabella Card fields."}
+      </footer>
     </section>
   );
 }

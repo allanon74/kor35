@@ -19,6 +19,9 @@ export function fieldTypeLabel(field) {
   return MSE_FIELD_TYPE_LABELS[t] || t;
 }
 
+export const FIELD_DESCRIPTION_PLACEHOLDER =
+  "Passa il mouse su un campo (o selezionalo) per vederne la descrizione.";
+
 export function fieldStatusDescription(field) {
   const custom = String(field?.description || "").trim();
   if (custom) return custom;

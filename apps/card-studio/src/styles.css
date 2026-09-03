@@ -303,7 +303,39 @@ body {
   background: #ece9d8;
   border: 1px inset #fff;
   font-size: 12px;
-  min-height: 1.4rem;
+  min-height: 2.75rem;
+  max-height: 2.75rem;
+  overflow: auto;
+  line-height: 1.35;
+}
+
+.mse-statusbar-static {
+  color: #444;
+}
+
+.mse-field-description-panel {
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+  max-height: 2.75rem;
+  overflow: auto;
+  padding: 0.35rem 0.5rem;
+  margin: 0.35rem 0.35rem 0.25rem;
+  background: #ece9d8;
+  border: 1px inset #fff;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #222;
+}
+
+.mse-field-description-panel.is-placeholder {
+  color: #555;
+  font-style: italic;
+}
+
+.mse-field-table-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* Card list table */
@@ -473,10 +505,6 @@ body {
   font-style: italic;
   font-size: 12px;
   margin: 0.35rem;
-}
-
-.mse-field-hover-hint {
-  display: none;
 }
 
 /* Preview pane */
