@@ -35,6 +35,24 @@ def _parse_json_field(value, field_name):
     return value
 
 
+def _mutable_request_data(data):
+    """
+    Copia request.data senza deepcopy di file upload (QueryDict.copy() fallisce su BufferedRandom).
+    """
+    from django.http import QueryDict
+
+    if isinstance(data, QueryDict):
+        return {key: data.get(key) for key in data}
+    if isinstance(data, dict):
+        return dict(data)
+    if hasattr(data, "copy"):
+        try:
+            return data.copy()
+        except TypeError:
+            return dict(data)
+    return dict(data)
+
+
 class CartaReliquiarioStatisticaSerializer(serializers.ModelSerializer):
     class Meta:
         model = CartaReliquiarioStatistica
@@ -390,7 +408,7 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
             CARTA_TIPO_PERSONAGGIO,
         )
 
-        mutable = data.copy() if hasattr(data, "copy") else dict(data)
+        mutable = _mutable_request_data(data)
         tipo_ok = {c for c, _ in CARTA_TIPO_CHOICES}
         energia_ok = {c for c, _ in CARTA_ENERGIA_CHOICES}
         rarita_ok = {c for c, _ in CARTA_RARITA_CHOICES}

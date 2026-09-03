@@ -1,6 +1,7 @@
 """
 Test carte collezionabili — bustine, reliquiario, validazione mazzo, accesso 3 stati.
 """
+import json
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -593,8 +594,41 @@ class CartaCatalogoAutoCodiceApiTests(APITestCase):
         self.assertEqual(resp.data.get("tipo"), CARTA_TIPO_PERSONAGGIO)
         self.assertEqual(resp.data.get("rarita"), CARTA_RARITA_COMUNE)
 
+    def test_patch_multipart_con_immagine_non_500(self):
+        """Card Studio: upload illustrazione via FormData (PATCH multipart)."""
+        from io import BytesIO
 
-class KeywordCartaParametriTests(TestCase):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        carta = CartaCollezionabile.objects.create(
+            campagna=self.campagna,
+            espansione=self.espansione,
+            codice="AUT-001",
+            nome="Con Arte",
+            tipo=CARTA_TIPO_PERSONAGGIO,
+            energia=CARTA_ENERGIA_MARZIALE,
+            rarita=CARTA_RARITA_COMUNE,
+        )
+        buf = BytesIO()
+        Image.new("RGB", (8, 8), color=(120, 80, 40)).save(buf, format="PNG")
+        upload = SimpleUploadedFile("art.png", buf.getvalue(), content_type="image/png")
+        resp = self.client.patch(
+            f"{self.base_url}{carta.id}/",
+            {
+                "nome": "Con Arte",
+                "tipo": CARTA_TIPO_PERSONAGGIO,
+                "energia": CARTA_ENERGIA_MARZIALE,
+                "rarita": CARTA_RARITA_COMUNE,
+                "mse_campi": json.dumps({"name": "Con Arte"}),
+                "immagine": upload,
+            },
+            format="multipart",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        carta.refresh_from_db()
+        self.assertTrue(bool(carta.immagine))
     def test_mutazione_parametrica(self):
         from personaggi.carte_keyword_utils import (
             match_keyword_parametrizzata,

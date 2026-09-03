@@ -307,6 +307,7 @@ body {
   max-height: 2.75rem;
   overflow: auto;
   line-height: 1.35;
+  box-sizing: border-box;
 }
 
 .mse-statusbar-static {
@@ -325,6 +326,7 @@ body {
   font-size: 12px;
   line-height: 1.35;
   color: #222;
+  box-sizing: border-box;
 }
 
 .mse-field-description-panel.is-placeholder {
@@ -336,9 +338,10 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 0.25rem;
 }
-
-/* Card list table */
 
 .mse-card-list {
   flex: 1;
@@ -403,12 +406,6 @@ body {
 }
 
 /* Field table (MSE card fields) */
-
-.mse-field-table-wrap {
-  flex: 1;
-  overflow: auto;
-  padding: 0.25rem;
-}
 
 .mse-field-table {
   width: 100%;
