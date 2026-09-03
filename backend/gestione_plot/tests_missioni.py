@@ -1,8 +1,9 @@
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
-from gestione_plot.missioni_service import calcola_ricompensa_base
+from gestione_plot.missioni_service import applica_fattore_korp, calcola_ricompensa_base
 
 
 class _FakeMissione:
@@ -57,3 +58,43 @@ class MissioniRiepilogoLogicTests(SimpleTestCase):
         non = [m for m in missioni if m.korp_id != korp_id and not m.esclusiva]
         self.assertEqual(len(di), 1)
         self.assertEqual(sum(m.reward_crediti for m in non), Decimal("25"))  # 20 + 5, non 50 esclusiva
+
+
+class MissioniFattoreKorpTests(SimpleTestCase):
+    def _missione(self, *, korp_id, fattore):
+        m = _FakeMissione(korp_id=korp_id)
+        m.korp = type("Korp", (), {"fattore_task": fattore})()
+        return m
+
+    @patch("gestione_plot.missioni_service.personaggio_ha_korp", return_value=True)
+    def test_sovrapagata_solo_fattore_maggiore_di_uno(self, _mock):
+        m = self._missione(korp_id=1, fattore=Decimal("2.00"))
+        cr, pr, is_bonus, fat = applica_fattore_korp(m, object(), Decimal("10"), 4)
+        self.assertEqual(cr, Decimal("20.00"))
+        self.assertEqual(pr, 8)
+        self.assertTrue(is_bonus)
+        self.assertEqual(fat, Decimal("2.00"))
+
+    @patch("gestione_plot.missioni_service.personaggio_ha_korp", return_value=True)
+    def test_stessa_korp_fattore_uno_non_evidenzia(self, _mock):
+        m = self._missione(korp_id=1, fattore=Decimal("1.00"))
+        cr, pr, is_bonus, fat = applica_fattore_korp(m, object(), Decimal("10"), 4)
+        self.assertEqual(cr, Decimal("10.00"))
+        self.assertEqual(pr, 4)
+        self.assertFalse(is_bonus)
+        self.assertEqual(fat, Decimal("1.00"))
+
+    @patch("gestione_plot.missioni_service.personaggio_ha_korp", return_value=False)
+    def test_altra_korp_nessun_bonus(self, _mock):
+        m = self._missione(korp_id=2, fattore=Decimal("3.00"))
+        cr, pr, is_bonus, fat = applica_fattore_korp(m, object(), Decimal("10"), 4)
+        self.assertEqual(cr, Decimal("10.00"))
+        self.assertFalse(is_bonus)
+        self.assertEqual(fat, Decimal("1.00"))
+
+    def test_task_generica_nessun_bonus(self):
+        m = _FakeMissione(korp_id=None)
+        cr, pr, is_bonus, fat = applica_fattore_korp(m, object(), Decimal("10"), 4)
+        self.assertEqual(cr, Decimal("10.00"))
+        self.assertFalse(is_bonus)
+        self.assertEqual(fat, Decimal("1.00"))

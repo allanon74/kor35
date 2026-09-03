@@ -59,7 +59,12 @@ def applica_fattore_korp(
     cr: Decimal,
     pr: int,
 ) -> tuple[Decimal, int, bool, Decimal]:
-    """Fattore solo se PG membro della KORP della task."""
+    """Fattore solo se PG membro della KORP della task.
+
+    ``is_bonus`` (sovrapagata) è True solo con fattore > 1: il giocatore
+    non vede il mittente KORP, ma le task della propria KORP pagate di più
+    restano evidenziate.
+    """
     if not missione.korp_id or not personaggio:
         return _q2(cr), int(pr), False, Decimal("1.00")
     if not personaggio_ha_korp(personaggio, missione.korp_id):
@@ -67,7 +72,8 @@ def applica_fattore_korp(
     fattore = fattore_for_korp(missione.korp)
     cr2 = _q2(cr * fattore)
     pr2 = int((Decimal(pr) * fattore).to_integral_value(rounding=ROUND_HALF_UP))
-    return cr2, pr2, True, fattore
+    is_bonus = fattore > Decimal("1.00")
+    return cr2, pr2, is_bonus, fattore
 
 
 def ricompensa_per_visualizzazione(missione, personaggio, *, is_primo=True) -> dict:
@@ -231,6 +237,8 @@ def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
     """
     Visibili al giocatore solo le task legate a eventi ATTIVI,
     non esclusive (oppure esclusive della propria KORP).
+    Il payload giocatore non include il mittente KORP: evidenza solo
+    le task sovrapagate (fattore > 1) della propria KORP.
     """
     attivi = set(eventi_attivi_ids())
     if not attivi:
@@ -271,7 +279,6 @@ def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
         ).values_list("missione_id", "evento_id"):
             presi.add((str(mid), eid))
 
-    korp_ids = set(get_active_korp_ids(personaggio))
     rows = []
     for m in missioni:
         if not personaggio_puo_svolgere(m, personaggio):
@@ -301,9 +308,6 @@ def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
             "sync_id": str(m.sync_id),
             "titolo": m.titolo,
             "descrizione": m.descrizione,
-            "korp_id": m.korp_id,
-            "korp_nome": m.korp.nome if m.korp_id else None,
-            "esclusiva": m.esclusiva,
             "tipo_risoluzione": m.tipo_risoluzione,
             "premio_solo_primo": m.premio_solo_primo,
             "attiva": m.attiva,
@@ -321,9 +325,8 @@ def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
         })
 
     def sort_key(row):
-        is_mine = row["korp_id"] in korp_ids if row["korp_id"] else False
         return (
-            0 if is_mine else 1,
+            0 if row["is_korp_bonus"] else 1,
             1 if row["svolta"] else 0,
             0 if row["effettuabile"] else 1,
             row["ordine"],

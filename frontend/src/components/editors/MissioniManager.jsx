@@ -313,12 +313,15 @@ export default function MissioniManager({ onLogout }) {
             <LabeledField label="Titolo" required>
               <input className={staffInputClass()} value={form.titolo} onChange={(e) => setForm({ ...form, titolo: e.target.value })} />
             </LabeledField>
-            <LabeledField label="KORP">
+            <LabeledField
+              label="KORP"
+              hint="Vuoto = task generale (nessun mittente). I giocatori non vedono la KORP: evidenziano solo le sovrapagate (fattore > 1) della propria."
+            >
               <SearchableSelect
                 options={korpOptions}
                 value={form.korp}
                 onChange={(v) => setForm({ ...form, korp: v })}
-                placeholder="Generica (nessuna)"
+                placeholder="Generica (nessuna KORP)"
                 allowClear
               />
             </LabeledField>

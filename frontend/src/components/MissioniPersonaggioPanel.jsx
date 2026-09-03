@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, ListTodo, RefreshCw } from 'lucide-react';
 import { getMissioniMie } from '../api';
 
-/** Elenco task del PG: KORP in cima, svolte, ricompense (claim automatico lato server). */
+/** Elenco task del PG: sovrapagate della propria KORP evidenziate, senza mittente. */
 export default function MissioniPersonaggioPanel({
   personaggioId,
   personaggioNome,
@@ -49,7 +49,7 @@ export default function MissioniPersonaggioPanel({
             ) : null}
             {standalone ? (
               <p className="mt-1 text-xs text-gray-500">
-                Task dell&apos;evento attivo: disponibili, esclusive KORP e già svolte.
+                Task dell&apos;evento attivo. Quelle evidenziate sono sovrapagate per la tua KORP.
               </p>
             ) : null}
           </div>
@@ -89,11 +89,9 @@ export default function MissioniPersonaggioPanel({
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-white">{m.titolo}</span>
-                  {m.korp_nome ? (
+                  {korpBonus ? (
                     <span className="rounded bg-violet-800/60 px-1.5 py-0.5 text-[10px] uppercase text-violet-100">
-                      {m.korp_nome}
-                      {m.esclusiva ? ' · esclusiva' : ''}
-                      {korpBonus ? ` ×${m.fattore_applicato}` : ''}
+                      Sovrapagata ×{m.fattore_applicato}
                     </span>
                   ) : null}
                   {m.svolta ? (
