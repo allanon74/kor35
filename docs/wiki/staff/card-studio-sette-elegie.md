@@ -26,7 +26,7 @@ make bootstrap-kor35-mse-template ENV=dev-office CAMPAGNA_SLUG=kor35
 
 Cosa fa:
 
-- crea/aggiorna il **gioco** `kor35` e il template `kor35-standard` (v3.2);
+- crea/aggiorna il **gioco** `kor35` e il template `kor35-standard` (v3.3);
 - collega le espansioni al gioco;
 - con `--seed-demo` (già nel Make) crea/aggiorna **29 carte** demo
   (12 PG, 6 OGG, 8 EVT, 3 LUO; 7 aure).
@@ -121,4 +121,6 @@ Aure: Marziale, Tecnologica, Innata, Magica, Sacra, Psionica, Arcana.
 | Preview vuota / stile Magic | riesegui `bootstrap-kor35-mse-template` sulla campagna |
 | 0 carte / 0 template | stesso bootstrap + seed; verifica `CAMPAGNA_SLUG` |
 | Export PNG fallisce | serve stylesheet MSE importato sul template attivo |
-| Art sempre neutra / simboli `{2}` non renderizzati | template non aggiornato (serve v3.2+): rifai bootstrap |
+| Art sempre neutra / simboli `{2}` non renderizzati | template non aggiornato (serve v3.3+): rifai bootstrap |
+| Pallino nero al posto dell’aura / cornice grigia | bootstrap (font simboli v1.1 + style v3.3) + rebuild frontend |
+| Chip simboli mancanti su costo/regole | rebuild Card Studio; chip `{MAR}`…`{ARC}` e `{0}`…`{9}` sotto i campi testo |
