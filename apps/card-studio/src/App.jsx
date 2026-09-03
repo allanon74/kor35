@@ -858,6 +858,9 @@ export default function App() {
     } else if (row.studio_template && templatesById[row.studio_template]?.gioco_definizione) {
       setSelectedGameId(templatesById[row.studio_template].gioco_definizione);
     }
+    if (row.espansione) {
+      setSelectedExpansionId(row.espansione);
+    }
   };
 
   const refreshAfterMutation = async ({ kind, saved }) => {
@@ -1494,6 +1497,8 @@ export default function App() {
           onMseCampiSync={(mse) => setMseCampiText(JSON.stringify(mse, null, 2))}
           onRenumberSetCodici={handleRenumberSetCodici}
           canRenumberSet={Boolean(selectedExpansionId || cardForm.espansione)}
+          selectedExpansionId={selectedExpansionId}
+          onExpansionChange={handleExpansionChange}
         />
       )}
 

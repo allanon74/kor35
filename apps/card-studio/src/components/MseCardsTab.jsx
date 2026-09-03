@@ -50,6 +50,8 @@ export default function MseCardsTab({
   onMseCampiSync,
   onRenumberSetCodici,
   canRenumberSet,
+  selectedExpansionId = "",
+  onExpansionChange,
 }) {
   const [statusText, setStatusText] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -122,14 +124,22 @@ export default function MseCardsTab({
     }
   };
 
+  const handleCardSetChange = (expId) => {
+    const next = expId || "";
+    onExpansionChange?.(next);
+    if (cardId) {
+      updateCardField("espansione", next || null);
+    }
+  };
+
   return (
     <section className="mse-cards-tab">
       <div className="mse-card-context-bar">
         <label>
           <span>Card set</span>
           <select
-            value={cardForm.espansione || ""}
-            onChange={(e) => updateCardField("espansione", e.target.value || null)}
+            value={selectedExpansionId || cardForm.espansione || ""}
+            onChange={(e) => handleCardSetChange(e.target.value)}
             disabled={!selectedGameId}
           >
             <option value="">— none —</option>
