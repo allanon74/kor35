@@ -147,14 +147,23 @@ function resolveFont(styleDef) {
 
 /** Nome package symbol-font dichiarato nello style (o legacy parse bug). */
 function styleSymbolFontName(styleDef) {
+  const fromFont = styleDef?.font?.symbol_font || styleDef?.font?.["symbol font"];
+  if (fromFont) {
+    const n = evalMseProp(fromFont, {}, "");
+    if (n) return normalizeMsePackageName(n);
+  }
   const sf = pickProp(styleDef, "symbol_font", "symbol font");
   if (sf && typeof sf === "object") {
     const n = evalMseProp(sf.name, {}, "");
     if (n) return normalizeMsePackageName(n);
   }
+  if (sf) {
+    const n = evalMseProp(sf, {}, "");
+    if (n) return normalizeMsePackageName(n);
+  }
   // Parser legacy: `symbol font:` non annidato → name/size finivano sul card style.
   const rootName = evalMseProp(pickProp(styleDef, "name"), {}, "");
-  if (rootName && /mana|symbol/i.test(String(rootName))) {
+  if (rootName && /mana|symbol|aure/i.test(String(rootName))) {
     return normalizeMsePackageName(rootName);
   }
   return "";
