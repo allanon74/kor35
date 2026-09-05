@@ -429,6 +429,40 @@ def apply_pool_effect(
             },
         }
 
+    if tipo == RandomQrPoolEffect.TIPO_DA_INFUSIONE:
+        if not personaggio:
+            return {
+                "blocked": True,
+                "error": "Parametro personaggio_id richiesto per Materia/Mod.",
+            }
+        if not effect.infusione_id:
+            return {
+                **base,
+                "tipo_modello": "pool_errore",
+                "messaggio": "Effetto Materia/Mod senza Infusione (matrice) collegata.",
+                "dati": {},
+            }
+        from .services import GestioneOggettiService
+
+        with transaction.atomic():
+            oggetto = GestioneOggettiService.crea_oggetto_da_infusione(
+                effect.infusione, personaggio
+            )
+        return {
+            **base,
+            "tipo_modello": "pool_loot",
+            "messaggio": f"Hai trovato: {oggetto.nome}",
+            "dati": {
+                "kind": "oggetto",
+                "tipo_oggetto": oggetto.tipo_oggetto,
+                "nome": oggetto.nome,
+                "oggetto_id": oggetto.pk,
+                "infusione_id": effect.infusione_id,
+                "messaggio": f"Hai trovato: {oggetto.nome}",
+                "gia_assegnato": True,
+            },
+        }
+
     if tipo in (
         RandomQrPoolEffect.TIPO_TESSITURA,
         RandomQrPoolEffect.TIPO_INFUSIONE,

@@ -2430,6 +2430,7 @@ class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
             E.TIPO_SERIE: ("serie", "Serie"),
             E.TIPO_MANIFESTO: ("manifesto", "Manifesto"),
             E.TIPO_OGGETTO_BASE: ("oggetto_base", "Oggetto base"),
+            E.TIPO_DA_INFUSIONE: ("infusione", "Infusione (matrice)"),
             E.TIPO_TESSITURA: ("tessitura", "Tessitura"),
             E.TIPO_INFUSIONE: ("infusione", "Infusione"),
             E.TIPO_CERIMONIALE: ("cerimoniale", "Cerimoniale"),

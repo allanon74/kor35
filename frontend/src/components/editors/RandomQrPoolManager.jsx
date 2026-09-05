@@ -317,7 +317,10 @@ const RandomQrPoolManager = ({ onLogout }) => {
         oggetto_base:
           tipo === 'oggetto_base' && effectForm.oggetto_base ? Number(effectForm.oggetto_base) : null,
         tessitura: tipo === 'tessitura' && effectForm.tessitura ? Number(effectForm.tessitura) : null,
-        infusione: tipo === 'infusione' && effectForm.infusione ? Number(effectForm.infusione) : null,
+        infusione:
+          (tipo === 'infusione' || tipo === 'da_infusione') && effectForm.infusione
+            ? Number(effectForm.infusione)
+            : null,
         cerimoniale:
           tipo === 'cerimoniale' && effectForm.cerimoniale ? Number(effectForm.cerimoniale) : null,
         attivata: tipo === 'attivata' && effectForm.attivata ? Number(effectForm.attivata) : null,
@@ -580,9 +583,10 @@ const RandomQrPoolManager = ({ onLogout }) => {
                         <option value="trappola">Trappola</option>
                         <option value="serie">Serie</option>
                         <option value="manifesto">Manifesto (anche condizionale)</option>
-                        <option value="oggetto_base">Oggetto (listino)</option>
+                        <option value="oggetto_base">Oggetto (listino Accademia)</option>
+                        <option value="da_infusione">Materia/Mod (da Infusione)</option>
                         <option value="tessitura">Tessitura</option>
-                        <option value="infusione">Infusione</option>
+                        <option value="infusione">Infusione (ricetta)</option>
                         <option value="cerimoniale">Cerimoniale</option>
                       </select>
                       <input
@@ -670,6 +674,22 @@ const RandomQrPoolManager = ({ onLogout }) => {
                           ))}
                         </select>
                       )}
+                      {(effectForm.tipo === 'da_infusione' || effectForm.tipo === 'infusione') && (
+                        <select
+                          className="sm:col-span-2 bg-gray-900 border border-gray-600 rounded p-2"
+                          value={effectForm.infusione}
+                          onChange={(e) => setEffectForm((f) => ({ ...f, infusione: e.target.value }))}
+                        >
+                          <option value="">
+                            {effectForm.tipo === 'da_infusione'
+                              ? 'Seleziona Infusione (matrice Materia/Mod)…'
+                              : 'Seleziona Infusione (ricetta)…'}
+                          </option>
+                          {infusioni.map((t) => (
+                            <option key={t.id} value={t.id}>{t.nome}</option>
+                          ))}
+                        </select>
+                      )}
                       {effectForm.tipo === 'tessitura' && (
                         <select
                           className="sm:col-span-2 bg-gray-900 border border-gray-600 rounded p-2"
@@ -678,18 +698,6 @@ const RandomQrPoolManager = ({ onLogout }) => {
                         >
                           <option value="">Seleziona tessitura…</option>
                           {tessiture.map((t) => (
-                            <option key={t.id} value={t.id}>{t.nome}</option>
-                          ))}
-                        </select>
-                      )}
-                      {effectForm.tipo === 'infusione' && (
-                        <select
-                          className="sm:col-span-2 bg-gray-900 border border-gray-600 rounded p-2"
-                          value={effectForm.infusione}
-                          onChange={(e) => setEffectForm((f) => ({ ...f, infusione: e.target.value }))}
-                        >
-                          <option value="">Seleziona infusione…</option>
-                          {infusioni.map((t) => (
                             <option key={t.id} value={t.id}>{t.nome}</option>
                           ))}
                         </select>

@@ -392,3 +392,48 @@ class ManifestoCondizionaleEPoolLootTests(TestCase):
                 {"personaggio_id": self.pg.id},
             )
         self.assertTrue(r2.data["dati"].get("gia_posseduta"))
+
+    def test_pool_effetto_materia_da_infusione(self):
+        from personaggi.models import AURA, Infusione, Oggetto, Punteggio, TIPO_OGGETTO_MATERIA
+
+        aura, _ = Punteggio.objects.get_or_create(
+            nome="Aura materia pool",
+            defaults={"tipo": AURA, "sigla": "AMP"},
+        )
+        if getattr(aura, "sigla", None) != "AMP":
+            # sigla già presa: usa quella esistente purché non ATE (diventerebbe Mod)
+            pass
+        if aura.tipo != AURA:
+            aura.tipo = AURA
+            aura.save(update_fields=["tipo"])
+
+        pool = RandomQrPool.objects.create(nome="Pool Mat", attivo=True)
+        qr = QrCode.objects.create()
+        RandomQrPoolMembership.objects.create(pool=pool, qr_code=qr)
+        inf = Infusione.objects.create(
+            nome="Matrice pool",
+            testo="",
+            aura_richiesta=aura,
+            tipo_risultato="POT",
+        )
+        eff = RandomQrPoolEffect.objects.create(
+            pool=pool,
+            tipo=RandomQrPoolEffect.TIPO_DA_INFUSIONE,
+            frequenza=1,
+            infusione=inf,
+        )
+        with patch("personaggi.qr_random_pool.scegli_effetto", return_value=eff):
+            r = self.client.get(
+                f"/api/personaggi/api/qrcode/{qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+        self.assertEqual(r.status_code, 200, getattr(r, "data", r.content))
+        self.assertEqual(r.data["tipo_modello"], "pool_loot")
+        oggetto = Oggetto.objects.get(pk=r.data["dati"]["oggetto_id"])
+        self.assertEqual(oggetto.infusione_generatrice_id, inf.pk)
+        self.assertEqual(oggetto.inventario_corrente.pk, self.pg.pk)
+        # ATE → Mod, altrimenti Materia (per POT)
+        if (aura.sigla or "").upper() == "ATE":
+            self.assertEqual(oggetto.tipo_oggetto, "MOD")
+        else:
+            self.assertEqual(oggetto.tipo_oggetto, TIPO_OGGETTO_MATERIA)

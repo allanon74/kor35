@@ -4683,6 +4683,7 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
     TIPO_SERIE = "serie"
     TIPO_MANIFESTO = "manifesto"
     TIPO_OGGETTO_BASE = "oggetto_base"
+    TIPO_DA_INFUSIONE = "da_infusione"
     TIPO_TESSITURA = "tessitura"
     TIPO_INFUSIONE = "infusione"
     TIPO_CERIMONIALE = "cerimoniale"
@@ -4694,8 +4695,9 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
         (TIPO_SERIE, "Serie"),
         (TIPO_MANIFESTO, "Manifesto"),
         (TIPO_OGGETTO_BASE, "Oggetto (listino)"),
+        (TIPO_DA_INFUSIONE, "Materia/Mod (da Infusione)"),
         (TIPO_TESSITURA, "Tessitura"),
-        (TIPO_INFUSIONE, "Infusione"),
+        (TIPO_INFUSIONE, "Infusione (ricetta)"),
         (TIPO_CERIMONIALE, "Cerimoniale"),
         (TIPO_ATTIVATA, "Attivata"),
     )
