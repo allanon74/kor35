@@ -381,15 +381,36 @@ export const RegoleGruppoListaEditor = ({ gruppi, onChange, lookup, lookupLoadin
 };
 
 export const RegoleVisibilitaEditor = ({ value, onChange, lookup }) => {
-  const regole = value && typeof value === 'object' ? value : { operator: 'OR', requisiti: [] };
+  return (
+    <RequisitiGruppoEditor
+      value={value}
+      onChange={onChange}
+      lookup={lookup}
+      label="Visibilità tab (negozi corporativi)"
+    />
+  );
+};
+
+/** Gruppo requisiti con operatore AND/OR (manifesti, pool, …). */
+export const RequisitiGruppoEditor = ({
+  value,
+  onChange,
+  lookup,
+  label = 'Condizioni (AND / OR)',
+  defaultOperator = 'AND',
+}) => {
+  const regole =
+    value && typeof value === 'object'
+      ? value
+      : { operator: defaultOperator, requisiti: [] };
   return (
     <div className="space-y-2 text-sm">
-      <label className="block text-gray-400 text-xs font-semibold uppercase">
-        Visibilità tab (negozi corporativi)
-      </label>
+      {label ? (
+        <label className="block text-gray-400 text-xs font-semibold uppercase">{label}</label>
+      ) : null}
       <select
         className="w-full bg-gray-900 border border-gray-600 rounded p-2"
-        value={regole.operator || 'OR'}
+        value={regole.operator || defaultOperator}
         onChange={(e) => onChange({ ...regole, operator: e.target.value })}
       >
         <option value="OR">Basta uno dei requisiti (OR)</option>

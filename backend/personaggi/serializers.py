@@ -2240,7 +2240,14 @@ class OggettoBaseSerializer(serializers.ModelSerializer):
 class ManifestoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Manifesto
-        fields = ("id", "nome", "testo", "requisiti_lettura")
+        fields = (
+            "id",
+            "nome",
+            "testo",
+            "requisiti_lettura",
+            "testo_condizionato",
+            "condizioni_testo",
+        )
 
 
 class ManifestoStaffSerializer(serializers.ModelSerializer):
@@ -2252,7 +2259,17 @@ class ManifestoStaffSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Manifesto
-        fields = ("id", "nome", "testo", "requisiti_lettura", "has_qrcode", "qrcode_id", "minigioco_usa_default")
+        fields = (
+            "id",
+            "nome",
+            "testo",
+            "requisiti_lettura",
+            "testo_condizionato",
+            "condizioni_testo",
+            "has_qrcode",
+            "qrcode_id",
+            "minigioco_usa_default",
+        )
 
 
 class NodoSerializer(serializers.ModelSerializer):
@@ -2362,6 +2379,16 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
 class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
     nodo_nome = serializers.CharField(source="nodo.nome", read_only=True, allow_null=True)
     serie_nome = serializers.CharField(source="serie.nome", read_only=True, allow_null=True)
+    manifesto_nome = serializers.CharField(source="manifesto.nome", read_only=True, allow_null=True)
+    oggetto_base_nome = serializers.CharField(
+        source="oggetto_base.nome", read_only=True, allow_null=True
+    )
+    tessitura_nome = serializers.CharField(source="tessitura.nome", read_only=True, allow_null=True)
+    infusione_nome = serializers.CharField(source="infusione.nome", read_only=True, allow_null=True)
+    cerimoniale_nome = serializers.CharField(
+        source="cerimoniale.nome", read_only=True, allow_null=True
+    )
+    attivata_nome = serializers.CharField(source="attivata.nome", read_only=True, allow_null=True)
 
     class Meta:
         model = RandomQrPoolEffect
@@ -2379,8 +2406,50 @@ class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
             "durata_secondi",
             "serie",
             "serie_nome",
+            "manifesto",
+            "manifesto_nome",
+            "oggetto_base",
+            "oggetto_base_nome",
+            "tessitura",
+            "tessitura_nome",
+            "infusione",
+            "infusione_nome",
+            "cerimoniale",
+            "cerimoniale_nome",
+            "attivata",
+            "attivata_nome",
         )
         read_only_fields = ("id",)
+
+    def validate(self, attrs):
+        tipo = attrs.get("tipo") or getattr(self.instance, "tipo", None)
+        from .models import RandomQrPoolEffect as E
+
+        required = {
+            E.TIPO_NODO: ("nodo", "Nodo"),
+            E.TIPO_SERIE: ("serie", "Serie"),
+            E.TIPO_MANIFESTO: ("manifesto", "Manifesto"),
+            E.TIPO_OGGETTO_BASE: ("oggetto_base", "Oggetto base"),
+            E.TIPO_TESSITURA: ("tessitura", "Tessitura"),
+            E.TIPO_INFUSIONE: ("infusione", "Infusione"),
+            E.TIPO_CERIMONIALE: ("cerimoniale", "Cerimoniale"),
+            E.TIPO_ATTIVATA: ("attivata", "Attivata"),
+        }
+        if tipo in required:
+            field, label = required[tipo]
+            if field in attrs:
+                val = attrs.get(field)
+            elif self.instance is not None:
+                val = getattr(self.instance, f"{field}_id", None) or getattr(
+                    self.instance, field, None
+                )
+            else:
+                val = None
+            if not val:
+                raise serializers.ValidationError(
+                    {field: f"{label} obbligatorio per tipo «{tipo}»."}
+                )
+        return attrs
 
 
 class RandomQrPoolMembershipStaffSerializer(serializers.ModelSerializer):

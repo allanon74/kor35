@@ -380,6 +380,112 @@ def apply_pool_effect(
             "dati": payload or {},
         }
 
+    if tipo == RandomQrPoolEffect.TIPO_MANIFESTO:
+        if not effect.manifesto_id:
+            return {
+                **base,
+                "tipo_modello": "pool_errore",
+                "messaggio": "Effetto manifesto senza Manifesto collegato.",
+                "dati": {},
+            }
+        dati = qr_logic.risolvi_payload_manifesto(effect.manifesto, personaggio)
+        return {
+            **base,
+            "tipo_modello": "manifesto",
+            "messaggio": dati.get("nome") or "Manifesto",
+            "dati": dati,
+        }
+
+    if tipo == RandomQrPoolEffect.TIPO_OGGETTO_BASE:
+        if not personaggio:
+            return {
+                "blocked": True,
+                "error": "Parametro personaggio_id richiesto per l'oggetto.",
+            }
+        if not effect.oggetto_base_id:
+            return {
+                **base,
+                "tipo_modello": "pool_errore",
+                "messaggio": "Effetto oggetto senza template listino collegato.",
+                "dati": {},
+            }
+        from .services import GestioneCraftingService
+
+        with transaction.atomic():
+            oggetto = GestioneCraftingService.crea_istanza_da_oggetto_base(
+                effect.oggetto_base, personaggio
+            )
+        return {
+            **base,
+            "tipo_modello": "pool_loot",
+            "messaggio": f"Hai trovato: {oggetto.nome}",
+            "dati": {
+                "kind": "oggetto",
+                "nome": oggetto.nome,
+                "oggetto_id": oggetto.pk,
+                "template_id": effect.oggetto_base_id,
+                "messaggio": f"Hai trovato: {oggetto.nome}",
+                "gia_assegnato": True,
+            },
+        }
+
+    if tipo in (
+        RandomQrPoolEffect.TIPO_TESSITURA,
+        RandomQrPoolEffect.TIPO_INFUSIONE,
+        RandomQrPoolEffect.TIPO_CERIMONIALE,
+        RandomQrPoolEffect.TIPO_ATTIVATA,
+    ):
+        if not personaggio:
+            return {
+                "blocked": True,
+                "error": "Parametro personaggio_id richiesto per la tecnica.",
+            }
+        tecnica = None
+        m2m = None
+        if tipo == RandomQrPoolEffect.TIPO_TESSITURA:
+            tecnica = effect.tessitura
+            m2m = personaggio.tessiture_possedute
+        elif tipo == RandomQrPoolEffect.TIPO_INFUSIONE:
+            tecnica = effect.infusione
+            m2m = personaggio.infusioni_possedute
+        elif tipo == RandomQrPoolEffect.TIPO_CERIMONIALE:
+            tecnica = effect.cerimoniale
+            m2m = personaggio.cerimoniali_posseduti
+        elif tipo == RandomQrPoolEffect.TIPO_ATTIVATA:
+            tecnica = effect.attivata
+            m2m = personaggio.attivate_possedute
+
+        if not tecnica:
+            return {
+                **base,
+                "tipo_modello": "pool_errore",
+                "messaggio": f"Effetto {tipo} senza tecnica collegata.",
+                "dati": {},
+            }
+
+        gia = m2m.filter(pk=tecnica.pk).exists()
+        if not gia:
+            with transaction.atomic():
+                m2m.add(tecnica)
+        nome = getattr(tecnica, "nome", None) or str(tecnica.pk)
+        return {
+            **base,
+            "tipo_modello": "pool_loot",
+            "messaggio": (
+                f"Possedevi già: {nome}" if gia else f"Hai appreso: {nome}"
+            ),
+            "dati": {
+                "kind": tipo,
+                "nome": nome,
+                "tecnica_id": tecnica.pk,
+                "gia_posseduta": gia,
+                "gia_assegnato": True,
+                "messaggio": (
+                    f"Possedevi già: {nome}" if gia else f"Hai appreso: {nome}"
+                ),
+            },
+        }
+
     return {
         **base,
         "tipo_modello": "pool_errore",

@@ -237,3 +237,158 @@ class PoolMinigiocoOverrideTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["tipo_modello"], "minigioco_richiesto")
         self.assertIn("Override", r.data.get("messaggio") or "")
+
+
+class ManifestoCondizionaleEPoolLootTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="conduser", password="pass")
+        self.pg = Personaggio.objects.create(nome="PG Cond", proprietario=self.user)
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_manifesto_testo_condizionato_and(self):
+        m = Manifesto.objects.create(
+            nome="Segreto",
+            testo="<p>Base</p>",
+            testo_condizionato="<p>Segreto INT</p>",
+            condizioni_testo={
+                "operator": "AND",
+                "requisiti": [{"tipo": "statistica", "sigla": "INT", "min": 3}],
+            },
+            requisiti_lettura=[],
+        )
+        qr = QrCode.objects.create(vista=m)
+
+        with patch.object(Personaggio, "get_valore_statistica", return_value=1):
+            r = self.client.get(
+                f"/api/personaggi/api/qrcode/{qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data["dati"]["puo_leggere"])
+        self.assertIn("Base", r.data["dati"]["testo"])
+        self.assertFalse(r.data["dati"]["mostra_testo_condizionato"])
+
+        with patch.object(Personaggio, "get_valore_statistica", return_value=5):
+            r2 = self.client.get(
+                f"/api/personaggi/api/qrcode/{qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+        self.assertTrue(r2.data["dati"]["mostra_testo_condizionato"])
+        self.assertIn("Segreto INT", r2.data["dati"]["testo_condizionato"])
+
+    def test_manifesto_condizioni_or(self):
+        m = Manifesto.objects.create(
+            nome="OR",
+            testo="base",
+            testo_condizionato="extra",
+            condizioni_testo={
+                "operator": "OR",
+                "requisiti": [
+                    {"tipo": "statistica", "sigla": "INT", "min": 99},
+                    {"tipo": "statistica", "sigla": "CCO", "min": 1},
+                ],
+            },
+        )
+        from personaggi.qr_logic import risolvi_payload_manifesto
+
+        def fake_stat(sigla):
+            return 2 if sigla == "CCO" else 0
+
+        with patch.object(self.pg, "get_valore_statistica", side_effect=fake_stat):
+            payload = risolvi_payload_manifesto(m, self.pg)
+        self.assertTrue(payload["mostra_testo_condizionato"])
+
+    def test_pool_effetto_manifesto(self):
+        pool = RandomQrPool.objects.create(nome="Pool Man", attivo=True)
+        qr = QrCode.objects.create()
+        RandomQrPoolMembership.objects.create(pool=pool, qr_code=qr)
+        m = Manifesto.objects.create(
+            nome="Dal pool",
+            testo="<p>Pool base</p>",
+            testo_condizionato="<p>Pool segreto</p>",
+            condizioni_testo={
+                "operator": "AND",
+                "requisiti": [{"tipo": "statistica", "sigla": "INT", "min": 1}],
+            },
+        )
+        eff = RandomQrPoolEffect.objects.create(
+            pool=pool,
+            tipo=RandomQrPoolEffect.TIPO_MANIFESTO,
+            frequenza=1,
+            manifesto=m,
+        )
+        with patch("personaggi.qr_random_pool.scegli_effetto", return_value=eff):
+            with patch.object(Personaggio, "get_valore_statistica", return_value=5):
+                r = self.client.get(
+                    f"/api/personaggi/api/qrcode/{qr.id}/",
+                    {"personaggio_id": self.pg.id},
+                )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["tipo_modello"], "manifesto")
+        self.assertTrue(r.data["dati"]["mostra_testo_condizionato"])
+
+    def test_pool_effetto_oggetto_base(self):
+        from personaggi.models import Oggetto, OggettoBase, TIPO_OGGETTO_FISICO
+
+        pool = RandomQrPool.objects.create(nome="Pool Loot", attivo=True)
+        qr = QrCode.objects.create()
+        RandomQrPoolMembership.objects.create(pool=pool, qr_code=qr)
+        template = OggettoBase.objects.create(
+            nome="Coltello pool",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            costo=0,
+        )
+        eff = RandomQrPoolEffect.objects.create(
+            pool=pool,
+            tipo=RandomQrPoolEffect.TIPO_OGGETTO_BASE,
+            frequenza=1,
+            oggetto_base=template,
+        )
+        with patch("personaggi.qr_random_pool.scegli_effetto", return_value=eff):
+            r = self.client.get(
+                f"/api/personaggi/api/qrcode/{qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["tipo_modello"], "pool_loot")
+        oggetto = Oggetto.objects.get(pk=r.data["dati"]["oggetto_id"])
+        self.assertEqual(oggetto.nome, "Coltello pool")
+        self.assertEqual(oggetto.inventario_corrente.pk, self.pg.pk)
+
+    def test_pool_effetto_tessitura(self):
+        from personaggi.models import AURA, Punteggio, Tessitura
+
+        aura, _ = Punteggio.objects.get_or_create(
+            nome="Aura pool test",
+            defaults={"tipo": AURA, "sigla": "APT"},
+        )
+        if aura.tipo != AURA:
+            aura.tipo = AURA
+            aura.save(update_fields=["tipo"])
+
+        pool = RandomQrPool.objects.create(nome="Pool Tec", attivo=True)
+        qr = QrCode.objects.create()
+        RandomQrPoolMembership.objects.create(pool=pool, qr_code=qr)
+        t = Tessitura.objects.create(nome="Tessitura pool", testo="", aura_richiesta=aura)
+        eff = RandomQrPoolEffect.objects.create(
+            pool=pool,
+            tipo=RandomQrPoolEffect.TIPO_TESSITURA,
+            frequenza=1,
+            tessitura=t,
+        )
+        with patch("personaggi.qr_random_pool.scegli_effetto", return_value=eff):
+            r = self.client.get(
+                f"/api/personaggi/api/qrcode/{qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["tipo_modello"], "pool_loot")
+        self.assertTrue(self.pg.tessiture_possedute.filter(pk=t.pk).exists())
+        # Seconda scansione: già posseduta
+        with patch("personaggi.qr_random_pool.scegli_effetto", return_value=eff):
+            r2 = self.client.get(
+                f"/api/personaggi/api/qrcode/{qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+        self.assertTrue(r2.data["dati"].get("gia_posseduta"))

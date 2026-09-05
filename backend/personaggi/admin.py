@@ -811,8 +811,8 @@ admin.site.register(abilita_prerequisito)
 class ManifestoAdmin(SModelAdmin):
     list_display = ('id', 'data_creazione', 'nome')
     readonly_fields = ('id', 'data_creazione')
-    summernote_fields = ['testo']
-    search_fields = ('nome', 'testo')
+    summernote_fields = ['testo', 'testo_condizionato']
+    search_fields = ('nome', 'testo', 'testo_condizionato')
 
 
 @admin.register(Nodo)

@@ -1371,7 +1371,17 @@ class RandomQrPoolEffectStaffViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "patch", "put", "delete", "head", "options"]
 
     def get_queryset(self):
-        qs = RandomQrPoolEffect.objects.select_related("pool", "nodo", "serie").order_by("ordine", "id")
+        qs = RandomQrPoolEffect.objects.select_related(
+            "pool",
+            "nodo",
+            "serie",
+            "manifesto",
+            "oggetto_base",
+            "tessitura",
+            "infusione",
+            "cerimoniale",
+            "attivata",
+        ).order_by("ordine", "id")
         pool_id = self.request.query_params.get("pool")
         if pool_id:
             qs = qs.filter(pool_id=pool_id)

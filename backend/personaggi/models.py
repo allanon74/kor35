@@ -3216,12 +3216,26 @@ class Manifesto(A_vista):
     `requisiti_lettura`: lista JSON opzionale per limitare la lettura, es.:
     [{"tipo": "statistica", "sigla": "CCO", "min": 1}, {"tipo": "abilita", "id": 12}]
     Lista vuota = tutti possono leggere.
+
+    `testo_condizionato` + `condizioni_testo`: secondo testo mostrato in aggiunta al
+    testo base solo se lo scanner soddisfa il gruppo AND/OR di requisiti, es.:
+    {"operator": "AND", "requisiti": [{"tipo": "statistica", "sigla": "INT", "min": 3}]}
     """
 
     requisiti_lettura = models.JSONField(
         default=list,
         blank=True,
         help_text="Requisiti opzionali (statistica per sigla o abilità per id). Vuoto = accesso libero.",
+    )
+    testo_condizionato = models.TextField(
+        blank=True,
+        default="",
+        help_text="HTML mostrato in aggiunta al testo base se le condizioni_testo sono soddisfatte.",
+    )
+    condizioni_testo = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Gruppo requisiti AND/OR: {"operator":"AND"|"OR","requisiti":[...]}. Vuoto = nessun testo condizionale.',
     )
 
     def __str__(self):
@@ -4667,11 +4681,23 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
     TIPO_NODO = "nodo"
     TIPO_TRAPPOLA = "trappola"
     TIPO_SERIE = "serie"
+    TIPO_MANIFESTO = "manifesto"
+    TIPO_OGGETTO_BASE = "oggetto_base"
+    TIPO_TESSITURA = "tessitura"
+    TIPO_INFUSIONE = "infusione"
+    TIPO_CERIMONIALE = "cerimoniale"
+    TIPO_ATTIVATA = "attivata"
     TIPO_CHOICES = (
         (TIPO_TESTO, "Testo"),
         (TIPO_NODO, "Nodo"),
         (TIPO_TRAPPOLA, "Trappola"),
         (TIPO_SERIE, "Serie"),
+        (TIPO_MANIFESTO, "Manifesto"),
+        (TIPO_OGGETTO_BASE, "Oggetto (listino)"),
+        (TIPO_TESSITURA, "Tessitura"),
+        (TIPO_INFUSIONE, "Infusione"),
+        (TIPO_CERIMONIALE, "Cerimoniale"),
+        (TIPO_ATTIVATA, "Attivata"),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -4706,6 +4732,50 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
     )
     serie = models.ForeignKey(
         "SerieCollezione",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+    )
+    manifesto = models.ForeignKey(
+        "Manifesto",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+        help_text="Effetto manifesto: riusa testo base + testo condizionale del catalogo.",
+    )
+    oggetto_base = models.ForeignKey(
+        "OggettoBase",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+        help_text="Effetto loot: crea istanza da listino e la mette in inventario.",
+    )
+    tessitura = models.ForeignKey(
+        "Tessitura",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+    )
+    infusione = models.ForeignKey(
+        "Infusione",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+    )
+    cerimoniale = models.ForeignKey(
+        "Cerimoniale",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+    )
+    attivata = models.ForeignKey(
+        "Attivata",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

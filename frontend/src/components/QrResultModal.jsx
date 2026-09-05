@@ -92,6 +92,15 @@ const getOggettiVisibili = (oggettiDaFiltrare, personaggioAttivo) => {
 const ManifestoView = ({ data }) => {
   const canRead = data.puo_leggere !== false;
   const blockMsg = data.messaggio_accesso;
+  const showCond = canRead && data.mostra_testo_condizionato && data.testo_condizionato;
+  const bodyHtml = canRead
+    ? [
+        data.testo || '<i>Nessun testo per questo manifesto.</i>',
+        showCond
+          ? `<hr style="border:none;border-top:1px solid #d6d3d1;margin:1.25rem 0;" /><div style="opacity:0.95">${data.testo_condizionato}</div>`
+          : '',
+      ].join('')
+    : '<p><i>Contenuto non disponibile per il tuo personaggio.</i></p>';
 
   // Creiamo un template HTML completo da passare all'iframe.
   // Questo ci permette di controllare STILI e COMPORTAMENTO del testo.
@@ -130,7 +139,7 @@ const ManifestoView = ({ data }) => {
       </style>
     </head>
     <body>
-      ${canRead ? (data.testo || '<i>Nessun testo per questo manifesto.</i>') : '<p><i>Contenuto non disponibile per il tuo personaggio.</i></p>'}
+      ${bodyHtml}
     </body>
     </html>
   `;
@@ -1102,6 +1111,28 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
                 className="text-left text-gray-200 prose prose-invert prose-sm max-w-none"
               />
             ) : null}
+          </div>
+        );
+
+      case 'pool_loot':
+        return (
+          <div className="text-center py-8">
+            <Package size={56} className="mx-auto text-emerald-400 mb-4" />
+            <h3 className="text-2xl font-black text-emerald-300 uppercase tracking-tight">
+              {data.dati?.nome || data.messaggio || 'Ricompensa'}
+            </h3>
+            <p className="text-gray-300 mt-3">
+              {data.dati?.messaggio || data.messaggio}
+            </p>
+            {data.dati?.kind === 'oggetto' ? (
+              <p className="text-xs text-gray-500 mt-4">L&apos;oggetto è stato aggiunto al tuo inventario.</p>
+            ) : (
+              <p className="text-xs text-gray-500 mt-4">
+                {data.dati?.gia_posseduta
+                  ? 'La tecnica era già nel tuo grimorio.'
+                  : 'La tecnica è stata aggiunta al tuo grimorio.'}
+              </p>
+            )}
           </div>
         );
 

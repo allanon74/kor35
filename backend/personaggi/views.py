@@ -1734,22 +1734,7 @@ class QrCodeDetailView(APIView):
 
         elif hasattr(vista_obj, "manifesto"):
             model_type = "manifesto"
-            serializer = ManifestoSerializer(vista_obj.manifesto)
-            data = dict(serializer.data)
-            if scanner_pg:
-                ok_r, msg_r = qr_logic.personaggio_soddisfa_requisiti_manifesto(scanner_pg, vista_obj.manifesto)
-                data["puo_leggere"] = ok_r
-                data["messaggio_accesso"] = msg_r or None
-                if not ok_r:
-                    data["testo"] = None
-            else:
-                reqs = vista_obj.manifesto.requisiti_lettura or []
-                if reqs:
-                    data["puo_leggere"] = False
-                    data["messaggio_accesso"] = "Accedi e indica personaggio_id per verificare i requisiti."
-                    data["testo"] = None
-                else:
-                    data["puo_leggere"] = True
+            data = qr_logic.risolvi_payload_manifesto(vista_obj.manifesto, scanner_pg)
 
         elif Inventario.objects.filter(pk=vista_obj.pk).exists() and not Personaggio.objects.filter(
             inventario_ptr_id=vista_obj.pk

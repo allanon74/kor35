@@ -17,6 +17,11 @@ import {
   staffGetSerieCollezioni,
   staffGetNodi,
   staffGetMinigiocoPatterns,
+  staffGetManifesti,
+  staffGetOggettiBase,
+  staffGetTessiture,
+  staffGetInfusioni,
+  staffGetCerimoniali,
 } from '../../api';
 
 const emptyPool = () => ({
@@ -41,7 +46,25 @@ const emptyEffect = () => ({
   nodo: '',
   durata_secondi: '',
   serie: '',
+  manifesto: '',
+  oggetto_base: '',
+  tessitura: '',
+  infusione: '',
+  cerimoniale: '',
+  attivata: '',
 });
+
+const effectDetailLabel = (eff) =>
+  eff.titolo
+  || eff.nodo_nome
+  || eff.serie_nome
+  || eff.manifesto_nome
+  || eff.oggetto_base_nome
+  || eff.tessitura_nome
+  || eff.infusione_nome
+  || eff.cerimoniale_nome
+  || eff.attivata_nome
+  || '—';
 
 const POOL_COLUMNS = [
   {
@@ -89,6 +112,11 @@ const RandomQrPoolManager = ({ onLogout }) => {
   const [serieList, setSerieList] = useState([]);
   const [nodi, setNodi] = useState([]);
   const [patterns, setPatterns] = useState([]);
+  const [manifesti, setManifesti] = useState([]);
+  const [oggettiBase, setOggettiBase] = useState([]);
+  const [tessiture, setTessiture] = useState([]);
+  const [infusioni, setInfusioni] = useState([]);
+  const [cerimoniali, setCerimoniali] = useState([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -104,15 +132,42 @@ const RandomQrPoolManager = ({ onLogout }) => {
   }, [onLogout]);
 
   const reloadLookups = useCallback(async () => {
-    const [serie, nodiData, patternData] = await Promise.all([
+    const [
+      serie,
+      nodiData,
+      patternData,
+      manifestiData,
+      oggettiData,
+      tessData,
+      infData,
+      cerData,
+    ] = await Promise.all([
       staffGetSerieCollezioni(onLogout),
       staffGetNodi(onLogout),
       staffGetMinigiocoPatterns(onLogout),
+      staffGetManifesti(onLogout),
+      staffGetOggettiBase(onLogout),
+      staffGetTessiture(onLogout, { page_size: 500 }),
+      staffGetInfusioni(onLogout, { page_size: 500 }),
+      staffGetCerimoniali(onLogout, { page_size: 500 }),
     ]);
     setSerieList(Array.isArray(serie) ? serie : serie?.results || []);
     setNodi(Array.isArray(nodiData) ? nodiData : nodiData?.results || []);
     const plist = Array.isArray(patternData) ? patternData : patternData?.results || [];
     setPatterns(plist.filter((p) => p.attivo !== false));
+    const manList = Array.isArray(manifestiData) ? manifestiData : manifestiData?.results || [];
+    setManifesti(manList);
+    const obList = Array.isArray(oggettiData) ? oggettiData : oggettiData?.results || [];
+    setOggettiBase(obList.filter((o) => !o.non_vendibile));
+    setTessiture(
+      (Array.isArray(tessData) ? tessData : tessData?.results || []).filter((t) => !t.non_vendibile),
+    );
+    setInfusioni(
+      (Array.isArray(infData) ? infData : infData?.results || []).filter((t) => !t.non_vendibile),
+    );
+    setCerimoniali(
+      (Array.isArray(cerData) ? cerData : cerData?.results || []).filter((t) => !t.non_vendibile),
+    );
   }, [onLogout]);
 
   useEffect(() => {
@@ -244,16 +299,28 @@ const RandomQrPoolManager = ({ onLogout }) => {
     try {
       setBusy(true);
       setError('');
+      const tipo = effectForm.tipo;
       const payload = {
-        ...effectForm,
+        tipo,
         frequenza: Math.max(1, parseInt(effectForm.frequenza, 10) || 1),
         ordine: parseInt(effectForm.ordine, 10) || 0,
-        nodo: effectForm.tipo === 'nodo' && effectForm.nodo ? Number(effectForm.nodo) : null,
-        serie: effectForm.tipo === 'serie' && effectForm.serie ? effectForm.serie : null,
+        attivo: true,
+        titolo: effectForm.titolo || '',
+        testo: effectForm.testo || '',
+        nodo: tipo === 'nodo' && effectForm.nodo ? Number(effectForm.nodo) : null,
+        serie: tipo === 'serie' && effectForm.serie ? effectForm.serie : null,
         durata_secondi:
-          effectForm.tipo === 'trappola' && effectForm.durata_secondi !== ''
+          tipo === 'trappola' && effectForm.durata_secondi !== ''
             ? Number(effectForm.durata_secondi)
             : null,
+        manifesto: tipo === 'manifesto' && effectForm.manifesto ? Number(effectForm.manifesto) : null,
+        oggetto_base:
+          tipo === 'oggetto_base' && effectForm.oggetto_base ? Number(effectForm.oggetto_base) : null,
+        tessitura: tipo === 'tessitura' && effectForm.tessitura ? Number(effectForm.tessitura) : null,
+        infusione: tipo === 'infusione' && effectForm.infusione ? Number(effectForm.infusione) : null,
+        cerimoniale:
+          tipo === 'cerimoniale' && effectForm.cerimoniale ? Number(effectForm.cerimoniale) : null,
+        attivata: tipo === 'attivata' && effectForm.attivata ? Number(effectForm.attivata) : null,
       };
       await staffCreateRandomQrPoolEffect(selectedId, payload, onLogout);
       setEffectForm(emptyEffect());
@@ -512,6 +579,11 @@ const RandomQrPoolManager = ({ onLogout }) => {
                         <option value="nodo">Nodo</option>
                         <option value="trappola">Trappola</option>
                         <option value="serie">Serie</option>
+                        <option value="manifesto">Manifesto (anche condizionale)</option>
+                        <option value="oggetto_base">Oggetto (listino)</option>
+                        <option value="tessitura">Tessitura</option>
+                        <option value="infusione">Infusione</option>
+                        <option value="cerimoniale">Cerimoniale</option>
                       </select>
                       <input
                         type="number"
@@ -574,6 +646,66 @@ const RandomQrPoolManager = ({ onLogout }) => {
                           ))}
                         </select>
                       )}
+                      {effectForm.tipo === 'manifesto' && (
+                        <select
+                          className="sm:col-span-2 bg-gray-900 border border-gray-600 rounded p-2"
+                          value={effectForm.manifesto}
+                          onChange={(e) => setEffectForm((f) => ({ ...f, manifesto: e.target.value }))}
+                        >
+                          <option value="">Seleziona manifesto…</option>
+                          {manifesti.map((m) => (
+                            <option key={m.id} value={m.id}>{m.nome}</option>
+                          ))}
+                        </select>
+                      )}
+                      {effectForm.tipo === 'oggetto_base' && (
+                        <select
+                          className="sm:col-span-2 bg-gray-900 border border-gray-600 rounded p-2"
+                          value={effectForm.oggetto_base}
+                          onChange={(e) => setEffectForm((f) => ({ ...f, oggetto_base: e.target.value }))}
+                        >
+                          <option value="">Seleziona oggetto listino…</option>
+                          {oggettiBase.map((o) => (
+                            <option key={o.id} value={o.id}>{o.nome}</option>
+                          ))}
+                        </select>
+                      )}
+                      {effectForm.tipo === 'tessitura' && (
+                        <select
+                          className="sm:col-span-2 bg-gray-900 border border-gray-600 rounded p-2"
+                          value={effectForm.tessitura}
+                          onChange={(e) => setEffectForm((f) => ({ ...f, tessitura: e.target.value }))}
+                        >
+                          <option value="">Seleziona tessitura…</option>
+                          {tessiture.map((t) => (
+                            <option key={t.id} value={t.id}>{t.nome}</option>
+                          ))}
+                        </select>
+                      )}
+                      {effectForm.tipo === 'infusione' && (
+                        <select
+                          className="sm:col-span-2 bg-gray-900 border border-gray-600 rounded p-2"
+                          value={effectForm.infusione}
+                          onChange={(e) => setEffectForm((f) => ({ ...f, infusione: e.target.value }))}
+                        >
+                          <option value="">Seleziona infusione…</option>
+                          {infusioni.map((t) => (
+                            <option key={t.id} value={t.id}>{t.nome}</option>
+                          ))}
+                        </select>
+                      )}
+                      {effectForm.tipo === 'cerimoniale' && (
+                        <select
+                          className="sm:col-span-2 bg-gray-900 border border-gray-600 rounded p-2"
+                          value={effectForm.cerimoniale}
+                          onChange={(e) => setEffectForm((f) => ({ ...f, cerimoniale: e.target.value }))}
+                        >
+                          <option value="">Seleziona cerimoniale…</option>
+                          {cerimoniali.map((t) => (
+                            <option key={t.id} value={t.id}>{t.nome}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -598,7 +730,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
                           <tr key={eff.id} className="bg-gray-900/40">
                             <td className="px-3 py-2 uppercase text-rose-300 font-bold text-xs">{eff.tipo}</td>
                             <td className="px-3 py-2 text-white truncate">
-                              {eff.titolo || eff.nodo_nome || eff.serie_nome || '—'}
+                              {effectDetailLabel(eff)}
                             </td>
                             <td className="px-3 py-2 text-right">
                               <input

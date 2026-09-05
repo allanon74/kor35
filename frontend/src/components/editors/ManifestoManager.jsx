@@ -11,6 +11,8 @@ import StaffMinigiocoPageToolbar from './StaffMinigiocoPageToolbar';
 import StaffMinigiocoUsaDefaultToggle from './StaffMinigiocoUsaDefaultToggle';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 import { useStaffQrAssociation } from '../../hooks/useStaffQrAssociation';
+import { useRequisitiAccessoLookup } from '../../hooks/useRequisitiAccessoLookup';
+import RequisitiListaEditor, { RequisitiGruppoEditor } from './RequisitiAccessoEditor';
 import {
   applyDefaultMinigiocoToQr,
   MINIGIOCO_PAGE_KEYS,
@@ -40,8 +42,11 @@ const TABS = [
   { id: 'trappole', label: 'Trappole' },
 ];
 
+const emptyCondizioni = () => ({ operator: 'AND', requisiti: [] });
+
 const ManifestoManager = ({ onBack, onLogout }) => {
   const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
+  const { lookup, loading: lookupLoading } = useRequisitiAccessoLookup(onLogout);
   const [tab, setTab] = useState('manifesti');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -107,35 +112,27 @@ const ManifestoManager = ({ onBack, onLogout }) => {
     }
   }, [tab, loadSerieTrappole]);
 
+  const manifestoPayload = (editingRow) => ({
+    nome: editingRow.nome,
+    testo: editingRow.testo || '',
+    requisiti_lettura: Array.isArray(editingRow.requisiti_lettura)
+      ? editingRow.requisiti_lettura
+      : [],
+    testo_condizionato: editingRow.testo_condizionato || '',
+    condizioni_testo: editingRow.condizioni_testo || emptyCondizioni(),
+  });
+
   const save = async () => {
     if (!editing?.nome?.trim()) {
       setMsg('Il nome è obbligatorio');
       return;
     }
     try {
+      const payload = manifestoPayload(editing);
       if (editing.id) {
-        await staffUpdateManifesto(
-          editing.id,
-          {
-            nome: editing.nome,
-            testo: editing.testo || '',
-            requisiti_lettura: editing.requisiti_lettura_json
-              ? JSON.parse(editing.requisiti_lettura_json)
-              : [],
-          },
-          onLogout
-        );
+        await staffUpdateManifesto(editing.id, payload, onLogout);
       } else {
-        await staffCreateManifesto(
-          {
-            nome: editing.nome,
-            testo: editing.testo || '',
-            requisiti_lettura: editing.requisiti_lettura_json
-              ? JSON.parse(editing.requisiti_lettura_json)
-              : [],
-          },
-          onLogout
-        );
+        await staffCreateManifesto(payload, onLogout);
       }
       setEditing(null);
       setMsg('Salvato.');
@@ -172,7 +169,9 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                 setEditing({
                   nome: '',
                   testo: '',
-                  requisiti_lettura_json: '[]',
+                  requisiti_lettura: [],
+                  testo_condizionato: '',
+                  condizioni_testo: emptyCondizioni(),
                 });
               }}
             >
@@ -217,7 +216,14 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                         setModalTab('dati');
                         setEditing({
                           ...m,
-                          requisiti_lettura_json: JSON.stringify(m.requisiti_lettura || [], null, 2),
+                          requisiti_lettura: Array.isArray(m.requisiti_lettura)
+                            ? m.requisiti_lettura
+                            : [],
+                          testo_condizionato: m.testo_condizionato || '',
+                          condizioni_testo:
+                            m.condizioni_testo && typeof m.condizioni_testo === 'object'
+                              ? m.condizioni_testo
+                              : emptyCondizioni(),
                         });
                       }}
                     >
@@ -265,7 +271,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
             onChange={setModalTab}
           />
           {modalTab === 'dati' && (
-          <div className="space-y-3">
+          <div className="space-y-4">
           <label className="block text-sm">
             Nome
             <input
@@ -275,21 +281,45 @@ const ManifestoManager = ({ onBack, onLogout }) => {
             />
           </label>
           <label className="block text-sm">
-            Contenuto (HTML / ricco)
+            Contenuto base (HTML / ricco)
             <textarea
-              className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600 font-mono text-sm min-h-[180px]"
+              className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600 font-mono text-sm min-h-[140px]"
               value={editing.testo || ''}
               onChange={(e) => setEditing({ ...editing, testo: e.target.value })}
             />
           </label>
-          <label className="block text-sm">
-            Requisiti lettura (JSON, lista vuota = tutti)
-            <textarea
-              className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600 font-mono text-xs min-h-[80px]"
-              value={editing.requisiti_lettura_json || '[]'}
-              onChange={(e) => setEditing({ ...editing, requisiti_lettura_json: e.target.value })}
+          <div className="space-y-2">
+            <div className="text-xs uppercase text-gray-400 font-semibold">
+              Requisiti lettura (gate: senza = tutti leggono)
+            </div>
+            <RequisitiListaEditor
+              requisiti={editing.requisiti_lettura || []}
+              onChange={(requisiti_lettura) => setEditing({ ...editing, requisiti_lettura })}
+              lookup={lookup}
+              lookupLoading={lookupLoading}
             />
-          </label>
+          </div>
+          <div className="border border-indigo-900/50 rounded-lg p-3 space-y-3 bg-indigo-950/20">
+            <div className="text-xs uppercase text-indigo-300 font-semibold">
+              Testo condizionale (mostrato in aggiunta se le condizioni sono OK)
+            </div>
+            <RequisitiGruppoEditor
+              value={editing.condizioni_testo || emptyCondizioni()}
+              onChange={(condizioni_testo) => setEditing({ ...editing, condizioni_testo })}
+              lookup={lookup}
+              label="Condizioni AND/OR"
+              defaultOperator="AND"
+            />
+            <label className="block text-sm">
+              Contenuto condizionale (HTML)
+              <textarea
+                className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600 font-mono text-sm min-h-[100px]"
+                value={editing.testo_condizionato || ''}
+                onChange={(e) => setEditing({ ...editing, testo_condizionato: e.target.value })}
+                placeholder="Visibile solo se le condizioni sopra sono soddisfatte"
+              />
+            </label>
+          </div>
           </div>
           )}
           {modalTab === 'minigioco' && (
