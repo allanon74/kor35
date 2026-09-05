@@ -1,0 +1,7 @@
+{
+  "name": "KOR35 (dev-home Docker stack)",
+  "user": "ubuntu",
+  "install": ".cursor/cloud/install.sh",
+  "start": ".cursor/cloud/start.sh",
+  "ports": [8080]
+}

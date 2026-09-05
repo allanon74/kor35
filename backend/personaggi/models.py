@@ -1583,13 +1583,72 @@ CAMPAGNA_ROLES_COMPITO = (
 )
 
 
+def _crea_campagna_base_raw(Campagna):
+    """Crea la campagna base "kor35" con SQL grezzo, usando solo le colonne
+    realmente presenti nella tabella.
+
+    Serve durante un ``migrate`` da zero: quando 0150 usa questa callable come
+    ``default`` di una ForeignKey, lo schema di ``personaggi_campagna`` è ancora
+    parziale e un INSERT sull'intero modello referenzierebbe colonne aggiunte
+    da migrazioni successive (es. ``moduli_accesso`` in 0250) non ancora esistenti.
+    """
+    from django.db import connection
+
+    table = Campagna._meta.db_table
+    now = timezone.now()
+    candidate = {
+        "slug": "kor35",
+        "nome": "Kor35",
+        "descrizione": "",
+        "is_default": True,
+        "is_base": True,
+        "attiva": True,
+        "sync_id": uuid.uuid4(),
+        "created_at": now,
+        "updated_at": now,
+    }
+    with connection.cursor() as cur:
+        present = {c.name for c in connection.introspection.get_table_description(cur, table)}
+        columns = ["id"] if "id" in present else []
+        params = [uuid.uuid4()] if "id" in present else []
+        for name, value in candidate.items():
+            if name in present:
+                columns.append(name)
+                params.append(value)
+        collist = ", ".join('"%s"' % c for c in columns)
+        placeholders = ", ".join(["%s"] * len(columns))
+        cur.execute(
+            'INSERT INTO "%s" (%s) VALUES (%s) RETURNING id' % (table, collist, placeholders),
+            params,
+        )
+        return cur.fetchone()[0]
+
+
 def get_default_campagna_id():
+    """Id della campagna base "kor35" (creata se assente).
+
+    Usata come ``default`` di ForeignKey anche in migrazioni storiche: legge il
+    solo ``id`` per non referenziare colonne che, durante un ``migrate`` da zero,
+    non esistono ancora (LWW/sync aggiungono campi in migrazioni successive).
+    """
+    from django.db import OperationalError, ProgrammingError
+
     Campagna = apps.get_model("personaggi", "Campagna")
-    campagna, _ = Campagna.objects.get_or_create(
-        slug="kor35",
-        defaults={"nome": "Kor35", "is_default": True, "is_base": True, "attiva": True},
+    existing = (
+        Campagna.objects.filter(slug="kor35").values_list("id", flat=True).first()
     )
-    return campagna.id
+    if existing is not None:
+        return existing
+    try:
+        # Savepoint: se lo schema è parziale (migrate da zero) l'INSERT ORM
+        # fallisce e va isolato, per non abortire la transazione della migrazione.
+        with transaction.atomic():
+            campagna = Campagna.objects.create(
+                slug="kor35", nome="Kor35", is_default=True, is_base=True, attiva=True
+            )
+        return campagna.id
+    except (ProgrammingError, OperationalError):
+        return _crea_campagna_base_raw(Campagna)
 
 class A_modello(SyncableModel, models.Model):
     id = models.AutoField("Codice Identificativo", primary_key=True)
