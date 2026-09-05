@@ -623,8 +623,9 @@ jobs:
             fi
 
             if [ "${CARD_STUDIO_CHANGED:-false}" = "true" ]; then
-              if ! docker compose -f compose.base.yml -f compose.prod.yml exec -T frontend test -f /usr/share/nginx/cardeditor/index.html; then
-                echo "ERRORE: /usr/share/nginx/cardeditor/index.html mancante (rsync Card Studio fallito?)." >&2
+              # Volume: react_build → /usr/share/nginx/html (vedi compose.prod.yml + common_locations.snippets)
+              if ! docker compose -f compose.base.yml -f compose.prod.yml exec -T frontend test -f /usr/share/nginx/html/cardeditor/index.html; then
+                echo "ERRORE: /usr/share/nginx/html/cardeditor/index.html mancante (rsync Card Studio fallito?)." >&2
                 exit 1
               fi
             fi
