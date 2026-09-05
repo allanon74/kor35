@@ -2166,6 +2166,7 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
             'nome', 'testo', 'costume', 'note_master', 'watch_enabled',
             'peso_influencer', 'badge_instafame', 'era', 'prefettura',
             'prefettura_esterna', 'tipologia', 'impostazioni_ui',
+            'punti_luminosi', 'punti_oscuri', 'punti_grigi',
             'foto_trucco', 'foto_outfit', 'clear_foto_trucco', 'clear_foto_outfit',
         }
         payload = {k: v for k, v in request.data.items() if k in allowed}

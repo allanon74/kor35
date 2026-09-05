@@ -17,6 +17,7 @@ class _FakeMissione:
         self.bonus_successive_prestigio = kwargs.get("bonus_successive_prestigio", 0)
         self.esclusiva = kwargs.get("esclusiva", False)
         self.korp_id = kwargs.get("korp_id")
+        self.allineamento = kwargs.get("allineamento", "GRIGIA")
 
 
 class MissioniRewardCalcTests(SimpleTestCase):

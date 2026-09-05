@@ -5225,6 +5225,21 @@ class Personaggio(Inventario):
             "Usato per like InstaFame (1 = minimo). Le cariche attive e le task possono aumentarlo."
         ),
     )
+    punti_luminosi = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Punteggio luminoso",
+        help_text="Contatore task a allineamento luminoso risolte (visibile allo staff).",
+    )
+    punti_oscuri = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Punteggio oscuro",
+        help_text="Contatore task a allineamento oscuro risolte (visibile allo staff).",
+    )
+    punti_grigi = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Punteggio grigio",
+        help_text="Contatore task a allineamento grigio risolte (visibile allo staff).",
+    )
     badge_instafame = models.CharField(
         max_length=8,
         choices=[
@@ -5336,6 +5351,41 @@ class Personaggio(Inventario):
         self.save(update_fields=["peso_influencer", "updated_at"])
         segno = "+" if delta >= 0 else ""
         self.aggiungi_log(f"Prestigio {segno}{delta} (ora {nuovo}) — {descrizione or 'variazione Prestigio'}")
+        return nuovo
+
+    def modifica_punteggio_allineamento(self, allineamento, delta=1, descrizione=""):
+        """
+        Variazione contatori luminoso/oscuro/grigio (task).
+        ``allineamento``: LUMINOSA | OSCURA | GRIGIA (o alias lowercase).
+        """
+        delta = int(delta or 0)
+        if delta == 0:
+            return None
+        key = (allineamento or "").strip().upper()
+        field_map = {
+            "LUMINOSA": "punti_luminosi",
+            "LUMINOSO": "punti_luminosi",
+            "OSCURA": "punti_oscuri",
+            "OSCURO": "punti_oscuri",
+            "GRIGIA": "punti_grigi",
+            "GRIGIO": "punti_grigi",
+        }
+        field = field_map.get(key)
+        if not field:
+            return None
+        attuale = max(0, int(getattr(self, field, 0) or 0))
+        nuovo = max(0, attuale + delta)
+        setattr(self, field, nuovo)
+        self.save(update_fields=[field, "updated_at"])
+        label = {
+            "punti_luminosi": "Luminoso",
+            "punti_oscuri": "Oscuro",
+            "punti_grigi": "Grigio",
+        }[field]
+        segno = "+" if delta >= 0 else ""
+        self.aggiungi_log(
+            f"Punteggio {label} {segno}{delta} (ora {nuovo}) — {descrizione or 'variazione allineamento'}"
+        )
         return nuovo
 
     def modifica_riserva_scommesse(self, delta, motivo):

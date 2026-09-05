@@ -26,11 +26,24 @@ const TIPO_OPTS = [
   { value: 'MANUALE', label: 'Manuale' },
 ];
 
+const ALLINEAMENTO_OPTS = [
+  { value: 'LUMINOSA', label: 'Luminosa' },
+  { value: 'OSCURA', label: 'Oscura' },
+  { value: 'GRIGIA', label: 'Grigia' },
+];
+
+const ALLINEAMENTO_STYLE = {
+  LUMINOSA: 'text-amber-200',
+  OSCURA: 'text-violet-300',
+  GRIGIA: 'text-gray-400',
+};
+
 const emptyForm = () => ({
   titolo: '',
   descrizione: '',
   korp: null,
   esclusiva: false,
+  allineamento: 'GRIGIA',
   reward_crediti: 0,
   reward_prestigio: 0,
   tipo_risoluzione: 'MANUALE',
@@ -51,6 +64,7 @@ const formFromMissione = (row) => ({
   descrizione: row.descrizione || '',
   korp: row.korp || null,
   esclusiva: !!row.esclusiva,
+  allineamento: row.allineamento || 'GRIGIA',
   reward_crediti: row.reward_crediti ?? 0,
   reward_prestigio: row.reward_prestigio ?? 0,
   tipo_risoluzione: row.tipo_risoluzione || 'MANUALE',
@@ -176,6 +190,7 @@ export default function MissioniManager({ onLogout }) {
         descrizione: form.descrizione || '',
         korp: Number.isFinite(korpId) ? korpId : null,
         esclusiva: !!form.esclusiva,
+        allineamento: form.allineamento || 'GRIGIA',
         reward_crediti: form.reward_crediti ?? 0,
         reward_prestigio: Math.max(0, parseInt(form.reward_prestigio, 10) || 0),
         tipo_risoluzione: form.tipo_risoluzione,
@@ -218,6 +233,17 @@ export default function MissioniManager({ onLogout }) {
         getSortValue: (x) => x.tipo_risoluzione || '',
         render: (x) => x.tipo_risoluzione,
         width: 130,
+      },
+      {
+        key: 'allineamento',
+        header: 'Allineamento',
+        getSortValue: (x) => x.allineamento || 'GRIGIA',
+        render: (x) => {
+          const key = x.allineamento || 'GRIGIA';
+          const label = ALLINEAMENTO_OPTS.find((o) => o.value === key)?.label || key;
+          return <span className={ALLINEAMENTO_STYLE[key] || 'text-gray-400'}>{label}</span>;
+        },
+        width: 110,
       },
       {
         key: 'korp',
@@ -269,6 +295,11 @@ export default function MissioniManager({ onLogout }) {
         options: TIPO_OPTS.map((o) => ({ id: o.value, label: o.label })),
       },
       {
+        key: 'allineamento',
+        label: 'Allineamento',
+        options: ALLINEAMENTO_OPTS.map((o) => ({ id: o.value, label: o.label })),
+      },
+      {
         key: 'korp',
         label: 'KORP',
         options: [
@@ -296,7 +327,7 @@ export default function MissioniManager({ onLogout }) {
           addLabel="Nuova"
           emptyMessage="Nessuna task definita."
           searchPlaceholder="Cerca titolo, KORP…"
-          getSearchText={(row) => [row.titolo, row.korp_nome, row.tipo_risoluzione].filter(Boolean).join(' ')}
+          getSearchText={(row) => [row.titolo, row.korp_nome, row.tipo_risoluzione, row.allineamento].filter(Boolean).join(' ')}
           getItemLabel={(row) => row.titolo || `Task #${row.id}`}
           onAdd={openCreate}
           onEdit={openEdit}
@@ -328,6 +359,20 @@ export default function MissioniManager({ onLogout }) {
             <LabeledField label="Tipo risoluzione">
               <select className={staffInputClass()} value={form.tipo_risoluzione} onChange={(e) => setForm({ ...form, tipo_risoluzione: e.target.value })}>
                 {TIPO_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </LabeledField>
+            <LabeledField
+              label="Allineamento"
+              hint="Alla risoluzione della task incrementa il punteggio luminoso, oscuro o grigio del PG."
+            >
+              <select
+                className={staffInputClass()}
+                value={form.allineamento || 'GRIGIA'}
+                onChange={(e) => setForm({ ...form, allineamento: e.target.value })}
+              >
+                {ALLINEAMENTO_OPTS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
               </select>
             </LabeledField>
             <LabeledField label="Ordine">

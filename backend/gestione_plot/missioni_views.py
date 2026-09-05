@@ -55,6 +55,7 @@ class MissioneListSerializer(ModelSerializer):
             "korp",
             "korp_nome",
             "esclusiva",
+            "allineamento",
             "reward_crediti",
             "reward_prestigio",
             "tipo_risoluzione",
@@ -77,6 +78,7 @@ class MissioneSerializer(ModelSerializer):
         fields = (
             "id", "sync_id", "updated_at", "created_at",
             "titolo", "descrizione", "korp", "korp_nome", "esclusiva",
+            "allineamento",
             "reward_crediti", "reward_prestigio", "tipo_risoluzione",
             "premio_solo_primo",
             "malus_non_primo_crediti", "malus_non_primo_prestigio",

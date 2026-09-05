@@ -89,6 +89,17 @@ export default function MissioniPersonaggioPanel({
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-white">{m.titolo}</span>
+                  {m.allineamento && m.allineamento !== 'GRIGIA' ? (
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[10px] uppercase ${
+                        m.allineamento === 'LUMINOSA'
+                          ? 'bg-amber-900/50 text-amber-100'
+                          : 'bg-violet-900/50 text-violet-100'
+                      }`}
+                    >
+                      {m.allineamento === 'LUMINOSA' ? 'Luminosa' : 'Oscura'}
+                    </span>
+                  ) : null}
                   {korpBonus ? (
                     <span className="rounded bg-violet-800/60 px-1.5 py-0.5 text-[10px] uppercase text-violet-100">
                       Sovrapagata ×{m.fattore_applicato}

@@ -133,6 +133,12 @@ def reclama_ricompensa(risoluzione: MissioneRisoluzione, *, notifica: bool = Tru
         pg.modifica_crediti(cr, f"Task «{titolo}» — ricompensa Crediti", conto="DEPOSITO")
     if pr > 0:
         pg.modifica_prestigio(pr, f"Task «{titolo}» — ricompensa Prestigio")
+    allineamento = getattr(risoluzione.missione, "allineamento", None) or Missione.ALLINEAMENTO_GRIGIA
+    pg.modifica_punteggio_allineamento(
+        allineamento,
+        1,
+        f"Task «{titolo}» — allineamento {allineamento.lower()}",
+    )
     risoluzione.ricompensa_reclamata = True
     risoluzione.reclamata_at = timezone.now()
     risoluzione.save(update_fields=["ricompensa_reclamata", "reclamata_at", "updated_at"])
@@ -309,6 +315,7 @@ def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
             "titolo": m.titolo,
             "descrizione": m.descrizione,
             "tipo_risoluzione": m.tipo_risoluzione,
+            "allineamento": m.allineamento or Missione.ALLINEAMENTO_GRIGIA,
             "premio_solo_primo": m.premio_solo_primo,
             "attiva": m.attiva,
             "ordine": m.ordine,

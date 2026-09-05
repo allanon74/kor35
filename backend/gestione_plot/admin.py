@@ -503,8 +503,11 @@ class CreazioneGuidataSceltaAdmin(admin.ModelAdmin):
 
 @admin.register(Missione)
 class MissioneAdmin(admin.ModelAdmin):
-    list_display = ("titolo", "korp", "esclusiva", "tipo_risoluzione", "reward_crediti", "reward_prestigio", "premio_solo_primo", "attiva")
-    list_filter = ("tipo_risoluzione", "attiva", "esclusiva", "premio_solo_primo", "korp")
+    list_display = (
+        "titolo", "korp", "esclusiva", "allineamento", "tipo_risoluzione",
+        "reward_crediti", "reward_prestigio", "premio_solo_primo", "attiva",
+    )
+    list_filter = ("tipo_risoluzione", "allineamento", "attiva", "esclusiva", "premio_solo_primo", "korp")
     search_fields = ("titolo", "descrizione")
     readonly_fields = ("sync_id", "updated_at", "created_at")
 

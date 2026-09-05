@@ -3889,6 +3889,7 @@ class PersonaggioStaffListSerializer(serializers.ModelSerializer):
             'proprietario_nome', 'proprietario_username',
             'era', 'era_nome', 'prefettura_nome', 'campagna_nome',
             'crediti', 'crediti_corrente', 'crediti_deposito', 'punti_caratteristica', 'data_morte',
+            'punti_luminosi', 'punti_oscuri', 'punti_grigi',
             'qrcode_id', 'korp_attivi', 'avatar_url',
         )
         read_only_fields = fields
@@ -4000,6 +4001,9 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
     )
     prefettura_esterna = serializers.BooleanField(required=False)
     peso_influencer = serializers.IntegerField(required=False, min_value=1)
+    punti_luminosi = serializers.IntegerField(required=False, min_value=0)
+    punti_oscuri = serializers.IntegerField(required=False, min_value=0)
+    punti_grigi = serializers.IntegerField(required=False, min_value=0)
     badge_instafame = serializers.ChoiceField(
         choices=[("", "Nessuno"), ("GOLD", "Gold"), ("DIAMOND", "Diamond"), ("PREMIUM", "Premium")],
         required=False,
@@ -4023,6 +4027,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'era', 'prefettura', 'prefettura_esterna',
             'era_nome', 'prefettura_nome',
             'watch_enabled', 'peso_influencer', 'badge_instafame',
+            'punti_luminosi', 'punti_oscuri', 'punti_grigi',
             'avatar_url', 'qrcode_id', 'qrcode_testo',
             'carriere_membership', 'risorse_pool_ui', 'abilita_possedute', 'razza_abilita',
             'scheda_modifica_libera', 'punteggi_base', 'modelli_aura', 'can_edit_razza',
