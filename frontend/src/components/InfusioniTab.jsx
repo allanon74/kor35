@@ -135,7 +135,7 @@ const InfusioniTab = ({ onLogout }) => {
         <div className="flex items-center gap-3 cursor-pointer min-w-0 flex-1" onClick={() => handleOpenModal(item)}>
             <div className="shrink-0 mt-0.5 relative">
                 <IconaPunteggio url={iconUrl} color={iconColor} mode="cerchio_inv" size="xs" />
-                <span className="absolute -top-2 -right-2 bg-gray-900 text-gray-200 text-[9px] font-bold px-1 py-0.5 rounded-full border border-gray-600 leading-none">
+                <span className="absolute -top-2 -right-2 bg-gray-900 text-gray-100 text-xs font-bold px-1.5 py-0.5 rounded-full border border-gray-600 leading-none">
                     L{item.livello}
                 </span>
             </div>
@@ -146,10 +146,10 @@ const InfusioniTab = ({ onLogout }) => {
         {/* Tasto Forgia (Apre Modale) */}
         <button
             onClick={(e) => handleForgeClick(item, e)}
-            className="flex items-center gap-1 px-3 py-2 bg-orange-700 hover:bg-orange-600 text-white rounded text-xs font-bold uppercase tracking-wider transition-all shadow-sm hover:shadow-orange-500/20 active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-2.5 bg-orange-700 hover:bg-orange-600 text-white rounded-lg text-sm font-bold uppercase tracking-wider transition-all shadow-sm hover:shadow-orange-500/20 active:scale-95 min-h-11"
         >
-            <Hammer size={14} /> 
-            <span className="hidden sm:inline">Forgia</span>
+            <Hammer size={16} />
+            Forgia
         </button>
 
         {item.is_modifiable && (
@@ -189,7 +189,7 @@ const InfusioniTab = ({ onLogout }) => {
         <div className="flex items-center gap-3 cursor-pointer grow" onClick={() => handleOpenModal(item)}>
             <div className="shrink-0 mt-0.5 relative">
                 <IconaPunteggio url={iconUrl} color={iconColor} mode="cerchio_inv" size="xs" />
-                <span className="absolute -top-2 -right-2 bg-gray-900 text-gray-200 text-[9px] font-bold px-1 py-0.5 rounded-full border border-gray-600 leading-none">
+                <span className="absolute -top-2 -right-2 bg-gray-900 text-gray-100 text-xs font-bold px-1.5 py-0.5 rounded-full border border-gray-600 leading-none">
                     L{item.livello}
                 </span>
             </div>
@@ -301,10 +301,11 @@ const InfusioniTab = ({ onLogout }) => {
         <div className="flex justify-end mb-6 max-w-3xl mx-auto">
             <button 
                 onClick={() => setShowProposals(true)}
-                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-indigo-300 hover:text-white px-4 py-2 rounded-lg border border-gray-600 transition-all shadow-sm text-sm font-medium"
+                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-indigo-300 hover:text-white px-4 py-2.5 rounded-lg border border-gray-600 transition-all shadow-sm text-sm font-medium w-full sm:w-auto justify-center"
             >
                 <FileEdit size={16} />
-                Gestisci Proposte Infusione
+                <span className="sm:hidden">Proposte</span>
+                <span className="hidden sm:inline">Gestisci Proposte Infusione</span>
             </button>
         </div>
 

@@ -110,7 +110,7 @@ const CerimonialiTab = ({ onLogout }) => {
       <div className="flex items-center gap-3 cursor-pointer min-w-0 flex-1" onClick={() => setModalItem(item)}>
           <div className="shrink-0 relative">
               <IconaPunteggio url={item.aura_richiesta?.icona_url} color={item.aura_richiesta?.colore} mode="cerchio_inv" size="xs" />
-              <span className="absolute -top-2 -right-2 bg-purple-900 text-purple-100 text-[10px] font-bold px-1 py-0.5 rounded-full border border-purple-500">
+              <span className="absolute -top-2 -right-2 bg-purple-900 text-purple-100 text-xs font-bold px-1.5 py-0.5 rounded-full border border-purple-500">
                   L{item.livello}
               </span>
           </div>
@@ -174,19 +174,21 @@ const CerimonialiTab = ({ onLogout }) => {
           <div className="flex items-center gap-3">
             <Users className="text-purple-400" size={24}/>
             <div>
-              <div className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Coralità (CCO)</div>
+              <div className="text-xs text-gray-400 uppercase font-bold tracking-widest">Coralità (CCO)</div>
               <div className="text-xl font-black text-purple-300 leading-none">{ccoValue}</div>
             </div>
           </div>
           <div className="text-right">
-              <div className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Crediti</div>
+              <div className="text-xs text-gray-400 uppercase font-bold tracking-widest">Crediti</div>
               <div className="text-xl font-black text-yellow-500 leading-none">{char.crediti} CR</div>
           </div>
       </div>
 
       <div className="flex justify-end mb-6 max-w-3xl mx-auto">
-          <button onClick={() => setShowProposals(true)} className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-purple-300 px-4 py-2 rounded-lg border border-purple-500/30 transition-all text-sm font-bold">
-              <FileEdit size={16} /> Gestisci Proposte Cerimoniale
+          <button onClick={() => setShowProposals(true)} className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-purple-300 px-4 py-2.5 rounded-lg border border-purple-500/30 transition-all text-sm font-bold w-full sm:w-auto justify-center">
+              <FileEdit size={16} />
+              <span className="sm:hidden">Proposte</span>
+              <span className="hidden sm:inline">Gestisci Proposte Cerimoniale</span>
           </button>
       </div>
 
@@ -232,24 +234,33 @@ const CerimonialiTab = ({ onLogout }) => {
 
       {/* Dettaglio Modale */}
       {modalItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md" onClick={() => setModalItem(null)}>
-          <div className="bg-gray-900 border border-purple-500/30 rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-             <div className="p-5 border-b border-gray-800 flex justify-between items-start bg-gray-800/50">
-                <div>
-                    <h3 className="text-xl font-black text-purple-400 uppercase">{modalItem.nome}</h3>
-                    <p className="text-[10px] text-gray-500 uppercase font-bold">Livello {modalItem.livello} • {modalItem.aura_richiesta_nome}</p>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/90 backdrop-blur-md" onClick={() => setModalItem(null)}>
+          <div className="bg-gray-900 border border-purple-500/30 rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[92vh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+             <div className="p-5 border-b border-gray-800 flex justify-between items-start bg-gray-800/50 gap-3">
+                <div className="min-w-0 pr-2">
+                    <h3 className="text-xl sm:text-2xl font-black text-purple-400 leading-tight break-words">{modalItem.nome}</h3>
+                    <p className="text-sm text-gray-400 mt-1">Livello {modalItem.livello} · {modalItem.aura_richiesta_nome}</p>
                     {modalItem.non_acquistabile && (
-                      <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wider border border-sky-500/70 bg-sky-900/30 text-sky-100 px-2 py-0.5 rounded">
+                      <span className="inline-block mt-2 text-xs font-bold uppercase tracking-wider border border-sky-500/70 bg-sky-900/30 text-sky-100 px-2 py-1 rounded">
                         Solo QR/Master
                       </span>
                     )}
                 </div>
-                <button onClick={() => setModalItem(null)} className="text-gray-400 hover:text-white transition-colors">✕</button>
+                <button onClick={() => setModalItem(null)} className="text-gray-400 hover:text-white transition-colors p-2 min-h-11 min-w-11 flex items-center justify-center shrink-0" aria-label="Chiudi">✕</button>
              </div>
-             <div className="p-6 overflow-y-auto space-y-6 text-sm">
-                <div><h4 className="text-[10px] font-black text-purple-500 uppercase mb-1">Prerequisiti</h4><p className="text-gray-300 italic">{modalItem.prerequisiti}</p></div>
-                <div><h4 className="text-[10px] font-black text-gray-500 uppercase mb-1">Svolgimento</h4><div className="text-gray-300 whitespace-pre-wrap">{modalItem.svolgimento}</div></div>
-                <div className="bg-purple-900/10 p-4 rounded-xl border border-purple-500/20"><h4 className="text-[10px] font-black text-purple-300 uppercase mb-1">Effetto</h4><div className="text-gray-200">{modalItem.effetto}</div></div>
+             <div className="p-5 sm:p-6 overflow-y-auto space-y-5 text-base leading-relaxed">
+                <div>
+                  <h4 className="text-xs font-black text-purple-400 uppercase tracking-wider mb-2">Prerequisiti</h4>
+                  <p className="text-gray-200 italic">{modalItem.prerequisiti}</p>
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-2">Svolgimento</h4>
+                  <div className="text-gray-200 whitespace-pre-wrap">{modalItem.svolgimento}</div>
+                </div>
+                <div className="bg-purple-900/10 p-4 rounded-xl border border-purple-500/20">
+                  <h4 className="text-xs font-black text-purple-300 uppercase tracking-wider mb-2">Effetto</h4>
+                  <div className="text-gray-100">{modalItem.effetto}</div>
+                </div>
              </div>
           </div>
         </div>

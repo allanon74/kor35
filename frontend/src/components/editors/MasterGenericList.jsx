@@ -5,6 +5,10 @@ import { applyColumnFilters, applyMultiSort, columnKey, hasActiveColumnFilters }
 import { useStaffTableControls } from '../../staff/useStaffTableControls';
 import { StaffTableControls } from '../../staff/StaffTableControls';
 import StaffDataTable from '../../staff/StaffDataTable';
+import SearchableSelect from './SearchableSelect';
+
+/** Sopra questa soglia, senza `ui` esplicito, si usa un select invece delle chip. */
+const DEFAULT_SELECT_THRESHOLD = 8;
 
 const MasterGenericList = ({
   items = [],
@@ -43,6 +47,7 @@ const MasterGenericList = ({
     setSearchTerm,
     activeFilters,
     toggleFilter,
+    setFilterValues,
     resetChipFilters,
     sorts,
     cycleSort,
@@ -56,6 +61,14 @@ const MasterGenericList = ({
     showColumnFilters,
     setShowColumnFilters,
   } = useStaffTableControls({ persistKey: normalizedKey, columns });
+
+  const resolveFilterUi = useCallback((conf) => {
+    if (conf.ui === 'select' || conf.ui === 'chips' || conf.ui === 'icon') return conf.ui;
+    if (conf.type === 'icon') return 'icon';
+    const threshold = conf.selectThreshold ?? DEFAULT_SELECT_THRESHOLD;
+    if ((conf.options?.length || 0) > threshold) return 'select';
+    return 'chips';
+  }, []);
 
   const [pendingDeleteItem, setPendingDeleteItem] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -267,35 +280,73 @@ const MasterGenericList = ({
         )}
 
         {filterConfig.length > 0 && (
-          <div className="space-y-3 pt-2 border-t border-gray-700/50">
-            {filterConfig.map((conf) => (
-              <div key={conf.key} className="flex flex-col md:flex-row items-start md:items-center gap-2">
-                <span className="text-[10px] font-black text-gray-500 uppercase w-full md:w-auto min-w-[70px] mb-1 md:mb-0">
-                  {conf.label}:
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {conf.options.map((opt) => {
-                    const isActive = (activeFilters[conf.key] || []).includes(opt.id);
-                    return (
-                      <button
-                        key={String(opt.id)}
-                        type="button"
-                        onClick={() => toggleFilter(conf.key, opt.id)}
-                        title={opt.label || opt.nome}
-                        className={`transition-all duration-200 ${conf.type === 'icon' ? 'p-1 rounded-full border' : 'px-3 py-1 rounded text-xs font-bold border'} ${
-                          isActive
-                            ? 'bg-cyan-600 border-cyan-400 text-white shadow-lg scale-105'
-                            : 'bg-gray-900 border-gray-700 text-gray-500 hover:border-gray-500'
-                        }`}
-                        style={conf.type === 'icon' && isActive ? { backgroundColor: opt.colore || opt.color } : {}}
-                      >
-                        {conf.renderOption ? conf.renderOption(opt, isActive) : (opt.label || opt.nome)}
-                      </button>
-                    );
-                  })}
+          <div className="flex flex-wrap items-end gap-x-4 gap-y-2 pt-2 border-t border-gray-700/50">
+            {filterConfig.map((conf) => {
+              const ui = resolveFilterUi(conf);
+              const activeVals = activeFilters[conf.key] || [];
+              const selectValue = activeVals[0] ?? null;
+
+              if (ui === 'select') {
+                const selectOptions = conf.options.map((opt) => ({
+                  id: opt.id,
+                  nome: opt.label || opt.nome,
+                }));
+                return (
+                  <div key={conf.key} className="flex flex-col gap-1 min-w-[160px] max-w-xs flex-1 sm:flex-none">
+                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-wide">
+                      {conf.label}
+                    </span>
+                    <SearchableSelect
+                      options={selectOptions}
+                      value={selectValue}
+                      onChange={(id) => setFilterValues(conf.key, id == null ? [] : [id])}
+                      placeholder={conf.placeholder || `Tutti · ${conf.label}`}
+                      labelKey="nome"
+                      valueKey="id"
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <div key={conf.key} className="flex flex-col gap-1">
+                  <span className="text-[10px] font-black text-gray-500 uppercase tracking-wide">
+                    {conf.label}
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {conf.options.map((opt) => {
+                      const isActive = activeVals.includes(opt.id);
+                      return (
+                        <button
+                          key={String(opt.id)}
+                          type="button"
+                          onClick={() => toggleFilter(conf.key, opt.id)}
+                          title={opt.label || opt.nome}
+                          className={`transition-all duration-200 ${
+                            ui === 'icon' || conf.type === 'icon'
+                              ? 'p-1 rounded-full border'
+                              : 'px-2.5 py-1 rounded text-xs font-bold border'
+                          } ${
+                            isActive
+                              ? 'bg-cyan-600 border-cyan-400 text-white shadow-lg'
+                              : 'bg-gray-900 border-gray-700 text-gray-500 hover:border-gray-500'
+                          }`}
+                          style={
+                            (ui === 'icon' || conf.type === 'icon') && isActive
+                              ? { backgroundColor: opt.colore || opt.color }
+                              : {}
+                          }
+                        >
+                          {conf.renderOption
+                            ? conf.renderOption(opt, isActive)
+                            : opt.label || opt.nome}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

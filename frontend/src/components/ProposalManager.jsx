@@ -41,20 +41,20 @@ const ProposalManager = ({ type, onClose }) => { // type = 'Infusione' | 'Tessit
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-40 p-4">
-            <div className="bg-gray-900 w-full max-w-5xl h-[80vh] rounded-xl flex flex-col border border-gray-700 shadow-2xl relative">
-                <div className="absolute top-4 right-4">
-                     <button onClick={onClose} className="text-gray-400 hover:text-white bg-gray-800 p-2 rounded-full">✕</button>
+        <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-40 p-0 sm:p-4">
+            <div className="bg-gray-900 w-full max-w-5xl h-[92vh] sm:h-[80vh] rounded-t-2xl sm:rounded-xl flex flex-col border border-gray-700 shadow-2xl relative">
+                <div className="absolute top-3 right-3 z-10">
+                     <button onClick={onClose} className="text-gray-400 hover:text-white bg-gray-800 p-2 rounded-full min-h-11 min-w-11 flex items-center justify-center" aria-label="Chiudi">✕</button>
                 </div>
                 
-                <div className="p-6 border-b border-gray-700 flex justify-between items-center">
+                <div className="p-4 sm:p-6 pr-14 border-b border-gray-700 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                     <div>
-                        <h2 className="text-2xl font-bold text-white">Le tue proposte di {type}</h2>
+                        <h2 className="text-xl sm:text-2xl font-bold text-white">Le tue proposte di {type}</h2>
                         <p className="text-gray-400 text-sm mt-1">Gestisci le tue creazioni. Inviare costa 10 CR per livello.</p>
                     </div>
                     <button 
                         onClick={handleCreateNew}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg transition-all"
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 shadow-lg transition-all w-full sm:w-auto min-h-11"
                     >
                         <Plus size={18} /> Nuova Proposta
                     </button>
