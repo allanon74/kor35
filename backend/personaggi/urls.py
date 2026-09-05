@@ -9,6 +9,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import AbilitaViewSet, ActivateUserView, DeleteUserView, ChangePasswordView, PersonaggioTransazioniListView, RegisterView, StaffMessageListView, UserViewSet
 from .views_negozio_mercante import (
+    NegozioMercanteBundleStaffViewSet,
     NegozioMercanteGiocatoreViewSet,
     NegozioMercanteQrListinoView,
     NegozioMercanteStaffViewSet,
@@ -66,6 +67,11 @@ router.register(r'negozio', views.NegozioViewSet, basename='negozio')
 router.register(r'negozi-mercante', NegozioMercanteGiocatoreViewSet, basename='negozi-mercante')
 router.register(r'staff/negozi-mercante', NegozioMercanteStaffViewSet, basename='staff-negozi-mercante')
 router.register(r'staff/negozi-mercante-voci', NegozioMercanteVoceStaffViewSet, basename='staff-negozi-mercante-voci')
+router.register(
+    r'staff/negozi-mercante-bundle',
+    NegozioMercanteBundleStaffViewSet,
+    basename='staff-negozi-mercante-bundle',
+)
 router.register(r'crafting', views.CraftingViewSet, basename='crafting')
 # ---------------------------------------------
 

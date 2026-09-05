@@ -8487,6 +8487,8 @@ class CreazioneConsumabileInCorso(SyncableModel, models.Model):
 from personaggi.negozio_mercante_models import (  # noqa: E402
     NegozioMercante,
     NegozioMercanteVoce,
+    NegozioMercanteBundle,
+    NegozioMercanteBundleRiga,
     NegozioMercanteStock,
     NegozioMercanteMovimento,
     NEGOZIO_TIPO_ALTERNATIVO,

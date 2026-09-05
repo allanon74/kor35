@@ -25,6 +25,10 @@ import {
   staffCreateNegozioMercanteVoce,
   staffUpdateNegozioMercanteVoce,
   staffDeleteNegozioMercanteVoce,
+  staffGetNegozioMercanteBundle,
+  staffCreateNegozioMercanteBundle,
+  staffUpdateNegozioMercanteBundle,
+  staffDeleteNegozioMercanteBundle,
   staffAssociaQrNegozioMercante,
   staffScollegaQrNegozioMercante,
   staffGetNegozioMercanteReadiness,
@@ -81,7 +85,16 @@ const emptyVoceDraft = () => ({
   consegna_istanza: false,
   consumabile_nome: '',
   consumabile_livello: 1,
+  non_vendibile: false,
   attivo: true,
+});
+
+const emptyBundleDraft = () => ({
+  nome: '',
+  descrizione: '',
+  prezzo_crediti: 100,
+  attivo: true,
+  righe: [],
 });
 
 const refIdFromVoce = (v) => {
@@ -108,7 +121,20 @@ const voceToDraft = (v) => ({
   consegna_istanza: Boolean(v.consegna_istanza) || v.tipo_risultato === 'AUM',
   consumabile_nome: v.consumabile_nome || '',
   consumabile_livello: v.consumabile_livello || 1,
+  non_vendibile: Boolean(v.non_vendibile),
   attivo: v.attivo !== false,
+});
+
+const bundleToDraft = (b) => ({
+  nome: b.nome || '',
+  descrizione: b.descrizione || '',
+  prezzo_crediti: b.prezzo_crediti ?? 100,
+  attivo: b.attivo !== false,
+  righe: (b.righe || []).map((r, idx) => ({
+    voce: String(r.voce),
+    quantita: r.quantita || 1,
+    ordine: r.ordine ?? idx,
+  })),
 });
 
 const NEGOZIO_COLUMNS = [
@@ -186,14 +212,19 @@ const NegozioMercanteManager = ({ onLogout }) => {
   const [negozi, setNegozi] = useState([]);
   const [selected, setSelected] = useState(null);
   const [voci, setVoci] = useState([]);
+  const [bundles, setBundles] = useState([]);
   const [form, setForm] = useState(emptyNegozio());
   const [formSnapshot, setFormSnapshot] = useState(null);
   const [voceDraft, setVoceDraft] = useState(emptyVoceDraft());
   const [voceEditingId, setVoceEditingId] = useState(null);
+  const [bundleDraft, setBundleDraft] = useState(emptyBundleDraft());
+  const [bundleEditingId, setBundleEditingId] = useState(null);
+  const [bundlePickVoceId, setBundlePickVoceId] = useState('');
   const [modalTab, setModalTab] = useState('dati');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [voceBusy, setVoceBusy] = useState(false);
+  const [bundleBusy, setBundleBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [scanningId, setScanningId] = useState(null);
   const [pendingQrConflict, setPendingQrConflict] = useState(null);
@@ -231,6 +262,18 @@ const NegozioMercanteManager = ({ onLogout }) => {
       }
       const data = await staffGetNegozioMercanteVoci(negozioId, onLogout);
       setVoci(asList(data));
+    },
+    [onLogout],
+  );
+
+  const loadBundles = useCallback(
+    async (negozioId) => {
+      if (!negozioId) {
+        setBundles([]);
+        return;
+      }
+      const data = await staffGetNegozioMercanteBundle(negozioId, onLogout);
+      setBundles(asList(data));
     },
     [onLogout],
   );
@@ -298,15 +341,23 @@ const NegozioMercanteManager = ({ onLogout }) => {
       setMsg('');
       setVoceDraft(emptyVoceDraft());
       setVoceEditingId(null);
+      setBundleDraft(emptyBundleDraft());
+      setBundleEditingId(null);
+      setBundlePickVoceId('');
       if (negozio?.id) {
-        await Promise.all([loadVoci(negozio.id), refreshReadiness(negozio.id)]);
+        await Promise.all([
+          loadVoci(negozio.id),
+          loadBundles(negozio.id),
+          refreshReadiness(negozio.id),
+        ]);
       } else {
         setVoci([]);
+        setBundles([]);
         setReadiness(null);
         setMovimenti([]);
       }
     },
-    [loadVoci, refreshReadiness],
+    [loadVoci, loadBundles, refreshReadiness],
   );
 
   const closeEditor = useCallback(() => {
@@ -314,6 +365,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
     setForm(emptyNegozio());
     setFormSnapshot(null);
     setVoci([]);
+    setBundles([]);
     setMsg('');
   }, []);
 
@@ -342,7 +394,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
         const snap = { ...emptyNegozio(), ...updated };
         setForm(snap);
         setFormSnapshot(JSON.stringify(snap));
-        await Promise.all([loadVoci(id), refreshReadiness(id)]);
+        await Promise.all([loadVoci(id), loadBundles(id), refreshReadiness(id)]);
         if (thenCatalogo || !selected?.id) setModalTab('catalogo');
       }
     } catch (e) {
@@ -412,6 +464,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
     }
     body.quantita_residua =
       voceDraft.quantita_residua === '' ? null : Number(voceDraft.quantita_residua);
+    body.non_vendibile = Boolean(voceDraft.non_vendibile);
     return body;
   };
 
@@ -465,8 +518,94 @@ const NegozioMercanteManager = ({ onLogout }) => {
     await staffDeleteNegozioMercanteVoce(v.id, onLogout);
     if (voceEditingId === v.id) cancelEditVoce();
     await loadVoci(selected.id);
+    await loadBundles(selected.id);
     await refreshReadiness(selected.id);
     await loadNegozi();
+  };
+
+  const addRigaToBundleDraft = () => {
+    if (!bundlePickVoceId) return;
+    if (bundleDraft.righe.some((r) => String(r.voce) === String(bundlePickVoceId))) {
+      setMsg('Questa voce è già nel bundle.');
+      return;
+    }
+    setBundleDraft({
+      ...bundleDraft,
+      righe: [
+        ...bundleDraft.righe,
+        { voce: String(bundlePickVoceId), quantita: 1, ordine: bundleDraft.righe.length },
+      ],
+    });
+    setBundlePickVoceId('');
+  };
+
+  const saveBundle = async () => {
+    if (!selected?.id) return;
+    if (!bundleDraft.nome.trim()) {
+      setMsg('Indica un nome per il bundle.');
+      return;
+    }
+    if (!bundleDraft.righe.length) {
+      setMsg('Aggiungi almeno una voce catalogo al bundle.');
+      return;
+    }
+    const body = {
+      negozio: selected.id,
+      nome: bundleDraft.nome.trim(),
+      descrizione: bundleDraft.descrizione || '',
+      prezzo_crediti: Number(bundleDraft.prezzo_crediti) || 0,
+      attivo: bundleDraft.attivo !== false,
+      righe: bundleDraft.righe.map((r, idx) => ({
+        voce: r.voce,
+        quantita: Number(r.quantita) || 1,
+        ordine: idx,
+      })),
+    };
+    setBundleBusy(true);
+    try {
+      if (bundleEditingId) {
+        await staffUpdateNegozioMercanteBundle(bundleEditingId, body, onLogout);
+        setMsg('Bundle aggiornato.');
+      } else {
+        await staffCreateNegozioMercanteBundle(body, onLogout);
+        setMsg('Bundle creato.');
+      }
+      await loadBundles(selected.id);
+      await refreshReadiness(selected.id);
+      await loadNegozi();
+      setBundleEditingId(null);
+      setBundleDraft(emptyBundleDraft());
+    } catch (e) {
+      setMsg(e.message || 'Errore salvataggio bundle.');
+    } finally {
+      setBundleBusy(false);
+    }
+  };
+
+  const startEditBundle = (b) => {
+    setBundleEditingId(b.id);
+    setBundleDraft(bundleToDraft(b));
+    setMsg('');
+  };
+
+  const cancelEditBundle = () => {
+    setBundleEditingId(null);
+    setBundleDraft(emptyBundleDraft());
+  };
+
+  const deleteBundle = async (b) => {
+    if (!window.confirm(`Eliminare il bundle «${b.nome}»?`)) return;
+    await staffDeleteNegozioMercanteBundle(b.id, onLogout);
+    if (bundleEditingId === b.id) cancelEditBundle();
+    await loadBundles(selected.id);
+    await refreshReadiness(selected.id);
+    await loadNegozi();
+  };
+
+  const voceLabelById = (id) => {
+    const v = voci.find((x) => String(x.id) === String(id));
+    if (!v) return String(id);
+    return `${v.entita_nome || '—'} (${TIPO_VOCE_LABEL[v.tipo_voce] || v.tipo_voce})`;
   };
 
   const onChangeTipoVoce = (tipo) => {
@@ -823,6 +962,19 @@ const NegozioMercanteManager = ({ onLogout }) => {
                       />
                       Voce attiva in listino
                     </label>
+                    <label className="flex items-start gap-2 text-xs text-gray-300">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={Boolean(voceDraft.non_vendibile)}
+                        onChange={(e) =>
+                          setVoceDraft({ ...voceDraft, non_vendibile: e.target.checked })
+                        }
+                      />
+                      <span>
+                        Non vendibile come articolo singolo (solo nei bundle)
+                      </span>
+                    </label>
                     <div className="flex gap-2">
                       {voceEditingId && (
                         <button
@@ -868,6 +1020,11 @@ const NegozioMercanteManager = ({ onLogout }) => {
                               {v.attivo === false && (
                                 <span className="ml-2 text-[10px] text-gray-500">inattiva</span>
                               )}
+                              {v.non_vendibile && (
+                                <span className="ml-2 text-[10px] text-violet-400">
+                                  solo bundle
+                                </span>
+                              )}
                             </td>
                             <td className="px-3 py-2 text-gray-400 text-xs">
                               {TIPO_VOCE_LABEL[v.tipo_voce] || v.tipo_voce}
@@ -904,6 +1061,207 @@ const NegozioMercanteManager = ({ onLogout }) => {
                           <tr>
                             <td colSpan={5} className="px-3 py-6 text-center text-gray-500 text-sm">
                               Nessun articolo. Aggiungine uno dal modulo sopra.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="rounded-lg border border-violet-900/50 bg-violet-950/20 p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-bold text-violet-200">
+                      <Package size={16} className="text-violet-400" />
+                      {bundleEditingId ? 'Modifica bundle' : 'Nuovo bundle'}
+                    </div>
+                    <p className="text-[11px] text-gray-400">
+                      Le componenti sono voci già in catalogo. Stock e disponibilità
+                      seguono le quantità residue delle voci: il bundle si esaurisce
+                      quando una componente finisce. «Non vendibile» nasconde la voce
+                      dal listino singolo.
+                    </p>
+                    <div className="grid sm:grid-cols-2 gap-2 text-sm">
+                      <input
+                        placeholder="Nome bundle"
+                        className="bg-gray-900 border border-gray-600 rounded p-2"
+                        value={bundleDraft.nome}
+                        onChange={(e) =>
+                          setBundleDraft({ ...bundleDraft, nome: e.target.value })
+                        }
+                      />
+                      <input
+                        type="number"
+                        placeholder="Prezzo pacchetto CR"
+                        className="bg-gray-900 border border-gray-600 rounded p-2"
+                        value={bundleDraft.prezzo_crediti}
+                        onChange={(e) =>
+                          setBundleDraft({ ...bundleDraft, prezzo_crediti: e.target.value })
+                        }
+                      />
+                      <input
+                        placeholder="Descrizione (opz.)"
+                        className="bg-gray-900 border border-gray-600 rounded p-2 sm:col-span-2"
+                        value={bundleDraft.descrizione}
+                        onChange={(e) =>
+                          setBundleDraft({ ...bundleDraft, descrizione: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2 items-end">
+                      <div className="flex-1 min-w-[12rem]">
+                        <SearchableSelect
+                          options={voci.map((v) => ({
+                            id: v.id,
+                            nome: `${v.entita_nome || '—'} · ${TIPO_VOCE_LABEL[v.tipo_voce] || v.tipo_voce}${
+                              v.non_vendibile ? ' · solo bundle' : ''
+                            }`,
+                          }))}
+                          value={bundlePickVoceId || null}
+                          onChange={(id) => setBundlePickVoceId(id ? String(id) : '')}
+                          placeholder="Aggiungi voce al bundle…"
+                          minOptionsForSearch={6}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="px-3 py-2 bg-violet-800 hover:bg-violet-700 rounded text-sm"
+                        onClick={addRigaToBundleDraft}
+                      >
+                        Aggiungi
+                      </button>
+                    </div>
+                    {bundleDraft.righe.length > 0 && (
+                      <ul className="space-y-1 text-xs">
+                        {bundleDraft.righe.map((r, idx) => (
+                          <li
+                            key={`${r.voce}-${idx}`}
+                            className="flex items-center gap-2 bg-gray-900/60 rounded px-2 py-1.5"
+                          >
+                            <span className="flex-1 text-gray-200 truncate">
+                              {voceLabelById(r.voce)}
+                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              className="w-16 bg-gray-950 border border-gray-600 rounded px-1 py-0.5 text-right"
+                              value={r.quantita}
+                              onChange={(e) => {
+                                const next = [...bundleDraft.righe];
+                                next[idx] = {
+                                  ...next[idx],
+                                  quantita: Number(e.target.value) || 1,
+                                };
+                                setBundleDraft({ ...bundleDraft, righe: next });
+                              }}
+                              title="Quantità"
+                            />
+                            <button
+                              type="button"
+                              className="text-red-400 hover:text-red-300"
+                              onClick={() =>
+                                setBundleDraft({
+                                  ...bundleDraft,
+                                  righe: bundleDraft.righe.filter((_, i) => i !== idx),
+                                })
+                              }
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <label className="flex items-center gap-2 text-xs text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={bundleDraft.attivo !== false}
+                        onChange={(e) =>
+                          setBundleDraft({ ...bundleDraft, attivo: e.target.checked })
+                        }
+                      />
+                      Bundle attivo
+                    </label>
+                    <div className="flex gap-2">
+                      {bundleEditingId && (
+                        <button
+                          type="button"
+                          className="px-3 py-1.5 bg-gray-700 rounded text-sm"
+                          onClick={cancelEditBundle}
+                        >
+                          Annulla
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={bundleBusy}
+                        onClick={saveBundle}
+                        className="px-3 py-1.5 bg-violet-700 hover:bg-violet-600 rounded text-sm font-bold disabled:opacity-50"
+                      >
+                        {bundleEditingId ? 'Salva bundle' : 'Crea bundle'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-gray-700 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-950 text-[10px] uppercase tracking-wider text-gray-500">
+                        <tr>
+                          <th className="text-left px-3 py-2">Bundle</th>
+                          <th className="text-left px-3 py-2">Componenti</th>
+                          <th className="text-right px-3 py-2">Prezzo</th>
+                          <th className="text-right px-3 py-2 w-24">Azioni</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-800">
+                        {bundles.map((b) => (
+                          <tr
+                            key={b.id}
+                            className={`bg-gray-900/40 ${
+                              bundleEditingId === b.id ? 'ring-1 ring-violet-600' : ''
+                            }`}
+                          >
+                            <td className="px-3 py-2 text-white">
+                              {b.nome}
+                              {b.attivo === false && (
+                                <span className="ml-2 text-[10px] text-gray-500">inattivo</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-gray-400 text-xs">
+                              {(b.righe || [])
+                                .map(
+                                  (r) =>
+                                    `${r.voce_nome || voceLabelById(r.voce)}×${r.quantita || 1}`,
+                                )
+                                .join(', ') || '—'}
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-violet-300">
+                              {b.prezzo_crediti} CR
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex justify-end gap-1">
+                                <button
+                                  type="button"
+                                  title="Modifica"
+                                  className="p-1.5 rounded bg-violet-600/20 text-violet-400 hover:bg-violet-600 hover:text-white"
+                                  onClick={() => startEditBundle(b)}
+                                >
+                                  <Pencil size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Elimina"
+                                  className="p-1.5 rounded bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white"
+                                  onClick={() => deleteBundle(b)}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {bundles.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="px-3 py-6 text-center text-gray-500 text-sm">
+                              Nessun bundle. Creane uno dal modulo sopra.
                             </td>
                           </tr>
                         )}

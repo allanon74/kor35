@@ -1475,6 +1475,34 @@ export const staffDeleteNegozioMercanteVoce = (id, onLogout) =>
     onLogout,
   );
 
+export const staffGetNegozioMercanteBundle = (negozioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante-bundle/?negozio=${negozioId}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const staffCreateNegozioMercanteBundle = (data, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/negozi-mercante-bundle/',
+    { method: 'POST', body: JSON.stringify(data) },
+    onLogout,
+  );
+
+export const staffUpdateNegozioMercanteBundle = (id, data, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante-bundle/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(data) },
+    onLogout,
+  );
+
+export const staffDeleteNegozioMercanteBundle = (id, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante-bundle/${id}/`,
+    { method: 'DELETE' },
+    onLogout,
+  );
+
 export const staffGetNegozioMercanteReadiness = (negozioId, onLogout) =>
   fetchAuthenticated(
     `/api/personaggi/api/staff/negozi-mercante/${negozioId}/readiness/`,

@@ -167,6 +167,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
         char_id: selectedCharacterId,
         voce_id: voce.tipo === 'voce' ? voce.id : undefined,
         stock_id: voce.tipo === 'stock' ? voce.id : undefined,
+        bundle_id: voce.tipo === 'bundle' ? voce.id : undefined,
         conto: extras.conto || 'CORRENTE',
       };
       if (voce.richiede_montaggio) {
@@ -317,6 +318,21 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                   >
                     <div className="min-w-0">
                       <div className="font-semibold text-white truncate">{v.nome}</div>
+                      {v.tipo === 'bundle' && (
+                        <div className="text-[10px] uppercase tracking-wide text-violet-300 mt-0.5">
+                          Pacchetto
+                        </div>
+                      )}
+                      {v.tipo === 'bundle' && Array.isArray(v.componenti) && v.componenti.length > 0 && (
+                        <ul className="mt-1 text-xs text-gray-400 list-disc list-inside">
+                          {v.componenti.map((c) => (
+                            <li key={`${c.voce_id}-${c.nome}`}>
+                              {c.nome}
+                              {c.quantita > 1 ? ` ×${c.quantita}` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                       {v.richiede_montaggio && (
                         <div className="text-[10px] uppercase tracking-wide text-fuchsia-300 mt-0.5">
                           Innesto / mutazione · montaggio in locazione
@@ -338,7 +354,11 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                       type="button"
                       disabled={!aperto || !v.acquistabile || busy}
                       onClick={() => handleBuy(v)}
-                      className="shrink-0 px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-40 text-white text-sm font-bold"
+                      className={`shrink-0 px-3 py-1.5 rounded disabled:opacity-40 text-white text-sm font-bold ${
+                        v.tipo === 'bundle'
+                          ? 'bg-violet-700 hover:bg-violet-600'
+                          : 'bg-amber-700 hover:bg-amber-600'
+                      }`}
                     >
                       {prezzoVoce(v)}
                     </button>

@@ -17,10 +17,11 @@ from personaggi.views_staff import (
     _get_active_campaign,
     _get_default_campaign,
 )
-from personaggi.negozio_mercante_models import NegozioMercante, NegozioMercanteVoce
+from personaggi.negozio_mercante_models import NegozioMercante, NegozioMercanteBundle, NegozioMercanteVoce
 from personaggi.negozio_mercante_readiness import valuta_prontezza_negozio
 from personaggi.negozio_mercante_models import NegozioMercanteMovimento
 from personaggi.negozio_mercante_service import (
+    acquista_bundle,
     acquista_stock,
     acquista_voce,
     build_listino,
@@ -30,7 +31,11 @@ from personaggi.negozio_mercante_service import (
 )
 from personaggi.models import Personaggio, QrCode
 from gestione_plot.permissions import IsStaffOrMaster
-from personaggi.serializers_negozio_mercante import NegozioMercanteSerializer, NegozioMercanteVoceSerializer
+from personaggi.serializers_negozio_mercante import (
+    NegozioMercanteBundleSerializer,
+    NegozioMercanteSerializer,
+    NegozioMercanteVoceSerializer,
+)
 from personaggi.views import _can_operate_in_campaign
 
 
@@ -84,6 +89,7 @@ class NegozioMercanteGiocatoreViewSet(viewsets.ViewSet):
         char_id = request.data.get("char_id")
         voce_id = request.data.get("voce_id")
         stock_id = request.data.get("stock_id")
+        bundle_id = request.data.get("bundle_id")
         slot_corpo = request.data.get("slot_corpo")
         destinatario_id = request.data.get("destinatario_id")
         conto = request.data.get("conto")
@@ -101,6 +107,15 @@ class NegozioMercanteGiocatoreViewSet(viewsets.ViewSet):
                     conto=conto,
                     destinatario_id=destinatario_id,
                 )
+            elif bundle_id:
+                result = acquista_bundle(
+                    negozio,
+                    pg,
+                    bundle_id,
+                    slot_corpo=slot_corpo,
+                    conto=conto,
+                    destinatario_id=destinatario_id,
+                )
             elif voce_id:
                 result = acquista_voce(
                     negozio,
@@ -111,7 +126,10 @@ class NegozioMercanteGiocatoreViewSet(viewsets.ViewSet):
                     destinatario_id=destinatario_id,
                 )
             else:
-                return Response({"error": "voce_id o stock_id richiesto."}, status=400)
+                return Response(
+                    {"error": "voce_id, bundle_id o stock_id richiesto."},
+                    status=400,
+                )
             return Response(result)
         except ValidationError as e:
             msg = e.messages[0] if getattr(e, "messages", None) else str(e)
@@ -237,6 +255,28 @@ class NegozioMercanteVoceStaffViewSet(ModuloStaffGateMixin, viewsets.ModelViewSe
             "infusione",
             "tessitura",
             "cerimoniale",
+        )
+        negozio_id = self.request.query_params.get("negozio")
+        if negozio_id:
+            qs = qs.filter(negozio_id=negozio_id)
+        return qs
+
+
+class NegozioMercanteBundleStaffViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
+    modulo_key = MODULO_NEGOZI
+    permission_classes = [IsStaffOrMaster]
+    serializer_class = NegozioMercanteBundleSerializer
+
+    def get_queryset(self):
+        qs = NegozioMercanteBundle.objects.select_related("negozio").prefetch_related(
+            "righe__voce",
+            "righe__voce__oggetto_base",
+            "righe__voce__oggetto",
+            "righe__voce__abilita",
+            "righe__voce__infusione",
+            "righe__voce__tessitura",
+            "righe__voce__cerimoniale",
+            "righe__voce__consumabile_tessitura",
         )
         negozio_id = self.request.query_params.get("negozio")
         if negozio_id:

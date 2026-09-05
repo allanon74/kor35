@@ -221,6 +221,13 @@ class NegozioMercanteVoce(SyncableModel, models.Model):
             "Le infusioni AUM (aumenti corporei) creano sempre un'istanza."
         ),
     )
+    non_vendibile = models.BooleanField(
+        default=False,
+        help_text=(
+            "Se attivo, la voce non compare nel listino come articolo singolo: "
+            "è acquistabile solo come componente di un bundle."
+        ),
+    )
 
     class Meta:
         verbose_name = "Voce negozio mercante"
@@ -229,6 +236,74 @@ class NegozioMercanteVoce(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.negozio.nome} / {self.get_tipo_voce_display()} ({self.prezzo_crediti} CR)"
+
+
+class NegozioMercanteBundle(SyncableModel, models.Model):
+    """Pacchetto di voci catalogo vendute insieme a un prezzo unico."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    negozio = models.ForeignKey(
+        NegozioMercante,
+        on_delete=models.CASCADE,
+        related_name="bundle",
+    )
+    nome = models.CharField(max_length=200)
+    descrizione = models.TextField(blank=True, default="")
+    prezzo_crediti = models.PositiveIntegerField(
+        help_text="Prezzo del pacchetto (manuale, non somma automatica delle voci).",
+    )
+    ordine = models.PositiveIntegerField(default=0)
+    attivo = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Bundle negozio mercante"
+        verbose_name_plural = "Bundle negozi mercante"
+        ordering = ["ordine", "created_at"]
+
+    def __str__(self):
+        return f"{self.negozio.nome} / bundle «{self.nome}» ({self.prezzo_crediti} CR)"
+
+
+class NegozioMercanteBundleRiga(SyncableModel, models.Model):
+    """Componente di un bundle: riferimento a una voce già in catalogo."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    bundle = models.ForeignKey(
+        NegozioMercanteBundle,
+        on_delete=models.CASCADE,
+        related_name="righe",
+    )
+    voce = models.ForeignKey(
+        NegozioMercanteVoce,
+        on_delete=models.PROTECT,
+        related_name="righe_bundle",
+        help_text="Voce del medesimo negozio inclusa nel pacchetto.",
+    )
+    quantita = models.PositiveIntegerField(
+        default=1,
+        help_text="Quante unità di questa voce consegna un acquisto del bundle.",
+    )
+    ordine = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Riga bundle negozio"
+        verbose_name_plural = "Righe bundle negozio"
+        ordering = ["ordine", "created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bundle", "voce"],
+                name="uniq_negozio_bundle_voce",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.bundle.nome} ×{self.quantita} → {self.voce_id}"
 
 
 class NegozioMercanteStock(SyncableModel, models.Model):
@@ -304,6 +379,12 @@ class NegozioMercanteMovimento(SyncableModel, models.Model):
     )
     riferimento_stock = models.ForeignKey(
         NegozioMercanteStock,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    riferimento_bundle = models.ForeignKey(
+        NegozioMercanteBundle,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
