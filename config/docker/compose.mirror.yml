@@ -1,5 +1,8 @@
 # mirror (Pi): replica bidirezionale con master; timer systemd kor35-mirror-db-sync.
 
+include:
+  - path: compose.coturn.yml
+
 services:
   db:
     container_name: kor35_mirror_db
@@ -14,6 +17,7 @@ services:
     environment:
       KOR35_SYNC_NODE_ROLE: replica
       EDGE_SYNC_STATE_FILE: /app/runtime-state/edge_sync_mirror.json
+      TURN_RELAY_ENABLED: "true"
     volumes:
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
@@ -35,6 +39,9 @@ services:
     volumes:
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
+
+  coturn:
+    container_name: kor35_mirror_coturn
 
   frontend:
     container_name: kor35_mirror_frontend

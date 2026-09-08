@@ -704,6 +704,10 @@ export const CharacterProvider = ({ children, onLogout }) => {
         const action = inner?.action;
         const payload = inner?.payload || inner;
 
+        if (action && String(action).startsWith('VOCE_')) {
+          window.dispatchEvent(new CustomEvent('kor35:voce', { detail: inner }));
+        }
+
         if (action === 'TIMER_SYNC' && payload) {
             updateTimerState(payload);
         }
@@ -780,6 +784,10 @@ export const CharacterProvider = ({ children, onLogout }) => {
              return;
            }
            if (msg.action && String(msg.action).startsWith('DUELLO_')) {
+             return;
+           }
+           if (msg.action && String(msg.action).startsWith('VOCE_')) {
+             window.dispatchEvent(new CustomEvent('kor35:voce', { detail: msg }));
              return;
            }
            const myId = parseInt(selectedCharacterId, 10);

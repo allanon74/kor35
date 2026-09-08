@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart timer-dispatch timer-dispatch-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run bootstrap-kor35-mse-template bootstrap-kor35-mse-template-dry-run
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db prod-turn-prepare pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart timer-dispatch timer-dispatch-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run bootstrap-kor35-mse-template bootstrap-kor35-mse-template-dry-run
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -100,6 +100,7 @@ help:
 	@echo ""
 	@echo "Backup:"
 	@echo "  make backup-db ENV=prod      # dump DB su file + rotazione (vedi scripts/backup_db_daily.sh)"
+	@echo "  make prod-turn-prepare        # sul droplet via SSH: TURN_AUTH_SECRET + ufw 3478/relay"
 	@echo ""
 	@echo "Wiki staff (sorgenti docs/wiki/staff/):"
 	@echo "  make wiki-staff-sync ENV=dev-home              # sync pagine staff nel DB"
@@ -435,3 +436,6 @@ cleanup-legacy:
 
 backup-db:
 	./scripts/backup_db_daily.sh --env "$(ENV)"
+
+prod-turn-prepare:
+	ssh -o BatchMode=yes kor35-prod 'bash -s' < scripts/prepare_prod_turn.sh

@@ -85,6 +85,9 @@ from .models import (
     InfusioneCaratteristica, TessituraCaratteristica, PropostaTecnicaCaratteristica,
     InfusioneStatisticaBase, TessituraStatisticaBase, ModelloAura, InfusioneStatistica,
     InfusioneCostoAttivazione, TessituraCostoAttivazione,
+    InfusioneSezioneCondizionale, InfusioneSezioneStatistica,
+    InfusioneSezioneStatisticaBase,
+    OggettoSezioneCondizionale, OggettoSezioneStatistica, OggettoSezioneStatisticaBase,
     CerimonialeCaratteristica,
     OggettoBase, OggettoBaseStatisticaBase, OggettoBaseModificatore, 
     ForgiaturaInCorso, 
@@ -1259,6 +1262,110 @@ class InfusioneCostoAttivazioneSerializer(TecnicaCostoAttivazioneSerializer):
         model = InfusioneCostoAttivazione
 
 
+class _SezioneStatisticaBaseEditorSerializer(serializers.Serializer):
+    statistica = serializers.PrimaryKeyRelatedField(queryset=Statistica.objects.all())
+    valore_base = serializers.IntegerField(required=False, default=0)
+
+    def to_representation(self, instance):
+        return {
+            "id": str(getattr(instance, "id", "") or ""),
+            "statistica": StatisticaSerializer(instance.statistica).data,
+            "valore_base": instance.valore_base,
+        }
+
+
+class _SezioneStatisticaModEditorSerializer(serializers.Serializer):
+    statistica = serializers.PrimaryKeyRelatedField(queryset=Statistica.objects.all())
+    valore = serializers.DecimalField(max_digits=7, decimal_places=2, required=False, default=0)
+    tipo_modificatore = serializers.ChoiceField(choices=["ADD", "MOL"], required=False, default="ADD")
+    solo_oggetto_ospitante = serializers.BooleanField(required=False, default=False)
+
+    def to_representation(self, instance):
+        return {
+            "id": str(getattr(instance, "id", "") or ""),
+            "statistica": StatisticaSerializer(instance.statistica).data,
+            "valore": instance.valore,
+            "tipo_modificatore": instance.tipo_modificatore,
+            "solo_oggetto_ospitante": bool(instance.solo_oggetto_ospitante),
+        }
+
+
+class InfusioneSezioneCondizionaleSerializer(serializers.Serializer):
+    id = serializers.UUIDField(required=False)
+    ordine = serializers.IntegerField(required=False, default=0)
+    testo = serializers.CharField(required=False, allow_blank=True, default="")
+    condizioni = serializers.JSONField(required=False, default=dict)
+    statistiche_base = serializers.ListField(child=serializers.DictField(), required=False, default=list)
+    modificatori = serializers.ListField(child=serializers.DictField(), required=False, default=list)
+
+    def to_internal_value(self, data):
+        raw = dict(data or {})
+        out = {
+            "id": raw.get("id"),
+            "ordine": raw.get("ordine", 0),
+            "testo": raw.get("testo") or "",
+            "condizioni": raw.get("condizioni") if isinstance(raw.get("condizioni"), dict) else {},
+            "statistiche_base": [],
+            "modificatori": [],
+        }
+        try:
+            out["ordine"] = int(out["ordine"] or 0)
+        except (TypeError, ValueError):
+            out["ordine"] = 0
+
+        def _pk(value):
+            if isinstance(value, dict):
+                return value.get("id")
+            return getattr(value, "pk", value)
+
+        for row in raw.get("statistiche_base") or []:
+            if not isinstance(row, dict):
+                continue
+            sid = _pk(row.get("statistica"))
+            if not sid:
+                continue
+            try:
+                valore_base = int(row.get("valore_base") or 0)
+            except (TypeError, ValueError):
+                valore_base = 0
+            out["statistiche_base"].append({"statistica": sid, "valore_base": valore_base})
+
+        for row in raw.get("modificatori") or []:
+            if not isinstance(row, dict):
+                continue
+            sid = _pk(row.get("statistica"))
+            if not sid:
+                continue
+            tipo = (row.get("tipo_modificatore") or "ADD").upper()
+            if tipo not in ("ADD", "MOL"):
+                tipo = "ADD"
+            out["modificatori"].append({
+                "statistica": sid,
+                "valore": row.get("valore", 0),
+                "tipo_modificatore": tipo,
+                "solo_oggetto_ospitante": bool(row.get("solo_oggetto_ospitante")),
+            })
+        return out
+
+    def to_representation(self, instance):
+        return {
+            "id": str(instance.id),
+            "ordine": instance.ordine,
+            "testo": instance.testo or "",
+            "condizioni": instance.condizioni or {},
+            "statistiche_base": _SezioneStatisticaBaseEditorSerializer(
+                instance.statistiche_base.select_related("statistica").all(), many=True
+            ).data,
+            "modificatori": _SezioneStatisticaModEditorSerializer(
+                instance.modificatori.select_related("statistica").all(), many=True
+            ).data,
+        }
+
+
+class OggettoSezioneCondizionaleSerializer(InfusioneSezioneCondizionaleSerializer):
+    pass
+
+
 class TessituraCostoAttivazioneSerializer(TecnicaCostoAttivazioneSerializer):
     class Meta(TecnicaCostoAttivazioneSerializer.Meta):
         model = TessituraCostoAttivazione
@@ -1461,6 +1568,39 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
                 return int((obj.data_fine_attivazione - now).total_seconds())
         return 0
 
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        personaggio = self.context.get("personaggio")
+        if personaggio:
+            rep["statistiche"] = _append_sezione_mod_chips(
+                rep.get("statistiche"), instance, personaggio
+            )
+        return rep
+
+
+def _append_sezione_mod_chips(statistiche_list, oggetto, personaggio):
+    """Aggiunge chip modificatori delle sezioni attive (nascosti se la condizione fallisce)."""
+    if not personaggio:
+        return statistiche_list
+    from .sezioni_condizionali import iter_modificatori_sezioni, sezioni_attive
+    extra = []
+    for mod in iter_modificatori_sezioni(sezioni_attive(oggetto, personaggio), solo_oggetto_ospitante=False):
+        extra.append({
+            "statistica": StatisticaSerializer(mod.statistica).data,
+            "valore": mod.valore,
+            "tipo_modificatore": mod.tipo_modificatore,
+            "usa_limitazione_aura": False,
+            "usa_limitazione_elemento": False,
+            "usa_condizione_text": False,
+            "condizione_text": "",
+            "solo_oggetto_ospitante": bool(mod.solo_oggetto_ospitante),
+            "da_sezione_condizionale": True,
+        })
+    if not extra:
+        return statistiche_list
+    return list(statistiche_list or []) + extra
+
+
 # -----------------------------------------------------------------------------
 # SERIALIZER PER OGGETTO (COMPLETO)
 # -----------------------------------------------------------------------------
@@ -1584,11 +1724,12 @@ class OggettoSerializer(serializers.ModelSerializer):
         if not obj.attacco_base:
             return None
         
+        from .sezioni_condizionali import statistiche_base_per_item
         personaggio = self.context.get('personaggio')
-        # Passa le statistiche_base dell'oggetto per includere i valori base
-        statistiche_base = obj.oggettostatisticabase_set.select_related('statistica').all()
+        # Passa le statistiche_base dell'oggetto (incluse sezioni attive) per i valori formula
+        statistiche_base = statistiche_base_per_item(obj, personaggio)
         from .models import FORMULA_SCOPE_ATTACK, raccogli_modificatori_solo_oggetto
-        item_mods = raccogli_modificatori_solo_oggetto(obj)
+        item_mods = raccogli_modificatori_solo_oggetto(obj, personaggio=personaggio)
 
         context = {
             'livello': obj.livello,
@@ -1669,6 +1810,15 @@ class OggettoSerializer(serializers.ModelSerializer):
 
     def get_testo_ricarica(self, obj):
         return obj.infusione_generatrice.metodo_ricarica if obj.infusione_generatrice else ""
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        personaggio = self.context.get("personaggio")
+        if personaggio:
+            rep["statistiche"] = _append_sezione_mod_chips(
+                rep.get("statistiche"), instance, personaggio
+            )
+        return rep
     
 # -----------------------------------------------------------------------------
 # SERIALIZER PER LE TECNICHE (INFUSIONE, TESSITURA, CERIMONIALE)
@@ -1974,6 +2124,7 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
     statistiche_base = InfusioneStatisticaBaseSerializer(many=True, required=False, source='infusionestatisticabase_set')
     modificatori = InfusioneStatisticaSerializer(many=True, required=False, source='infusionestatistica_set')
     costi_attivazione = InfusioneCostoAttivazioneSerializer(many=True, required=False)
+    sezioni_condizionali = InfusioneSezioneCondizionaleSerializer(many=True, required=False)
     livello = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -1987,6 +2138,9 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
             rep['aura_richiesta'] = PunteggioSmallSerializer(instance.aura_richiesta).data
         if instance.aura_infusione:
             rep['aura_infusione'] = PunteggioSmallSerializer(instance.aura_infusione).data
+        rep['sezioni_condizionali'] = InfusioneSezioneCondizionaleSerializer(
+            instance.sezioni_condizionali.order_by('ordine', 'created_at'), many=True
+        ).data
         rep.update(_qr_fields_for_avista(instance))
         return rep
 
@@ -1996,8 +2150,10 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         s_base = validated_data.pop('infusionestatisticabase_set', [])
         mods = validated_data.pop('infusionestatistica_set', [])
         costi = validated_data.pop('costi_attivazione', [])
+        sezioni = validated_data.pop('sezioni_condizionali', [])
         instance = Infusione.objects.create(**validated_data)
         self.handle_nested_data(instance, comp, s_base, mods, costi)
+        self._sync_sezioni(instance, sezioni)
         return instance
     
     @transaction.atomic
@@ -2006,10 +2162,23 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         s_base = validated_data.pop('infusionestatisticabase_set', None)
         mods = validated_data.pop('infusionestatistica_set', None)
         costi = validated_data.pop('costi_attivazione', None)
+        sezioni = validated_data.pop('sezioni_condizionali', None)
         
         instance = super().update(instance, validated_data)
         self.handle_nested_data(instance, comp, s_base, mods, costi)
+        self._sync_sezioni(instance, sezioni)
         return instance
+
+    def _sync_sezioni(self, instance, sezioni):
+        from .sezioni_condizionali import sync_sezioni_nested
+        sync_sezioni_nested(
+            instance,
+            sezioni,
+            sezione_model=InfusioneSezioneCondizionale,
+            base_model=InfusioneSezioneStatisticaBase,
+            mod_model=InfusioneSezioneStatistica,
+            parent_fk_name='infusione',
+        )
 
 class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMasterMixin):
     componenti = TessituraCaratteristicaSerializer(many=True, required=False)
@@ -4807,6 +4976,7 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
     componenti = OggettoComponenteEditorSerializer(many=True, required=False)
     statistiche_base = OggettoStatisticaBaseSerializer(many=True, required=False, source='oggettostatisticabase_set')
     statistiche = OggettoStatisticaSerializer(many=True, required=False, source='oggettostatistica_set')
+    sezioni_condizionali = OggettoSezioneCondizionaleSerializer(many=True, required=False)
 
     class Meta:
         model = Oggetto
@@ -4820,6 +4990,9 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
             'nome': instance.classe_oggetto.nome,
         } if instance.classe_oggetto else None
         rep['classe_oggetto_nome'] = instance.classe_oggetto.nome if instance.classe_oggetto else ''
+        rep['sezioni_condizionali'] = OggettoSezioneCondizionaleSerializer(
+            instance.sezioni_condizionali.order_by('ordine', 'created_at'), many=True
+        ).data
         rep.update(_qr_fields_for_avista(instance))
         return rep
 
@@ -4828,9 +5001,11 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
         comp = validated_data.pop('componenti', [])
         s_base = validated_data.pop('oggettostatisticabase_set', [])
         s_mod = validated_data.pop('oggettostatistica_set', [])
+        sezioni = validated_data.pop('sezioni_condizionali', [])
         
         instance = Oggetto.objects.create(**validated_data)
         self.handle_nested_data(instance, components=comp, stats_base=s_base, stats_mod=s_mod)
+        self._sync_sezioni(instance, sezioni)
         return instance
 
     @transaction.atomic
@@ -4838,10 +5013,23 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
         comp = validated_data.pop('componenti', None)
         s_base = validated_data.pop('oggettostatisticabase_set', None)
         s_mod = validated_data.pop('oggettostatistica_set', None)
+        sezioni = validated_data.pop('sezioni_condizionali', None)
         
         instance = super().update(instance, validated_data)
         self.handle_nested_data(instance, components=comp, stats_base=s_base, stats_mod=s_mod)
+        self._sync_sezioni(instance, sezioni)
         return instance
+
+    def _sync_sezioni(self, instance, sezioni):
+        from .sezioni_condizionali import sync_sezioni_nested
+        sync_sezioni_nested(
+            instance,
+            sezioni,
+            sezione_model=OggettoSezioneCondizionale,
+            base_model=OggettoSezioneStatisticaBase,
+            mod_model=OggettoSezioneStatistica,
+            parent_fk_name='oggetto',
+        )
 
 # SERIALIZZATORE COMPLETO PER EDIT OGGETTO BASE (TEMPLATE)
 class OggettoBaseFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixin):

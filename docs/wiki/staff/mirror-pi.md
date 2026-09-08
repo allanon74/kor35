@@ -251,6 +251,48 @@ make mirror-pi-configure MIRROR_NETWORK_MODE=router MIRROR_NETWORK_AUTO_BOOT=0
 
 ---
 
+## Caso 7 — Chiamate vocali (TURN)
+
+In evento i telefoni spesso **non** possono parlarsi in UDP diretto (client isolation mesh). Il relè **coturn** sul Pi riceve l’audio e lo inoltra.
+
+- Servizio: `coturn` in `compose.mirror.yml` (`network_mode: host`).
+- Porte host: **3478** UDP/TCP, relè **49160–49259** UDP.
+- L’API `/api/personaggi/api/chiamate/ice-servers/` pubblica `turn:<host-app>:3478` (stesso host con cui il telefono ha aperto l’app).
+- Credenziali default: `kor35turn` / `kor35turnlocal` — **cambiale** in `backend/.env.mirror`.
+- **Prod** (`www.kor35.it`): coturn sul droplet con **HMAC a tempo** (`TURN_AUTH_SECRET`). Fallback se il Pi è giù: i giocatori usano la web app pubblica; l’audio passa dal VPS.
+
+Avvio / verifica sul Pi:
+
+```bash
+cd /home/pi/kor35-replica/config/docker
+export COMPOSE_PROJECT_NAME=kor35-replica
+export KOR35_BACKEND_ENV_FILE=/home/pi/kor35-replica/backend/.env.mirror
+docker compose -f compose.base.yml -f compose.mirror.yml ps coturn
+```
+
+Firewall (se UFW è attivo): aprire 3478/udp, 3478/tcp e 49160:49259/udp sulla LAN evento. Non inoltrare 3478 su Internet.
+
+Il microfono del browser richiede **HTTPS** (o localhost). In evento usare i certificati del Pi, non `http://192.168.x.x`.
+
+### Fallback: Pi giù → www.kor35.it
+
+Se lo stack sul Pi non parte, i giocatori usano **https://www.kor35.it** (HTTPS già ok per il microfono). Serve coturn sul droplet.
+
+Una tantum (già eseguito sul droplet il 2026-09-08):
+
+```bash
+make prod-turn-prepare
+# oppure sul server: bash scripts/prepare_prod_turn.sh
+```
+
+Scrive `TURN_AUTH_SECRET` (HMAC) e `TURN_EXTERNAL_IP` in `/srv/kor35/backend/.env.prod` e apre ufw: **3478/udp**, **3478/tcp**, **49160–49259/udp**.
+
+Dopo il merge su `main` il deploy CI avvia `kor35_prod_coturn`. Se l’audio non parte da 4G, controllare anche il **Cloud Firewall del provider** (oltre a ufw). Coturn non è proxato da nginx.
+
+Senza secret + porte aperte + container Up, su prod lo squillo parte e l’audio no (NAT/4G).
+
+---
+
 ## Accesso SSH
 
 | Via | Comando |

@@ -20,6 +20,7 @@ from .models import (
     # NUOVI MODELLI INTERMEDI
     InfusioneCaratteristica, TessituraCaratteristica,
     InfusioneStatisticaBase, TessituraStatisticaBase,
+    InfusioneSezioneCondizionale, OggettoSezioneCondizionale,
     PersonaggioInfusione, PersonaggioTessitura, PersonaggioModelloAura,
     PersonaggioAttivata,
     InfusionePluginModel, TessituraPluginModel,
@@ -27,7 +28,7 @@ from .models import (
     PuntiCaratteristicaMovimento, STATISTICA,
     Tabella, Tier, Abilita, Mattone, 
     Caratteristica, Aura, ModelloAura, MattoneStatistica, 
-    Messaggio, LetturaMessaggio, Gruppo,
+    Messaggio, LetturaMessaggio, Gruppo, ChiamataVocale,
     abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, 
     abilita_prerequisito, AbilitaStatistica, CaratteristicaModificatore,
     TransazioneSospesa, STATO_TRANSAZIONE_CHOICES, STATO_TRANSAZIONE_IN_ATTESA, 
@@ -145,6 +146,7 @@ PERSONAGGI_ADMIN_MODEL_GROUPS = {
     # Comunicazioni / utility
     "Gruppo": ("Comunicazioni", 70),
     "Messaggio": ("Comunicazioni", 71),
+    "ChiamataVocale": ("Comunicazioni", 75),
     "TransazioneSospesa": ("Comunicazioni", 72),
     "Dichiarazione": ("Comunicazioni", 73),
     "UserSocialPreference": ("Comunicazioni", 74),
@@ -392,6 +394,20 @@ class InfusioneStatisticaInline(StatisticaModificatorePivotInline):
     fk_name = 'infusione'
     verbose_name = "Modificatore Attivo (es. +1 Forza)"
     verbose_name_plural = "Modificatori Attivi"
+
+class InfusioneSezioneCondizionaleInline(admin.StackedInline):
+    model = InfusioneSezioneCondizionale
+    extra = 0
+    fields = ('ordine', 'condizioni', 'testo')
+    verbose_name = "Sezione condizionale"
+    verbose_name_plural = "Sezioni condizionali (testo/stats se requisito)"
+
+class OggettoSezioneCondizionaleInline(admin.StackedInline):
+    model = OggettoSezioneCondizionale
+    extra = 0
+    fields = ('ordine', 'condizioni', 'testo')
+    verbose_name = "Sezione condizionale"
+    verbose_name_plural = "Sezioni condizionali (testo/stats se requisito)"
 
 class TessituraStatisticaBaseInline(StatisticaBasePivotInline):
     model = TessituraStatisticaBase; form = TessituraStatisticaBaseForm; fk_name = 'tessitura'
@@ -1083,7 +1099,8 @@ class InfusioneAdmin(SModelAdmin):
     inlines = [
         InfusioneCaratteristicaInline,   # Componenti (Livello/Costo)
         InfusioneStatisticaBaseInline,   # Statistiche Base (Danno, Peso)
-        InfusioneStatisticaInline        # Modificatori (Bonus/Malus)
+        InfusioneStatisticaInline,       # Modificatori (Bonus/Malus)
+        InfusioneSezioneCondizionaleInline,
     ]
     
     # Rimuovi 'statistiche' dagli esclusi per permettere la gestione inline corretta
@@ -1402,6 +1419,14 @@ class MessaggioAdmin(SModelAdmin):
         if not obj.mittente: obj.mittente = request.user
         super().save_model(request, obj, form, change)
 
+@admin.register(ChiamataVocale)
+class ChiamataVocaleAdmin(admin.ModelAdmin):
+    list_display = ("id", "chiamante", "chiamato", "verso_staff", "stato", "created_at")
+    list_filter = ("stato", "verso_staff")
+    search_fields = ("chiamante__nome", "chiamato__nome")
+    readonly_fields = ("id", "created_at", "updated_at", "closed_at")
+    autocomplete_fields = ["chiamante", "chiamato", "accettata_da"]
+
 @admin.register(TransazioneSospesa)
 class TransazioneSospesaAdmin(admin.ModelAdmin):
     list_display = ('id', 'oggetto', 'mittente', 'richiedente', 'stato', 'data_richiesta')
@@ -1473,7 +1498,8 @@ class OggettoAdmin(SModelAdmin):
         TracciamentoInventarioInline, 
         PotenziamentiInstallatiInline,
         OggettoStatisticaBaseInline, 
-        OggettoStatisticaInline,  
+        OggettoStatisticaInline,
+        OggettoSezioneCondizionaleInline,
         ]
     
     def get_inventario_attuale(self, obj):

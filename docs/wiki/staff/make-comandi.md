@@ -165,6 +165,7 @@ Guida staff: Wiki «Card Studio — carta Sette Elegie» (`staff-card-studio-set
 | Comando | Descrizione |
 |---------|-------------|
 | `make backup-db ENV=prod` | Dump DB + rotazione |
+| `make prod-turn-prepare` | Secret HMAC + ufw TURN sul droplet (chiamate vocali fallback) |
 | `make wiki-staff-sync ENV=dev-home` | Aggiorna pagine Wiki staff da `docs/wiki/staff/` |
 | `make wiki-staff-sync ENV=dev-home WIKI_STAFF_FORCE=1` | Sovrascrive contenuto Wiki staff da repo |
 | `make wiki-carte-sync ENV=dev-home` | Aggiorna bozza regolamento carte da `docs/wiki/carte/` |
@@ -182,6 +183,7 @@ SSH prod: alias `kor35-prod`, utente `deploy`, path `/srv/kor35`.
 make status ENV=prod
 make logs ENV=prod
 make migrate ENV=prod
+make prod-turn-prepare
 ```
 
-Vedi `.cursor/rules/prod-docker-ops.mdc`.
+Vedi `.cursor/rules/prod-docker-ops.mdc` (TURN fallback Pi giù).

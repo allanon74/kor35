@@ -624,6 +624,9 @@ class GestioneOggettiService:
             stat_obj.limit_a_aure.set(stat_man.limit_a_aure.all())
             stat_obj.limit_a_elementi.set(stat_man.limit_a_elementi.all())
 
+        from .sezioni_condizionali import copia_sezioni_infusione_su_oggetto
+        copia_sezioni_infusione_su_oggetto(infusione, nuovo_oggetto)
+
         for comp in infusione.componenti.select_related('caratteristica').all():
             OggettoCaratteristica.objects.create(
                 oggetto=nuovo_oggetto,

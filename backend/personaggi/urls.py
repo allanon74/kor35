@@ -1,7 +1,7 @@
 from django.urls import path, include
 # from rest_framework.authtoken.views import obtain_auth_token
 
-from . import views, views_staff, views_scommesse, views_carte, views_carte_platform, watch_views, views_economia, views_notifiche
+from . import views, views_staff, views_scommesse, views_carte, views_carte_platform, watch_views, views_economia, views_notifiche, chiamate_views
 from rest_framework import routers
 
 from rest_framework.routers import DefaultRouter
@@ -421,6 +421,13 @@ urlpatterns = [
     ),
     
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
+    path('api/chiamate/ice-servers/', chiamate_views.ChiamataIceServersView.as_view(), name='chiamate-ice-servers'),
+    path('api/chiamate/coda/', chiamate_views.ChiamataVocaleCodaStaffView.as_view(), name='chiamate-coda-staff'),
+    path('api/chiamate/<uuid:pk>/accetta/', chiamate_views.ChiamataVocaleAccettaView.as_view(), name='chiamate-accetta'),
+    path('api/chiamate/<uuid:pk>/rifiuta/', chiamate_views.ChiamataVocaleRifiutaView.as_view(), name='chiamate-rifiuta'),
+    path('api/chiamate/<uuid:pk>/chiudi/', chiamate_views.ChiamataVocaleChiudiView.as_view(), name='chiamate-chiudi'),
+    path('api/chiamate/', chiamate_views.ChiamataVocaleListCreateView.as_view(), name='chiamate-list-create'),
+
     path('api/notifiche/', views_notifiche.NotificaPreferenzeView.as_view(), name='notifiche-preferenze'),
     path('api/notifiche/telegram/link/', views_notifiche.TelegramLinkView.as_view(), name='notifiche-telegram-link'),
     path('api/notifiche/telegram/unlink/', views_notifiche.TelegramUnlinkView.as_view(), name='notifiche-telegram-unlink'),

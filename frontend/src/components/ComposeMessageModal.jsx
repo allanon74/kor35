@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Dialog, DialogPanel, DialogTitle, DialogBackdrop } from '@headlessui/react';
 import { searchPersonaggi, fetchAuthenticated, getPersonaggioDetail } from '../api';
 import RichTextEditor from './RichTextEditor';
-import { Shield, User, X, UserCircle, Eye, EyeOff, ChevronDown } from 'lucide-react';
+import { Shield, User, X, UserCircle, Eye, EyeOff, ChevronDown, Phone } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
+import { useChiamataVocale } from './ChiamataVocaleProvider';
 import { useDirtyModalClose } from '../hooks/useDirtyModalClose';
 import { richTextHasContent } from '../utils/htmlSanitizer';
 
@@ -27,6 +28,7 @@ const ComposeMessageModal = ({
   isCampaignStaffer = false,
 }) => {
   const { transazioniGiocatoreAbilitate, bypassEventoGate } = useCharacter();
+  const { startCall, call: activeCall } = useChiamataVocale();
   const transferConsentito = transazioniGiocatoreAbilitate;
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -482,11 +484,29 @@ const ComposeMessageModal = ({
                 />
                 <label
                   htmlFor="chk_staff"
-                  className="cursor-pointer flex items-center gap-2 font-bold text-indigo-300"
+                  className="cursor-pointer flex items-center gap-2 font-bold text-indigo-300 flex-1"
                 >
                   <Shield size={18} />
                   Invia messaggio allo Staff
                 </label>
+                {isStaffMessage ? (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await startCall({ versoStaff: true });
+                        onClose();
+                      } catch {
+                        /* overlay mostra errore */
+                      }
+                    }}
+                    disabled={!!activeCall}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 px-2.5 py-1.5 text-xs font-bold text-white"
+                    title="Chiama lo staff"
+                  >
+                    <Phone size={14} /> Chiama
+                  </button>
+                ) : null}
               </div>
 
               {!isStaffMessage && (
@@ -517,6 +537,24 @@ const ComposeMessageModal = ({
                         Cambia
                       </button>
                     )}
+                    {selectedRecipient ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await startCall({ personaggioId: selectedRecipient.id });
+                            onClose();
+                          } catch {
+                            /* overlay */
+                          }
+                        }}
+                        disabled={!!activeCall}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 px-3 py-2 text-xs font-bold text-white"
+                        title={`Chiama ${selectedRecipient.nome}`}
+                      >
+                        <Phone size={14} /> Chiama
+                      </button>
+                    ) : null}
                   </div>
 
                   {results.length > 0 && !selectedRecipient && (

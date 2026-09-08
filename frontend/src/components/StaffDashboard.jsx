@@ -63,6 +63,7 @@ const EconomiaCreditiManager = lazy(() => import('./editors/EconomiaCreditiManag
 const StaffAppLinksPanel = lazy(() => import('./editors/StaffAppLinksPanel'));
 const StaffCalendarioCompitiManager = lazy(() => import('./editors/StaffCalendarioCompitiManager'));
 const StaffRubricheManager = lazy(() => import('./editors/StaffRubricheManager'));
+const ChiamateVocaliStaffTab = lazy(() => import('./editors/ChiamateVocaliStaffTab'));
 
 const STAFF_COMPONENT_MAP = {
     plot: PlotTab,
@@ -98,6 +99,7 @@ const STAFF_COMPONENT_MAP = {
     campagne: CampaignManager,
     maintenance: MaintenanceModePanel,
     messaggi: AdminMessageTab,
+    chiamate: ChiamateVocaliStaffTab,
     scommesse: ScommesseManager,
     'manuali-pdf': ManualePdfManager,
     'negozi-mercante': NegozioMercanteManager,
