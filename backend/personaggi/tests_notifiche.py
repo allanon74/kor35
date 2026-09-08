@@ -38,8 +38,11 @@ class NotificaPreferenzeApiTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         canali = resp.data["canali"]
         self.assertTrue(canali["webpush"]["messaggi"])
+        self.assertTrue(canali["webpush"]["chiamate"])
         self.assertFalse(canali["telegram"]["messaggi"])
+        self.assertFalse(canali["telegram"]["chiamate"])
         self.assertFalse(canali["email"]["messaggi"])
+        self.assertIn("chiamate", [c["id"] for c in resp.data["categorie"]])
         self.assertEqual(resp.data["email"]["address"], "player@example.com")
         self.assertFalse(resp.data["calendario"]["include_compiti"])
         self.assertIn("calendario.ics?token=", resp.data["calendario"]["path"])
@@ -108,6 +111,20 @@ class NotifyDispatcherTests(APITestCase):
         mock_email.assert_called_once()
         notify_user(self.user, category="messaggi", head="H", body="B")
         self.assertEqual(mock_email.call_count, 1)
+
+    @patch("personaggi.notify._send_email", return_value=1)
+    @patch("personaggi.notify._send_telegram", return_value=1)
+    @patch("personaggi.notify._send_webpush", return_value=1)
+    def test_chiamate_categoria_separata(self, mock_wp, mock_tg, mock_email):
+        prefs = get_or_create_preferenze(self.user)
+        prefs.set_canale("telegram", "chiamate", True)
+        prefs.telegram_chat_id = "12345"
+        prefs.save()
+        notify_user(self.user, category="chiamate", head="Chiamata vocale", body="Alice ti sta chiamando.")
+        mock_tg.assert_called_once()
+        mock_email.assert_not_called()
+        notify_user(self.user, category="in_game", head="H", body="B")
+        mock_tg.assert_called_once()
 
 
 class TelegramLinkHookTests(APITestCase):

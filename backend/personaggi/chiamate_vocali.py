@@ -246,7 +246,7 @@ def _push_invito(call: ChiamataVocale, user_ids: list[int]):
         body = f"{call.chiamante.nome} ti sta chiamando."
     notify_user_ids(
         user_ids,
-        category="in_game",
+        category="chiamate",
         head="Chiamata vocale",
         body=body,
         url="/?tab=messaggi",

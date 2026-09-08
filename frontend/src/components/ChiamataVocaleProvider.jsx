@@ -57,6 +57,22 @@ function startRingtone() {
   };
 }
 
+function serializeSdp(desc) {
+  if (!desc) return null;
+  return { type: desc.type, sdp: desc.sdp };
+}
+
+function iceInit(candidate) {
+  if (!candidate) return null;
+  if (typeof candidate === 'string') return { candidate };
+  return {
+    candidate: candidate.candidate,
+    sdpMid: candidate.sdpMid ?? null,
+    sdpMLineIndex: candidate.sdpMLineIndex ?? 0,
+    usernameFragment: candidate.usernameFragment,
+  };
+}
+
 export function ChiamataVocaleProvider({ children }) {
   const { selectedCharacterId, onLogout, canAccessModulo } = useCharacter();
   const chiamateAbilitate = canAccessModulo ? canAccessModulo('chiamate') : false;
@@ -69,16 +85,45 @@ export function ChiamataVocaleProvider({ children }) {
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const pendingIceRef = useRef([]);
+  const pendingSignalsRef = useRef([]);
   const iceServersRef = useRef(null);
   const stopRingRef = useRef(null);
   const callRef = useRef(null);
+  const offerSentRef = useRef(null);
   callRef.current = call;
+
+  const playRemote = useCallback(async () => {
+    const el = remoteAudioRef.current;
+    if (!el) return;
+    el.muted = false;
+    el.volume = 1;
+    try {
+      await el.play();
+    } catch {
+      /* autoplay: riprova su ontrack / gesto utente */
+    }
+  }, []);
+
+  const attachRemoteStream = useCallback(
+    (stream) => {
+      const el = remoteAudioRef.current;
+      if (!el || !stream) return;
+      if (el.srcObject !== stream) {
+        el.srcObject = stream;
+      }
+      setRemoteReady(true);
+      playRemote();
+    },
+    [playRemote]
+  );
 
   const sendSignal = useCallback((payload) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(payload));
+      return;
     }
+    pendingSignalsRef.current.push(payload);
   }, []);
 
   const stopLocalMedia = useCallback(() => {
@@ -95,8 +140,13 @@ export function ChiamataVocaleProvider({ children }) {
       pcRef.current = null;
     }
     pendingIceRef.current = [];
+    pendingSignalsRef.current = [];
+    offerSentRef.current = null;
     setRemoteReady(false);
     setMuted(false);
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
+    }
     if (stopRingRef.current) {
       stopRingRef.current();
       stopRingRef.current = null;
@@ -108,7 +158,10 @@ export function ChiamataVocaleProvider({ children }) {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('Microfono non supportato su questo browser.');
     }
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false,
+    });
     localStreamRef.current = stream;
     return stream;
   }, []);
@@ -128,7 +181,7 @@ export function ChiamataVocaleProvider({ children }) {
     const queued = pendingIceRef.current.splice(0);
     for (const cand of queued) {
       try {
-        await pc.addIceCandidate(cand);
+        await pc.addIceCandidate(new RTCIceCandidate(cand));
       } catch {
         /* candidato stale */
       }
@@ -140,69 +193,95 @@ export function ChiamataVocaleProvider({ children }) {
       if (pcRef.current) return pcRef.current;
       const iceServers = await ensureIce();
       const stream = await ensureMic();
-      const pc = new RTCPeerConnection({ iceServers });
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      const pc = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 4 });
+      stream.getAudioTracks().forEach((track) => pc.addTrack(track, stream));
+      if (!pc.getTransceivers().some((t) => t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio')) {
+        pc.addTransceiver('audio', { direction: 'sendrecv' });
+      }
       pc.onicecandidate = (ev) => {
         if (ev.candidate) {
           sendSignal({
             type: 'ice',
             call_id: callId,
-            candidate: ev.candidate.toJSON ? ev.candidate.toJSON() : ev.candidate,
+            candidate: iceInit(ev.candidate.toJSON ? ev.candidate.toJSON() : ev.candidate),
           });
         }
       };
       pc.ontrack = (ev) => {
-        const remote = ev.streams?.[0];
-        if (remoteAudioRef.current && remote) {
-          remoteAudioRef.current.srcObject = remote;
-          remoteAudioRef.current.play().catch(() => {});
-        }
-        setRemoteReady(true);
+        const remote = ev.streams?.[0] || new MediaStream(ev.track ? [ev.track] : []);
+        attachRemoteStream(remote);
       };
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
           setError('Collegamento audio instabile.');
         }
       };
+      pc.oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          setError('');
+        }
+        if (pc.iceConnectionState === 'failed') {
+          setError('Collegamento audio fallito (rete/TURN). Chiudi e richiama.');
+        }
+      };
       pcRef.current = pc;
       return pc;
     },
-    [ensureIce, ensureMic, sendSignal]
+    [attachRemoteStream, ensureIce, ensureMic, sendSignal]
   );
 
   const createOffer = useCallback(
     async (callId) => {
-      const pc = await setupPeer(callId);
-      const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
-      await pc.setLocalDescription(offer);
-      sendSignal({ type: 'sdp', call_id: callId, sdp: pc.localDescription });
+      if (offerSentRef.current === callId) return;
+      offerSentRef.current = callId;
+      try {
+        const pc = await setupPeer(callId);
+        const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+        await pc.setLocalDescription(offer);
+        sendSignal({ type: 'sdp', call_id: callId, sdp: serializeSdp(pc.localDescription) });
+      } catch (err) {
+        if (offerSentRef.current === callId) offerSentRef.current = null;
+        setError(err?.message || 'Impossibile avviare l\'audio.');
+      }
     },
-    [ensureIce, sendSignal, setupPeer]
+    [sendSignal, setupPeer]
   );
 
   const handleRemoteSdp = useCallback(
     async (sdp, callId) => {
-      const pc = await setupPeer(callId);
-      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-      await flushIce(pc);
-      if (sdp.type === 'offer') {
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        sendSignal({ type: 'sdp', call_id: callId, sdp: pc.localDescription });
+      if (!sdp?.type || !sdp?.sdp) return;
+      try {
+        const pc = await setupPeer(callId);
+        if (sdp.type === 'offer' && pc.signalingState !== 'stable') {
+          return;
+        }
+        if (sdp.type === 'answer' && pc.signalingState !== 'have-local-offer') {
+          return;
+        }
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        await flushIce(pc);
+        if (sdp.type === 'offer') {
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          sendSignal({ type: 'sdp', call_id: callId, sdp: serializeSdp(pc.localDescription) });
+        }
+      } catch (err) {
+        setError(err?.message || 'Segnalazione audio fallita.');
       }
     },
     [flushIce, sendSignal, setupPeer]
   );
 
   const handleRemoteIce = useCallback(async (candidate) => {
-    if (!candidate) return;
+    const init = iceInit(candidate);
+    if (!init?.candidate) return;
     const pc = pcRef.current;
     if (!pc || !pc.remoteDescription) {
-      pendingIceRef.current.push(candidate);
+      pendingIceRef.current.push(init);
       return;
     }
     try {
-      await pc.addIceCandidate(candidate);
+      await pc.addIceCandidate(new RTCIceCandidate(init));
     } catch {
       /* noop */
     }
@@ -316,6 +395,14 @@ export function ChiamataVocaleProvider({ children }) {
       wsRef.current = ws;
       ws.onopen = () => {
         retry = 0;
+        const queued = pendingSignalsRef.current.splice(0);
+        queued.forEach((payload) => {
+          try {
+            ws.send(JSON.stringify(payload));
+          } catch {
+            /* noop */
+          }
+        });
       };
       ws.onmessage = (ev) => {
         try {
@@ -374,6 +461,7 @@ export function ChiamataVocaleProvider({ children }) {
       }
       try {
         await ensureMic();
+        await playRemote();
         const data = await avviaChiamataVocale(
           {
             chiamante_id: Number(selectedCharacterId),
@@ -393,7 +481,7 @@ export function ChiamataVocaleProvider({ children }) {
         throw err;
       }
     },
-    [chiamateAbilitate, ensureMic, onLogout, selectedCharacterId, stopLocalMedia]
+    [chiamateAbilitate, ensureMic, onLogout, playRemote, selectedCharacterId, stopLocalMedia]
   );
 
   const acceptCall = useCallback(async () => {
@@ -402,6 +490,7 @@ export function ChiamataVocaleProvider({ children }) {
     setError('');
     try {
       await ensureMic();
+      await playRemote();
       const data = await accettaChiamataVocale(current.id, onLogout);
       if (stopRingRef.current) {
         stopRingRef.current();
@@ -413,7 +502,7 @@ export function ChiamataVocaleProvider({ children }) {
       stopLocalMedia();
       setError(err?.detail || err?.message || 'Impossibile accettare.');
     }
-  }, [ensureMic, onLogout, setupPeer, stopLocalMedia]);
+  }, [ensureMic, onLogout, playRemote, setupPeer, stopLocalMedia]);
 
   const rejectCall = useCallback(async () => {
     const current = callRef.current;
@@ -454,7 +543,7 @@ export function ChiamataVocaleProvider({ children }) {
   return (
     <ChiamataVocaleContext.Provider value={value}>
       {children}
-      <audio ref={remoteAudioRef} autoPlay playsInline />
+      <audio ref={remoteAudioRef} autoPlay playsInline className="absolute w-px h-px opacity-0 overflow-hidden" />
       <ChiamataVocaleOverlay
         call={call}
         error={error}

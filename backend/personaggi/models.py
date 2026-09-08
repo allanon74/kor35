@@ -1716,11 +1716,12 @@ class CampagnaFeaturePolicy(SyncableModel, models.Model):
         return f"{self.campagna.nome} - {self.feature_key}: {self.mode}"
 
 
-NOTIFICA_CATEGORIE = ("messaggi", "in_game", "compiti", "social", "staff")
+NOTIFICA_CATEGORIE = ("messaggi", "in_game", "chiamate", "compiti", "social", "staff")
 NOTIFICA_CANALI = ("webpush", "telegram", "email")
 NOTIFICA_CATEGORIA_LABELS = {
     "messaggi": "Messaggi (privati e di gruppo)",
     "in_game": "Avvisi in-game (broadcast, timer)",
+    "chiamate": "Chiamate vocali",
     "compiti": "Compiti off-game (scadenze)",
     "social": "InstaFame (citazioni)",
     "staff": "Messaggi staff",

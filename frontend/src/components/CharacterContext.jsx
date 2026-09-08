@@ -787,7 +787,6 @@ export const CharacterProvider = ({ children, onLogout }) => {
              return;
            }
            if (msg.action && String(msg.action).startsWith('VOCE_')) {
-             window.dispatchEvent(new CustomEvent('kor35:voce', { detail: msg }));
              return;
            }
            const myId = parseInt(selectedCharacterId, 10);

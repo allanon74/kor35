@@ -518,6 +518,7 @@ class Command(BaseCommand):
 <ul>
     <li><strong>Messaggi</strong> — privati e di gruppo</li>
     <li><strong>Avvisi in-game</strong> — broadcast e timer</li>
+    <li><strong>Chiamate vocali</strong> — squillo in arrivo (Telegram/push/email, indipendenti dagli avvisi in-game)</li>
     <li><strong>Compiti off-game</strong> — scadenze assegnate ad aiuto staff / staff / master</li>
     <li><strong>InstaFame</strong> — citazioni</li>
     <li><strong>Messaggi staff</strong></li>
