@@ -5,7 +5,8 @@ import hmac
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.test import override_settings
+from django.test import SimpleTestCase, override_settings
+from django.urls import resolve
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -179,3 +180,41 @@ class ChiamateVocaliApiTests(APITestCase):
         rif = self.client.post(f"/api/personaggi/api/chiamate/{call_id}/rifiuta/", {}, format="json")
         self.assertEqual(rif.status_code, status.HTTP_200_OK, rif.data)
         self.assertEqual(rif.data["stato"], ChiamataVocale.STATO_RIFIUTATA)
+
+    @patch("personaggi.chiamate_vocali._notifica_parti")
+    @patch("personaggi.chiamate_vocali._push_invito")
+    def test_modulo_off_blocca_avvio(self, _push, _ws):
+        from personaggi.campagna_moduli import MODULO_ACCESSO_OFF, MODULO_CHIAMATE, apply_moduli_accesso
+
+        apply_moduli_accesso(self.campagna, {MODULO_CHIAMATE: MODULO_ACCESSO_OFF})
+        self.client.force_authenticate(self.u1)
+        resp = self.client.post(
+            "/api/personaggi/api/chiamate/",
+            {"chiamante_id": self.pg1.id, "chiamato_id": self.pg2.id},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        ice = self.client.get(
+            "/api/personaggi/api/chiamate/ice-servers/",
+            HTTP_X_CAMPAGNA="voce-test",
+        )
+        self.assertEqual(ice.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class ChiamateRoutingTests(SimpleTestCase):
+    def test_rest_ice_coda_e_list_non_collidono(self):
+        from personaggi import chiamate_views
+
+        ice = resolve("/api/personaggi/api/chiamate/ice-servers/")
+        self.assertIs(ice.func.view_class, chiamate_views.ChiamataIceServersView)
+        coda = resolve("/api/personaggi/api/chiamate/coda/")
+        self.assertIs(coda.func.view_class, chiamate_views.ChiamataVocaleCodaStaffView)
+        lista = resolve("/api/personaggi/api/chiamate/")
+        self.assertIs(lista.func.view_class, chiamate_views.ChiamataVocaleListCreateView)
+
+    def test_ws_chiamate_con_e_senza_slash(self):
+        from personaggi.routing import websocket_urlpatterns
+
+        for path in ("ws/chiamate/", "ws/chiamate"):
+            match = next((p.resolve(path) for p in websocket_urlpatterns if p.resolve(path)), None)
+            self.assertIsNotNone(match, path)

@@ -27,9 +27,10 @@ const ComposeMessageModal = ({
   currentCredits = 0,
   isCampaignStaffer = false,
 }) => {
-  const { transazioniGiocatoreAbilitate, bypassEventoGate } = useCharacter();
+  const { transazioniGiocatoreAbilitate, bypassEventoGate, canAccessModulo } = useCharacter();
   const { startCall, call: activeCall } = useChiamataVocale();
   const transferConsentito = transazioniGiocatoreAbilitate;
+  const chiamateAbilitate = canAccessModulo('chiamate');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [selectedRecipient, setSelectedRecipient] = useState(null);
@@ -489,7 +490,7 @@ const ComposeMessageModal = ({
                   <Shield size={18} />
                   Invia messaggio allo Staff
                 </label>
-                {isStaffMessage ? (
+                {isStaffMessage && chiamateAbilitate ? (
                   <button
                     type="button"
                     onClick={async () => {
@@ -537,7 +538,7 @@ const ComposeMessageModal = ({
                         Cambia
                       </button>
                     )}
-                    {selectedRecipient ? (
+                    {selectedRecipient && chiamateAbilitate ? (
                       <button
                         type="button"
                         onClick={async () => {

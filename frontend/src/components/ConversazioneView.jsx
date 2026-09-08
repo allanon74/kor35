@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Reply, Send, X, Users, MessageCircle, Shield, Eye, Phone } from 'lucide-react';
 import { useChiamataVocale } from './ChiamataVocaleProvider';
+import { useCharacter } from './CharacterContext';
 import RichTextDisplay from './RichTextDisplay';
 import RichTextEditor from './RichTextEditor';
 import MessageAttachmentsLine from './MessageAttachmentsLine';
@@ -20,6 +21,8 @@ const ConversazioneView = ({
   const [markingRead, setMarkingRead] = useState(false);
   const messagesEndRef = useRef(null);
   const { startCall, call: activeCall } = useChiamataVocale();
+  const { canAccessModulo } = useCharacter();
+  const chiamateAbilitate = canAccessModulo ? canAccessModulo('chiamate') : false;
 
   const titolo =
     conversazione.titolo ||
@@ -120,6 +123,7 @@ const ConversazioneView = ({
                 {markingRead ? '…' : 'Segna letti'}
               </button>
             ) : null}
+            {chiamateAbilitate ? (
             <button
               type="button"
               onClick={async () => {
@@ -142,6 +146,7 @@ const ConversazioneView = ({
             >
               <Phone className="w-5 h-5" />
             </button>
+            ) : null}
             <button
               type="button"
               onClick={requestClose}

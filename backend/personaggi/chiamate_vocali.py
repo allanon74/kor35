@@ -254,10 +254,15 @@ def _push_invito(call: ChiamataVocale, user_ids: list[int]):
 
 
 def avvia_chiamata(*, chiamante: Personaggio, chiamato: Personaggio | None, verso_staff: bool) -> ChiamataVocale:
+    from personaggi.campagna_moduli import MODULO_CHIAMATE, modulo_accesso_error, personaggio_puo_accedere_modulo
+
     scadi_chiamate_vecchie()
     owner = chiamante.proprietario
     if not owner:
         raise ValueError("Il chiamante non ha un giocatore associato.")
+    msg_mod = modulo_accesso_error(chiamante, MODULO_CHIAMATE, user=owner)
+    if msg_mod:
+        raise ValueError(msg_mod)
     if user_ha_chiamata_attiva(owner):
         raise ValueError("Hai già una chiamata in corso.")
     if verso_staff:
@@ -282,6 +287,9 @@ def avvia_chiamata(*, chiamante: Personaggio, chiamato: Personaggio | None, vers
         raise ValueError("Destinatario non raggiungibile.")
     if chiamato.pk == chiamante.pk:
         raise ValueError("Non puoi chiamare te stesso.")
+    dest_mod = modulo_accesso_error(chiamato, MODULO_CHIAMATE, user=chiamato.proprietario)
+    if dest_mod:
+        raise ValueError(f"{chiamato.nome} non può ricevere chiamate in questa campagna.")
     if user_ha_chiamata_attiva(chiamato.proprietario):
         raise ValueError(f"{chiamato.nome} è già in chiamata.")
     call = ChiamataVocale.objects.create(
@@ -312,10 +320,14 @@ def utente_puo_partecipare(call: ChiamataVocale, user) -> bool:
 
 
 def accetta_chiamata(call: ChiamataVocale, user: User) -> ChiamataVocale:
+    from personaggi.campagna_moduli import MODULO_CHIAMATE, user_puo_accedere_modulo
+
     scadi_chiamate_vecchie()
     call.refresh_from_db()
     if call.stato != ChiamataVocale.STATO_RINGING:
         raise ValueError("La chiamata non è più in squillo.")
+    if not user_puo_accedere_modulo(user, call.campagna, MODULO_CHIAMATE):
+        raise ValueError("Chiamate vocali: modulo non attivo in questa campagna.")
     if call.chiamante.proprietario_id == user.id:
         raise ValueError("Non puoi accettare la tua stessa chiamata.")
     if call.verso_staff:

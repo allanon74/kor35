@@ -58,7 +58,8 @@ function startRingtone() {
 }
 
 export function ChiamataVocaleProvider({ children }) {
-  const { selectedCharacterId, onLogout } = useCharacter();
+  const { selectedCharacterId, onLogout, canAccessModulo } = useCharacter();
+  const chiamateAbilitate = canAccessModulo ? canAccessModulo('chiamate') : false;
   const [call, setCall] = useState(null);
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState('');
@@ -303,6 +304,7 @@ export function ChiamataVocaleProvider({ children }) {
   }, [applySignal]);
 
   useEffect(() => {
+    if (!chiamateAbilitate) return undefined;
     const url = wsUrl();
     if (!url) return undefined;
     let closed = false;
@@ -334,9 +336,10 @@ export function ChiamataVocaleProvider({ children }) {
       window.clearTimeout(timer);
       if (wsRef.current) wsRef.current.close();
     };
-  }, [applySignal]);
+  }, [applySignal, chiamateAbilitate]);
 
   useEffect(() => {
+    if (!chiamateAbilitate) return undefined;
     let cancelled = false;
     getChiamataVocaleAttiva(onLogout)
       .then((data) => {
@@ -356,13 +359,17 @@ export function ChiamataVocaleProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [onLogout]);
+  }, [onLogout, chiamateAbilitate]);
 
   const startCall = useCallback(
     async ({ personaggioId = null, versoStaff = false } = {}) => {
       setError('');
       if (!selectedCharacterId) {
         setError('Seleziona un personaggio prima di chiamare.');
+        return;
+      }
+      if (!chiamateAbilitate) {
+        setError('Chiamate vocali: modulo non attivo in questa campagna.');
         return;
       }
       try {
@@ -386,7 +393,7 @@ export function ChiamataVocaleProvider({ children }) {
         throw err;
       }
     },
-    [ensureMic, onLogout, selectedCharacterId, stopLocalMedia]
+    [chiamateAbilitate, ensureMic, onLogout, selectedCharacterId, stopLocalMedia]
   );
 
   const acceptCall = useCallback(async () => {

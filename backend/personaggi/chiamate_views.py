@@ -4,6 +4,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from personaggi.campagna_moduli import (
+    MODULO_CHIAMATE,
+    ModuloStaffGateMixin,
+    campagna_da_request,
+    user_puo_accedere_modulo,
+)
 from personaggi.chiamate_vocali import (
     accetta_chiamata,
     avvia_chiamata,
@@ -28,6 +34,20 @@ def _ensure_enabled():
     return None
 
 
+def _gate_modulo_utente(request):
+    campagna = campagna_da_request(request)
+    if campagna and not user_puo_accedere_modulo(request.user, campagna, MODULO_CHIAMATE):
+        from personaggi.campagna_moduli import get_modulo_accesso, modulo_label, MODULO_ACCESSO_TEST
+
+        modo = get_modulo_accesso(campagna, MODULO_CHIAMATE)
+        if modo == MODULO_ACCESSO_TEST:
+            detail = "Chiamate vocali: in testing — accesso solo per staff/master."
+        else:
+            detail = f"{modulo_label(MODULO_CHIAMATE)}: modulo non attivo in questa campagna."
+        return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
+    return None
+
+
 class ChiamataIceServersView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -35,6 +55,9 @@ class ChiamataIceServersView(APIView):
         blocked = _ensure_enabled()
         if blocked:
             return blocked
+        gated = _gate_modulo_utente(request)
+        if gated:
+            return gated
         return Response({"iceServers": ice_servers(request)})
 
 
@@ -80,8 +103,9 @@ class ChiamataVocaleListCreateView(APIView):
         return Response(serializza_chiamata(call, request.user), status=status.HTTP_201_CREATED)
 
 
-class ChiamataVocaleCodaStaffView(APIView):
+class ChiamataVocaleCodaStaffView(ModuloStaffGateMixin, APIView):
     permission_classes = [IsAuthenticated]
+    modulo_key = MODULO_CHIAMATE
 
     def get(self, request):
         blocked = _ensure_enabled()

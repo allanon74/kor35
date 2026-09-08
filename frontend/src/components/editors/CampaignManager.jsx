@@ -67,6 +67,7 @@ const STAFF_TOOL_LABELS = {
   'creazione-guidata': 'Creazione guidata',
   'social-report': 'Report social',
   rubriche: 'Rubriche',
+  chiamate: 'Centralino vocale',
 };
 
 const PLAYER_TAB_LABELS = {
