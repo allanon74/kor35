@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import {
   accettaChiamataVocale,
   avviaChiamataVocale,
@@ -80,6 +81,7 @@ export function ChiamataVocaleProvider({ children }) {
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState('');
   const [remoteReady, setRemoteReady] = useState(false);
+  const [busy, setBusy] = useState(false);
   const wsRef = useRef(null);
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -92,16 +94,13 @@ export function ChiamataVocaleProvider({ children }) {
   const offerSentRef = useRef(null);
   callRef.current = call;
 
-  const playRemote = useCallback(async () => {
+  const playRemote = useCallback(() => {
     const el = remoteAudioRef.current;
-    if (!el) return;
+    if (!el || !el.srcObject) return;
     el.muted = false;
     el.volume = 1;
-    try {
-      await el.play();
-    } catch {
-      /* autoplay: riprova su ontrack / gesto utente */
-    }
+    const p = el.play();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
   }, []);
 
   const attachRemoteStream = useCallback(
@@ -158,10 +157,16 @@ export function ChiamataVocaleProvider({ children }) {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('Microfono non supportato su questo browser.');
     }
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      video: false,
-    });
+    const tryGet = (constraints) => navigator.mediaDevices.getUserMedia(constraints);
+    let stream;
+    try {
+      stream = await tryGet({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false,
+      });
+    } catch {
+      stream = await tryGet({ audio: true, video: false });
+    }
     localStreamRef.current = stream;
     return stream;
   }, []);
@@ -297,6 +302,7 @@ export function ChiamataVocaleProvider({ children }) {
     const current = callRef.current;
     stopLocalMedia();
     setCall(null);
+    setError('');
     if (current?.id) {
       sendSignal({ type: 'hangup', call_id: current.id });
       try {
@@ -453,15 +459,20 @@ export function ChiamataVocaleProvider({ children }) {
       setError('');
       if (!selectedCharacterId) {
         setError('Seleziona un personaggio prima di chiamare.');
-        return;
+        return false;
       }
       if (!chiamateAbilitate) {
         setError('Chiamate vocali: modulo non attivo in questa campagna.');
-        return;
+        return false;
       }
+      if (!versoStaff && !personaggioId) {
+        setError('Seleziona un personaggio da chiamare.');
+        return false;
+      }
+      setBusy(true);
       try {
         await ensureMic();
-        await playRemote();
+        playRemote();
         const data = await avviaChiamataVocale(
           {
             chiamante_id: Number(selectedCharacterId),
@@ -471,14 +482,18 @@ export function ChiamataVocaleProvider({ children }) {
           onLogout
         );
         setCall({ ...data, ruolo: 'caller' });
+        return true;
       } catch (err) {
         stopLocalMedia();
         const msg =
           err?.detail ||
+          err?.data?.detail ||
           err?.message ||
           (typeof err === 'string' ? err : 'Impossibile avviare la chiamata.');
         setError(String(msg));
-        throw err;
+        return false;
+      } finally {
+        setBusy(false);
       }
     },
     [chiamateAbilitate, ensureMic, onLogout, playRemote, selectedCharacterId, stopLocalMedia]
@@ -488,9 +503,10 @@ export function ChiamataVocaleProvider({ children }) {
     const current = callRef.current;
     if (!current?.id) return;
     setError('');
+    setBusy(true);
     try {
       await ensureMic();
-      await playRemote();
+      playRemote();
       const data = await accettaChiamataVocale(current.id, onLogout);
       if (stopRingRef.current) {
         stopRingRef.current();
@@ -500,7 +516,9 @@ export function ChiamataVocaleProvider({ children }) {
       await setupPeer(data.id);
     } catch (err) {
       stopLocalMedia();
-      setError(err?.detail || err?.message || 'Impossibile accettare.');
+      setError(err?.detail || err?.data?.detail || err?.message || 'Impossibile accettare.');
+    } finally {
+      setBusy(false);
     }
   }, [ensureMic, onLogout, playRemote, setupPeer, stopLocalMedia]);
 
@@ -531,29 +549,38 @@ export function ChiamataVocaleProvider({ children }) {
       error,
       muted,
       remoteReady,
+      busy,
       startCall,
       acceptCall,
       rejectCall,
       hangup,
       toggleMute,
     }),
-    [acceptCall, call, error, hangup, muted, rejectCall, remoteReady, startCall, toggleMute]
+    [acceptCall, busy, call, error, hangup, muted, rejectCall, remoteReady, startCall, toggleMute]
   );
 
   return (
     <ChiamataVocaleContext.Provider value={value}>
       {children}
-      <audio ref={remoteAudioRef} autoPlay playsInline className="absolute w-px h-px opacity-0 overflow-hidden" />
-      <ChiamataVocaleOverlay
-        call={call}
-        error={error}
-        muted={muted}
-        remoteReady={remoteReady}
-        acceptCall={acceptCall}
-        rejectCall={rejectCall}
-        hangup={hangup}
-        toggleMute={toggleMute}
-      />
+      {typeof document !== 'undefined'
+        ? createPortal(
+            <>
+              <audio ref={remoteAudioRef} autoPlay playsInline className="sr-only" />
+              <ChiamataVocaleOverlay
+                call={call}
+                error={error}
+                busy={busy}
+                muted={muted}
+                remoteReady={remoteReady}
+                acceptCall={acceptCall}
+                rejectCall={rejectCall}
+                hangup={hangup}
+                toggleMute={toggleMute}
+              />
+            </>,
+            document.body
+          )
+        : null}
     </ChiamataVocaleContext.Provider>
   );
 }
@@ -571,6 +598,7 @@ export const useChiamataVocale = () => {
       rejectCall: async () => {},
       hangup: async () => {},
       toggleMute: () => {},
+      busy: false,
     };
   }
   return ctx;

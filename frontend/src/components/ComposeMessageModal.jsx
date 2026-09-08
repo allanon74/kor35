@@ -28,7 +28,7 @@ const ComposeMessageModal = ({
   isCampaignStaffer = false,
 }) => {
   const { transazioniGiocatoreAbilitate, bypassEventoGate, canAccessModulo } = useCharacter();
-  const { startCall, call: activeCall } = useChiamataVocale();
+  const { startCall, busy } = useChiamataVocale();
   const transferConsentito = transazioniGiocatoreAbilitate;
   const chiamateAbilitate = canAccessModulo('chiamate');
   const [query, setQuery] = useState('');
@@ -494,14 +494,10 @@ const ComposeMessageModal = ({
                   <button
                     type="button"
                     onClick={async () => {
-                      try {
-                        await startCall({ versoStaff: true });
-                        onClose();
-                      } catch {
-                        /* overlay mostra errore */
-                      }
+                      const ok = await startCall({ versoStaff: true });
+                      if (ok) onClose();
                     }}
-                    disabled={!!activeCall}
+                    disabled={busy}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 px-2.5 py-1.5 text-xs font-bold text-white"
                     title="Chiama lo staff"
                   >
@@ -542,14 +538,10 @@ const ComposeMessageModal = ({
                       <button
                         type="button"
                         onClick={async () => {
-                          try {
-                            await startCall({ personaggioId: selectedRecipient.id });
-                            onClose();
-                          } catch {
-                            /* overlay */
-                          }
+                          const ok = await startCall({ personaggioId: selectedRecipient.id });
+                          if (ok) onClose();
                         }}
-                        disabled={!!activeCall}
+                        disabled={busy}
                         className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 px-3 py-2 text-xs font-bold text-white"
                         title={`Chiama ${selectedRecipient.nome}`}
                       >

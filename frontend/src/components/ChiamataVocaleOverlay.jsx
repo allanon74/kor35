@@ -12,6 +12,7 @@ function formatElapsed(startedAt) {
 const ChiamataVocaleOverlay = ({
   call,
   error,
+  busy,
   muted,
   remoteReady,
   acceptCall,
@@ -32,7 +33,7 @@ const ChiamataVocaleOverlay = ({
     return Date.now();
   }, [call?.id, call?.stato]);
 
-  if (!call && !error) return null;
+  if (!call && !error && !busy) return null;
 
   const isIncoming = call?.ruolo === 'callee' && call?.stato === 'ringing';
   const isOutgoing = call?.ruolo === 'caller' && call?.stato === 'ringing';
@@ -42,7 +43,7 @@ const ChiamataVocaleOverlay = ({
     : call?.chiamante?.nome || '…';
 
   return (
-    <div className="fixed inset-x-0 bottom-20 sm:bottom-6 z-[80] flex justify-center pointer-events-none px-3">
+    <div className="fixed inset-x-0 bottom-20 sm:bottom-6 z-[200] flex justify-center pointer-events-none px-3">
       <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-emerald-400/30 bg-gray-950/95 shadow-2xl shadow-black/50 backdrop-blur-md ring-1 ring-white/10 overflow-hidden">
         <div className="flex items-stretch">
           <div className={`w-1.5 shrink-0 ${isIncoming ? 'bg-amber-400' : 'bg-emerald-500'}`} />
@@ -52,11 +53,16 @@ const ChiamataVocaleOverlay = ({
                 {isIncoming ? <PhoneIncoming size={22} /> : isOutgoing ? <PhoneOutgoing size={22} /> : <Phone size={22} />}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-white truncate">{peerNome}</p>
+                <p className="text-sm font-semibold text-white truncate">
+                  {call ? peerNome : 'Chiamata vocale'}
+                </p>
                 <p className="text-xs text-gray-400">
+                  {busy && !call && 'Avvio chiamata…'}
                   {isIncoming && 'Chiamata in arrivo'}
-                  {isOutgoing && 'Chiamata in corso…'}
+                  {isOutgoing && !busy && 'Chiamata in corso…'}
+                  {isOutgoing && busy && 'Avvio…'}
                   {inCall && (remoteReady ? `In linea · ${formatElapsed(startedAt || tick)}` : 'Collegamento audio…')}
+                  {!call && !busy && error ? 'Errore' : null}
                 </p>
               </div>
             </div>

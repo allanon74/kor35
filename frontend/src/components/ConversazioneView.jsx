@@ -20,7 +20,7 @@ const ConversazioneView = ({
   const [isSending, setIsSending] = useState(false);
   const [markingRead, setMarkingRead] = useState(false);
   const messagesEndRef = useRef(null);
-  const { startCall, call: activeCall } = useChiamataVocale();
+  const { startCall, busy } = useChiamataVocale();
   const { canAccessModulo } = useCharacter();
   const chiamateAbilitate = canAccessModulo ? canAccessModulo('chiamate') : false;
 
@@ -134,12 +134,14 @@ const ConversazioneView = ({
                     await startCall({ versoStaff: true });
                   } else if (other?.id) {
                     await startCall({ personaggioId: other.id });
+                  } else {
+                    await startCall({});
                   }
                 } catch {
                   /* overlay */
                 }
               }}
-              disabled={!!activeCall}
+              disabled={busy}
               className="p-2 text-emerald-300 rounded-full hover:bg-emerald-900/40 hover:text-white transition-colors disabled:opacity-40"
               title="Chiama"
               aria-label="Chiama"
