@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Mic, MicOff, Phone, PhoneOff, PhoneIncoming, PhoneOutgoing } from 'lucide-react';
+import { Mic, MicOff, Phone, PhoneOff, PhoneIncoming, PhoneOutgoing, Volume2 } from 'lucide-react';
 
 function formatElapsed(startedAt) {
   if (!startedAt) return '00:00';
@@ -19,6 +19,7 @@ const ChiamataVocaleOverlay = ({
   rejectCall,
   hangup,
   toggleMute,
+  boostSpeaker,
 }) => {
   const [tick, setTick] = useState(Date.now());
 
@@ -67,7 +68,13 @@ const ChiamataVocaleOverlay = ({
               </div>
             </div>
             {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
-            <div className="mt-3 flex items-center justify-end gap-2">
+            {call ? (
+              <p className="mt-2 text-[11px] text-gray-500 leading-snug">
+                Usa il viva voce (o cuffie Bluetooth già collegate).
+                La cornetta all&apos;orecchio non è disponibile: il browser non può usarla come un telefono.
+              </p>
+            ) : null}
+            <div className="mt-3 flex items-center justify-end gap-2 flex-wrap">
               {isIncoming ? (
                 <>
                   <button
@@ -88,16 +95,25 @@ const ChiamataVocaleOverlay = ({
               ) : (
                 <>
                   {inCall ? (
-                    <button
-                      type="button"
-                      onClick={toggleMute}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-bold ${
-                        muted ? 'bg-amber-700 text-white' : 'bg-gray-800 text-gray-200 hover:bg-gray-700'
-                      }`}
-                    >
-                      {muted ? <MicOff size={14} /> : <Mic size={14} />}
-                      {muted ? 'Muto' : 'Microfono'}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={boostSpeaker}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-gray-800 text-gray-200 hover:bg-gray-700 px-3 py-2 text-xs font-bold"
+                      >
+                        <Volume2 size={14} /> Altoparlante
+                      </button>
+                      <button
+                        type="button"
+                        onClick={toggleMute}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-bold ${
+                          muted ? 'bg-amber-700 text-white' : 'bg-gray-800 text-gray-200 hover:bg-gray-700'
+                        }`}
+                      >
+                        {muted ? <MicOff size={14} /> : <Mic size={14} />}
+                        {muted ? 'Muto' : 'Microfono'}
+                      </button>
+                    </>
                   ) : null}
                   <button
                     type="button"

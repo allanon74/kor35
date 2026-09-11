@@ -86,6 +86,7 @@ export function ChiamataVocaleProvider({ children }) {
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
+  const audioCtxRef = useRef(null);
   const pendingIceRef = useRef([]);
   const pendingSignalsRef = useRef([]);
   const iceServersRef = useRef(null);
@@ -94,14 +95,63 @@ export function ChiamataVocaleProvider({ children }) {
   const offerSentRef = useRef(null);
   callRef.current = call;
 
+  const unlockAudioSession = useCallback(async () => {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (Ctx) {
+      if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+      try {
+        await audioCtxRef.current.resume();
+      } catch {
+        /* iOS può rifiutare se non c'è gesto */
+      }
+    }
+  }, []);
+
   const playRemote = useCallback(() => {
     const el = remoteAudioRef.current;
-    if (!el || !el.srcObject) return;
+    if (!el) return;
     el.muted = false;
     el.volume = 1;
+    el.setAttribute('playsinline', 'true');
+    el.setAttribute('webkit-playsinline', 'true');
+    if (!el.srcObject) return;
     const p = el.play();
     if (p && typeof p.catch === 'function') p.catch(() => {});
   }, []);
+
+  /** Prova l'altoparlante senza rubare cuffie Bluetooth già collegate. */
+  const preferSpeakerSink = useCallback(async () => {
+    const el = remoteAudioRef.current;
+    if (!el || typeof el.setSinkId !== 'function') return;
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const outputs = devices.filter((d) => d.kind === 'audiooutput');
+      const bluetooth = outputs.some((d) =>
+        /bluetooth|headset|airpod|headphone|cuffie|a2dp/i.test(d.label || '')
+      );
+      if (bluetooth) return;
+      const speaker = outputs.find((d) =>
+        /speaker|altoparlante|speakerphone/i.test(d.label || '')
+      );
+      if (speaker && el.sinkId !== speaker.deviceId) {
+        await el.setSinkId(speaker.deviceId);
+      }
+    } catch {
+      /* iOS Safari: setSinkId non c'è; Android a volte nega enumerate */
+    }
+  }, []);
+
+  const boostSpeaker = useCallback(async () => {
+    await unlockAudioSession();
+    await preferSpeakerSink();
+    playRemote();
+    const stream = localStreamRef.current;
+    stream?.getAudioTracks().forEach((t) => {
+      t.enabled = true;
+    });
+    if (muted) setMuted(false);
+  }, [muted, playRemote, preferSpeakerSink, unlockAudioSession]);
 
   const attachRemoteStream = useCallback(
     (stream) => {
@@ -150,10 +200,29 @@ export function ChiamataVocaleProvider({ children }) {
       stopRingRef.current();
       stopRingRef.current = null;
     }
+    if (audioCtxRef.current) {
+      try {
+        audioCtxRef.current.close();
+      } catch {
+        /* noop */
+      }
+      audioCtxRef.current = null;
+    }
   }, []);
 
   const ensureMic = useCallback(async () => {
-    if (localStreamRef.current) return localStreamRef.current;
+    const existing = localStreamRef.current;
+    const live = existing?.getAudioTracks().some((t) => t.readyState === 'live');
+    if (existing && live) {
+      existing.getAudioTracks().forEach((t) => {
+        t.enabled = true;
+      });
+      return existing;
+    }
+    if (existing) {
+      existing.getTracks().forEach((t) => t.stop());
+      localStreamRef.current = null;
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('Microfono non supportato su questo browser.');
     }
@@ -168,6 +237,9 @@ export function ChiamataVocaleProvider({ children }) {
       stream = await tryGet({ audio: true, video: false });
     }
     localStreamRef.current = stream;
+    stream.getAudioTracks().forEach((t) => {
+      t.enabled = true;
+    });
     return stream;
   }, []);
 
@@ -472,6 +544,7 @@ export function ChiamataVocaleProvider({ children }) {
       setBusy(true);
       try {
         await ensureMic();
+        await unlockAudioSession();
         playRemote();
         const data = await avviaChiamataVocale(
           {
@@ -496,7 +569,7 @@ export function ChiamataVocaleProvider({ children }) {
         setBusy(false);
       }
     },
-    [chiamateAbilitate, ensureMic, onLogout, playRemote, selectedCharacterId, stopLocalMedia]
+    [chiamateAbilitate, ensureMic, onLogout, playRemote, selectedCharacterId, stopLocalMedia, unlockAudioSession]
   );
 
   const acceptCall = useCallback(async () => {
@@ -506,6 +579,7 @@ export function ChiamataVocaleProvider({ children }) {
     setBusy(true);
     try {
       await ensureMic();
+      await unlockAudioSession();
       playRemote();
       const data = await accettaChiamataVocale(current.id, onLogout);
       if (stopRingRef.current) {
@@ -520,7 +594,7 @@ export function ChiamataVocaleProvider({ children }) {
     } finally {
       setBusy(false);
     }
-  }, [ensureMic, onLogout, playRemote, setupPeer, stopLocalMedia]);
+  }, [ensureMic, onLogout, playRemote, setupPeer, stopLocalMedia, unlockAudioSession]);
 
   const rejectCall = useCallback(async () => {
     const current = callRef.current;
@@ -555,8 +629,9 @@ export function ChiamataVocaleProvider({ children }) {
       rejectCall,
       hangup,
       toggleMute,
+      boostSpeaker,
     }),
-    [acceptCall, busy, call, error, hangup, muted, rejectCall, remoteReady, startCall, toggleMute]
+    [acceptCall, boostSpeaker, busy, call, error, hangup, muted, rejectCall, remoteReady, startCall, toggleMute]
   );
 
   return (
@@ -565,7 +640,21 @@ export function ChiamataVocaleProvider({ children }) {
       {typeof document !== 'undefined'
         ? createPortal(
             <>
-              <audio ref={remoteAudioRef} autoPlay playsInline className="sr-only" />
+              <audio
+                ref={remoteAudioRef}
+                autoPlay
+                playsInline
+                // Non usare display:none / sr-only: iOS può silenziare l'elemento.
+                style={{
+                  position: 'fixed',
+                  left: 0,
+                  bottom: 0,
+                  width: 1,
+                  height: 1,
+                  opacity: 0.01,
+                  pointerEvents: 'none',
+                }}
+              />
               <ChiamataVocaleOverlay
                 call={call}
                 error={error}
@@ -576,6 +665,7 @@ export function ChiamataVocaleProvider({ children }) {
                 rejectCall={rejectCall}
                 hangup={hangup}
                 toggleMute={toggleMute}
+                boostSpeaker={boostSpeaker}
               />
             </>,
             document.body
@@ -598,6 +688,7 @@ export const useChiamataVocale = () => {
       rejectCall: async () => {},
       hangup: async () => {},
       toggleMute: () => {},
+      boostSpeaker: async () => {},
       busy: false,
     };
   }
