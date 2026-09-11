@@ -88,7 +88,7 @@ from .models import (
 )
 from gestione_plot.permissions import IsStaffOrMaster
 
-from .permissions import IsPilotConsole, IsScientificConsole
+from .permissions import IsCompattatoreConsole, IsPilotConsole, IsScientificConsole
 from .serializers import (
     ComandoCriticoGlobaleListSerializer,
     ComandoCriticoGlobaleSerializer,
@@ -456,15 +456,23 @@ def _login_required_scientifica() -> bool:
     return bool(PilotRuntimeConfig.get_solo().scientifica_login_richiesto)
 
 
+def _login_required_compattatore() -> bool:
+    return bool(PilotRuntimeConfig.get_solo().compattatore_login_richiesto)
+
+
 def _stat_accesso_per_ruolo_ticket(ruolo: str) -> str:
     if ruolo == "scientifica":
         return scientifica_stat_sigla()
+    if ruolo == "ingegneria":
+        return ingegneria_stat_sigla()
     return navigazione_stat_sigla()
 
 
 def _login_required_per_ruolo_ticket(ruolo: str) -> bool:
     if ruolo == "scientifica":
         return _login_required_scientifica()
+    if ruolo == "ingegneria":
+        return _login_required_compattatore()
     return _login_required_console()
 
 
@@ -687,12 +695,25 @@ class PilotConsoleTicketClaimView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, ticket_id):
-        if not _login_required_console():
-            return Response({"error": "Login ticket disattivato (console senza login)."}, status=status.HTTP_400_BAD_REQUEST)
         wants_html = _request_prefers_html(request)
         return_url = "/app/start"
         codice = (request.query_params.get("c") or "").strip()
         ticket = get_object_or_404(PilotConsoleLoginTicket, pk=ticket_id)
+        ruolo = getattr(ticket, "ruolo", None) or "navigazione"
+        if not _login_required_per_ruolo_ticket(ruolo):
+            if wants_html:
+                return render(
+                    request,
+                    "pilotaggio/claim_result.html",
+                    {
+                        "ok": False,
+                        "title": "Login disattivato",
+                        "message": "Login ticket disattivato (console senza login).",
+                        "return_url": return_url,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response({"error": "Login ticket disattivato (console senza login)."}, status=status.HTTP_400_BAD_REQUEST)
         if not codice or ticket.codice != codice:
             if wants_html:
                 return render(
@@ -728,7 +749,7 @@ class PilotConsoleTicketClaimView(APIView):
             qs = qs.filter(pk=personaggio_id)
         ruolo = getattr(ticket, "ruolo", None) or "navigazione"
         stat_sigla = _stat_accesso_per_ruolo_ticket(ruolo)
-        min_val = 1 if ruolo == "navigazione" else 1  # entrambi >0 o >=1: navigazione >=1, scientifica >0
+        min_val = 1 if ruolo == "navigazione" else 1  # navigazione >=1, altri >0
         candidato = None
         for pg in qs.order_by("nome"):
             val = int(pg.get_valore_statistica(stat_sigla) or 0)
@@ -760,7 +781,10 @@ class PilotConsoleTicketClaimView(APIView):
         ticket.pilota = candidato
         ticket.claimed_at = timezone.now()
         ticket.save(update_fields=["pilota", "claimed_at", "updated_at"])
-        console_label = "scientifica" if ruolo == "scientifica" else "pilota"
+        console_label = {
+            "scientifica": "scientifica",
+            "ingegneria": "ingegneria",
+        }.get(ruolo, "pilota")
         if wants_html:
             return render(
                 request,
@@ -787,10 +811,12 @@ class PilotConsoleTicketStatusView(APIView):
     permission_classes: list = [permissions.AllowAny]
 
     def get(self, request, ticket_id):
-        if not _login_required_console():
-            return Response({"error": "Login ticket disattivato (console senza login)."}, status=status.HTTP_400_BAD_REQUEST)
         codice = (request.query_params.get("c") or "").strip()
         ticket = get_object_or_404(PilotConsoleLoginTicket, pk=ticket_id)
+        if not codice or ticket.codice != codice:
+            return Response({"error": "Ticket non valido."}, status=status.HTTP_403_FORBIDDEN)
+        if not _login_required_per_ruolo_ticket(getattr(ticket, "ruolo", None) or "navigazione"):
+            return Response({"error": "Login ticket disattivato (console senza login)."}, status=status.HTTP_400_BAD_REQUEST)
         if not codice or ticket.codice != codice:
             return Response({"error": "Ticket non valido."}, status=status.HTTP_403_FORBIDDEN)
         if ticket.scaduto:
@@ -2304,7 +2330,7 @@ class PilotCompattatoreStateView(APIView):
     """GET /api/pilot/compattatore/state/"""
 
     authentication_classes = [PilotConsoleTokenAuthentication]
-    permission_classes = [IsPilotConsole]
+    permission_classes = [IsCompattatoreConsole]
 
     def get(self, request):
         from .compattatore_engine import build_compattatore_state_payload
@@ -2316,7 +2342,7 @@ class PilotCompattatoreCompressioneView(APIView):
     """POST /api/pilot/compattatore/compressione/ body {mattone_id}"""
 
     authentication_classes = [PilotConsoleTokenAuthentication]
-    permission_classes = [IsPilotConsole]
+    permission_classes = [IsCompattatoreConsole]
 
     def post(self, request):
         from .compattatore_engine import operazione_compressione
@@ -2335,7 +2361,7 @@ class PilotCompattatoreDecompressioneView(APIView):
     """POST /api/pilot/compattatore/decompressione/ body {mattone_id}"""
 
     authentication_classes = [PilotConsoleTokenAuthentication]
-    permission_classes = [IsPilotConsole]
+    permission_classes = [IsCompattatoreConsole]
 
     def post(self, request):
         from .compattatore_engine import operazione_decompressione
@@ -2354,7 +2380,7 @@ class PilotCompattatoreRisonanzaView(APIView):
     """POST /api/pilot/compattatore/risonanza/ body {mattone_id}"""
 
     authentication_classes = [PilotConsoleTokenAuthentication]
-    permission_classes = [IsPilotConsole]
+    permission_classes = [IsCompattatoreConsole]
 
     def post(self, request):
         from .compattatore_engine import operazione_risonanza
@@ -2376,7 +2402,7 @@ class PilotCompattatoreQuanticoView(APIView):
     """
 
     authentication_classes = [PilotConsoleTokenAuthentication]
-    permission_classes = [IsPilotConsole]
+    permission_classes = [IsCompattatoreConsole]
 
     def post(self, request):
         from .compattatore_engine import operazione_compattatore_quantico
@@ -2387,6 +2413,50 @@ class PilotCompattatoreQuanticoView(APIView):
                 qr_id=request.data.get("qr_id"),
                 personaggio_id=request.data.get("personaggio_id"),
             )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
+
+
+class PilotCompattatoreSintesiCarburanteView(APIView):
+    """
+    POST /api/pilot/compattatore/sintesi-carburante/
+    body { allocazioni: [{mattone_id, quantita}, ...] }  (1–3 unità totali)
+    """
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsCompattatoreConsole]
+
+    def post(self, request):
+        from .compattatore_engine import operazione_sintesi_carburante
+
+        allocazioni = request.data.get("allocazioni") or request.data.get("componenti") or []
+        if not isinstance(allocazioni, list):
+            return Response(
+                {"error": "allocazioni deve essere una lista."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            payload = operazione_sintesi_carburante(allocazioni=allocazioni)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
+
+
+class PilotCompattatoreEnergizzaMinimoView(APIView):
+    """
+    POST /api/pilot/compattatore/energizza-minimo/
+    A nave ferma porta Z a livello 1 (banchina).
+    """
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsCompattatoreConsole]
+
+    def post(self, request):
+        from .compattatore_engine import energizza_compattatore_minimo
+
+        try:
+            payload = energizza_compattatore_minimo()
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(payload)

@@ -1037,6 +1037,7 @@ class PilotConsoleLoginTicket(SyncableModel, models.Model):
         max_length=16,
         choices=[
             ("navigazione", "Console Navigazione"),
+            ("ingegneria", "Console Ingegneria"),
             ("scientifica", "Console Scientifica"),
         ],
         default="navigazione",

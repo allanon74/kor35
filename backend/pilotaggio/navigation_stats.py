@@ -122,7 +122,7 @@ def navigation_roles_catalog(
             "requisito": f"{sigle['ingegneria']} > 0",
             "url_console": "/pilot/?screen=compattatore",
             "implementato": bool(cfg.compattatore_console_abilitata),
-            "note": "Stiva nave, compressione/risonanza. Operazione quantica opzionale (flag evento).",
+            "note": "Stiva nave, compressione/risonanza, sintesi carburante. Operazione quantica opzionale (flag evento).",
         },
         {
             "id": "stiva_app",

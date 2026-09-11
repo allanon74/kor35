@@ -2925,6 +2925,24 @@ select, input[type=text], input[type=number] {
   border-top: 2px solid rgba(124, 77, 255, 0.55);
 }
 
+.compattatore-panel--fuel {
+  border-top: 2px solid rgba(255, 183, 77, 0.55);
+  margin: 1rem 0;
+}
+
+.comp-fuel-gauges {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.comp-fuel-gauges strong {
+  display: block;
+  font-size: 1.05rem;
+  color: #ffe0a3;
+}
+
 .compattatore-panel--quantico.is-disabled {
   opacity: 0.55;
   filter: grayscale(0.35);

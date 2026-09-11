@@ -121,6 +121,14 @@ export const api = {
     method: 'POST',
     body,
   }),
+  compattatoreSintesiCarburante: (allocazioni) => request('/api/pilot/compattatore/sintesi-carburante/', {
+    method: 'POST',
+    body: { allocazioni },
+  }),
+  compattatoreEnergizzaMinimo: () => request('/api/pilot/compattatore/energizza-minimo/', {
+    method: 'POST',
+    body: {},
+  }),
   scientificaConsoleEnabled: () => request('/api/pilot/scientifica/console-enabled/', { auth: false }),
   scientificaAutoLogin: () => request('/api/pilot/scientifica/auth/auto-login/', { method: 'POST', body: {}, auth: false }),
   createScientificaConsoleTicket: () => request('/api/pilot/scientifica/auth/console-ticket/', {

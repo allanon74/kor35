@@ -590,6 +590,13 @@ def _calcola_produzione_consumo(
                 consumo_carburante += livello * float(ss.coeff_consumo_carburante or 0.0)
         elif ss.tipo in ("batteria", "serbatoio"):
             continue
+        elif (
+            ss.tipo == "compattatore"
+            and livello <= 1
+            and not _sessione_ha_decollato(sessione)
+        ):
+            # Banchina: Z=1 a nave ferma non gravita sul bus di volo.
+            continue
         else:
             consumo_energia += livello * float(ss.coeff_consumo_energia or 0.0)
         if ss.tipo == "motore":
@@ -636,6 +643,12 @@ def valida_livello_sottosistema_energia(
         return True, ""
     if stato.sottosistema.tipo in TIPI_ESCLUSI_SHEEDDING:
         return True, ""
+    if (
+        str(stato.sottosistema.tipo or "") == "compattatore"
+        and nuovo_livello <= 1
+        and not _sessione_ha_decollato(sessione)
+    ):
+        return True, ""
 
     if stati is None:
         stati = list(
@@ -677,6 +690,11 @@ def _applica_shedding_energia(
                 and not st.espulso
                 and st.sottosistema.tipo not in TIPI_ESCLUSI_SHEEDDING
                 and int(st.livello_target or 0) > 0
+                and not (
+                    st.sottosistema.tipo == "compattatore"
+                    and int(st.livello_target or 0) <= 1
+                    and not _sessione_ha_decollato(sessione)
+                )
             ]
             if not candidati:
                 break

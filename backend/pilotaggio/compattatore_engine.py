@@ -42,12 +42,13 @@ def _sottosistema_compattatore():
 
 
 def _livello_compattatore() -> int:
+    from .engine import sessione_nave_operativa
     from .stato_nave import stato_operativo_sottosistema
 
     ss = _sottosistema_compattatore()
     if ss is None:
         return 0
-    stato = stato_operativo_sottosistema(ss, None)
+    stato = stato_operativo_sottosistema(ss, sessione_nave_operativa())
     if stato is None or not getattr(stato, "online", True):
         return 0
     if getattr(stato, "espulso", False):
@@ -94,6 +95,12 @@ def _mattone_stiva(mattone_id):
 
 
 def build_compattatore_state_payload() -> dict:
+    from .compattatore_carburante import (
+        descrizione_formula,
+        nave_ferma_per_compattatore,
+        payload_carburante_sessione,
+    )
+    from .engine import sessione_nave_operativa
     from .models import PilotRuntimeConfig
     from .stato_nave import stato_operativo_sottosistema
 
@@ -101,11 +108,24 @@ def build_compattatore_state_payload() -> dict:
     ss = _sottosistema_compattatore()
     livello = _livello_compattatore()
     stato = _stato_compattatore()
+    sessione = sessione_nave_operativa()
+    nave_ferma = nave_ferma_per_compattatore(sessione)
     operativo = bool(cfg.compattatore_console_abilitata and ss is not None and livello > 0)
+    st = None
     if ss is not None:
-        st = stato_operativo_sottosistema(ss, None)
+        st = stato_operativo_sottosistema(ss, sessione)
         if st is None or not st.online or getattr(st, "espulso", False):
             operativo = False
+
+    puo_energizzare = bool(
+        cfg.compattatore_console_abilitata
+        and ss is not None
+        and nave_ferma
+        and st is not None
+        and st.online
+        and not getattr(st, "espulso", False)
+        and livello < 1
+    )
 
     return {
         "abilitato": bool(cfg.compattatore_console_abilitata),
@@ -115,10 +135,17 @@ def build_compattatore_state_payload() -> dict:
         "energia_accumulata": float(stato.energia_accumulata or 0),
         "energia_soglia_operazione": 9.0,
         "operazione_disponibile": _operazione_disponibile(),
+        "nave_ferma": nave_ferma,
+        "puo_energizzare_minimo": puo_energizzare,
         "quantico_abilitato": bool(cfg.compattatore_quantico_abilitato),
         "quantico_disponibile": bool(
             cfg.compattatore_quantico_abilitato and _operazione_disponibile()
         ),
+        "sintesi_carburante": {
+            "abilitato": True,
+            "formula": descrizione_formula(),
+            **payload_carburante_sessione(),
+        },
         "stiva": build_stiva_payload(),
     }
 
@@ -440,3 +467,62 @@ def operazione_compattatore_quantico(
         "modalita": "qr" if qr_id else "testo",
     }
     return payload
+
+
+@transaction.atomic
+def operazione_sintesi_carburante(*, allocazioni: List[dict]) -> dict:
+    from .compattatore_carburante import applica_carburante_sintesi, stima_da_allocazioni
+
+    if not _operazione_disponibile():
+        raise ValueError("Compattatore non operativo o energia insufficiente.")
+    livello = _livello_compattatore()
+    stima = stima_da_allocazioni(allocazioni, livello)
+    if stima["resa"] <= 0:
+        raise ValueError("Resa carburante nulla: alza il livello Z o scegli altri componenti.")
+    consuma_mattoni_stiva(
+        [{"mattone_id": u["mattone_id"], "quantita": u["quantita"]} for u in stima["unita"]]
+    )
+    _consuma_energia_operazione()
+    serbatoio = applica_carburante_sintesi(stima["resa"])
+    payload = build_compattatore_state_payload()
+    payload["sintesi"] = {
+        **stima,
+        **serbatoio,
+        "resa": stima["resa"],
+    }
+    return payload
+
+
+@transaction.atomic
+def energizza_compattatore_minimo() -> dict:
+    """
+    A nave ferma porta il Compattatore a livello 1 (alimentazione da banchina).
+    In crociera il livello Z si regola dalla plancia.
+    """
+    from .compattatore_carburante import nave_ferma_per_compattatore
+    from .engine import get_o_crea_stato_sottosistema, sessione_nave_operativa
+    from .stato_nave import get_o_crea_stato_nave
+
+    ss = _sottosistema_compattatore()
+    if ss is None:
+        raise ValueError("Sottosistema Compattatore non configurato.")
+    sessione = sessione_nave_operativa()
+    if not nave_ferma_per_compattatore(sessione):
+        raise ValueError(
+            "In crociera il livello Z si imposta dalla plancia, non dal Compattatore."
+        )
+
+    nave = get_o_crea_stato_nave(ss)
+    if not nave.online or nave.espulso:
+        raise ValueError("Compattatore offline o espulso: serve riparazione/reintegrazione.")
+    nave.livello_target = max(int(nave.livello_target or 0), 1)
+    nave.livello_attuale = max(int(nave.livello_attuale or 0), 1)
+    nave.save(update_fields=["livello_target", "livello_attuale", "updated_at"])
+    if sessione is not None:
+        stato = get_o_crea_stato_sottosistema(sessione, ss)
+        if not stato.online or stato.espulso:
+            raise ValueError("Compattatore offline o espulso sulla sessione.")
+        stato.livello_target = max(int(stato.livello_target or 0), 1)
+        stato.livello_attuale = max(int(stato.livello_attuale or 0), 1)
+        stato.save(update_fields=["livello_target", "livello_attuale", "updated_at"])
+    return build_compattatore_state_payload()

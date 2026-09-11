@@ -29,6 +29,8 @@ export default function CompattatoreScreen({ onLogout }) {
   const [quanticoNome, setQuanticoNome] = useState('');
   const [quanticoQrId, setQuanticoQrId] = useState('');
   const [quanticoPgId, setQuanticoPgId] = useState('');
+  const [burnQty, setBurnQty] = useState(1);
+  const [lastSintesi, setLastSintesi] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -99,6 +101,40 @@ export default function CompattatoreScreen({ onLogout }) {
       setQuanticoPgId('');
     } catch (e) {
       setError(e.message || 'Compattatore Quantico non riuscito.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runEnergizza = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await api.compattatoreEnergizzaMinimo();
+      setData(res);
+    } catch (e) {
+      setError(e.message || 'Energizzazione minima non riuscita.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runSintesi = async () => {
+    if (!selectedMattone) {
+      setError('Seleziona un componente da bruciare.');
+      return;
+    }
+    const qty = Math.max(1, Math.min(3, Number(burnQty) || 1));
+    setBusy(true);
+    setError('');
+    try {
+      const res = await api.compattatoreSintesiCarburante([
+        { mattone_id: selectedMattone, quantita: qty },
+      ]);
+      setData(res);
+      if (res?.sintesi) setLastSintesi(res.sintesi);
+    } catch (e) {
+      setError(e.message || 'Sintesi carburante non riuscita.');
     } finally {
       setBusy(false);
     }
@@ -306,6 +342,100 @@ export default function CompattatoreScreen({ onLogout }) {
           </ResultScreen>
         </section>
       </div>
+
+      <section className="compattatore-panel compattatore-panel--fuel">
+        <div className="compattatore-panel-corner compattatore-panel-corner--tl" aria-hidden="true" />
+        <div className="compattatore-panel-corner compattatore-panel-corner--br" aria-hidden="true" />
+        <h2 className="compattatore-panel-title">Bruciatore / sintesi carburante</h2>
+        <p className="compattatore-panel-sub">
+          Consuma 1–3 componenti dalla stiva → riempie i serbatoi. Resa scala con livello Z e qualità.
+        </p>
+
+        {data?.puo_energizzare_minimo ? (
+          <button
+            type="button"
+            className="comp-btn comp-btn--op"
+            disabled={busy}
+            onClick={runEnergizza}
+          >
+            Energizza Z=1 (nave ferma)
+          </button>
+        ) : null}
+
+        <div className="comp-fuel-gauges">
+          <div>
+            <span className="comp-field-label">Serbatoi</span>
+            <strong>
+              {Math.round(data?.sintesi_carburante?.carburante_attuale || 0)}
+              /
+              {Math.round(data?.sintesi_carburante?.carburante_massimo || 0)}
+            </strong>
+          </div>
+          <div>
+            <span className="comp-field-label">Stato</span>
+            <strong>{data?.nave_ferma ? 'Nave ferma' : 'In crociera'}</strong>
+          </div>
+          <div>
+            <span className="comp-field-label">η(Z)</span>
+            <strong>
+              {Math.round((data?.sintesi_carburante?.formula?.eta_base || 0.42) * 100
+                + (data?.livello_energia || 0) * ((data?.sintesi_carburante?.formula?.eta_per_livello || 0.07) * 100))}
+              %
+            </strong>
+          </div>
+        </div>
+
+        <label className="comp-field">
+          <span className="comp-field-label">Quantità da bruciare (componente selezionato sopra)</span>
+          <input
+            type="number"
+            min={1}
+            max={3}
+            className="comp-sci-input"
+            value={burnQty}
+            disabled={busy || !opReady}
+            onChange={(e) => setBurnQty(e.target.value)}
+          />
+        </label>
+
+        <button
+          type="button"
+          className="comp-btn comp-btn--op"
+          disabled={busy || !opReady || !selectedMattone}
+          onClick={runSintesi}
+        >
+          Sintetizza carburante
+        </button>
+
+        <ResultScreen
+          title="Output sintesi"
+          variant="classic"
+          empty={!lastSintesi ? 'Nessuna sintesi eseguita.' : null}
+        >
+          {lastSintesi ? (
+            <>
+              <p className="comp-result-line comp-result-line--ok">
+                Resa
+                {' '}
+                {lastSintesi.resa ?? lastSintesi.resa_calcolata}
+                {' → +'}
+                {lastSintesi.aggiunto}
+                {' '}
+                carburante
+                {(lastSintesi.sversato || 0) > 0 ? ` (sversato ${lastSintesi.sversato})` : ''}
+              </p>
+              <p className="comp-result-line">
+                Serbatoi:
+                {' '}
+                {lastSintesi.carburante_attuale}
+                /
+                {lastSintesi.carburante_massimo}
+                {lastSintesi.miscela ? ' · miscela catalitica' : ''}
+              </p>
+            </>
+          ) : null}
+        </ResultScreen>
+      </section>
 
       <section className="compattatore-stiva-deck">
         <div className="compattatore-stiva-deck-header">

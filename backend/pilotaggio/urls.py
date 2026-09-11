@@ -116,6 +116,16 @@ urlpatterns = [
         views.PilotCompattatoreQuanticoView.as_view(),
         name="pilot-compattatore-quantico",
     ),
+    path(
+        "compattatore/sintesi-carburante/",
+        views.PilotCompattatoreSintesiCarburanteView.as_view(),
+        name="pilot-compattatore-sintesi-carburante",
+    ),
+    path(
+        "compattatore/energizza-minimo/",
+        views.PilotCompattatoreEnergizzaMinimoView.as_view(),
+        name="pilot-compattatore-energizza-minimo",
+    ),
     path("scientifica/console-enabled/", views.ScientificaConsoleEnabledView.as_view(), name="scientifica-console-enabled"),
     path("scientifica/auth/auto-login/", views.ScientificaConsoleAutoLoginView.as_view(), name="scientifica-auto-login"),
     path(
