@@ -28,10 +28,8 @@ function wsUrl() {
   return `${proto}//${window.location.host}/ws/chiamate/?token=${encodeURIComponent(token)}`;
 }
 
-function startRingtone() {
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  if (!AudioCtx) return () => {};
-  const ctx = new AudioCtx();
+function startRingtone(ctx) {
+  if (!ctx) return () => {};
   let stopped = false;
   const beep = () => {
     if (stopped) return;
@@ -50,12 +48,44 @@ function startRingtone() {
   return () => {
     stopped = true;
     window.clearInterval(id);
-    try {
-      ctx.close();
-    } catch {
-      /* noop */
-    }
+    // Non chiudere il context: su alcuni Android close() dopo lo squillo
+    // spegne l'<audio> remoto (chiamato non sente, chiamante sì).
   };
+}
+
+/** Tiene l'elemento <audio> in play durante il tap Rispondi/Chiama. */
+async function primeRemoteAudioElement(el, ctx) {
+  if (!el) return;
+  el.muted = false;
+  el.volume = 1;
+  el.setAttribute('playsinline', 'true');
+  el.setAttribute('webkit-playsinline', 'true');
+  if (!ctx) {
+    const p = el.play();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+    return;
+  }
+  try {
+    if (ctx.state === 'suspended') await ctx.resume();
+    const dest = ctx.createMediaStreamDestination();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    gain.gain.value = 0.0001;
+    osc.connect(gain);
+    gain.connect(dest);
+    osc.start();
+    el.srcObject = dest.stream;
+    await el.play();
+    window.setTimeout(() => {
+      try {
+        osc.stop();
+      } catch {
+        /* già sostituito dallo stream remoto */
+      }
+    }, 500);
+  } catch {
+    /* autoplay ancora bloccato */
+  }
 }
 
 function serializeSdp(desc) {
@@ -116,17 +146,22 @@ export function ChiamataVocaleProvider({ children }) {
   const revivingMicRef = useRef(false);
   callRef.current = call;
 
-  const unlockAudioSession = useCallback(async () => {
+  const ensureAudioContext = useCallback(() => {
     const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (Ctx) {
-      if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
-      try {
-        await audioCtxRef.current.resume();
-      } catch {
-        /* iOS può rifiutare se non c'è gesto */
-      }
-    }
+    if (!Ctx) return null;
+    if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+    return audioCtxRef.current;
   }, []);
+
+  const unlockAudioSession = useCallback(async () => {
+    const ctx = ensureAudioContext();
+    if (!ctx) return;
+    try {
+      await ctx.resume();
+    } catch {
+      /* iOS può rifiutare se non c'è gesto */
+    }
+  }, [ensureAudioContext]);
 
   const playRemote = useCallback(() => {
     const el = remoteAudioRef.current;
@@ -495,7 +530,11 @@ export function ChiamataVocaleProvider({ children }) {
           };
         });
         if (!mine && !stopRingRef.current) {
-          stopRingRef.current = startRingtone();
+          const ctx = ensureAudioContext();
+          if (ctx) {
+            ctx.resume().catch(() => {});
+            stopRingRef.current = startRingtone(ctx);
+          }
         }
         return;
       }
@@ -534,7 +573,7 @@ export function ChiamataVocaleProvider({ children }) {
         }
       }
     },
-    [clearCall, createOffer, handleRemoteIce, handleRemoteSdp, selectedCharacterId]
+    [clearCall, createOffer, ensureAudioContext, handleRemoteIce, handleRemoteSdp, selectedCharacterId]
   );
 
   useEffect(() => {
@@ -599,7 +638,11 @@ export function ChiamataVocaleProvider({ children }) {
         if (data.chiamata.stato === 'ringing') {
           setCall(data.chiamata);
           if (data.chiamata.ruolo === 'callee') {
-            stopRingRef.current = startRingtone();
+            const ctx = ensureAudioContext();
+            if (ctx) {
+              ctx.resume().catch(() => {});
+              stopRingRef.current = startRingtone(ctx);
+            }
           }
         }
       })
@@ -607,7 +650,7 @@ export function ChiamataVocaleProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [onLogout, chiamateAbilitate]);
+  }, [ensureAudioContext, onLogout, chiamateAbilitate]);
 
   const startCall = useCallback(
     async ({ personaggioId = null, versoStaff = false } = {}) => {
@@ -628,7 +671,7 @@ export function ChiamataVocaleProvider({ children }) {
       try {
         await ensureMic();
         await unlockAudioSession();
-        playRemote();
+        await primeRemoteAudioElement(remoteAudioRef.current, audioCtxRef.current);
         const data = await avviaChiamataVocale(
           {
             chiamante_id: Number(selectedCharacterId),
@@ -652,7 +695,7 @@ export function ChiamataVocaleProvider({ children }) {
         setBusy(false);
       }
     },
-    [chiamateAbilitate, ensureMic, onLogout, playRemote, selectedCharacterId, stopLocalMedia, unlockAudioSession]
+    [chiamateAbilitate, ensureMic, onLogout, selectedCharacterId, stopLocalMedia, unlockAudioSession]
   );
 
   const acceptCall = useCallback(async () => {
@@ -661,14 +704,14 @@ export function ChiamataVocaleProvider({ children }) {
     setError('');
     setBusy(true);
     try {
-      await ensureMic();
-      await unlockAudioSession();
-      playRemote();
-      const data = await accettaChiamataVocale(current.id, onLogout);
       if (stopRingRef.current) {
         stopRingRef.current();
         stopRingRef.current = null;
       }
+      await ensureMic();
+      await unlockAudioSession();
+      await primeRemoteAudioElement(remoteAudioRef.current, audioCtxRef.current);
+      const data = await accettaChiamataVocale(current.id, onLogout);
       setCall({ ...data, ruolo: 'callee' });
       await setupPeer(data.id);
     } catch (err) {
@@ -677,7 +720,7 @@ export function ChiamataVocaleProvider({ children }) {
     } finally {
       setBusy(false);
     }
-  }, [ensureMic, onLogout, playRemote, setupPeer, stopLocalMedia, unlockAudioSession]);
+  }, [ensureMic, onLogout, setupPeer, stopLocalMedia, unlockAudioSession]);
 
   const rejectCall = useCallback(async () => {
     const current = callRef.current;
