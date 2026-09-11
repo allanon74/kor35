@@ -12,7 +12,7 @@ function classNames(...classes) {
   return classes.filter(Boolean).join(' ');
 }
 
-const MessaggiTab = ({ onLogout, composeTarget, onComposeTargetConsumed }) => {
+const MessaggiTab = ({ onLogout, composeTarget, onComposeTargetConsumed, initialViewMode = 'chat' }) => {
   const {
     selectedCharacterData: char,
     viewAll,
@@ -219,6 +219,7 @@ const MessaggiTab = ({ onLogout, composeTarget, onComposeTargetConsumed }) => {
               composeTarget={composeTarget}
               onComposeTargetConsumed={onComposeTargetConsumed}
               scrollToFirstUnreadNonce={scrollToFirstUnreadNonce}
+              initialViewMode={initialViewMode}
             />
           </Tab.Panel>
           

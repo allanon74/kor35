@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useCharacter } from './CharacterContext';
-import { Trash2, Mail, Eye, EyeOff, MessageCircle, Megaphone, Shield, ChevronRight, Coins, Package } from 'lucide-react';
+import { Trash2, Mail, Eye, EyeOff, MessageCircle, Megaphone, Shield, ChevronRight, Coins, Package, Bell } from 'lucide-react';
 import ComposeMessageModal from './ComposeMessageModal';
 import ConversazioneView from './ConversazioneView';
 import RichTextDisplay from './RichTextDisplay';
@@ -11,8 +11,9 @@ import { getConversazioni, rispondiMessaggio, markMessageAsRead } from '../api';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { OfflineConsultBanner } from './OfflineConsultBanner';
 import ChiamateLogPanel from './ChiamateLogPanel';
+import NotificheTab from './NotificheTab';
 
-const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, scrollToFirstUnreadNonce = 0 }) => {
+const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, scrollToFirstUnreadNonce = 0, initialViewMode = 'chat' }) => {
   const {
     selectedCharacterData: char,
     userMessages,
@@ -30,7 +31,26 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [replyToRecipient, setReplyToRecipient] = useState(null);
   const [expandedMessages, setExpandedMessages] = useState({});
-  const [viewMode, setViewMode] = useState('chat'); // 'chat' | 'annunci'
+  const [viewMode, setViewMode] = useState(() =>
+    ['chat', 'annunci', 'notifiche'].includes(initialViewMode) ? initialViewMode : 'chat'
+  ); // 'chat' | 'annunci' | 'notifiche'
+
+  useEffect(() => {
+    const openNotifiche = () => setViewMode('notifiche');
+    window.addEventListener('kor35:open-notifiche', openNotifiche);
+    return () => window.removeEventListener('kor35:open-notifiche', openNotifiche);
+  }, []);
+
+  useEffect(() => {
+    if (['chat', 'annunci', 'notifiche'].includes(initialViewMode)) {
+      setViewMode(initialViewMode);
+    }
+  }, [initialViewMode]);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('kor35:messaggi-view', { detail: { viewMode } }));
+  }, [viewMode]);
+
   const [conversazioni, setConversazioni] = useState([]);
   const [activeConversazione, setActiveConversazione] = useState(null);
   const [loadingConv, setLoadingConv] = useState(false);
@@ -242,17 +262,29 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
             </span>
           )}
         </button>
+        <button
+          type="button"
+          onClick={() => setViewMode('notifiche')}
+          className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold transition-colors ${
+            viewMode === 'notifiche' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+          }`}
+        >
+          <Bell size={16} />
+          Notifiche
+        </button>
       </div>
 
-      {viewMode === 'chat' ? (
+      {viewMode === 'notifiche' ? (
+        <div className="flex-1 overflow-y-auto custom-scrollbar mb-4 space-y-3 px-1">
+          <ChiamateLogPanel
+            personaggioId={selectedCharacterId}
+            onLogout={onLogout}
+            enabled={chiamateAbilitate}
+          />
+          <NotificheTab onLogout={onLogout} embedded />
+        </div>
+      ) : viewMode === 'chat' ? (
         <div className="flex-1 overflow-y-auto custom-scrollbar mb-16 space-y-2 px-1">
-          {!activeConversazione ? (
-            <ChiamateLogPanel
-              personaggioId={selectedCharacterId}
-              onLogout={onLogout}
-              enabled={chiamateAbilitate}
-            />
-          ) : null}
           {loadingConv && conversazioni.length === 0 ? (
             <div className="text-center text-gray-500 py-10">Caricamento conversazioni…</div>
           ) : conversazioni.length === 0 ? (
@@ -410,6 +442,7 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
         </div>
       )}
 
+      {viewMode !== 'notifiche' ? (
       <div className="absolute bottom-4 right-4 z-10">
         <button
           type="button"
@@ -428,6 +461,7 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
           <span className="font-bold hidden sm:inline">Nuovo</span>
         </button>
       </div>
+      ) : null}
 
       <ComposeMessageModal
         isOpen={isComposeOpen && isOnline}

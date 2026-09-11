@@ -14,12 +14,12 @@ import { isWebPushEnabled } from '../lib/webpush';
 import { ensureAppServiceWorker } from '../lib/appServiceWorker';
 import { useSharedNowTs } from '../hooks/useSharedNowTs';
 
-import { 
-    Home, QrCode, Zap, TestTube2, Scroll, LogOut, Mail, Backpack, 
+import {
+Home, QrCode, Zap, TestTube2, Scroll, LogOut, Mail, Backpack, 
     Menu, X, UserCog, RefreshCw, Filter, DownloadCloud, ScrollText, 
     ArrowRightLeft, Gamepad2, Loader2, ExternalLink, Tag, Users, Sparkles,
     Pin, PinOff, Briefcase, ClipboardCheck, Globe, ChevronRight, Package, Star,
-    Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard, ListTodo, Wallet, Bell
+    Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard, ListTodo, Wallet
 } from 'lucide-react';
 
 // GameTab resta eager: first paint su /app/play (tab di default).
@@ -94,7 +94,6 @@ const AVAILABLE_TABS = [
     { id: 'stiva-nave', label: 'Stiva nave', icon: Ship, component: lazyTab('stiva-nave'), requiresStivaAccess: true, requiresModulo: 'pilotaggio' },
     { id: 'qr', label: 'Scanner', icon: QrCode, component: lazyTab('qr') },
     { id: 'messaggi', label: 'Messaggi', icon: Mail, component: lazyTab('messaggi') },
-    { id: 'notifiche', label: 'Notifiche', icon: Bell, component: lazyTab('notifiche') },
     { id: 'logs', label: 'Diario', icon: ScrollText, component: lazyTab('logs') },
     { id: 'transazioni', label: 'Transazioni', icon: ArrowRightLeft, component: lazyTab('transazioni') },
     { id: 'economia', label: 'Economia', icon: Wallet, component: lazyTab('economia'), requiresModulo: 'conto_deposito' },
@@ -119,7 +118,9 @@ const MAIN_TAB_STORAGE_KEY = 'kor35_main_active_tab';
 
 function isValidMainTabId(tabId) {
     if (!tabId) return false;
-    if (tabId === 'game' || tabId === 'home' || tabId === 'admin_msg' || tabId === 'watch' || tabId === 'notifiche') return true;
+    // legacy: tab=notifiche ora vive come subtab di messaggi
+    if (tabId === 'notifiche') return true;
+    if (tabId === 'game' || tabId === 'home' || tabId === 'admin_msg' || tabId === 'watch') return true;
     return AVAILABLE_TABS.some((t) => t.id === tabId);
 }
 
@@ -163,6 +164,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(readStoredMainTab);
+  const [messaggiViewMode, setMessaggiViewMode] = useState('chat');
   const [qrResultData, setQrResultData] = useState(null);
   const [minigiocoPayload, setMinigiocoPayload] = useState(null);
   const [pilotRepairing, setPilotRepairing] = useState(false);
@@ -435,16 +437,52 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const urlTab = params.get('tab');
+    const urlSub = params.get('sub');
+    if (urlTab === 'notifiche') {
+      setActiveTab('messaggi');
+      setMessaggiViewMode('notifiche');
+      return;
+    }
     if (isValidMainTabId(urlTab)) {
       setActiveTab(urlTab);
+    }
+    if (urlTab === 'messaggi' && ['chat', 'annunci', 'notifiche'].includes(urlSub)) {
+      setMessaggiViewMode(urlSub);
     }
   }, [location.search]);
 
   useEffect(() => {
-    const onOpenMessaggi = () => setActiveTab('messaggi');
+    const onOpenMessaggi = () => {
+      setActiveTab('messaggi');
+      setMessaggiViewMode('chat');
+    };
+    const onOpenNotifiche = () => {
+      setActiveTab('messaggi');
+      setMessaggiViewMode('notifiche');
+    };
+    const onMessaggiView = (ev) => {
+      const mode = ev?.detail?.viewMode;
+      if (['chat', 'annunci', 'notifiche'].includes(mode)) {
+        setMessaggiViewMode(mode);
+      }
+    };
     window.addEventListener('kor35:open-messaggi', onOpenMessaggi);
-    return () => window.removeEventListener('kor35:open-messaggi', onOpenMessaggi);
+    window.addEventListener('kor35:open-notifiche', onOpenNotifiche);
+    window.addEventListener('kor35:messaggi-view', onMessaggiView);
+    return () => {
+      window.removeEventListener('kor35:open-messaggi', onOpenMessaggi);
+      window.removeEventListener('kor35:open-notifiche', onOpenNotifiche);
+      window.removeEventListener('kor35:messaggi-view', onMessaggiView);
+    };
   }, []);
+
+
+  useEffect(() => {
+    if (activeTab === 'notifiche') {
+      setActiveTab('messaggi');
+      setMessaggiViewMode('notifiche');
+    }
+  }, [activeTab]);
 
   // Persiste il tab così dopo standby / kill soft del browser si torna alla stessa schermata.
   useEffect(() => {
@@ -459,17 +497,32 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
 
   // Sincronizza ?tab= nell'URL (replace) così OS e PWA ripristinano la vista corretta al wake.
   useEffect(() => {
-    if (!isValidMainTabId(activeTab)) return;
+    if (!isValidMainTabId(activeTab) && activeTab !== 'notifiche') return;
     try {
       const params = new URLSearchParams(location.search);
-      if (params.get('tab') === activeTab) return;
-      params.set('tab', activeTab);
+      const tabForUrl = activeTab === 'notifiche' ? 'messaggi' : activeTab;
+      const desiredSub = tabForUrl === 'messaggi' ? messaggiViewMode : '';
+      let changed = false;
+      if (params.get('tab') !== tabForUrl) {
+        params.set('tab', tabForUrl);
+        changed = true;
+      }
+      if (desiredSub && desiredSub !== 'chat') {
+        if (params.get('sub') !== desiredSub) {
+          params.set('sub', desiredSub);
+          changed = true;
+        }
+      } else if (params.has('sub')) {
+        params.delete('sub');
+        changed = true;
+      }
+      if (!changed) return;
       const q = params.toString();
       navigate({ pathname: location.pathname, search: q ? `?${q}` : '' }, { replace: true });
     } catch (e) {
       /* noop */
     }
-  }, [activeTab, navigate, location.pathname, location.search]);
+  }, [activeTab, messaggiViewMode, navigate, location.pathname, location.search]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -873,7 +926,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   }, [activeTab, selectedCharacterId, watchTabEnabled]);
 
   useEffect(() => {
-    if (!selectedCharacterId && activeTab !== 'personaggi' && activeTab !== 'notifiche') {
+    if (!selectedCharacterId && activeTab !== 'personaggi') {
       setActiveTab('personaggi');
     }
   }, [selectedCharacterId, activeTab]);
@@ -954,7 +1007,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                       onSelectChar={() => setActiveTab('game')}
                   />
               );
-          } else if (!selectedCharacterId && tabDef.id !== 'personaggi' && tabDef.id !== 'notifiche') {
+          } else if (!selectedCharacterId && tabDef.id !== 'personaggi') {
               content = (
                   <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-4 animate-fadeIn">
                       <Users size={64} className="opacity-20 animate-pulse"/>
@@ -977,6 +1030,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                       onLogout={onLogout}
                       composeTarget={messageComposeTarget}
                       onComposeTargetConsumed={() => setMessageComposeTarget(null)}
+                      initialViewMode={messaggiViewMode}
                   />
               );
           } else if (tabDef.id === 'scommesse' || tabDef.id === 'tasks') {
@@ -1012,6 +1066,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     handleScanSuccess,
     onLogout,
     messageComposeTarget,
+    messaggiViewMode,
   ]);
 
   // --- CONTENUTO MENU (render function, evita remount continui della sidebar) ---

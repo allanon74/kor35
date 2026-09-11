@@ -544,7 +544,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <button
-            onClick={() => navigate('/app/play?tab=notifiche')}
+            onClick={() => navigate('/app/play?tab=messaggi&sub=notifiche')}
             className="rounded-xl border border-violet-800/70 bg-violet-950/40 p-4 text-left hover:bg-violet-950/70"
           >
             <Bell size={20} className="text-violet-300 mb-2" />

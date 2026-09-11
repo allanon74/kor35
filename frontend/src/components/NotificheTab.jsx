@@ -38,7 +38,7 @@ function Toggle({ checked, disabled, onChange, label }) {
   );
 }
 
-export default function NotificheTab({ onLogout }) {
+export default function NotificheTab({ onLogout, embedded = false }) {
   const { subscribeToPush } = useCharacter();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -153,18 +153,27 @@ export default function NotificheTab({ onLogout }) {
   const includeCompiti = !!data?.calendario?.include_compiti;
 
   return (
-    <div className="h-full overflow-y-auto p-4 space-y-5 max-w-3xl mx-auto">
-      <header className="flex items-start gap-3">
-        <Bell className="text-violet-300 shrink-0 mt-0.5" size={22} />
-        <div>
-          <h1 className="text-lg font-bold text-white">Notifiche</h1>
-          <p className="text-sm text-gray-400">
-            Scegli come ricevere gli avvisi. Il web push KOR35 è attivo di default; Telegram ed email restano spenti
-            finché non li abiliti. Le istruzioni per calendario e Telegram sono in questa scheda; il pulsante «?»
-            in alto apre anche la guida wiki (visibile solo da loggati).
+    <div className={`overflow-y-auto space-y-5 max-w-3xl ${embedded ? 'p-1' : 'h-full p-4 mx-auto'}`}>
+      {embedded ? (
+        <header className="px-1">
+          <h2 className="text-sm font-semibold text-white">Canali e preferenze</h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Web push, Telegram, email e calendario. Il registro chiamate è qui sopra.
           </p>
-        </div>
-      </header>
+        </header>
+      ) : (
+        <header className="flex items-start gap-3">
+          <Bell className="text-violet-300 shrink-0 mt-0.5" size={22} />
+          <div>
+            <h1 className="text-lg font-bold text-white">Notifiche</h1>
+            <p className="text-sm text-gray-400">
+              Scegli come ricevere gli avvisi. Il web push KOR35 è attivo di default; Telegram ed email restano spenti
+              finché non li abiliti. Le istruzioni per calendario e Telegram sono in questa scheda; il pulsante «?»
+              in alto apre anche la guida wiki (visibile solo da loggati).
+            </p>
+          </div>
+        </header>
+      )}
 
       {error ? (
         <p className="text-sm text-red-300 bg-red-950/50 border border-red-800 rounded-lg px-3 py-2">{error}</p>
