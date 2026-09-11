@@ -74,6 +74,25 @@ function iceInit(candidate) {
   };
 }
 
+/** Android Chrome spesso lascia il track in muted=true per qualche centinaio di ms. */
+function waitTrackUnmuted(track, timeoutMs = 1200) {
+  return new Promise((resolve) => {
+    if (!track || track.readyState !== 'live' || !track.muted) {
+      resolve();
+      return;
+    }
+    const timer = window.setTimeout(resolve, timeoutMs);
+    track.addEventListener(
+      'unmute',
+      () => {
+        window.clearTimeout(timer);
+        resolve();
+      },
+      { once: true }
+    );
+  });
+}
+
 export function ChiamataVocaleProvider({ children }) {
   const { selectedCharacterId, onLogout, canAccessModulo } = useCharacter();
   const chiamateAbilitate = canAccessModulo ? canAccessModulo('chiamate') : false;
@@ -93,6 +112,8 @@ export function ChiamataVocaleProvider({ children }) {
   const stopRingRef = useRef(null);
   const callRef = useRef(null);
   const offerSentRef = useRef(null);
+  const tearingDownRef = useRef(false);
+  const revivingMicRef = useRef(false);
   callRef.current = call;
 
   const unlockAudioSession = useCallback(async () => {
@@ -176,6 +197,8 @@ export function ChiamataVocaleProvider({ children }) {
   }, []);
 
   const stopLocalMedia = useCallback(() => {
+    tearingDownRef.current = true;
+    revivingMicRef.current = false;
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
@@ -210,10 +233,10 @@ export function ChiamataVocaleProvider({ children }) {
     }
   }, []);
 
-  const ensureMic = useCallback(async () => {
+  const ensureMic = useCallback(async ({ refresh = false } = {}) => {
     const existing = localStreamRef.current;
-    const live = existing?.getAudioTracks().some((t) => t.readyState === 'live');
-    if (existing && live) {
+    const live = existing?.getAudioTracks().some((t) => t.readyState === 'live' && !t.muted);
+    if (existing && live && !refresh) {
       existing.getAudioTracks().forEach((t) => {
         t.enabled = true;
       });
@@ -230,7 +253,12 @@ export function ChiamataVocaleProvider({ children }) {
     let stream;
     try {
       stream = await tryGet({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
         video: false,
       });
     } catch {
@@ -265,16 +293,70 @@ export function ChiamataVocaleProvider({ children }) {
     }
   }, []);
 
+  const attachLocalAudio = useCallback(async (pc, stream) => {
+    const track = stream?.getAudioTracks()?.[0];
+    if (!pc || !track) return;
+    track.enabled = true;
+    const sender = pc.getSenders().find((s) => !s.track || s.track.kind === 'audio');
+    if (sender) {
+      if (sender.track !== track) await sender.replaceTrack(track);
+    } else {
+      pc.addTrack(track, stream);
+    }
+    pc.getTransceivers().forEach((t) => {
+      if (t.sender?.track?.kind === 'audio' || t.receiver?.track?.kind === 'audio') {
+        try {
+          t.direction = 'sendrecv';
+        } catch {
+          /* transceiver già chiuso */
+        }
+      }
+    });
+    await waitTrackUnmuted(track);
+  }, []);
+
+  const reviveLocalMic = useCallback(async () => {
+    const pc = pcRef.current;
+    if (tearingDownRef.current || revivingMicRef.current || !pc) return;
+    if (pc.connectionState === 'closed' || pc.signalingState === 'closed') return;
+    revivingMicRef.current = true;
+    try {
+      const stream = await ensureMic({ refresh: true });
+      if (tearingDownRef.current || pcRef.current !== pc) return;
+      await attachLocalAudio(pc, stream);
+    } catch {
+      /* permesso revocato o track già fermato in hangup */
+    } finally {
+      revivingMicRef.current = false;
+    }
+  }, [attachLocalAudio, ensureMic]);
+
+  const watchLocalTracks = useCallback(
+    (stream) => {
+      stream?.getAudioTracks().forEach((track) => {
+        const onEnded = () => {
+          if (!tearingDownRef.current) reviveLocalMic();
+        };
+        track.addEventListener('ended', onEnded);
+      });
+    },
+    [reviveLocalMic]
+  );
+
   const setupPeer = useCallback(
     async (callId) => {
       if (pcRef.current) return pcRef.current;
+      tearingDownRef.current = false;
       const iceServers = await ensureIce();
-      const stream = await ensureMic();
       const pc = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 4 });
-      stream.getAudioTracks().forEach((track) => pc.addTrack(track, stream));
-      if (!pc.getTransceivers().some((t) => t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio')) {
+      // Rinnova sempre il mic qui: su Android il getUserMedia di "Chiama"
+      // (aperto durante lo squillo) arriva spesso muted/silenzioso all'offer.
+      const stream = await ensureMic({ refresh: true });
+      await attachLocalAudio(pc, stream);
+      if (!pc.getSenders().some((s) => s.track?.kind === 'audio')) {
         pc.addTransceiver('audio', { direction: 'sendrecv' });
       }
+      watchLocalTracks(stream);
       pc.onicecandidate = (ev) => {
         if (ev.candidate) {
           sendSignal({
@@ -304,7 +386,7 @@ export function ChiamataVocaleProvider({ children }) {
       pcRef.current = pc;
       return pc;
     },
-    [attachRemoteStream, ensureIce, ensureMic, sendSignal]
+    [attachLocalAudio, attachRemoteStream, ensureIce, ensureMic, sendSignal, watchLocalTracks]
   );
 
   const createOffer = useCallback(
@@ -313,7 +395,8 @@ export function ChiamataVocaleProvider({ children }) {
       offerSentRef.current = callId;
       try {
         const pc = await setupPeer(callId);
-        const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+        // addTrack già presente: non usare offerToReceiveAudio (secondo m-line recvonly).
+        const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         sendSignal({ type: 'sdp', call_id: callId, sdp: serializeSdp(pc.localDescription) });
       } catch (err) {
