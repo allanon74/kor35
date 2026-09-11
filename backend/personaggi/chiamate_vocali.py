@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import logging
 from datetime import timedelta
 from typing import Any, Iterable
 
@@ -29,6 +30,7 @@ from personaggi.models import (
 )
 from personaggi.ws_auth import user_notifications_group
 
+logger = logging.getLogger(__name__)
 RING_TIMEOUT_SECONDS = 45
 VOCE_USER_PREFIX = "voce_user_"
 
@@ -129,9 +131,12 @@ def staff_user_ids(campagna) -> list[int]:
 
 def scadi_chiamate_vecchie() -> int:
     cutoff = timezone.now() - timedelta(seconds=RING_TIMEOUT_SECONDS + 5)
-    qs = ChiamataVocale.objects.filter(
-        stato=ChiamataVocale.STATO_RINGING,
-        created_at__lt=cutoff,
+    qs = (
+        ChiamataVocale.objects.filter(
+            stato=ChiamataVocale.STATO_RINGING,
+            created_at__lt=cutoff,
+        )
+        .select_related("chiamante", "chiamato", "campagna")
     )
     n = 0
     for call in qs:
@@ -139,6 +144,20 @@ def scadi_chiamate_vecchie() -> int:
         call.closed_at = timezone.now()
         call.save(update_fields=["stato", "closed_at", "updated_at"])
         _notifica_parti(call, "VOCE_PERSA")
+        # Push anche sulla persa: se l'invito è andato perso (app in background
+        # senza WS), almeno rimane traccia sul telefono del chiamato.
+        dest_push = []
+        if call.verso_staff:
+            dest_push = [i for i in staff_user_ids(call.campagna) if i != call.chiamante.proprietario_id]
+        elif call.chiamato_id and call.chiamato.proprietario_id:
+            dest_push = [call.chiamato.proprietario_id]
+        if dest_push:
+            _push_esito(
+                call,
+                user_ids=dest_push,
+                head="Chiamata persa",
+                body=f"Hai perso una chiamata da {call.chiamante.nome}.",
+            )
         n += 1
     return n
 
@@ -183,7 +202,54 @@ def serializza_chiamata(call: ChiamataVocale, user=None) -> dict:
         "accettata_da_username": call.accettata_da.username if call.accettata_da_id else None,
         "ruolo": ruolo,
         "created_at": call.created_at.isoformat() if call.created_at else None,
+        "closed_at": call.closed_at.isoformat() if call.closed_at else None,
     }
+
+
+def serializza_chiamata_storico(call: ChiamataVocale, personaggio: Personaggio) -> dict:
+    """Entry per il registro chiamate del personaggio (area messaggi)."""
+    base = serializza_chiamata(call)
+    uscente = call.chiamante_id == personaggio.id
+    if uscente:
+        direzione = "inviata"
+        peer_nome = (
+            "Staff"
+            if call.verso_staff
+            else (call.chiamato.nome if call.chiamato_id else "—")
+        )
+    else:
+        direzione = "ricevuta"
+        peer_nome = call.chiamante.nome if call.chiamante_id else "—"
+    if call.stato == ChiamataVocale.STATO_PERSA:
+        esito = "persa"
+    elif call.stato == ChiamataVocale.STATO_RIFIUTATA:
+        esito = "rifiutata"
+    elif call.stato == ChiamataVocale.STATO_IN_CORSO:
+        esito = "in_corso"
+    elif call.stato == ChiamataVocale.STATO_RINGING:
+        esito = "in_squillo"
+    else:
+        # terminata: se non è mai stata accettata è un annullamento del chiamante
+        esito = "completata" if call.accettata_da_id else "annullata"
+    return {
+        **base,
+        "direzione": direzione,
+        "esito": esito,
+        "peer_nome": peer_nome,
+    }
+
+
+def storico_chiamate_personaggio(personaggio: Personaggio, *, limit: int = 50) -> list[dict]:
+    """Ultime chiamate uscenti/entranti del PG (incluse perse)."""
+    scadi_chiamate_vecchie()
+    limit = max(1, min(int(limit or 50), 100))
+    qs = (
+        ChiamataVocale.objects.filter(campagna_id=personaggio.campagna_id)
+        .filter(Q(chiamante=personaggio) | Q(chiamato=personaggio))
+        .select_related("chiamante", "chiamato", "campagna", "accettata_da")
+        .order_by("-created_at")[:limit]
+    )
+    return [serializza_chiamata_storico(c, personaggio) for c in qs]
 
 
 def _destinatari_user_ids(call: ChiamataVocale, *, extra: Iterable[int] | None = None) -> list[int]:
@@ -236,21 +302,36 @@ def _notifica_parti(call: ChiamataVocale, action: str, extra: dict | None = None
 
 
 def _push_invito(call: ChiamataVocale, user_ids: list[int]):
-    try:
-        from personaggi.notify import notify_user_ids
-    except Exception:
-        return
     if call.verso_staff:
         body = f"{call.chiamante.nome} chiama lo staff."
     else:
         body = f"{call.chiamante.nome} ti sta chiamando."
-    notify_user_ids(
-        user_ids,
-        category="chiamate",
+    _push_esito(
+        call,
+        user_ids=user_ids,
         head="Chiamata vocale",
         body=body,
-        url="/?tab=messaggi",
     )
+
+
+def _push_esito(call: ChiamataVocale, *, user_ids: list[int], head: str, body: str):
+    try:
+        from personaggi.notify import notify_user_ids
+    except Exception:
+        logger.exception("notify_user_ids non importabile: push chiamata saltata")
+        return
+    if not user_ids:
+        return
+    try:
+        notify_user_ids(
+            user_ids,
+            category="chiamate",
+            head=head,
+            body=body,
+            url="/?tab=messaggi",
+        )
+    except Exception:
+        logger.exception("Push chiamata fallita call=%s", getattr(call, "pk", None))
 
 
 def avvia_chiamata(*, chiamante: Personaggio, chiamato: Personaggio | None, verso_staff: bool) -> ChiamataVocale:

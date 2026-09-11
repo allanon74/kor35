@@ -32,7 +32,7 @@ def notify_user(user, *, category: str, head: str, body: str, url: str = "/") ->
     prefs = get_or_create_preferenze(user)
     attempts = 0
     if prefs.is_enabled("webpush", category):
-        attempts += _send_webpush(user, head=head, body=body, url=url)
+        attempts += _send_webpush(user, head=head, body=body, url=url, category=category)
     if prefs.is_enabled("telegram", category) and prefs.telegram_chat_id:
         attempts += _send_telegram(prefs.telegram_chat_id, head=head, body=body)
     if prefs.is_enabled("email", category) and (user.email or "").strip():
@@ -63,7 +63,7 @@ def notify_user_ids(user_ids: Iterable, *, category: str, head: str, body: str, 
     return notify_users((users.get(i) for i in ids), category=category, head=head, body=body, url=url)
 
 
-def _send_webpush(user, *, head: str, body: str, url: str) -> int:
+def _send_webpush(user, *, head: str, body: str, url: str, category: str = "messaggi") -> int:
     try:
         from webpush import send_user_notification
     except Exception as exc:  # pragma: no cover
@@ -76,9 +76,11 @@ def _send_webpush(user, *, head: str, body: str, url: str) -> int:
                 "head": head,
                 "body": body,
                 "icon": "/pwa-192x192.png",
-                "url": url or "/",
+                "url": url or "/?tab=messaggi",
+                "tag": f"kor35-{category}",
+                "renotify": True,
             },
-            ttl=1000,
+            ttl=86400,
         )
         return 1
     except Exception as exc:

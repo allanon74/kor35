@@ -72,16 +72,38 @@ registerRoute(
 
 // 6. Push notifications
 self.addEventListener('push', function (event) {
-  const eventData = event.data ? event.data.json() : {};
+  let eventData = {};
+  try {
+    if (event.data) {
+      try {
+        eventData = event.data.json();
+      } catch (_) {
+        const text = event.data.text();
+        try {
+          eventData = JSON.parse(text);
+        } catch {
+          eventData = { body: text };
+        }
+      }
+    }
+  } catch (_) {
+    eventData = {};
+  }
+  // django-webpush a volte annida il payload
+  if (eventData && typeof eventData === 'object' && eventData.notification) {
+    eventData = { ...eventData, ...eventData.notification };
+  }
 
-  const title = eventData.head || 'KOR-35';
+  const title = eventData.head || eventData.title || 'KOR-35';
   const options = {
-    body: eventData.body || 'Nuovo messaggio ricevuto.',
-    icon: '/pwa-192x192.png',
+    body: eventData.body || eventData.message || 'Nuovo messaggio ricevuto.',
+    icon: eventData.icon || '/pwa-192x192.png',
     badge: '/pwa-192x192.png',
     vibrate: [100, 50, 100],
+    tag: eventData.tag || undefined,
+    renotify: Boolean(eventData.renotify),
     data: {
-      url: eventData.url || '/',
+      url: eventData.url || eventData.data?.url || '/?tab=messaggi',
     },
   };
 

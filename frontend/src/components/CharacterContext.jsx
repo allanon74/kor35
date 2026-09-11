@@ -46,12 +46,29 @@ export const CharacterContext = createContext(null);
 
 // --- HELPER UTILS ---
 
-const sendSystemNotification = (title, body) => {
+const sendSystemNotification = (title, body, options = {}) => {
     if (!("Notification" in window)) return;
-    if (Notification.permission === "granted") {
-      try {
-          new Notification(title, { body, icon: '/pwa-192x192.png', vibrate: [200, 100, 200] });
-      } catch (e) { console.error("Errore notifica:", e); }
+    if (Notification.permission !== "granted") return;
+    try {
+      const n = new Notification(title, {
+        body,
+        icon: '/pwa-192x192.png',
+        badge: '/pwa-192x192.png',
+        tag: options.tag || undefined,
+        renotify: Boolean(options.renotify),
+        data: options.data || { url: '/?tab=messaggi' },
+      });
+      n.onclick = () => {
+        try {
+          window.focus();
+          window.dispatchEvent(new CustomEvent('kor35:open-messaggi'));
+        } catch {
+          /* noop */
+        }
+        n.close();
+      };
+    } catch (e) {
+      console.error("Errore notifica:", e);
     }
 };
 
@@ -706,6 +723,26 @@ export const CharacterProvider = ({ children, onLogout }) => {
 
         if (action && String(action).startsWith('VOCE_')) {
           window.dispatchEvent(new CustomEvent('kor35:voce', { detail: inner }));
+          // Solo il chiamato (o staff verso_staff) riceve toast OS: il chiamante
+          // è già nella stessa room WS e non deve vedere "ti sta chiamando".
+          const isCaller =
+            selectedCharacterId &&
+            String(inner?.chiamante_id) === String(selectedCharacterId);
+          if (!isCaller && action === 'VOCE_INVITO') {
+            const who = inner?.chiamante_nome || 'Qualcuno';
+            sendSystemNotification(
+              'Chiamata vocale',
+              `${who} ti sta chiamando.`,
+              { tag: `voce-${inner?.call_id || 'invito'}`, renotify: true }
+            );
+          } else if (!isCaller && action === 'VOCE_PERSA') {
+            const who = inner?.chiamante_nome || 'Qualcuno';
+            sendSystemNotification(
+              'Chiamata persa',
+              `Hai perso una chiamata da ${who}.`,
+              { tag: `voce-persa-${inner?.call_id || 'x'}` }
+            );
+          }
         }
 
         if (action === 'TIMER_SYNC' && payload) {
@@ -789,15 +826,21 @@ export const CharacterProvider = ({ children, onLogout }) => {
            if (msg.action && String(msg.action).startsWith('VOCE_')) {
              return;
            }
-           const myId = parseInt(selectedCharacterId, 10);
+           const myId = String(selectedCharacterId || '');
+           const destId = msg.destinatario_id != null ? String(msg.destinatario_id) : '';
            const forMe =
              msg.tipo === 'BROAD' ||
              msg.tipo === 'GROUP' ||
              msg.tipo === 'STAFF' ||
-             (msg.tipo === 'INDV' && (msg.destinatario_id === myId || !msg.destinatario_id));
+             (msg.tipo === 'INDV' &&
+               ((destId && destId === myId) || !msg.destinatario_id));
            if (forMe) {
               setNotification(msg);
-              sendSystemNotification(msg.titolo, htmlToPlainText(msg.testo));
+              sendSystemNotification(
+                msg.titolo || 'Nuovo messaggio',
+                htmlToPlainText(msg.testo),
+                { tag: msg.id ? `msg-${msg.id}` : 'msg', renotify: true }
+              );
               fetchUserMessages(selectedCharacterId);
               queryClient.invalidateQueries(['personaggio', selectedCharacterId]);
            }

@@ -10,6 +10,7 @@ import { importiDaMessaggio } from '../utils/creditiCessione';
 import { getConversazioni, rispondiMessaggio, markMessageAsRead } from '../api';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { OfflineConsultBanner } from './OfflineConsultBanner';
+import ChiamateLogPanel from './ChiamateLogPanel';
 
 const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, scrollToFirstUnreadNonce = 0 }) => {
   const {
@@ -21,8 +22,10 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
     isCampaignStaffer,
     handleToggleRead,
     handleDeleteMessage: contextDeleteMessage,
+    canAccessModulo,
   } = useCharacter();
   const isOnline = useOnlineStatus();
+  const chiamateAbilitate = canAccessModulo ? canAccessModulo('chiamate') : false;
 
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [replyToRecipient, setReplyToRecipient] = useState(null);
@@ -243,6 +246,13 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
 
       {viewMode === 'chat' ? (
         <div className="flex-1 overflow-y-auto custom-scrollbar mb-16 space-y-2 px-1">
+          {!activeConversazione ? (
+            <ChiamateLogPanel
+              personaggioId={selectedCharacterId}
+              onLogout={onLogout}
+              enabled={chiamateAbilitate}
+            />
+          ) : null}
           {loadingConv && conversazioni.length === 0 ? (
             <div className="text-center text-gray-500 py-10">Caricamento conversazioni…</div>
           ) : conversazioni.length === 0 ? (

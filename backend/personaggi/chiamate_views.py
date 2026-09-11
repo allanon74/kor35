@@ -19,6 +19,7 @@ from personaggi.chiamate_vocali import (
     rifiuta_chiamata,
     scadi_chiamate_vecchie,
     serializza_chiamata,
+    storico_chiamate_personaggio,
     user_ha_chiamata_attiva,
     user_is_campaign_staff,
 )
@@ -101,6 +102,35 @@ class ChiamataVocaleListCreateView(APIView):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializza_chiamata(call, request.user), status=status.HTTP_201_CREATED)
+
+
+class ChiamataVocaleStoricoView(APIView):
+    """Registro chiamate (inviate / ricevute / perse) per un personaggio del giocatore."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        blocked = _ensure_enabled()
+        if blocked:
+            return blocked
+        gated = _gate_modulo_utente(request)
+        if gated:
+            return gated
+        pg_id = request.query_params.get("personaggio_id") or request.query_params.get("personaggio")
+        if not pg_id:
+            return Response({"detail": "personaggio_id obbligatorio."}, status=status.HTTP_400_BAD_REQUEST)
+        personaggio = (
+            Personaggio.objects.filter(pk=pg_id, proprietario=request.user)
+            .select_related("campagna")
+            .first()
+        )
+        if not personaggio:
+            return Response({"detail": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            limit = int(request.query_params.get("limit") or 50)
+        except (TypeError, ValueError):
+            limit = 50
+        return Response({"results": storico_chiamate_personaggio(personaggio, limit=limit)})
 
 
 class ChiamataVocaleCodaStaffView(ModuloStaffGateMixin, APIView):

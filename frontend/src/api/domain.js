@@ -467,25 +467,19 @@ export const getAdminSentMessages = (onLogout) => {
 };
 
 export const saveWebPushSubscription = async (subscription, onLogout) => {
-    const token = localStorage.getItem('kor35_token'); // O il nome chiave che usi tu
-    
-    if (!token) return;
-
-    const response = await fetch(`${API_BASE_URL}/api/personaggi/api/webpush/subscribe/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Token ${token}` // FONDAMENTALE: Invia l'identità dell'utente
-        },
-        body: JSON.stringify(subscription)
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Errore server (${response.status}): ${errorText}`);
-    }
-
-    return await response.json();
+  if (!subscription) {
+    throw new Error('Sottoscrizione push mancante.');
+  }
+  const payload =
+    typeof subscription.toJSON === 'function' ? subscription.toJSON() : subscription;
+  return fetchAuthenticated(
+    '/api/personaggi/api/webpush/subscribe/',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    onLogout
+  );
 };
 
 // --- NUOVE FUNZIONI PER INFUSIONI E TESSITURE ---
@@ -861,6 +855,13 @@ export const chiudiChiamataVocale = (callId, onLogout) =>
 
 export const getCodaChiamateStaff = (onLogout) =>
   fetchAuthenticated('/api/personaggi/api/chiamate/coda/', { method: 'GET' }, onLogout);
+
+export const getStoricoChiamateVocali = (personaggioId, onLogout, { limit = 50 } = {}) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/chiamate/storico/?personaggio_id=${encodeURIComponent(personaggioId)}&limit=${limit}`,
+    { method: 'GET' },
+    onLogout
+  );
 
 // Crea un oggetto fisico a partire da un'infusione
 export const craftOggetto = (infusioneId) => {

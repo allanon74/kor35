@@ -200,6 +200,37 @@ class ChiamateVocaliApiTests(APITestCase):
         )
         self.assertEqual(ice.status_code, status.HTTP_403_FORBIDDEN)
 
+    @patch("personaggi.chiamate_vocali._notifica_parti")
+    @patch("personaggi.chiamate_vocali._push_invito")
+    def test_storico_inviate_ricevute_perse(self, _push, _ws):
+        self.client.force_authenticate(self.u1)
+        avvio = self.client.post(
+            "/api/personaggi/api/chiamate/",
+            {"chiamante_id": self.pg1.id, "chiamato_id": self.pg2.id},
+            format="json",
+        )
+        self.assertEqual(avvio.status_code, status.HTTP_201_CREATED, avvio.data)
+        call = ChiamataVocale.objects.get(pk=avvio.data["id"])
+        call.stato = ChiamataVocale.STATO_PERSA
+        call.save(update_fields=["stato", "updated_at"])
+
+        hist_caller = self.client.get(
+            f"/api/personaggi/api/chiamate/storico/?personaggio_id={self.pg1.id}"
+        )
+        self.assertEqual(hist_caller.status_code, status.HTTP_200_OK, hist_caller.data)
+        self.assertEqual(len(hist_caller.data["results"]), 1)
+        self.assertEqual(hist_caller.data["results"][0]["direzione"], "inviata")
+        self.assertEqual(hist_caller.data["results"][0]["esito"], "persa")
+
+        self.client.force_authenticate(self.u2)
+        hist_callee = self.client.get(
+            f"/api/personaggi/api/chiamate/storico/?personaggio_id={self.pg2.id}"
+        )
+        self.assertEqual(hist_callee.status_code, status.HTTP_200_OK, hist_callee.data)
+        self.assertEqual(hist_callee.data["results"][0]["direzione"], "ricevuta")
+        self.assertEqual(hist_callee.data["results"][0]["esito"], "persa")
+        self.assertEqual(hist_callee.data["results"][0]["peer_nome"], self.pg1.nome)
+
 
 class ChiamateRoutingTests(SimpleTestCase):
     def test_rest_ice_coda_e_list_non_collidono(self):
@@ -209,6 +240,8 @@ class ChiamateRoutingTests(SimpleTestCase):
         self.assertIs(ice.func.view_class, chiamate_views.ChiamataIceServersView)
         coda = resolve("/api/personaggi/api/chiamate/coda/")
         self.assertIs(coda.func.view_class, chiamate_views.ChiamataVocaleCodaStaffView)
+        storico = resolve("/api/personaggi/api/chiamate/storico/")
+        self.assertIs(storico.func.view_class, chiamate_views.ChiamataVocaleStoricoView)
         lista = resolve("/api/personaggi/api/chiamate/")
         self.assertIs(lista.func.view_class, chiamate_views.ChiamataVocaleListCreateView)
 

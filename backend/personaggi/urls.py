@@ -423,6 +423,7 @@ urlpatterns = [
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
     path('api/chiamate/ice-servers/', chiamate_views.ChiamataIceServersView.as_view(), name='chiamate-ice-servers'),
     path('api/chiamate/coda/', chiamate_views.ChiamataVocaleCodaStaffView.as_view(), name='chiamate-coda-staff'),
+    path('api/chiamate/storico/', chiamate_views.ChiamataVocaleStoricoView.as_view(), name='chiamate-storico'),
     path('api/chiamate/<uuid:pk>/accetta/', chiamate_views.ChiamataVocaleAccettaView.as_view(), name='chiamate-accetta'),
     path('api/chiamate/<uuid:pk>/rifiuta/', chiamate_views.ChiamataVocaleRifiutaView.as_view(), name='chiamate-rifiuta'),
     path('api/chiamate/<uuid:pk>/chiudi/', chiamate_views.ChiamataVocaleChiudiView.as_view(), name='chiamate-chiudi'),
