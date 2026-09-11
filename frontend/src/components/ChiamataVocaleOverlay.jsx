@@ -70,8 +70,8 @@ const ChiamataVocaleOverlay = ({
             {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
             {call ? (
               <p className="mt-2 text-[11px] text-gray-500 leading-snug">
-                Usa il viva voce (o cuffie Bluetooth già collegate).
-                La cornetta all&apos;orecchio non è disponibile: il browser non può usarla come un telefono.
+                Viva voce o cuffie Bluetooth. Tieni lo schermo acceso e resta in Chrome:
+                in stand-by o in un&apos;altra app il browser spegne microfono e audio.
               </p>
             ) : null}
             <div className="mt-3 flex items-center justify-end gap-2 flex-wrap">

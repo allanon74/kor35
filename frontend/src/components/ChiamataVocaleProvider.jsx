@@ -144,6 +144,9 @@ export function ChiamataVocaleProvider({ children }) {
   const offerSentRef = useRef(null);
   const tearingDownRef = useRef(false);
   const revivingMicRef = useRef(false);
+  const wakeLockRef = useRef(null);
+  const disconnectTimerRef = useRef(null);
+  const iceRestartAtRef = useRef(0);
   callRef.current = call;
 
   const ensureAudioContext = useCallback(() => {
@@ -231,9 +234,53 @@ export function ChiamataVocaleProvider({ children }) {
     pendingSignalsRef.current.push(payload);
   }, []);
 
+  const releaseWakeLock = useCallback(() => {
+    if (wakeLockRef.current) {
+      try {
+        wakeLockRef.current.release();
+      } catch {
+        /* noop */
+      }
+      wakeLockRef.current = null;
+    }
+    try {
+      if (navigator.mediaSession) {
+        navigator.mediaSession.playbackState = 'none';
+        navigator.mediaSession.metadata = null;
+      }
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  const restartIce = useCallback(
+    async (callId) => {
+      const pc = pcRef.current;
+      if (tearingDownRef.current || !pc || !callId) return;
+      if (pc.signalingState !== 'stable') return;
+      const now = Date.now();
+      if (now - iceRestartAtRef.current < 4000) return;
+      iceRestartAtRef.current = now;
+      try {
+        const offer = await pc.createOffer({ iceRestart: true });
+        await pc.setLocalDescription(offer);
+        sendSignal({ type: 'sdp', call_id: callId, sdp: serializeSdp(pc.localDescription) });
+      } catch {
+        /* glare o PC già chiuso */
+      }
+    },
+    [sendSignal]
+  );
+
   const stopLocalMedia = useCallback(() => {
     tearingDownRef.current = true;
     revivingMicRef.current = false;
+    iceRestartAtRef.current = 0;
+    if (disconnectTimerRef.current) {
+      window.clearTimeout(disconnectTimerRef.current);
+      disconnectTimerRef.current = null;
+    }
+    releaseWakeLock();
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
@@ -266,7 +313,7 @@ export function ChiamataVocaleProvider({ children }) {
       }
       audioCtxRef.current = null;
     }
-  }, []);
+  }, [releaseWakeLock]);
 
   const ensureMic = useCallback(async ({ refresh = false } = {}) => {
     const existing = localStreamRef.current;
@@ -406,22 +453,39 @@ export function ChiamataVocaleProvider({ children }) {
         attachRemoteStream(remote);
       };
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-          setError('Collegamento audio instabile.');
+        if (tearingDownRef.current || pcRef.current !== pc) return;
+        if (pc.connectionState === 'connected') {
+          setError('');
+          if (disconnectTimerRef.current) {
+            window.clearTimeout(disconnectTimerRef.current);
+            disconnectTimerRef.current = null;
+          }
+          return;
         }
+        if (pc.connectionState !== 'disconnected' && pc.connectionState !== 'failed') return;
+        if (disconnectTimerRef.current) return;
+        const delay = pc.connectionState === 'failed' ? 400 : 2500;
+        disconnectTimerRef.current = window.setTimeout(() => {
+          disconnectTimerRef.current = null;
+          if (tearingDownRef.current || pcRef.current !== pc) return;
+          if (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected') {
+            setError('');
+            return;
+          }
+          setError('Collegamento audio instabile. Riconnessione…');
+          restartIce(callId);
+        }, delay);
       };
       pc.oniceconnectionstatechange = () => {
+        if (tearingDownRef.current || pcRef.current !== pc) return;
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
           setError('');
-        }
-        if (pc.iceConnectionState === 'failed') {
-          setError('Collegamento audio fallito (rete/TURN). Chiudi e richiama.');
         }
       };
       pcRef.current = pc;
       return pc;
     },
-    [attachLocalAudio, attachRemoteStream, ensureIce, ensureMic, sendSignal, watchLocalTracks]
+    [attachLocalAudio, attachRemoteStream, ensureIce, ensureMic, restartIce, sendSignal, watchLocalTracks]
   );
 
   const createOffer = useCallback(
@@ -742,6 +806,57 @@ export function ChiamataVocaleProvider({ children }) {
     });
     setMuted(next);
   }, [muted]);
+
+  useEffect(() => {
+    if (call?.stato !== 'in_corso') return undefined;
+
+    const requestLock = async () => {
+      if (!('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+      try {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+      } catch {
+        /* policy batteria o browser senza Screen Wake Lock */
+      }
+    };
+    requestLock();
+    try {
+      if (navigator.mediaSession) {
+        const peer =
+          call.ruolo === 'caller' ? call.chiamato?.nome : call.chiamante?.nome;
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: 'Chiamata vocale',
+          artist: peer || 'KOR35',
+        });
+        navigator.mediaSession.playbackState = 'playing';
+      }
+    } catch {
+      /* Media Session non disponibile */
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      requestLock();
+      unlockAudioSession();
+      playRemote();
+      reviveLocalMic();
+      const pc = pcRef.current;
+      if (
+        pc &&
+        (pc.connectionState === 'disconnected' ||
+          pc.connectionState === 'failed' ||
+          pc.iceConnectionState === 'disconnected' ||
+          pc.iceConnectionState === 'failed')
+      ) {
+        restartIce(call.id);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [call, playRemote, restartIce, reviveLocalMic, unlockAudioSession]);
 
   const value = useMemo(
     () => ({
