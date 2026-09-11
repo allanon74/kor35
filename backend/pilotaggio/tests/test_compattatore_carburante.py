@@ -6,7 +6,22 @@ from django.test import SimpleTestCase
 from pilotaggio.compattatore_carburante import (
     CROCIERA_TIPICA_CARBURANTE_PER_TICK,
     calcola_resa_sintesi,
+    descrizione_formula,
     efficienza_livello,
+)
+
+# Contratto JSON esposto a frontend-pilot (CompattatoreScreen).
+FORMULA_CONTRACT_KEYS = (
+    "base_resa_indice_0",
+    "bonus_indice",
+    "eta_base",
+    "eta_per_livello",
+    "bonus_miscela",
+    "quantita_min",
+    "quantita_max",
+    "crociera_tipica_carburante_per_tick",
+    "picco_reattori_carburante_per_tick",
+    "testo",
 )
 
 
@@ -15,6 +30,13 @@ class SintesiCarburanteFormulaTests(SimpleTestCase):
         self.assertAlmostEqual(efficienza_livello(1), 0.49, places=2)
         self.assertAlmostEqual(efficienza_livello(9), 1.05, places=2)
         self.assertEqual(efficienza_livello(0), 0.0)
+
+    def test_formula_contract_keys_per_frontend(self):
+        formula = descrizione_formula()
+        for key in FORMULA_CONTRACT_KEYS:
+            self.assertIn(key, formula)
+        self.assertEqual(formula["eta_base"], 0.42)
+        self.assertEqual(formula["eta_per_livello"], 0.07)
 
     def test_ingegnere_capace_supera_crociera_per_tick(self):
         """

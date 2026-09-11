@@ -144,6 +144,14 @@ export default function CompattatoreScreen({ onLogout }) {
   const quanticoReady = Boolean(data?.quantico_disponibile);
   const opReady = Boolean(data?.operazione_disponibile);
   const energiaPct = Math.min(100, ((data?.energia_accumulata || 0) / (data?.energia_soglia_operazione || 9)) * 100);
+  const formula = data?.sintesi_carburante?.formula || {};
+  const etaPct = Math.round(
+    ((Number(formula.eta_base) || 0.42)
+      + (Number(data?.livello_energia) || 0) * (Number(formula.eta_per_livello) || 0.07))
+    * 100,
+  );
+  const carburanteAttuale = Math.round(data?.sintesi_carburante?.carburante_attuale || 0);
+  const carburanteMassimo = Math.round(data?.sintesi_carburante?.carburante_massimo || 0);
 
   return (
     <div className="compattatore-console">
@@ -366,9 +374,9 @@ export default function CompattatoreScreen({ onLogout }) {
           <div>
             <span className="comp-field-label">Serbatoi</span>
             <strong>
-              {Math.round(data?.sintesi_carburante?.carburante_attuale || 0)}
+              {carburanteAttuale}
               /
-              {Math.round(data?.sintesi_carburante?.carburante_massimo || 0)}
+              {carburanteMassimo}
             </strong>
           </div>
           <div>
@@ -378,8 +386,7 @@ export default function CompattatoreScreen({ onLogout }) {
           <div>
             <span className="comp-field-label">η(Z)</span>
             <strong>
-              {Math.round((data?.sintesi_carburante?.formula?.eta_base || 0.42) * 100
-                + (data?.livello_energia || 0) * ((data?.sintesi_carburante?.formula?.eta_per_livello || 0.07) * 100))}
+              {etaPct}
               %
             </strong>
           </div>
