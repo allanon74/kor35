@@ -187,6 +187,18 @@ API console (token pilota):
 | `POST /api/pilot/compattatore/decompressione/` | `{ "mattone_id": "uuid" }` |
 | `POST /api/pilot/compattatore/risonanza/` | `{ "mattone_id": "uuid" }` |
 | `POST /api/pilot/compattatore/quantico/` | `{ "nome_oggetto": "..." }` o `{ "qr_id", "personaggio_id" }` |
+| `POST /api/pilot/compattatore/sintesi-carburante/` | `{ "allocazioni": [{ "mattone_id", "quantita" }] }` (1–3 unità) |
+| `POST /api/pilot/compattatore/energizza-minimo/` | A nave ferma porta Z a 1 (banchina) |
+
+### Sintesi carburante (bruciatore)
+
+Colma il gap «riempire i serbatoi dalla stiva». Pannello dedicato sulla console Compattatore.
+
+- Consuma **1–3** unità componenti.
+- Resa: `Σ densità(indice)×qty × η(Z) × miscela` con `η(Z)=0.42+0.07×Z` (Z1≈49%, Z9≈105%); miscela +22% se ≥2 indici.
+- Densità indice 0 = 14, indice 9 ≈ 36.7. Costo energia: 9 (come le altre ops).
+- **Bilancio**: Z alto + componenti buoni → una op/tick supera la crociera tipica (K5+L2 = 28.8/tick). Z=1 solo per rifornimento a terra (resa/tick sotto crociera).
+- A **nave ferma**, `energizza-minimo` permette Z=1 senza carico sul bus di volo.
 
 ---
 
