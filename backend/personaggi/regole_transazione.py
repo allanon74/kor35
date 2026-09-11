@@ -201,6 +201,11 @@ def valida_proposta_transazione(personaggio: Personaggio, proposta_data: dict) -
     campagna = personaggio.campagna
     regole = get_regole_map(campagna)
     crediti_dare = Decimal(str(proposta_data.get('crediti_da_dare') or 0))
+    if crediti_dare <= 0:
+        from personaggi.economia_crediti import parse_importi_cessione
+
+        corr, dep = parse_importi_cessione(proposta_data, dare=True)
+        crediti_dare = corr + dep
     if crediti_dare > 0:
         ok, msg = personaggio_puo_trasferire_categoria(
             personaggio, REGOLA_TX_CODICE_CREDITI, regole_map=regole

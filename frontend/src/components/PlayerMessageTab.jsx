@@ -6,6 +6,7 @@ import ConversazioneView from './ConversazioneView';
 import RichTextDisplay from './RichTextDisplay';
 import MessageAttachmentsLine from './MessageAttachmentsLine';
 import { getMessageAttachmentsSummary } from './messageAttachments';
+import { importiDaMessaggio } from '../utils/creditiCessione';
 import { getConversazioni, rispondiMessaggio, markMessageAsRead } from '../api';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { OfflineConsultBanner } from './OfflineConsultBanner';
@@ -284,7 +285,7 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
                     <p className="text-sm text-gray-400 truncate mt-0.5">{conv.anteprima || '—'}</p>
                     {allegatiSummary ? (
                       <p className="mt-1 text-[11px] text-amber-200/90 truncate inline-flex items-center gap-1 max-w-full">
-                        {Number(lastMsg?.crediti_allegati || 0) > 0 ? (
+                        {importiDaMessaggio(lastMsg).corrente > 0 || importiDaMessaggio(lastMsg).deposito > 0 ? (
                           <Coins size={12} className="shrink-0" />
                         ) : null}
                         {(lastMsg?.oggetti_allegati_snapshot || []).length > 0 ? (

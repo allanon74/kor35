@@ -155,6 +155,16 @@ export function useStaffTableControls({ persistKey, columns = [] } = {}) {
     });
   }, []);
 
+  /** Imposta i valori di un filtro chip/select (array vuoto = nessun filtro). */
+  const setFilterValues = useCallback((key, values) => {
+    setActiveFilters((prev) => {
+      const next = { ...prev };
+      if (!values?.length) delete next[key];
+      else next[key] = values;
+      return next;
+    });
+  }, []);
+
   const resetChipFilters = useCallback(() => {
     setActiveFilters({});
     setSearchTerm('');
@@ -173,6 +183,7 @@ export function useStaffTableControls({ persistKey, columns = [] } = {}) {
     setSearchTerm,
     activeFilters,
     toggleFilter,
+    setFilterValues,
     resetChipFilters,
     sorts: sanitizedSorts,
     cycleSort,

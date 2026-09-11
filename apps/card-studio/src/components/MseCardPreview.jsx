@@ -1,20 +1,8 @@
 import { useMemo } from "react";
 import { buildCardScriptContext } from "../mse/scriptEngine";
 import { resolveMseLayers } from "../mse/resolveLayers";
-import { resolveSelectedSymbolFontPackage } from "../mse/symbolFonts";
-
-function alignmentStyle(alignment) {
-  const parts = String(alignment || "left top").toLowerCase().split(/\s+/);
-  let justifyContent = "flex-start";
-  let alignItems = "flex-start";
-  if (parts.some((p) => p === "center" || p === "middle")) {
-    justifyContent = "center";
-    alignItems = "center";
-  }
-  if (parts.includes("right")) justifyContent = "flex-end";
-  if (parts.includes("bottom")) alignItems = "flex-end";
-  return { justifyContent, alignItems };
-}
+import { parseFlexAlignment } from "../mse/layerAlignment";
+import { resolveSelectedSymbolFontPackage, splitGlyphsIntoWrappableUnits } from "../mse/symbolFonts";
 
 export default function MseCardPreview({
   template,
@@ -84,6 +72,8 @@ export default function MseCardPreview({
           zIndex: layer.z,
           transform: layer.box.angle ? `rotate(${layer.box.angle}deg)` : undefined,
         };
+        const flexAlign = parseFlexAlignment(layer.alignment);
+
         if (layer.type === "image") {
           const cover = /^(art|image|illustration|__frame__|card_frame)$/i.test(layer.fieldName);
           return (
@@ -100,28 +90,34 @@ export default function MseCardPreview({
             />
           );
         }
+
         if (layer.type === "symbols") {
+          const glyphs = layer.wrap
+            ? splitGlyphsIntoWrappableUnits(layer.glyphs || [])
+            : layer.glyphs || [];
           return (
             <div
               key={`${layer.fieldName}-${layer.z}-sym`}
               className="mse-layer mse-layer-symbols"
               style={{
                 ...boxStyle,
-                ...alignmentStyle(layer.alignment),
                 display: "flex",
                 flexDirection: "row",
-                flexWrap: "wrap",
-                alignItems: "center",
+                flexWrap: layer.wrap ? "wrap" : "nowrap",
+                alignContent: layer.wrap ? "flex-start" : "stretch",
+                justifyContent: flexAlign.justifyContent,
+                alignItems: flexAlign.alignItems,
                 gap: "2px",
+                overflow: "hidden",
               }}
             >
-              {(layer.glyphs || []).map((g, idx) =>
+              {glyphs.map((g, idx) =>
                 g.type === "image" && g.src ? (
                   <img
                     key={`${layer.fieldName}-g-${idx}`}
                     src={g.src}
                     alt={g.value}
-                    style={{ width: g.size, height: g.size }}
+                    style={{ width: g.size, height: g.size, flexShrink: 0 }}
                     draggable={false}
                   />
                 ) : (
@@ -132,6 +128,9 @@ export default function MseCardPreview({
                       fontSize: `${layer.font.size}px`,
                       color: layer.font.color,
                       fontWeight: layer.font.weight,
+                      fontStyle: layer.font.style || "normal",
+                      lineHeight: 1.25,
+                      whiteSpace: layer.wrap ? "pre-wrap" : "pre",
                     }}
                   >
                     {g.value}
@@ -141,17 +140,27 @@ export default function MseCardPreview({
             </div>
           );
         }
+
+        const isMultiline = /^(rules|rule_text|text|lore|testo_gioco)$/i.test(layer.fieldName);
+        const isLore = /^lore$/i.test(layer.fieldName);
         return (
           <div
             key={`${layer.fieldName}-${layer.z}`}
-            className="mse-layer mse-layer-text"
+            className={`mse-layer mse-layer-text${isLore ? " mse-layer-lore" : ""}`}
             style={{
               ...boxStyle,
-              ...alignmentStyle(layer.alignment),
+              display: "flex",
+              overflow: "hidden",
+              justifyContent: flexAlign.justifyContent,
+              alignItems: flexAlign.alignItems,
               fontFamily: layer.font.family,
               fontSize: `${layer.font.size}px`,
               color: layer.font.color,
               fontWeight: layer.font.weight,
+              fontStyle: layer.font.style || "normal",
+              lineHeight: 1.25,
+              whiteSpace: isMultiline ? "pre-wrap" : "nowrap",
+              wordBreak: isMultiline ? "break-word" : "normal",
             }}
           >
             {layer.text}

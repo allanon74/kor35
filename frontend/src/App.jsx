@@ -2,6 +2,7 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 // Importiamo sia il Provider "vero" che il Context "nudo"
 import { CharacterProvider, CharacterContext } from './components/CharacterContext';
+import { ChiamataVocaleProvider } from './components/ChiamataVocaleProvider';
 
 // Layouts (shell leggeri — restano eager)
 import AppLayout from './layouts/AppLayout';
@@ -128,7 +129,9 @@ export default function App() {
     if (token) {
       return (
         <CharacterProvider onLogout={handleLogout}>
-          {children}
+          <ChiamataVocaleProvider>
+            {children}
+          </ChiamataVocaleProvider>
         </CharacterProvider>
       );
     } else {

@@ -315,6 +315,20 @@ WATCH_WEAR_APK_PATH = env(
     "WATCH_WEAR_APK_PATH",
     default="/watch-apps/wearos-kor35/app-release.apk",
 ).strip()
+
+# Chiamate vocali in-app (WebRTC). TURN opzionale per mesh/NAT; STUN di default.
+CHIAMATE_VOCALI_ENABLED = env.bool("CHIAMATE_VOCALI_ENABLED", default=True)
+STUN_URLS = env.list("STUN_URLS", default=["stun:stun.l.google.com:19302"])
+TURN_URLS = env.list("TURN_URLS", default=[])
+TURN_USERNAME = env("TURN_USERNAME", default="kor35turn").strip()
+TURN_CREDENTIAL = env("TURN_CREDENTIAL", default="kor35turnlocal").strip()
+TURN_PORT = env.int("TURN_PORT", default=3478)
+TURN_RELAY_ENABLED = env.bool("TURN_RELAY_ENABLED", default=False)
+TURN_AUTO_FROM_HOST = env.bool("TURN_AUTO_FROM_HOST", default=True)
+# HMAC coturn REST (prod). Se valorizzato, ICE usa username/expiry temporanei, non TURN_USERNAME.
+TURN_AUTH_SECRET = env("TURN_AUTH_SECRET", default="").strip()
+TURN_CREDENTIAL_TTL = env.int("TURN_CREDENTIAL_TTL", default=28800)
+
 # Console pilotaggio frontend separato: attiva solo su mirror/evento (Pi) salvo override env.
 PILOT_CONSOLE_ENABLED = env.bool(
     "PILOT_CONSOLE_ENABLED",

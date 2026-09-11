@@ -211,6 +211,19 @@ docker compose -f compose.base.yml -f compose.prod.yml exec -T backend \
   grep -n 'from django.db import transaction' /app/personaggi/admin.py
 ```
 
+## TURN / chiamate vocali (fallback Pi giù)
+
+Coturn sul droplet (`kor35_prod_coturn`, `network_mode: host`). Credenziali HMAC: `TURN_AUTH_SECRET` in `/srv/kor35/backend/.env.prod` (stesso valore per Django e coturn). Senza secret il container coturn non parte (`TURN_REQUIRE_AUTH_SECRET`).
+
+Porte da aprire su **ufw** del droplet: **3478/udp**, **3478/tcp**, **49160–49259/udp**. Non proxy via nginx. Script: `scripts/prepare_prod_turn.sh` / `make prod-turn-prepare`.
+
+```bash
+cd /srv/kor35/config/docker
+COMPOSE_PROJECT_NAME=kor35-prod \
+KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod \
+docker compose -f compose.base.yml -f compose.prod.yml ps coturn
+```
+
 ## Dev locale (WSL)
 
 - Path: `/home/django/progetti/kor35`

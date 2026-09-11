@@ -26,6 +26,7 @@ export const CAMPAGNA_MODULI_REGISTRY = [
   { key: 'negozi', label: 'Negozi mercante', descrizione: 'Tab negozi e listini staff.', default: 'OPEN' },
   { key: 'creazione_guidata', label: 'Creazione guidata PG', descrizione: 'Wizard creazione personaggio (staff).', default: 'OPEN' },
   { key: 'conto_deposito', label: 'Conto di deposito', descrizione: 'Economia duale: corrente (stipendio) e deposito; trasferimento per evento.', default: 'OFF' },
+  { key: 'chiamate', label: 'Chiamate vocali', descrizione: 'Chiamate in-app personaggio↔personaggio e verso lo staff (centralino).', default: 'OPEN' },
 ];
 
 export const STAFF_TOOL_TO_MODULO = {
@@ -38,6 +39,7 @@ export const STAFF_TOOL_TO_MODULO = {
   'social-report': 'social',
   'economia-crediti': 'conto_deposito',
   rubriche: 'rubriche',
+  chiamate: 'chiamate',
 };
 
 export const PLAYER_TAB_TO_MODULO = {

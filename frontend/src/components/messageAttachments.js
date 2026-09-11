@@ -1,15 +1,18 @@
+import { formatImportiCessione, importiDaMessaggio } from '../utils/creditiCessione';
+
 /**
  * Anteprima testuale degli allegati di un Messaggio (crediti / oggetti).
  */
 export function getMessageAttachmentsSummary(msg) {
   if (!msg) return null;
-  const crediti = Number(msg.crediti_allegati || 0);
+  const { corrente, deposito } = importiDaMessaggio(msg);
   const oggetti = Array.isArray(msg.oggetti_allegati_snapshot)
     ? msg.oggetti_allegati_snapshot
     : [];
   const parts = [];
-  if (crediti > 0) {
-    parts.push(`${crediti} credit${crediti === 1 ? 'o' : 'i'}`);
+  const creditiLabel = formatImportiCessione(corrente, deposito);
+  if (corrente > 0 || deposito > 0) {
+    parts.push(creditiLabel);
   }
   if (oggetti.length > 0) {
     const names = oggetti

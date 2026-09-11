@@ -20,6 +20,7 @@ function mseToJs(expr) {
   s = s.replace(/\byes\b/gi, "true").replace(/\bno\b/gi, "false");
   s = s.replace(/\band\b/gi, "&&").replace(/\bor\b/gi, "||").replace(/\bnot\b/gi, "!");
 
+  // Nested if/then/else: match from the end so inner branches recurse correctly.
   s = s.replace(/\bif\s+(.+?)\s+then\s+(.+?)(?:\s+else\s+(.+))?$/gis, (_, cond, thenV, elseV) => {
     const e = elseV !== undefined ? elseV.trim() : "null";
     return `(${mseToJs(cond)}) ? (${mseToJs(thenV)}) : (${mseToJs(e)})`;
@@ -35,6 +36,9 @@ function mseToJs(expr) {
       return `${root}[${JSON.stringify(key)}]`;
     }
   );
+
+  // MSE usa spesso `=` per uguaglianza; non toccare == != <= >= === !==.
+  s = s.replace(/(?<![!<>=])=(?![=~=])/g, "==");
 
   s = s.replace(/\brgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/gi, '"rgb($1,$2,$3)"');
   return s;
@@ -181,6 +185,34 @@ export function buildCardScriptContext(cardForm, gameCardFields, getFieldValue) 
   // Alias catalogo ↔ MSE (sempre, anche se il campo non è nella spec filtrata)
   if (!card.name) card.name = cardForm?.nome || "";
   if (!card.nome) card.nome = cardForm?.nome || "";
+  if (card.type == null || card.type === "") {
+    card.type = cardForm?.tipo || cardForm?.mse_campi?.type || "";
+  }
+  if (card.energy == null || card.energy === "") {
+    card.energy = cardForm?.energia || cardForm?.mse_campi?.energy || "";
+  }
+  if (card.rarity == null || card.rarity === "") {
+    card.rarity = cardForm?.rarita || cardForm?.mse_campi?.rarity || "";
+  }
+  if (card.cost == null || card.cost === "") {
+    card.cost = cardForm?.costo_gioco ?? cardForm?.mse_campi?.cost ?? "";
+  }
+  if (card.attack == null || card.attack === "") {
+    card.attack = cardForm?.attacco ?? cardForm?.mse_campi?.attack ?? "";
+  }
+  if (card.health == null || card.health === "") {
+    card.health = cardForm?.salute ?? cardForm?.mse_campi?.health ?? "";
+  }
+  if (card.initiative == null || card.initiative === "") {
+    card.initiative = cardForm?.iniziativa ?? cardForm?.mse_campi?.initiative ?? "";
+  }
+  if (card.code == null || card.code === "") card.code = cardForm?.codice || "";
+  if (card.rules == null || card.rules === "") {
+    card.rules = card.rule_text || card.text || cardForm?.testo_gioco || "";
+  }
+  if (card.lore == null || card.lore === "") {
+    card.lore = cardForm?.testo_lore || cardForm?.mse_campi?.lore || "";
+  }
   if (card.rule_text == null || card.rule_text === "") {
     card.rule_text = card.rules || card.text || cardForm?.testo_gioco || "";
   }

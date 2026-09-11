@@ -9,11 +9,20 @@ import { localDateTimeToApiIso, apiIsoToLocalDateTimeValue } from '../../utils/i
 
 const TIPO_REQUISITO_OPTS = [
   { id: 'statistica', label: 'Statistica (sigla)' },
-  { id: 'abilita', label: 'Abilità' },
   { id: 'punteggio', label: 'Aura / punteggio' },
+  { id: 'caratteristica', label: 'Caratteristica' },
+  { id: 'abilita', label: 'Abilità' },
   { id: 'korp', label: 'KORP' },
   { id: 'carriera', label: 'Carriera' },
   { id: 'carica', label: 'Carica' },
+];
+
+const OP_REQUISITO_OPTS = [
+  { id: 'gt', label: '>' },
+  { id: 'gte', label: '≥' },
+  { id: 'lt', label: '<' },
+  { id: 'lte', label: '≤' },
+  { id: 'eq', label: '=' },
 ];
 
 const GIORNI_SETTIMANA = [
@@ -37,6 +46,13 @@ const statisticaOptions = (lookup) =>
 
 const auraOptions = (lookup) =>
   (lookup.auras || []).map((a) => ({
+    value: a.nome,
+    label: a.sigla ? `${a.nome} (${a.sigla})` : a.nome,
+    searchText: `${a.nome} ${a.sigla || ''}`,
+  })).filter((o) => o.value);
+
+const caratteristicaOptions = (lookup) =>
+  (lookup.caratteristiche || []).map((a) => ({
     value: a.nome,
     label: a.sigla ? `${a.nome} (${a.sigla})` : a.nome,
     searchText: `${a.nome} ${a.sigla || ''}`,
@@ -90,7 +106,15 @@ const RequisitiListaEditor = ({ requisiti, onChange, lookup = {}, lookupLoading 
                   disabled={lookupLoading}
                   className="min-w-[140px]"
                 />
-                <span className="text-gray-500 text-xs">≥</span>
+                <select
+                  className="bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-xs"
+                  value={req.op || 'gte'}
+                  onChange={(e) => updateAt(idx, { op: e.target.value })}
+                >
+                  {OP_REQUISITO_OPTS.map((o) => (
+                    <option key={o.id} value={o.id}>{o.label}</option>
+                  ))}
+                </select>
                 <input
                   type="number"
                   className="w-12 bg-gray-800 border border-gray-600 rounded px-1 text-xs"
@@ -108,7 +132,41 @@ const RequisitiListaEditor = ({ requisiti, onChange, lookup = {}, lookupLoading 
                   placeholder={lookupLoading ? 'Caricamento…' : 'Aura / punteggio'}
                   disabled={lookupLoading}
                 />
-                <span className="text-gray-500 text-xs">≥</span>
+                <select
+                  className="bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-xs"
+                  value={req.op || 'gte'}
+                  onChange={(e) => updateAt(idx, { op: e.target.value })}
+                >
+                  {OP_REQUISITO_OPTS.map((o) => (
+                    <option key={o.id} value={o.id}>{o.label}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  className="w-12 bg-gray-800 border border-gray-600 rounded px-1 text-xs"
+                  value={req.min ?? 1}
+                  onChange={(e) => updateAt(idx, { min: Number(e.target.value) })}
+                />
+              </>
+            )}
+            {tipo === 'caratteristica' && (
+              <>
+                <FilterableCombobox
+                  options={caratteristicaOptions(lookup)}
+                  value={req.nome || req.sigla || ''}
+                  onChange={(nome) => updateAt(idx, { nome: String(nome || '') })}
+                  placeholder={lookupLoading ? 'Caricamento…' : 'Caratteristica'}
+                  disabled={lookupLoading}
+                />
+                <select
+                  className="bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-xs"
+                  value={req.op || 'gte'}
+                  onChange={(e) => updateAt(idx, { op: e.target.value })}
+                >
+                  {OP_REQUISITO_OPTS.map((o) => (
+                    <option key={o.id} value={o.id}>{o.label}</option>
+                  ))}
+                </select>
                 <input
                   type="number"
                   className="w-12 bg-gray-800 border border-gray-600 rounded px-1 text-xs"
@@ -381,15 +439,37 @@ export const RegoleGruppoListaEditor = ({ gruppi, onChange, lookup, lookupLoadin
 };
 
 export const RegoleVisibilitaEditor = ({ value, onChange, lookup }) => {
-  const regole = value && typeof value === 'object' ? value : { operator: 'OR', requisiti: [] };
+  return (
+    <RequisitiGruppoEditor
+      value={value}
+      onChange={onChange}
+      lookup={lookup}
+      label="Visibilità tab (negozi corporativi)"
+    />
+  );
+};
+
+/** Gruppo requisiti con operatore AND/OR (manifesti, pool, …). */
+export const RequisitiGruppoEditor = ({
+  value,
+  onChange,
+  lookup,
+  lookupLoading = false,
+  label = 'Condizioni (AND / OR)',
+  defaultOperator = 'AND',
+}) => {
+  const regole =
+    value && typeof value === 'object'
+      ? value
+      : { operator: defaultOperator, requisiti: [] };
   return (
     <div className="space-y-2 text-sm">
-      <label className="block text-gray-400 text-xs font-semibold uppercase">
-        Visibilità tab (negozi corporativi)
-      </label>
+      {label ? (
+        <label className="block text-gray-400 text-xs font-semibold uppercase">{label}</label>
+      ) : null}
       <select
         className="w-full bg-gray-900 border border-gray-600 rounded p-2"
-        value={regole.operator || 'OR'}
+        value={regole.operator || defaultOperator}
         onChange={(e) => onChange({ ...regole, operator: e.target.value })}
       >
         <option value="OR">Basta uno dei requisiti (OR)</option>
@@ -399,6 +479,7 @@ export const RegoleVisibilitaEditor = ({ value, onChange, lookup }) => {
         requisiti={regole.requisiti || []}
         onChange={(requisiti) => onChange({ ...regole, requisiti })}
         lookup={lookup}
+        lookupLoading={lookupLoading}
       />
     </div>
   );

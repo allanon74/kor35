@@ -1458,6 +1458,15 @@ class Missione(SyncableModel, models.Model):
         (TIPO_MANUALE, "Manuale"),
     ]
 
+    ALLINEAMENTO_LUMINOSA = "LUMINOSA"
+    ALLINEAMENTO_OSCURA = "OSCURA"
+    ALLINEAMENTO_GRIGIA = "GRIGIA"
+    ALLINEAMENTO_CHOICES = [
+        (ALLINEAMENTO_LUMINOSA, "Luminosa"),
+        (ALLINEAMENTO_OSCURA, "Oscura"),
+        (ALLINEAMENTO_GRIGIA, "Grigia"),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     titolo = models.CharField(max_length=200)
@@ -1475,6 +1484,17 @@ class Missione(SyncableModel, models.Model):
         default=False,
         verbose_name="Esclusiva KORP",
         help_text="Se attivo, solo i membri della KORP indicata possono svolgerla.",
+    )
+    allineamento = models.CharField(
+        max_length=10,
+        choices=ALLINEAMENTO_CHOICES,
+        default=ALLINEAMENTO_GRIGIA,
+        db_index=True,
+        verbose_name="Allineamento",
+        help_text=(
+            "Luminosa / Oscura / Grigia. Alla risoluzione incrementa il "
+            "punteggio corrispondente sul personaggio."
+        ),
     )
     reward_crediti = models.DecimalField(
         max_digits=12,

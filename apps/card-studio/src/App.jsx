@@ -349,6 +349,13 @@ function buildNewCardForm({
   };
 }
 
+/** Banner globale App: solo messaggi operativi (export PNG), non hint campo (pannello fisso MSE). */
+function isCardsTabOperationalMessage(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  return /PNG|stylesheet|Export|Importa uno stylesheet|fallito/i.test(t);
+}
+
 export default function App() {
   const [tab, setTab] = useState("cards");
   const [loading, setLoading] = useState(true);
@@ -850,6 +857,9 @@ export default function App() {
       setSelectedGameId(esp.gioco_definizione);
     } else if (row.studio_template && templatesById[row.studio_template]?.gioco_definizione) {
       setSelectedGameId(templatesById[row.studio_template].gioco_definizione);
+    }
+    if (row.espansione) {
+      setSelectedExpansionId(row.espansione);
     }
   };
 
@@ -1481,10 +1491,14 @@ export default function App() {
           espansioniById={espansioniById}
           stylingValues={stylingValues}
           onPickFile={onDynamicFilePicked}
-          onStatusMessage={setMsg}
+          onStatusMessage={(text) => {
+            if (isCardsTabOperationalMessage(text)) setMsg(text);
+          }}
           onMseCampiSync={(mse) => setMseCampiText(JSON.stringify(mse, null, 2))}
           onRenumberSetCodici={handleRenumberSetCodici}
           canRenumberSet={Boolean(selectedExpansionId || cardForm.espansione)}
+          selectedExpansionId={selectedExpansionId}
+          onExpansionChange={handleExpansionChange}
         />
       )}
 

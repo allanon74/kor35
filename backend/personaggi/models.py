@@ -961,15 +961,23 @@ def stat_link_attivo_in_contesto(personaggio, stat_link, context=None):
     return True
 
 
-def raccogli_modificatori_solo_oggetto(oggetto_host):
+def raccogli_modificatori_solo_oggetto(oggetto_host, personaggio=None):
     """Modificatori marcati solo_oggetto_ospitante: host + potenziamenti montati attivi."""
     if not oggetto_host:
         return []
+
+    from .sezioni_condizionali import iter_modificatori_sezioni, sezioni_attive
 
     links = []
     for stat_link in oggetto_host.oggettostatistica_set.select_related('statistica').all():
         if stat_link_solo_oggetto_ospitante(stat_link):
             links.append(stat_link)
+    links.extend(
+        iter_modificatori_sezioni(
+            sezioni_attive(oggetto_host, personaggio),
+            solo_oggetto_ospitante=True,
+        )
+    )
 
     potenziamenti = getattr(oggetto_host, 'potenziamenti_installati', None)
     if potenziamenti is not None:
@@ -977,11 +985,18 @@ def raccogli_modificatori_solo_oggetto(oggetto_host):
             'oggettostatistica_set__statistica',
             'oggettostatistica_set__limit_a_elementi',
             'oggettostatistica_set__limit_a_aure',
+            'sezioni_condizionali__modificatori__statistica',
         ).all():
             if potenziamento.is_active():
                 for stat_link in potenziamento.oggettostatistica_set.all():
                     if stat_link_solo_oggetto_ospitante(stat_link):
                         links.append(stat_link)
+                links.extend(
+                    iter_modificatori_sezioni(
+                        sezioni_attive(potenziamento, personaggio),
+                        solo_oggetto_ospitante=True,
+                    )
+                )
     return links
 
 
@@ -1701,11 +1716,12 @@ class CampagnaFeaturePolicy(SyncableModel, models.Model):
         return f"{self.campagna.nome} - {self.feature_key}: {self.mode}"
 
 
-NOTIFICA_CATEGORIE = ("messaggi", "in_game", "compiti", "social", "staff")
+NOTIFICA_CATEGORIE = ("messaggi", "in_game", "chiamate", "compiti", "social", "staff")
 NOTIFICA_CANALI = ("webpush", "telegram", "email")
 NOTIFICA_CATEGORIA_LABELS = {
     "messaggi": "Messaggi (privati e di gruppo)",
     "in_game": "Avvisi in-game (broadcast, timer)",
+    "chiamate": "Chiamate vocali",
     "compiti": "Compiti off-game (scadenze)",
     "social": "InstaFame (citazioni)",
     "staff": "Messaggi staff",
@@ -2990,13 +3006,23 @@ class Infusione(Tecnica):
         
     @property
     def TestoFormattato(self): 
+        from .sezioni_condizionali import html_sezioni_append, statistiche_base_per_item
+        stats = statistiche_base_per_item(self, personaggio=None)
+        ctx = {
+            'livello': self.livello,
+            'aura': self.aura_richiesta,
+            'formula_builder_selezioni': self.formula_builder_selezioni or {},
+            'attack_formula_template': self.formula_attacco,
+            'formula_kind': FORMULA_SCOPE_ATTACK,
+        }
         base_text = formatta_testo_generico(
-            self.testo, 
-            statistiche_base=self.infusionestatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all(), 
-            context={'livello': self.livello, 'aura': self.aura_richiesta, 'formula_builder_selezioni': self.formula_builder_selezioni or {}, 'attack_formula_template': self.formula_attacco, 'formula_kind': FORMULA_SCOPE_ATTACK},
-            formula=self.formula_attacco
+            self.testo,
+            statistiche_base=stats,
+            context=ctx,
+            formula=self.formula_attacco,
         )
-        return base_text + genera_html_cariche(self, None)
+        extra = html_sezioni_append(self, None, context=ctx, statistiche_base=stats)
+        return base_text + extra + genera_html_cariche(self, None)
     
 class Tessitura(Tecnica):
     formula = models.TextField("Formula", blank=True, null=True, default=DEFAULT_WEAVE_FORMULA_TEMPLATE)
@@ -3195,6 +3221,84 @@ class InfusioneCostoAttivazione(SyncableModel, models.Model):
         return f"{self.statistica.sigla}: -{self.costo}"
 
 
+class InfusioneSezioneCondizionale(SyncableModel, models.Model):
+    """
+    Blocco extra (testo + stats) visibile/attivo sull'infusione solo se le
+    condizioni JSON sono soddisfatte dal personaggio (stesso schema dei manifesti).
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    infusione = models.ForeignKey(
+        Infusione, on_delete=models.CASCADE, related_name="sezioni_condizionali"
+    )
+    ordine = models.PositiveIntegerField(default=0)
+    testo = models.TextField("Testo addizionale", blank=True, default="")
+    condizioni = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Gruppo requisiti AND/OR: {"operator":"AND"|"OR","requisiti":[...]}.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["ordine", "created_at"]
+        verbose_name = "Sezione condizionale infusione"
+        verbose_name_plural = "Sezioni condizionali infusione"
+
+    def __str__(self):
+        return f"Sezione {self.ordine} di {self.infusione_id}"
+
+
+class InfusioneSezioneStatisticaBase(SyncableModel, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sezione = models.ForeignKey(
+        InfusioneSezioneCondizionale,
+        on_delete=models.CASCADE,
+        related_name="statistiche_base",
+    )
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore_base = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("sezione", "statistica")
+        verbose_name = "Statistica base sezione infusione"
+        verbose_name_plural = "Statistiche base sezioni infusione"
+
+    def __str__(self):
+        return f"{self.statistica}: {self.valore_base}"
+
+
+class InfusioneSezioneStatistica(SyncableModel, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sezione = models.ForeignKey(
+        InfusioneSezioneCondizionale,
+        on_delete=models.CASCADE,
+        related_name="modificatori",
+    )
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore = stat_modificatore_valore_field()
+    tipo_modificatore = models.CharField(
+        max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO
+    )
+    solo_oggetto_ospitante = models.BooleanField(
+        "Solo oggetto ospitante",
+        default=False,
+        help_text="Se attivo, il modificatore vale solo per le formule dell'oggetto, non per il personaggio.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("sezione", "statistica")
+        verbose_name = "Modificatore sezione infusione"
+        verbose_name_plural = "Modificatori sezioni infusione"
+
+    def __str__(self):
+        return f"{self.statistica}: {self.valore}"
+
+
 class TessituraCostoAttivazione(SyncableModel, models.Model):
     """Risorse consumate all'attivazione runtime della tessitura."""
     tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE, related_name='costi_attivazione')
@@ -3216,12 +3320,26 @@ class Manifesto(A_vista):
     `requisiti_lettura`: lista JSON opzionale per limitare la lettura, es.:
     [{"tipo": "statistica", "sigla": "CCO", "min": 1}, {"tipo": "abilita", "id": 12}]
     Lista vuota = tutti possono leggere.
+
+    `testo_condizionato` + `condizioni_testo`: secondo testo mostrato in aggiunta al
+    testo base solo se lo scanner soddisfa il gruppo AND/OR di requisiti, es.:
+    {"operator": "AND", "requisiti": [{"tipo": "statistica", "sigla": "INT", "min": 3}]}
     """
 
     requisiti_lettura = models.JSONField(
         default=list,
         blank=True,
         help_text="Requisiti opzionali (statistica per sigla o abilità per id). Vuoto = accesso libero.",
+    )
+    testo_condizionato = models.TextField(
+        blank=True,
+        default="",
+        help_text="HTML mostrato in aggiunta al testo base se le condizioni_testo sono soddisfatte.",
+    )
+    condizioni_testo = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Gruppo requisiti AND/OR: {"operator":"AND"|"OR","requisiti":[...]}. Vuoto = nessun testo condizionale.',
     )
 
     def __str__(self):
@@ -4667,11 +4785,25 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
     TIPO_NODO = "nodo"
     TIPO_TRAPPOLA = "trappola"
     TIPO_SERIE = "serie"
+    TIPO_MANIFESTO = "manifesto"
+    TIPO_OGGETTO_BASE = "oggetto_base"
+    TIPO_DA_INFUSIONE = "da_infusione"
+    TIPO_TESSITURA = "tessitura"
+    TIPO_INFUSIONE = "infusione"
+    TIPO_CERIMONIALE = "cerimoniale"
+    TIPO_ATTIVATA = "attivata"
     TIPO_CHOICES = (
         (TIPO_TESTO, "Testo"),
         (TIPO_NODO, "Nodo"),
         (TIPO_TRAPPOLA, "Trappola"),
         (TIPO_SERIE, "Serie"),
+        (TIPO_MANIFESTO, "Manifesto"),
+        (TIPO_OGGETTO_BASE, "Oggetto (listino)"),
+        (TIPO_DA_INFUSIONE, "Materia/Mod (da Infusione)"),
+        (TIPO_TESSITURA, "Tessitura"),
+        (TIPO_INFUSIONE, "Infusione (ricetta)"),
+        (TIPO_CERIMONIALE, "Cerimoniale"),
+        (TIPO_ATTIVATA, "Attivata"),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -4706,6 +4838,50 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
     )
     serie = models.ForeignKey(
         "SerieCollezione",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+    )
+    manifesto = models.ForeignKey(
+        "Manifesto",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+        help_text="Effetto manifesto: riusa testo base + testo condizionale del catalogo.",
+    )
+    oggetto_base = models.ForeignKey(
+        "OggettoBase",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+        help_text="Effetto loot: crea istanza da listino e la mette in inventario.",
+    )
+    tessitura = models.ForeignKey(
+        "Tessitura",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+    )
+    infusione = models.ForeignKey(
+        "Infusione",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+    )
+    cerimoniale = models.ForeignKey(
+        "Cerimoniale",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+    )
+    attivata = models.ForeignKey(
+        "Attivata",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -5128,12 +5304,23 @@ class Oggetto(A_vista):
 
     @property
     def TestoFormattato(self): 
+        from .sezioni_condizionali import html_sezioni_append, statistiche_base_per_item
+        stats = statistiche_base_per_item(self, personaggio=None)
+        ctx = {
+            'livello': self.livello,
+            'aura': self.aura,
+            'item_modifiers': raccogli_modificatori_solo_oggetto(self),
+            'formula_builder_selezioni': self.formula_builder_selezioni or {},
+            'attack_formula_template': self.attacco_base,
+            'formula_kind': FORMULA_SCOPE_ATTACK,
+        }
         base_text = formatta_testo_generico(
-            self.testo, 
-            statistiche_base=self.oggettostatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all(), 
-            context={'livello': self.livello, 'aura': self.aura, 'item_modifiers': raccogli_modificatori_solo_oggetto(self), 'formula_builder_selezioni': self.formula_builder_selezioni or {}, 'attack_formula_template': self.attacco_base, 'formula_kind': FORMULA_SCOPE_ATTACK}
+            self.testo,
+            statistiche_base=stats,
+            context=ctx,
         )
-        return base_text + genera_html_cariche(self, None)
+        extra = html_sezioni_append(self, None, context=ctx, statistiche_base=stats)
+        return base_text + extra + genera_html_cariche(self, None)
     
     @property
     def inventario_corrente(self):
@@ -5158,6 +5345,84 @@ class Oggetto(A_vista):
         if not self.data_fine_attivazione:
             return False
         return timezone.now() < self.data_fine_attivazione
+
+
+class OggettoSezioneCondizionale(SyncableModel, models.Model):
+    """
+    Blocco extra (testo + stats) visibile/attivo sull'oggetto solo se le
+    condizioni JSON sono soddisfatte dal personaggio.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    oggetto = models.ForeignKey(
+        Oggetto, on_delete=models.CASCADE, related_name="sezioni_condizionali"
+    )
+    ordine = models.PositiveIntegerField(default=0)
+    testo = models.TextField("Testo addizionale", blank=True, default="")
+    condizioni = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Gruppo requisiti AND/OR: {"operator":"AND"|"OR","requisiti":[...]}.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["ordine", "created_at"]
+        verbose_name = "Sezione condizionale oggetto"
+        verbose_name_plural = "Sezioni condizionali oggetto"
+
+    def __str__(self):
+        return f"Sezione {self.ordine} di {self.oggetto_id}"
+
+
+class OggettoSezioneStatisticaBase(SyncableModel, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sezione = models.ForeignKey(
+        OggettoSezioneCondizionale,
+        on_delete=models.CASCADE,
+        related_name="statistiche_base",
+    )
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore_base = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("sezione", "statistica")
+        verbose_name = "Statistica base sezione oggetto"
+        verbose_name_plural = "Statistiche base sezioni oggetto"
+
+    def __str__(self):
+        return f"{self.statistica}: {self.valore_base}"
+
+
+class OggettoSezioneStatistica(SyncableModel, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sezione = models.ForeignKey(
+        OggettoSezioneCondizionale,
+        on_delete=models.CASCADE,
+        related_name="modificatori",
+    )
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore = stat_modificatore_valore_field()
+    tipo_modificatore = models.CharField(
+        max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO
+    )
+    solo_oggetto_ospitante = models.BooleanField(
+        "Solo oggetto ospitante",
+        default=False,
+        help_text="Se attivo, il modificatore vale solo per le formule dell'oggetto, non per il personaggio.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("sezione", "statistica")
+        verbose_name = "Modificatore sezione oggetto"
+        verbose_name_plural = "Modificatori sezioni oggetto"
+
+    def __str__(self):
+        return f"{self.statistica}: {self.valore}"
 
 
 def aura_fonte_mattoni_per_infusione(infusione):
@@ -5224,6 +5489,21 @@ class Personaggio(Inventario):
             "Prestigio del personaggio (conosciuto / influenza social). "
             "Usato per like InstaFame (1 = minimo). Le cariche attive e le task possono aumentarlo."
         ),
+    )
+    punti_luminosi = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Punteggio luminoso",
+        help_text="Contatore task a allineamento luminoso risolte (visibile allo staff).",
+    )
+    punti_oscuri = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Punteggio oscuro",
+        help_text="Contatore task a allineamento oscuro risolte (visibile allo staff).",
+    )
+    punti_grigi = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Punteggio grigio",
+        help_text="Contatore task a allineamento grigio risolte (visibile allo staff).",
     )
     badge_instafame = models.CharField(
         max_length=8,
@@ -5336,6 +5616,41 @@ class Personaggio(Inventario):
         self.save(update_fields=["peso_influencer", "updated_at"])
         segno = "+" if delta >= 0 else ""
         self.aggiungi_log(f"Prestigio {segno}{delta} (ora {nuovo}) — {descrizione or 'variazione Prestigio'}")
+        return nuovo
+
+    def modifica_punteggio_allineamento(self, allineamento, delta=1, descrizione=""):
+        """
+        Variazione contatori luminoso/oscuro/grigio (task).
+        ``allineamento``: LUMINOSA | OSCURA | GRIGIA (o alias lowercase).
+        """
+        delta = int(delta or 0)
+        if delta == 0:
+            return None
+        key = (allineamento or "").strip().upper()
+        field_map = {
+            "LUMINOSA": "punti_luminosi",
+            "LUMINOSO": "punti_luminosi",
+            "OSCURA": "punti_oscuri",
+            "OSCURO": "punti_oscuri",
+            "GRIGIA": "punti_grigi",
+            "GRIGIO": "punti_grigi",
+        }
+        field = field_map.get(key)
+        if not field:
+            return None
+        attuale = max(0, int(getattr(self, field, 0) or 0))
+        nuovo = max(0, attuale + delta)
+        setattr(self, field, nuovo)
+        self.save(update_fields=[field, "updated_at"])
+        label = {
+            "punti_luminosi": "Luminoso",
+            "punti_oscuri": "Oscuro",
+            "punti_grigi": "Grigio",
+        }[field]
+        segno = "+" if delta >= 0 else ""
+        self.aggiungi_log(
+            f"Punteggio {label} {segno}{delta} (ora {nuovo}) — {descrizione or 'variazione allineamento'}"
+        )
         return nuovo
 
     def modifica_riserva_scommesse(self, delta, motivo):
@@ -6690,8 +7005,30 @@ class Personaggio(Inventario):
                 'potenziamenti_installati__oggettostatistica_set__statistica', 
                 'potenziamenti_installati__infusione_generatrice', 
                 'potenziamenti_installati__aura',
+                'sezioni_condizionali__modificatori__statistica',
+                'potenziamenti_installati__sezioni_condizionali__modificatori__statistica',
                 )
         
+        from .sezioni_condizionali import iter_modificatori_sezioni, sezioni_attive
+
+        def _val_stat_senza_sezioni(sigla):
+            """Evita ricorsione: usa punteggi_base + mods già raccolti (senza sezioni)."""
+            st_obj = Statistica.objects.filter(sigla=sigla).first()
+            if not st_obj:
+                return 0
+            base = self.punteggi_base.get(st_obj.nome, 0)
+            m = mods.get(st_obj.parametro, {'add': 0.0, 'mol': 1.0})
+            return (base + m['add']) * m['mol']
+
+        def _apply_sezioni_oggetto(oggetto_src):
+            eval_kw = {'get_statistica': _val_stat_senza_sezioni}
+            for mod in iter_modificatori_sezioni(
+                sezioni_attive(oggetto_src, self, **eval_kw),
+                solo_oggetto_ospitante=False,
+            ):
+                if mod.statistica and mod.statistica.parametro:
+                    _add(mod.statistica.parametro, mod.tipo_modificatore, mod.valore)
+
         for oggetto in oggetti_inventario:
             # USIAMO LA FONTE DI VERITÀ UNICA: is_active()
             # Questo controlla: Equipaggiamento, Timer, Cariche (spegne_a_zero) e Gerarchia
@@ -6699,6 +7036,7 @@ class Personaggio(Inventario):
                 for stat_link in oggetto.oggettostatistica_set.all(): 
                     if _is_global(stat_link):
                         _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
+                _apply_sezioni_oggetto(oggetto)
                 
                 # Potenziamenti (Mod/Materia)
                 for potenziamento in oggetto.potenziamenti_installati.all():
@@ -6708,6 +7046,7 @@ class Personaggio(Inventario):
                         for stat_link_pot in potenziamento.oggettostatistica_set.all(): 
                             if _is_global(stat_link_pot):
                                 _add(stat_link_pot.statistica.parametro, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
+                        _apply_sezioni_oggetto(potenziamento)
 
         # 3. Caratteristiche Base
         cb = self.caratteristiche_base
@@ -7182,10 +7521,11 @@ class Personaggio(Inventario):
     def get_testo_formattato_per_item(self, item):
         if not item: return ""
         testo_finale=""
+        from .sezioni_condizionali import html_sezioni_append, statistiche_base_per_item
         
         if isinstance(item, Oggetto):
-            stats = item.oggettostatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
-            item_mods = raccogli_modificatori_solo_oggetto(item)
+            stats = statistiche_base_per_item(item, self)
+            item_mods = raccogli_modificatori_solo_oggetto(item, personaggio=self)
             ctx = {
                 'livello': item.livello,
                 'aura': item.aura,
@@ -7202,11 +7542,13 @@ class Personaggio(Inventario):
                 personaggio=self,
                 context=ctx,
             )
+            testo_finale += html_sezioni_append(item, self, context=ctx, statistiche_base=stats)
             
         elif isinstance(item, Infusione):
-            stats = item.infusionestatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
+            stats = statistiche_base_per_item(item, self)
             ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'formula_kind': FORMULA_SCOPE_ATTACK, 'formula_builder_selezioni': getattr(item, 'formula_builder_selezioni', None) or {}, 'attack_formula_template': item.formula_attacco}
             testo_finale = formatta_testo_generico(item.testo, statistiche_base=stats, personaggio=self, context=ctx, formula=item.formula_attacco)
+            testo_finale += html_sezioni_append(item, self, context=ctx, statistiche_base=stats)
             
         elif isinstance(item, Attivata):
             stats = item.attivatastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
@@ -7647,48 +7989,36 @@ class TransazioneSospesa(SyncableModel, models.Model):
         from django.db import transaction as db_transaction
         
         with db_transaction.atomic():
-            # Crediti: debit+credit sullo stesso conto della proposta (natura conservata)
-            from personaggi.economia_crediti import normalize_conto, saldo_conto
+            # Crediti: ogni tipologia resta sul proprio conto (corrente→corrente, deposito→deposito)
+            from personaggi.economia_crediti import (
+                importi_cessione_da_proposta,
+                trasferisci_cessione_p2p,
+            )
+            from django.core.exceptions import ValidationError as DjangoValidationError
 
-            if self.ultima_proposta_iniziatore.crediti_da_dare > 0:
-                amt = self.ultima_proposta_iniziatore.crediti_da_dare
-                conto = normalize_conto(
-                    getattr(self.ultima_proposta_iniziatore, "conto_crediti", None)
-                )
-                if saldo_conto(self.iniziatore, conto) < amt:
-                    raise Exception(
-                        f"Crediti {conto.lower()} insufficienti per l'iniziatore ({amt} CR)."
+            def _applica_crediti_proposta(mittente, destinatario, proposta):
+                corr, dep = importi_cessione_da_proposta(proposta)
+                if corr <= 0 and dep <= 0:
+                    return
+                try:
+                    trasferisci_cessione_p2p(
+                        mittente,
+                        destinatario,
+                        corr,
+                        dep,
+                        desc_out=f"Pagato in transazione #{self.id}",
+                        desc_in=f"Ricevuto da transazione #{self.id}",
                     )
-                self.iniziatore.modifica_crediti(
-                    -amt,
-                    f"Pagato in transazione #{self.id} ({conto.lower()})",
-                    conto=conto,
-                )
-                self.destinatario.modifica_crediti(
-                    amt,
-                    f"Ricevuto da transazione #{self.id} ({conto.lower()})",
-                    conto=conto,
-                )
+                except DjangoValidationError as exc:
+                    msg = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+                    raise Exception(msg) from exc
 
-            if self.ultima_proposta_destinatario.crediti_da_dare > 0:
-                amt = self.ultima_proposta_destinatario.crediti_da_dare
-                conto = normalize_conto(
-                    getattr(self.ultima_proposta_destinatario, "conto_crediti", None)
-                )
-                if saldo_conto(self.destinatario, conto) < amt:
-                    raise Exception(
-                        f"Crediti {conto.lower()} insufficienti per il destinatario ({amt} CR)."
-                    )
-                self.destinatario.modifica_crediti(
-                    -amt,
-                    f"Pagato in transazione #{self.id} ({conto.lower()})",
-                    conto=conto,
-                )
-                self.iniziatore.modifica_crediti(
-                    amt,
-                    f"Ricevuto da transazione #{self.id} ({conto.lower()})",
-                    conto=conto,
-                )
+            _applica_crediti_proposta(
+                self.iniziatore, self.destinatario, self.ultima_proposta_iniziatore
+            )
+            _applica_crediti_proposta(
+                self.destinatario, self.iniziatore, self.ultima_proposta_destinatario
+            )
             
             # Esegui scambi oggetti
             for oggetto in self.ultima_proposta_iniziatore.oggetti_da_dare.all():
@@ -7738,9 +8068,18 @@ class PropostaTransazione(SyncableModel, models.Model):
         default=CreditoMovimento.CONTO_CORRENTE,
         db_index=True,
         help_text=(
-            "Conto da cui partono i crediti_da_dare; il destinatario li riceve sullo stesso conto "
-            "(corrente resta corrente, deposito resta deposito)."
+            "Legacy: conto unico se si usa solo crediti_da_dare. "
+            "Con economia duale preferire crediti_corrente_da_dare + crediti_deposito_da_dare "
+            "(la natura dei crediti è conservata in cessione)."
         ),
+    )
+    crediti_corrente_da_dare = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Crediti correnti che l'autore cede (restano correnti per il destinatario).",
+    )
+    crediti_deposito_da_dare = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Crediti di deposito che l'autore cede (restano deposito per il destinatario).",
     )
     oggetti_da_dare = models.ManyToManyField('Oggetto', related_name='proposte_oggetti_dati', blank=True)
     consumabili_da_dare = models.ManyToManyField(
@@ -7749,6 +8088,14 @@ class PropostaTransazione(SyncableModel, models.Model):
     
     # Cosa l'autore RICEVE
     crediti_da_ricevere = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    crediti_corrente_da_ricevere = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Crediti correnti che l'autore si aspetta di ricevere.",
+    )
+    crediti_deposito_da_ricevere = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Crediti di deposito che l'autore si aspetta di ricevere.",
+    )
     oggetti_da_ricevere = models.ManyToManyField('Oggetto', related_name='proposte_oggetti_ricevuti', blank=True)
     consumabili_da_ricevere = models.ManyToManyField(
         'ConsumabilePersonaggio', related_name='proposte_consumabili_ricevuti', blank=True
@@ -7903,7 +8250,15 @@ class Messaggio(SyncableModel, models.Model):
         choices=CreditoMovimento.CONTO_CHOICES,
         default=CreditoMovimento.CONTO_CORRENTE,
         blank=True,
-        help_text="Conto usato per crediti_allegati (mittente e destinatario sullo stesso conto).",
+        help_text="Legacy: conto unico di crediti_allegati. Preferire i campi split corrente/deposito.",
+    )
+    crediti_corrente_allegati = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        help_text="Crediti correnti allegati (restano correnti per il destinatario).",
+    )
+    crediti_deposito_allegati = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        help_text="Crediti di deposito allegati (restano deposito per il destinatario).",
     )
     oggetti_allegati_snapshot = models.JSONField(default=list, blank=True)
     is_staff_message = models.BooleanField(default=False)
@@ -7927,6 +8282,69 @@ class LetturaMessaggio(SyncableModel, models.Model):
     cancellato = models.BooleanField(default=False)
     class Meta: unique_together = ('messaggio', 'personaggio'); verbose_name = "Stato Lettura Messaggio"; verbose_name_plural = "Stati Lettura Messaggi"
     def __str__(self): return f"{self.personaggio.nome} - {self.messaggio.titolo}"
+
+
+class ChiamataVocale(models.Model):
+    """
+    Sessione vocale live (WebRTC). Resta locale al nodo: non è nel registry
+    di edge-sync (una chiamata sul Pi non ha senso sul master).
+    """
+
+    STATO_RINGING = "ringing"
+    STATO_IN_CORSO = "in_corso"
+    STATO_RIFIUTATA = "rifiutata"
+    STATO_TERMINATA = "terminata"
+    STATO_PERSA = "persa"
+    STATO_CHOICES = (
+        (STATO_RINGING, "In squillo"),
+        (STATO_IN_CORSO, "In corso"),
+        (STATO_RIFIUTATA, "Rifiutata"),
+        (STATO_TERMINATA, "Terminata"),
+        (STATO_PERSA, "Persa"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    chiamante = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="chiamate_uscenti",
+    )
+    chiamato = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="chiamate_entranti",
+        null=True,
+        blank=True,
+    )
+    verso_staff = models.BooleanField(default=False)
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.CASCADE,
+        related_name="chiamate_vocali",
+    )
+    stato = models.CharField(max_length=12, choices=STATO_CHOICES, default=STATO_RINGING, db_index=True)
+    accettata_da = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="chiamate_vocali_accettate",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Chiamata vocale"
+        verbose_name_plural = "Chiamate vocali"
+        indexes = [
+            models.Index(fields=["stato", "created_at"]),
+        ]
+
+    def __str__(self):
+        dest = "Staff" if self.verso_staff else (self.chiamato.nome if self.chiamato_id else "?")
+        return f"{self.chiamante} → {dest} ({self.stato})"
 
 
 class AuthUserSyncState(models.Model):
@@ -8474,6 +8892,8 @@ class CreazioneConsumabileInCorso(SyncableModel, models.Model):
 from personaggi.negozio_mercante_models import (  # noqa: E402
     NegozioMercante,
     NegozioMercanteVoce,
+    NegozioMercanteBundle,
+    NegozioMercanteBundleRiga,
     NegozioMercanteStock,
     NegozioMercanteMovimento,
     NEGOZIO_TIPO_ALTERNATIVO,

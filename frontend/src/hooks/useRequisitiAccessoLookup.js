@@ -15,6 +15,7 @@ const emptyLookup = () => ({
   cariche: [],
   statistiche: [],
   auras: [],
+  caratteristiche: [],
 });
 
 /**
@@ -41,6 +42,7 @@ export function useRequisitiAccessoLookup(onLogout, merge = {}) {
         setLoaded({
           statistiche: Array.isArray(stats) ? stats : stats?.results || [],
           auras: pList.filter((p) => p.tipo === 'AU'),
+          caratteristiche: pList.filter((p) => p.tipo === 'CA'),
           korps: Array.isArray(korps) ? korps : korps?.results || [],
           carriere: Array.isArray(carriere) ? carriere : carriere?.results || [],
           cariche: Array.isArray(cariche) ? cariche : cariche?.results || [],

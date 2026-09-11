@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Dialog, DialogPanel, DialogTitle, DialogBackdrop } from '@headlessui/react';
 import { searchPersonaggi, fetchAuthenticated, getPersonaggioDetail } from '../api';
 import RichTextEditor from './RichTextEditor';
-import { Shield, User, X, UserCircle, Eye, EyeOff, ChevronDown } from 'lucide-react';
+import { Shield, User, X, UserCircle, Eye, EyeOff, ChevronDown, Phone } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
+import { useChiamataVocale } from './ChiamataVocaleProvider';
 import { useDirtyModalClose } from '../hooks/useDirtyModalClose';
 import { richTextHasContent } from '../utils/htmlSanitizer';
 
@@ -26,8 +27,10 @@ const ComposeMessageModal = ({
   currentCredits = 0,
   isCampaignStaffer = false,
 }) => {
-  const { transazioniGiocatoreAbilitate, bypassEventoGate } = useCharacter();
+  const { transazioniGiocatoreAbilitate, bypassEventoGate, canAccessModulo } = useCharacter();
+  const { startCall, busy } = useChiamataVocale();
   const transferConsentito = transazioniGiocatoreAbilitate;
+  const chiamateAbilitate = canAccessModulo('chiamate');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [selectedRecipient, setSelectedRecipient] = useState(null);
@@ -35,8 +38,8 @@ const ComposeMessageModal = ({
   const [titolo, setTitolo] = useState('');
   const [testo, setTesto] = useState('');
   const [includeTransfer, setIncludeTransfer] = useState(false);
-  const [creditiToSend, setCreditiToSend] = useState('');
-  const [contoCrediti, setContoCrediti] = useState('CORRENTE');
+  const [creditiCorrenteToSend, setCreditiCorrenteToSend] = useState('');
+  const [creditiDepositoToSend, setCreditiDepositoToSend] = useState('');
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -70,7 +73,7 @@ const ComposeMessageModal = ({
   const isDirty = useMemo(() => {
     if (titolo.trim()) return true;
     if (hasMeaningfulText(testo)) return true;
-    if (includeTransfer && (Number(creditiToSend) > 0 || selectedItemIds.length > 0)) return true;
+    if (includeTransfer && (Number(creditiCorrenteToSend) > 0 || Number(creditiDepositoToSend) > 0 || selectedItemIds.length > 0)) return true;
     if (isStaffMessage && !replyToRecipient?.isStaff) return true;
     if (selectedRecipient && !replyToRecipient) return true;
     if (query.trim().length >= 2 && !selectedRecipient) return true;
@@ -79,7 +82,8 @@ const ComposeMessageModal = ({
     titolo,
     testo,
     includeTransfer,
-    creditiToSend,
+    creditiCorrenteToSend,
+    creditiDepositoToSend,
     selectedItemIds,
     isStaffMessage,
     replyToRecipient,
@@ -101,8 +105,8 @@ const ComposeMessageModal = ({
       setTitolo('');
       setTesto('');
       setIncludeTransfer(false);
-      setCreditiToSend('');
-      setContoCrediti('CORRENTE');
+      setCreditiCorrenteToSend('');
+      setCreditiDepositoToSend('');
       setSelectedItemIds([]);
       setError('');
       setSelectedSenderId(currentCharacterId ? String(currentCharacterId) : '');
@@ -162,9 +166,7 @@ const ComposeMessageModal = ({
       setSenderDuale(duale);
       setSenderCorrente(corr);
       setSenderDeposito(dep);
-      setSenderCredits(
-        duale ? (contoCrediti === 'DEPOSITO' ? dep : corr) : Number(detail?.crediti ?? fallbackCredits ?? 0)
-      );
+      setSenderCredits(duale ? corr : Number(detail?.crediti ?? fallbackCredits ?? 0));
     };
 
     const loadSenderInventory = async () => {
@@ -214,11 +216,11 @@ const ComposeMessageModal = ({
     availableTransferItems,
     ownCharacters,
     onLogout,
-    contoCrediti,
   ]);
 
   useEffect(() => {
-    setCreditiToSend('');
+    setCreditiCorrenteToSend('');
+    setCreditiDepositoToSend('');
     setSelectedItemIds([]);
   }, [selectedSenderId]);
 
@@ -263,8 +265,9 @@ const ComposeMessageModal = ({
       return;
     }
 
-    const parsedCrediti = includeTransfer ? Math.max(0, Number(creditiToSend || 0)) : 0;
-    if (includeTransfer && !Number.isFinite(parsedCrediti)) {
+    const parsedCorrente = includeTransfer ? Math.max(0, Number(creditiCorrenteToSend || 0)) : 0;
+    const parsedDeposito = includeTransfer && senderDuale ? Math.max(0, Number(creditiDepositoToSend || 0)) : 0;
+    if (includeTransfer && (!Number.isFinite(parsedCorrente) || !Number.isFinite(parsedDeposito))) {
       setError('Importo crediti non valido.');
       return;
     }
@@ -273,16 +276,15 @@ const ComposeMessageModal = ({
       return;
     }
 
-    const availableForSend = senderDuale
-      ? contoCrediti === 'DEPOSITO'
-        ? senderDeposito
-        : senderCorrente
-      : Number(senderCredits || 0);
-    if (parsedCrediti > availableForSend) {
-      setError('Crediti insufficienti per questo invio.');
+    if (parsedCorrente > Number(senderCorrente || 0)) {
+      setError('Crediti correnti insufficienti per questo invio.');
       return;
     }
-    if (isStaffMessage && (parsedCrediti > 0 || selectedItemIds.length > 0)) {
+    if (parsedDeposito > Number(senderDeposito || 0)) {
+      setError('Crediti di deposito insufficienti per questo invio.');
+      return;
+    }
+    if (isStaffMessage && (parsedCorrente > 0 || parsedDeposito > 0 || selectedItemIds.length > 0)) {
       setError('Non puoi allegare crediti/oggetti nei messaggi allo staff.');
       return;
     }
@@ -304,8 +306,10 @@ const ComposeMessageModal = ({
         testo: testo,
         is_staff_message: isStaffMessage,
         mostra_proprietario_giocatore: showOwnerToRecipient,
-        crediti_da_inviare: parsedCrediti,
-        conto_crediti: includeTransfer ? contoCrediti : 'CORRENTE',
+        crediti_da_inviare: parsedCorrente + parsedDeposito,
+        conto_crediti: parsedDeposito > 0 && parsedCorrente === 0 ? 'DEPOSITO' : 'CORRENTE',
+        crediti_corrente_da_inviare: parsedCorrente,
+        crediti_deposito_da_inviare: parsedDeposito,
         oggetti_ids: includeTransfer ? selectedItemIds : [],
       };
 
@@ -471,7 +475,8 @@ const ComposeMessageModal = ({
                       setSelectedRecipient(null);
                       setQuery('');
                       setIncludeTransfer(false);
-                      setCreditiToSend('');
+                      setCreditiCorrenteToSend('');
+                      setCreditiDepositoToSend('');
                       setSelectedItemIds([]);
                     }
                   }}
@@ -480,11 +485,25 @@ const ComposeMessageModal = ({
                 />
                 <label
                   htmlFor="chk_staff"
-                  className="cursor-pointer flex items-center gap-2 font-bold text-indigo-300"
+                  className="cursor-pointer flex items-center gap-2 font-bold text-indigo-300 flex-1"
                 >
                   <Shield size={18} />
                   Invia messaggio allo Staff
                 </label>
+                {isStaffMessage && chiamateAbilitate ? (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = await startCall({ versoStaff: true });
+                      if (ok) onClose();
+                    }}
+                    disabled={busy}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 px-2.5 py-1.5 text-xs font-bold text-white"
+                    title="Chiama lo staff"
+                  >
+                    <Phone size={14} /> Chiama
+                  </button>
+                ) : null}
               </div>
 
               {!isStaffMessage && (
@@ -515,6 +534,20 @@ const ComposeMessageModal = ({
                         Cambia
                       </button>
                     )}
+                    {selectedRecipient && chiamateAbilitate ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const ok = await startCall({ personaggioId: selectedRecipient.id });
+                          if (ok) onClose();
+                        }}
+                        disabled={busy}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 px-3 py-2 text-xs font-bold text-white"
+                        title={`Chiama ${selectedRecipient.nome}`}
+                      >
+                        <Phone size={14} /> Chiama
+                      </button>
+                    ) : null}
                   </div>
 
                   {results.length > 0 && !selectedRecipient && (
@@ -568,7 +601,8 @@ const ComposeMessageModal = ({
                         const enabled = e.target.checked;
                         setIncludeTransfer(enabled);
                         if (!enabled) {
-                          setCreditiToSend('');
+                          setCreditiCorrenteToSend('');
+                          setCreditiDepositoToSend('');
                           setSelectedItemIds([]);
                         }
                       }}
@@ -579,39 +613,39 @@ const ComposeMessageModal = ({
 
                   {includeTransfer && (
                     <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs uppercase tracking-wide text-gray-400 mb-1">
-                          Crediti (disponibili:{' '}
-                          {senderDuale
-                            ? contoCrediti === 'DEPOSITO'
-                              ? Number(senderDeposito || 0).toFixed(2)
-                              : Number(senderCorrente || 0).toFixed(2)
-                            : Number(senderCredits || 0)}
-                          )
+                      <div className="space-y-2">
+                        <label className="block text-xs uppercase tracking-wide text-gray-400">
+                          {senderDuale ? 'Crediti correnti' : 'Crediti'}{' '}
+                          (disponibili: {Number(senderCorrente || senderCredits || 0).toFixed(2)})
                         </label>
-                        {senderDuale && (
-                          <select
-                            className="w-full mb-2 bg-gray-900 border border-gray-700 rounded p-2 text-sm"
-                            value={contoCrediti}
-                            onChange={(e) => setContoCrediti(e.target.value)}
-                          >
-                            <option value="CORRENTE">Da conto corrente</option>
-                            <option value="DEPOSITO">Da conto deposito</option>
-                          </select>
-                        )}
                         <input
                           type="number"
                           min="0"
-                          step="1"
-                          value={creditiToSend}
-                          onChange={(e) => setCreditiToSend(e.target.value)}
+                          step="0.01"
+                          value={creditiCorrenteToSend}
+                          onChange={(e) => setCreditiCorrenteToSend(e.target.value)}
                           className="w-full bg-gray-900 border border-gray-700 rounded p-2 focus:ring-2 focus:ring-indigo-500 outline-none"
                           placeholder="0"
                         />
                         {senderDuale && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Il destinatario riceve sullo stesso conto.
-                          </p>
+                          <>
+                            <label className="block text-xs uppercase tracking-wide text-amber-400/80 pt-1">
+                              Crediti di deposito (disponibili:{' '}
+                              {Number(senderDeposito || 0).toFixed(2)})
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={creditiDepositoToSend}
+                              onChange={(e) => setCreditiDepositoToSend(e.target.value)}
+                              className="w-full bg-gray-900 border border-amber-900/40 rounded p-2 focus:ring-2 focus:ring-amber-500 outline-none"
+                              placeholder="0"
+                            />
+                            <p className="text-xs text-gray-500">
+                              Il destinatario riceve ogni tipologia sullo stesso conto.
+                            </p>
+                          </>
                         )}
                       </div>
 

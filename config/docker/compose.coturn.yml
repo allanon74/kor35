@@ -1,0 +1,19 @@
+# Relè TURN (WebRTC). Incluso da overlay mirror / dev-office / dev-home / prod.
+#
+# network_mode: host → i client usano lo stesso host con cui aprono l'app
+# (LAN evento, oppure www.kor35.it su DigitalOcean).
+# Porte: 3478 UDP/TCP, relay 49160–49259 UDP.
+#
+# LAN: credenziali statiche TURN_USERNAME / TURN_CREDENTIAL.
+# Prod: TURN_AUTH_SECRET (HMAC a tempo, obbligatorio).
+
+services:
+  coturn:
+    image: coturn/coturn:4.6.2
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - ${KOR35_BACKEND_ENV_FILE:-../../backend/.env}
+    volumes:
+      - ./coturn/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]

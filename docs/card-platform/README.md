@@ -33,6 +33,7 @@ KOR35 evolve verso una **piattaforma carte in tre layer**, senza big-bang:
 | [07-mse-mapping.md](./07-mse-mapping.md) | MSE2 ↔ KOR35 |
 | [08-permessi-identita.md](./08-permessi-identita.md) | User, PlayerProfile, Personaggio |
 | [09-kor35-mse-template-prod-runbook.md](./09-kor35-mse-template-prod-runbook.md) | Template KOR35 + allineamento stylesheet prod |
+| [10-mse-parity-template-system.md](./10-mse-parity-template-system.md) | Piano parità MSE + authoring giochi/template (Sette Elegie) |
 
 ## Codice backend introdotto
 

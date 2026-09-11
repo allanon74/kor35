@@ -710,3 +710,158 @@ def normalize_conto(value, default: str = CONTO_CORRENTE) -> str:
     if v not in CONTI_VALIDI:
         raise ValidationError(f"Conto non valido: {value}")
     return v
+
+
+def parse_importi_cessione(payload: dict | None, *, dare: bool = True) -> tuple[Decimal, Decimal]:
+    """
+    Estrae (corrente, deposito) da un payload P2P.
+
+    Formato nuovo: crediti_corrente_da_* / crediti_deposito_da_*.
+    Formato legacy: crediti_da_* + conto_crediti (tutto su un solo conto).
+    Se gli split sono tutti zero e c'è un importo legacy, si usa il formato legacy
+    (i serializer DRF riempiono gli split a 0 per default).
+    """
+    payload = payload or {}
+    if dare:
+        k_corr, k_dep, k_legacy = (
+            "crediti_corrente_da_dare",
+            "crediti_deposito_da_dare",
+            "crediti_da_dare",
+        )
+    else:
+        k_corr, k_dep, k_legacy = (
+            "crediti_corrente_da_ricevere",
+            "crediti_deposito_da_ricevere",
+            "crediti_da_ricevere",
+        )
+    corr = _d2(payload.get(k_corr))
+    dep = _d2(payload.get(k_dep))
+    if corr < 0 or dep < 0:
+        raise ValidationError("Gli importi crediti non possono essere negativi.")
+    if corr > 0 or dep > 0:
+        return corr, dep
+    amt = _d2(payload.get(k_legacy))
+    if amt < 0:
+        raise ValidationError("Gli importi crediti non possono essere negativi.")
+    if amt <= 0:
+        return Decimal("0.00"), Decimal("0.00")
+    conto = normalize_conto(payload.get("conto_crediti"))
+    if conto == CONTO_DEPOSITO:
+        return Decimal("0.00"), amt
+    return amt, Decimal("0.00")
+
+
+def parse_importi_messaggio(payload: dict | None) -> tuple[Decimal, Decimal]:
+    """Estrae (corrente, deposito) dagli allegati di un messaggio."""
+    payload = payload or {}
+    corr = _d2(payload.get("crediti_corrente_da_inviare"))
+    dep = _d2(payload.get("crediti_deposito_da_inviare"))
+    if corr < 0 or dep < 0:
+        raise ValidationError("Gli importi crediti non possono essere negativi.")
+    if corr > 0 or dep > 0:
+        return corr, dep
+    amt = _d2(payload.get("crediti_da_inviare") or payload.get("crediti_allegati"))
+    if amt < 0:
+        raise ValidationError("Gli importi crediti non possono essere negativi.")
+    if amt <= 0:
+        return Decimal("0.00"), Decimal("0.00")
+    conto = normalize_conto(
+        payload.get("conto_crediti") or payload.get("conto_crediti_allegati")
+    )
+    if conto == CONTO_DEPOSITO:
+        return Decimal("0.00"), amt
+    return amt, Decimal("0.00")
+
+
+def normalizza_payload_proposta(payload: dict | None) -> dict:
+    """Arricchisce il payload proposta con split + totali legacy coerenti."""
+    src = dict(payload or {})
+    corr, dep = parse_importi_cessione(src, dare=True)
+    corr_r, dep_r = parse_importi_cessione(src, dare=False)
+    src["crediti_corrente_da_dare"] = corr
+    src["crediti_deposito_da_dare"] = dep
+    src["crediti_corrente_da_ricevere"] = corr_r
+    src["crediti_deposito_da_ricevere"] = dep_r
+    src["crediti_da_dare"] = corr + dep
+    src["crediti_da_ricevere"] = corr_r + dep_r
+    if dep > 0 and corr == 0:
+        src["conto_crediti"] = CONTO_DEPOSITO
+    else:
+        src["conto_crediti"] = CONTO_CORRENTE
+    return src
+
+
+def importi_cessione_da_proposta(proposta) -> tuple[Decimal, Decimal]:
+    """Importi (corrente, deposito) che l'autore della proposta DÀ."""
+    corr = _d2(getattr(proposta, "crediti_corrente_da_dare", 0) or 0)
+    dep = _d2(getattr(proposta, "crediti_deposito_da_dare", 0) or 0)
+    if corr == 0 and dep == 0:
+        amt = _d2(getattr(proposta, "crediti_da_dare", 0) or 0)
+        if amt > 0:
+            conto = normalize_conto(getattr(proposta, "conto_crediti", None))
+            if conto == CONTO_DEPOSITO:
+                return Decimal("0.00"), amt
+            return amt, Decimal("0.00")
+    return corr, dep
+
+
+def importi_cessione_da_messaggio(messaggio) -> tuple[Decimal, Decimal]:
+    corr = _d2(getattr(messaggio, "crediti_corrente_allegati", 0) or 0)
+    dep = _d2(getattr(messaggio, "crediti_deposito_allegati", 0) or 0)
+    if corr == 0 and dep == 0:
+        amt = _d2(getattr(messaggio, "crediti_allegati", 0) or 0)
+        if amt > 0:
+            conto = normalize_conto(getattr(messaggio, "conto_crediti_allegati", None))
+            if conto == CONTO_DEPOSITO:
+                return Decimal("0.00"), amt
+            return amt, Decimal("0.00")
+    return corr, dep
+
+
+def valida_saldo_cessione(personaggio, corrente, deposito, *, user=None) -> None:
+    """Verifica fondi e modulo deposito per una cessione P2P."""
+    corrente = _d2(corrente)
+    deposito = _d2(deposito)
+    if corrente < 0 or deposito < 0:
+        raise ValidationError("Gli importi crediti non possono essere negativi.")
+    if deposito > 0 and not modulo_conto_deposito_attivo(personaggio, user=user):
+        raise ValidationError("Il conto di deposito non è attivo.")
+    if corrente > 0:
+        disp = saldo_conto(personaggio, CONTO_CORRENTE)
+        if disp < corrente:
+            raise ValidationError(
+                f"Crediti correnti insufficienti (disponibili {disp}, richiesti {corrente})."
+            )
+    if deposito > 0:
+        disp = saldo_conto(personaggio, CONTO_DEPOSITO)
+        if disp < deposito:
+            raise ValidationError(
+                f"Crediti di deposito insufficienti (disponibili {disp}, richiesti {deposito})."
+            )
+
+
+def trasferisci_cessione_p2p(
+    mittente,
+    destinatario,
+    corrente,
+    deposito,
+    *,
+    desc_out: str,
+    desc_in: str,
+    user=None,
+) -> tuple[Decimal, Decimal]:
+    """
+    Cede crediti conservando la natura dei conti (corrente→corrente, deposito→deposito).
+    """
+    corrente = _d2(corrente)
+    deposito = _d2(deposito)
+    if corrente == 0 and deposito == 0:
+        return corrente, deposito
+    valida_saldo_cessione(mittente, corrente, deposito, user=user)
+    if corrente > 0:
+        modifica_crediti(mittente, -corrente, desc_out, conto=CONTO_CORRENTE)
+        modifica_crediti(destinatario, corrente, desc_in, conto=CONTO_CORRENTE)
+    if deposito > 0:
+        modifica_crediti(mittente, -deposito, desc_out, conto=CONTO_DEPOSITO)
+        modifica_crediti(destinatario, deposito, desc_in, conto=CONTO_DEPOSITO)
+    return corrente, deposito

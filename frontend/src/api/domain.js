@@ -825,6 +825,43 @@ export const sendPrivateMessage = (messageData, onLogout) => {
   );
 };
 
+export const getChiamataIceServers = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/chiamate/ice-servers/', { method: 'GET' }, onLogout);
+
+export const getChiamataVocaleAttiva = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/chiamate/', { method: 'GET' }, onLogout);
+
+export const avviaChiamataVocale = (payload, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/chiamate/',
+    { method: 'POST', body: JSON.stringify(payload) },
+    onLogout
+  );
+
+export const accettaChiamataVocale = (callId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/chiamate/${callId}/accetta/`,
+    { method: 'POST', body: JSON.stringify({}) },
+    onLogout
+  );
+
+export const rifiutaChiamataVocale = (callId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/chiamate/${callId}/rifiuta/`,
+    { method: 'POST', body: JSON.stringify({}) },
+    onLogout
+  );
+
+export const chiudiChiamataVocale = (callId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/chiamate/${callId}/chiudi/`,
+    { method: 'POST', body: JSON.stringify({}) },
+    onLogout
+  );
+
+export const getCodaChiamateStaff = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/chiamate/coda/', { method: 'GET' }, onLogout);
+
 // Crea un oggetto fisico a partire da un'infusione
 export const craftOggetto = (infusioneId) => {
   return fetchAuthenticated('/api/personaggi/api/oggetti/craft/', {
@@ -1471,6 +1508,34 @@ export const staffUpdateNegozioMercanteVoce = (id, data, onLogout) =>
 export const staffDeleteNegozioMercanteVoce = (id, onLogout) =>
   fetchAuthenticated(
     `/api/personaggi/api/staff/negozi-mercante-voci/${id}/`,
+    { method: 'DELETE' },
+    onLogout,
+  );
+
+export const staffGetNegozioMercanteBundle = (negozioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante-bundle/?negozio=${negozioId}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const staffCreateNegozioMercanteBundle = (data, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/negozi-mercante-bundle/',
+    { method: 'POST', body: JSON.stringify(data) },
+    onLogout,
+  );
+
+export const staffUpdateNegozioMercanteBundle = (id, data, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante-bundle/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(data) },
+    onLogout,
+  );
+
+export const staffDeleteNegozioMercanteBundle = (id, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante-bundle/${id}/`,
     { method: 'DELETE' },
     onLogout,
   );

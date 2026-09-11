@@ -1,7 +1,8 @@
 """
-Seed idempotente: 20 carte demo «Sette Elegie» + espansione + keyword MVP.
+Seed idempotente: mazzo demo «Sette Elegie» + espansione + keyword MVP.
 
 Dati: personaggi/data/carte_esempio_sette_elegie.json
+Collega gioco/template Card Studio se presenti (bootstrap_kor35_mse_template).
 """
 from __future__ import annotations
 
@@ -151,7 +152,59 @@ def _upsert_espansione(campagna, meta: dict, *, force: bool):
     return esp, created
 
 
-def _card_defaults(row: dict, espansione) -> dict:
+def _mse_campi_from_row(row: dict) -> dict:
+    """Campi MSE omologhi per preview Card Studio (Sette Elegie)."""
+    campi = {
+        "code": row.get("codice") or "",
+        "name": row.get("nome") or "",
+        "type": row.get("tipo") or "",
+        "energy": row.get("energia") or "",
+        "rarity": row.get("rarita") or "",
+        "cost": int(row.get("costo_gioco") or 0),
+        "rules": row.get("testo_gioco") or "",
+        "lore": row.get("testo_lore") or "",
+    }
+    for src, dst in (("attacco", "attack"), ("salute", "health"), ("iniziativa", "initiative")):
+        if row.get(src) is not None:
+            campi[dst] = int(row[src])
+    return campi
+
+
+def _link_espansione_studio(campagna, espansione, *, force: bool) -> None:
+    """Associa gioco KOR35 + template default se già bootstrapati."""
+    from personaggi.carte_platform_models import MODELLO_BASE_KOR35, CarteGiocoDefinizione, CarteStudioTemplate
+
+    changed = False
+    gioco = (
+        CarteGiocoDefinizione.objects.filter(campagna=campagna, modello_base=MODELLO_BASE_KOR35)
+        .order_by("nome")
+        .first()
+    )
+    if gioco and (force or not espansione.gioco_definizione_id):
+        espansione.gioco_definizione = gioco
+        changed = True
+    template = None
+    if gioco:
+        template = (
+            CarteStudioTemplate.objects.filter(
+                campagna=campagna, gioco_definizione=gioco, is_default_for_new_cards=True
+            )
+            .order_by("nome")
+            .first()
+            or CarteStudioTemplate.objects.filter(
+                campagna=campagna, gioco_definizione=gioco, slug="kor35-standard"
+            ).first()
+        )
+    if template and (force or not espansione.default_studio_template_id):
+        espansione.default_studio_template = template
+        changed = True
+    if changed:
+        espansione.save(
+            update_fields=["gioco_definizione", "default_studio_template", "updated_at"]
+        )
+
+
+def _card_defaults(row: dict, espansione, studio_template=None) -> dict:
     out = {
         "nome": row["nome"],
         "tipo": row["tipo"],
@@ -169,7 +222,10 @@ def _card_defaults(row: dict, espansione) -> dict:
         "attiva": True,
         "espansione": espansione,
         "set_collezione": espansione.slug,
+        "mse_campi": _mse_campi_from_row(row),
     }
+    if studio_template is not None:
+        out["studio_template"] = studio_template
     for key in ("attacco", "salute", "iniziativa"):
         if key in row and row[key] is not None:
             out[key] = int(row[key])
@@ -236,7 +292,7 @@ def seed_carte_esempio(
     with_keywords: bool | None = None,
 ) -> dict:
     """
-    Carica espansione demo + 20 carte. Ritorna statistiche per CLI/test.
+    Carica espansione demo + 29 carte. Ritorna statistiche per CLI/test.
     """
     from personaggi.carte_collezionabili_models import CartaCollezionabile
     from personaggi.carte_collezionabili_service import get_carte_accesso_modo
@@ -280,11 +336,13 @@ def seed_carte_esempio(
         kw_created, kw_updated = _seed_keywords(campagna, force=force)
 
     espansione, esp_created = _upsert_espansione(campagna, esp_meta, force=force)
+    _link_espansione_studio(campagna, espansione, force=force)
+    studio_template = espansione.default_studio_template
 
     carte_create = 0
     carte_aggiornate = 0
     for row in payload["carte"]:
-        defaults = _card_defaults(row, espansione)
+        defaults = _card_defaults(row, espansione, studio_template=studio_template)
         carta, created = CartaCollezionabile.objects.get_or_create(
             campagna=campagna,
             codice=row["codice"],

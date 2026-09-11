@@ -85,6 +85,9 @@ from .models import (
     InfusioneCaratteristica, TessituraCaratteristica, PropostaTecnicaCaratteristica,
     InfusioneStatisticaBase, TessituraStatisticaBase, ModelloAura, InfusioneStatistica,
     InfusioneCostoAttivazione, TessituraCostoAttivazione,
+    InfusioneSezioneCondizionale, InfusioneSezioneStatistica,
+    InfusioneSezioneStatisticaBase,
+    OggettoSezioneCondizionale, OggettoSezioneStatistica, OggettoSezioneStatisticaBase,
     CerimonialeCaratteristica,
     OggettoBase, OggettoBaseStatisticaBase, OggettoBaseModificatore, 
     ForgiaturaInCorso, 
@@ -1259,6 +1262,110 @@ class InfusioneCostoAttivazioneSerializer(TecnicaCostoAttivazioneSerializer):
         model = InfusioneCostoAttivazione
 
 
+class _SezioneStatisticaBaseEditorSerializer(serializers.Serializer):
+    statistica = serializers.PrimaryKeyRelatedField(queryset=Statistica.objects.all())
+    valore_base = serializers.IntegerField(required=False, default=0)
+
+    def to_representation(self, instance):
+        return {
+            "id": str(getattr(instance, "id", "") or ""),
+            "statistica": StatisticaSerializer(instance.statistica).data,
+            "valore_base": instance.valore_base,
+        }
+
+
+class _SezioneStatisticaModEditorSerializer(serializers.Serializer):
+    statistica = serializers.PrimaryKeyRelatedField(queryset=Statistica.objects.all())
+    valore = serializers.DecimalField(max_digits=7, decimal_places=2, required=False, default=0)
+    tipo_modificatore = serializers.ChoiceField(choices=["ADD", "MOL"], required=False, default="ADD")
+    solo_oggetto_ospitante = serializers.BooleanField(required=False, default=False)
+
+    def to_representation(self, instance):
+        return {
+            "id": str(getattr(instance, "id", "") or ""),
+            "statistica": StatisticaSerializer(instance.statistica).data,
+            "valore": instance.valore,
+            "tipo_modificatore": instance.tipo_modificatore,
+            "solo_oggetto_ospitante": bool(instance.solo_oggetto_ospitante),
+        }
+
+
+class InfusioneSezioneCondizionaleSerializer(serializers.Serializer):
+    id = serializers.UUIDField(required=False)
+    ordine = serializers.IntegerField(required=False, default=0)
+    testo = serializers.CharField(required=False, allow_blank=True, default="")
+    condizioni = serializers.JSONField(required=False, default=dict)
+    statistiche_base = serializers.ListField(child=serializers.DictField(), required=False, default=list)
+    modificatori = serializers.ListField(child=serializers.DictField(), required=False, default=list)
+
+    def to_internal_value(self, data):
+        raw = dict(data or {})
+        out = {
+            "id": raw.get("id"),
+            "ordine": raw.get("ordine", 0),
+            "testo": raw.get("testo") or "",
+            "condizioni": raw.get("condizioni") if isinstance(raw.get("condizioni"), dict) else {},
+            "statistiche_base": [],
+            "modificatori": [],
+        }
+        try:
+            out["ordine"] = int(out["ordine"] or 0)
+        except (TypeError, ValueError):
+            out["ordine"] = 0
+
+        def _pk(value):
+            if isinstance(value, dict):
+                return value.get("id")
+            return getattr(value, "pk", value)
+
+        for row in raw.get("statistiche_base") or []:
+            if not isinstance(row, dict):
+                continue
+            sid = _pk(row.get("statistica"))
+            if not sid:
+                continue
+            try:
+                valore_base = int(row.get("valore_base") or 0)
+            except (TypeError, ValueError):
+                valore_base = 0
+            out["statistiche_base"].append({"statistica": sid, "valore_base": valore_base})
+
+        for row in raw.get("modificatori") or []:
+            if not isinstance(row, dict):
+                continue
+            sid = _pk(row.get("statistica"))
+            if not sid:
+                continue
+            tipo = (row.get("tipo_modificatore") or "ADD").upper()
+            if tipo not in ("ADD", "MOL"):
+                tipo = "ADD"
+            out["modificatori"].append({
+                "statistica": sid,
+                "valore": row.get("valore", 0),
+                "tipo_modificatore": tipo,
+                "solo_oggetto_ospitante": bool(row.get("solo_oggetto_ospitante")),
+            })
+        return out
+
+    def to_representation(self, instance):
+        return {
+            "id": str(instance.id),
+            "ordine": instance.ordine,
+            "testo": instance.testo or "",
+            "condizioni": instance.condizioni or {},
+            "statistiche_base": _SezioneStatisticaBaseEditorSerializer(
+                instance.statistiche_base.select_related("statistica").all(), many=True
+            ).data,
+            "modificatori": _SezioneStatisticaModEditorSerializer(
+                instance.modificatori.select_related("statistica").all(), many=True
+            ).data,
+        }
+
+
+class OggettoSezioneCondizionaleSerializer(InfusioneSezioneCondizionaleSerializer):
+    pass
+
+
 class TessituraCostoAttivazioneSerializer(TecnicaCostoAttivazioneSerializer):
     class Meta(TecnicaCostoAttivazioneSerializer.Meta):
         model = TessituraCostoAttivazione
@@ -1461,6 +1568,39 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
                 return int((obj.data_fine_attivazione - now).total_seconds())
         return 0
 
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        personaggio = self.context.get("personaggio")
+        if personaggio:
+            rep["statistiche"] = _append_sezione_mod_chips(
+                rep.get("statistiche"), instance, personaggio
+            )
+        return rep
+
+
+def _append_sezione_mod_chips(statistiche_list, oggetto, personaggio):
+    """Aggiunge chip modificatori delle sezioni attive (nascosti se la condizione fallisce)."""
+    if not personaggio:
+        return statistiche_list
+    from .sezioni_condizionali import iter_modificatori_sezioni, sezioni_attive
+    extra = []
+    for mod in iter_modificatori_sezioni(sezioni_attive(oggetto, personaggio), solo_oggetto_ospitante=False):
+        extra.append({
+            "statistica": StatisticaSerializer(mod.statistica).data,
+            "valore": mod.valore,
+            "tipo_modificatore": mod.tipo_modificatore,
+            "usa_limitazione_aura": False,
+            "usa_limitazione_elemento": False,
+            "usa_condizione_text": False,
+            "condizione_text": "",
+            "solo_oggetto_ospitante": bool(mod.solo_oggetto_ospitante),
+            "da_sezione_condizionale": True,
+        })
+    if not extra:
+        return statistiche_list
+    return list(statistiche_list or []) + extra
+
+
 # -----------------------------------------------------------------------------
 # SERIALIZER PER OGGETTO (COMPLETO)
 # -----------------------------------------------------------------------------
@@ -1584,11 +1724,12 @@ class OggettoSerializer(serializers.ModelSerializer):
         if not obj.attacco_base:
             return None
         
+        from .sezioni_condizionali import statistiche_base_per_item
         personaggio = self.context.get('personaggio')
-        # Passa le statistiche_base dell'oggetto per includere i valori base
-        statistiche_base = obj.oggettostatisticabase_set.select_related('statistica').all()
+        # Passa le statistiche_base dell'oggetto (incluse sezioni attive) per i valori formula
+        statistiche_base = statistiche_base_per_item(obj, personaggio)
         from .models import FORMULA_SCOPE_ATTACK, raccogli_modificatori_solo_oggetto
-        item_mods = raccogli_modificatori_solo_oggetto(obj)
+        item_mods = raccogli_modificatori_solo_oggetto(obj, personaggio=personaggio)
 
         context = {
             'livello': obj.livello,
@@ -1669,6 +1810,15 @@ class OggettoSerializer(serializers.ModelSerializer):
 
     def get_testo_ricarica(self, obj):
         return obj.infusione_generatrice.metodo_ricarica if obj.infusione_generatrice else ""
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        personaggio = self.context.get("personaggio")
+        if personaggio:
+            rep["statistiche"] = _append_sezione_mod_chips(
+                rep.get("statistiche"), instance, personaggio
+            )
+        return rep
     
 # -----------------------------------------------------------------------------
 # SERIALIZER PER LE TECNICHE (INFUSIONE, TESSITURA, CERIMONIALE)
@@ -1974,6 +2124,7 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
     statistiche_base = InfusioneStatisticaBaseSerializer(many=True, required=False, source='infusionestatisticabase_set')
     modificatori = InfusioneStatisticaSerializer(many=True, required=False, source='infusionestatistica_set')
     costi_attivazione = InfusioneCostoAttivazioneSerializer(many=True, required=False)
+    sezioni_condizionali = InfusioneSezioneCondizionaleSerializer(many=True, required=False)
     livello = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -1987,6 +2138,9 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
             rep['aura_richiesta'] = PunteggioSmallSerializer(instance.aura_richiesta).data
         if instance.aura_infusione:
             rep['aura_infusione'] = PunteggioSmallSerializer(instance.aura_infusione).data
+        rep['sezioni_condizionali'] = InfusioneSezioneCondizionaleSerializer(
+            instance.sezioni_condizionali.order_by('ordine', 'created_at'), many=True
+        ).data
         rep.update(_qr_fields_for_avista(instance))
         return rep
 
@@ -1996,8 +2150,10 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         s_base = validated_data.pop('infusionestatisticabase_set', [])
         mods = validated_data.pop('infusionestatistica_set', [])
         costi = validated_data.pop('costi_attivazione', [])
+        sezioni = validated_data.pop('sezioni_condizionali', [])
         instance = Infusione.objects.create(**validated_data)
         self.handle_nested_data(instance, comp, s_base, mods, costi)
+        self._sync_sezioni(instance, sezioni)
         return instance
     
     @transaction.atomic
@@ -2006,10 +2162,23 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         s_base = validated_data.pop('infusionestatisticabase_set', None)
         mods = validated_data.pop('infusionestatistica_set', None)
         costi = validated_data.pop('costi_attivazione', None)
+        sezioni = validated_data.pop('sezioni_condizionali', None)
         
         instance = super().update(instance, validated_data)
         self.handle_nested_data(instance, comp, s_base, mods, costi)
+        self._sync_sezioni(instance, sezioni)
         return instance
+
+    def _sync_sezioni(self, instance, sezioni):
+        from .sezioni_condizionali import sync_sezioni_nested
+        sync_sezioni_nested(
+            instance,
+            sezioni,
+            sezione_model=InfusioneSezioneCondizionale,
+            base_model=InfusioneSezioneStatisticaBase,
+            mod_model=InfusioneSezioneStatistica,
+            parent_fk_name='infusione',
+        )
 
 class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMasterMixin):
     componenti = TessituraCaratteristicaSerializer(many=True, required=False)
@@ -2240,7 +2409,14 @@ class OggettoBaseSerializer(serializers.ModelSerializer):
 class ManifestoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Manifesto
-        fields = ("id", "nome", "testo", "requisiti_lettura")
+        fields = (
+            "id",
+            "nome",
+            "testo",
+            "requisiti_lettura",
+            "testo_condizionato",
+            "condizioni_testo",
+        )
 
 
 class ManifestoStaffSerializer(serializers.ModelSerializer):
@@ -2252,7 +2428,17 @@ class ManifestoStaffSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Manifesto
-        fields = ("id", "nome", "testo", "requisiti_lettura", "has_qrcode", "qrcode_id", "minigioco_usa_default")
+        fields = (
+            "id",
+            "nome",
+            "testo",
+            "requisiti_lettura",
+            "testo_condizionato",
+            "condizioni_testo",
+            "has_qrcode",
+            "qrcode_id",
+            "minigioco_usa_default",
+        )
 
 
 class NodoSerializer(serializers.ModelSerializer):
@@ -2362,6 +2548,16 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
 class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
     nodo_nome = serializers.CharField(source="nodo.nome", read_only=True, allow_null=True)
     serie_nome = serializers.CharField(source="serie.nome", read_only=True, allow_null=True)
+    manifesto_nome = serializers.CharField(source="manifesto.nome", read_only=True, allow_null=True)
+    oggetto_base_nome = serializers.CharField(
+        source="oggetto_base.nome", read_only=True, allow_null=True
+    )
+    tessitura_nome = serializers.CharField(source="tessitura.nome", read_only=True, allow_null=True)
+    infusione_nome = serializers.CharField(source="infusione.nome", read_only=True, allow_null=True)
+    cerimoniale_nome = serializers.CharField(
+        source="cerimoniale.nome", read_only=True, allow_null=True
+    )
+    attivata_nome = serializers.CharField(source="attivata.nome", read_only=True, allow_null=True)
 
     class Meta:
         model = RandomQrPoolEffect
@@ -2379,8 +2575,51 @@ class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
             "durata_secondi",
             "serie",
             "serie_nome",
+            "manifesto",
+            "manifesto_nome",
+            "oggetto_base",
+            "oggetto_base_nome",
+            "tessitura",
+            "tessitura_nome",
+            "infusione",
+            "infusione_nome",
+            "cerimoniale",
+            "cerimoniale_nome",
+            "attivata",
+            "attivata_nome",
         )
         read_only_fields = ("id",)
+
+    def validate(self, attrs):
+        tipo = attrs.get("tipo") or getattr(self.instance, "tipo", None)
+        from .models import RandomQrPoolEffect as E
+
+        required = {
+            E.TIPO_NODO: ("nodo", "Nodo"),
+            E.TIPO_SERIE: ("serie", "Serie"),
+            E.TIPO_MANIFESTO: ("manifesto", "Manifesto"),
+            E.TIPO_OGGETTO_BASE: ("oggetto_base", "Oggetto base"),
+            E.TIPO_DA_INFUSIONE: ("infusione", "Infusione (matrice)"),
+            E.TIPO_TESSITURA: ("tessitura", "Tessitura"),
+            E.TIPO_INFUSIONE: ("infusione", "Infusione"),
+            E.TIPO_CERIMONIALE: ("cerimoniale", "Cerimoniale"),
+            E.TIPO_ATTIVATA: ("attivata", "Attivata"),
+        }
+        if tipo in required:
+            field, label = required[tipo]
+            if field in attrs:
+                val = attrs.get(field)
+            elif self.instance is not None:
+                val = getattr(self.instance, f"{field}_id", None) or getattr(
+                    self.instance, field, None
+                )
+            else:
+                val = None
+            if not val:
+                raise serializers.ValidationError(
+                    {field: f"{label} obbligatorio per tipo «{tipo}»."}
+                )
+        return attrs
 
 
 class RandomQrPoolMembershipStaffSerializer(serializers.ModelSerializer):
@@ -2734,6 +2973,8 @@ class PropostaTransazioneSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'autore', 'autore_nome', 'crediti_da_dare', 'crediti_da_ricevere',
             'conto_crediti',
+            'crediti_corrente_da_dare', 'crediti_deposito_da_dare',
+            'crediti_corrente_da_ricevere', 'crediti_deposito_da_ricevere',
             'oggetti_da_dare', 'oggetti_da_ricevere',
             'consumabili_da_dare', 'consumabili_da_ricevere',
             'messaggio', 
@@ -3610,10 +3851,22 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
     proposta = serializers.DictField()
     
     def validate_proposta(self, value):
-        required_fields = ['crediti_da_dare', 'crediti_da_ricevere']
-        for field in required_fields:
-            if field not in value:
-                raise serializers.ValidationError(f"Campo '{field}' mancante nella proposta")
+        from personaggi.economia_crediti import (
+            CONTO_DEPOSITO,
+            modulo_conto_deposito_attivo,
+            normalizza_payload_proposta,
+            valida_saldo_cessione,
+        )
+        from personaggi.regole_transazione import valida_proposta_transazione
+
+        try:
+            value = normalizza_payload_proposta(value)
+        except Exception as exc:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            if isinstance(exc, DjangoValidationError):
+                raise serializers.ValidationError(exc.messages[0] if exc.messages else str(exc))
+            raise
+
         iniziatore = self.context.get('iniziatore')
         if iniziatore:
             _valida_consumabili_proprieta(
@@ -3621,35 +3874,27 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
                 iniziatore,
                 'consumabili_da_dare',
             )
-            from personaggi.economia_crediti import (
-                CONTO_DEPOSITO,
-                modulo_conto_deposito_attivo,
-                normalize_conto,
-                saldo_conto,
-                saldo_spendibile,
-            )
-            from personaggi.regole_transazione import valida_proposta_transazione
             ok, msg = valida_proposta_transazione(iniziatore, value)
             if not ok:
                 raise serializers.ValidationError(msg)
-            dare = Decimal(str(value.get('crediti_da_dare') or 0))
-            if dare > 0:
-                conto = normalize_conto(value.get('conto_crediti'))
-                if conto == CONTO_DEPOSITO and not modulo_conto_deposito_attivo(iniziatore):
-                    raise serializers.ValidationError(
-                        "Il conto di deposito non è attivo: usa il conto corrente."
-                    )
-                disponibile = (
-                    saldo_conto(iniziatore, conto)
-                    if modulo_conto_deposito_attivo(iniziatore)
-                    else saldo_spendibile(iniziatore)
+            corr = value['crediti_corrente_da_dare']
+            dep = value['crediti_deposito_da_dare']
+            if dep > 0 and not modulo_conto_deposito_attivo(iniziatore):
+                raise serializers.ValidationError(
+                    "Il conto di deposito non è attivo: usa solo crediti correnti."
                 )
-                if dare > disponibile:
-                    raise serializers.ValidationError(
-                        f"Crediti insufficienti sul conto {conto.lower()} "
-                        f"(disponibili {disponibile}, richiesti {dare})."
-                    )
-                value['conto_crediti'] = conto
+            if corr > 0 or dep > 0:
+                try:
+                    valida_saldo_cessione(iniziatore, corr, dep)
+                except Exception as exc:
+                    from django.core.exceptions import ValidationError as DjangoValidationError
+                    if isinstance(exc, DjangoValidationError):
+                        raise serializers.ValidationError(
+                            exc.messages[0] if exc.messages else str(exc)
+                        )
+                    raise
+            if dep > 0 and corr == 0:
+                value['conto_crediti'] = CONTO_DEPOSITO
         return value
     
     def create(self, validated_data):
@@ -3658,7 +3903,6 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
         proposta_data = validated_data['proposta']
         
         from django.db import transaction as db_transaction
-        from personaggi.economia_crediti import normalize_conto
         
         with db_transaction.atomic():
             # Crea transazione
@@ -3674,7 +3918,11 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
                 autore=iniziatore,
                 crediti_da_dare=proposta_data.get('crediti_da_dare', 0),
                 crediti_da_ricevere=proposta_data.get('crediti_da_ricevere', 0),
-                conto_crediti=normalize_conto(proposta_data.get('conto_crediti')),
+                conto_crediti=proposta_data.get('conto_crediti') or 'CORRENTE',
+                crediti_corrente_da_dare=proposta_data.get('crediti_corrente_da_dare', 0),
+                crediti_deposito_da_dare=proposta_data.get('crediti_deposito_da_dare', 0),
+                crediti_corrente_da_ricevere=proposta_data.get('crediti_corrente_da_ricevere', 0),
+                crediti_deposito_da_ricevere=proposta_data.get('crediti_deposito_da_ricevere', 0),
                 messaggio=proposta_data.get('messaggio', ''),
                 is_attiva=True
             )
@@ -3693,12 +3941,24 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
 
 class PropostaTransazioneCreateSerializer(serializers.Serializer):
     """Serializer per creare una nuova proposta (controproposta o rilancio)"""
-    crediti_da_dare = serializers.DecimalField(max_digits=10, decimal_places=2, default=0)
-    crediti_da_ricevere = serializers.DecimalField(max_digits=10, decimal_places=2, default=0)
+    crediti_da_dare = serializers.DecimalField(max_digits=10, decimal_places=2, default=0, required=False)
+    crediti_da_ricevere = serializers.DecimalField(max_digits=10, decimal_places=2, default=0, required=False)
     conto_crediti = serializers.ChoiceField(
         choices=["CORRENTE", "DEPOSITO"],
         required=False,
         default="CORRENTE",
+    )
+    crediti_corrente_da_dare = serializers.DecimalField(
+        max_digits=10, decimal_places=2, default=0, required=False
+    )
+    crediti_deposito_da_dare = serializers.DecimalField(
+        max_digits=10, decimal_places=2, default=0, required=False
+    )
+    crediti_corrente_da_ricevere = serializers.DecimalField(
+        max_digits=10, decimal_places=2, default=0, required=False
+    )
+    crediti_deposito_da_ricevere = serializers.DecimalField(
+        max_digits=10, decimal_places=2, default=0, required=False
     )
     oggetti_da_dare = serializers.PrimaryKeyRelatedField(many=True, queryset=Oggetto.objects.all(), required=False)
     oggetti_da_ricevere = serializers.PrimaryKeyRelatedField(many=True, queryset=Oggetto.objects.all(), required=False)
@@ -3711,48 +3971,49 @@ class PropostaTransazioneCreateSerializer(serializers.Serializer):
     messaggio = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, data):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from personaggi.economia_crediti import (
+            CONTO_DEPOSITO,
+            modulo_conto_deposito_attivo,
+            normalizza_payload_proposta,
+            valida_saldo_cessione,
+        )
+        from personaggi.regole_transazione import valida_proposta_transazione
+
+        try:
+            data = normalizza_payload_proposta(data)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages[0] if exc.messages else str(exc))
+
         autore = self.context.get('autore')
         if autore:
             dare_ids = [c.id for c in data.get('consumabili_da_dare', [])]
             _valida_consumabili_proprieta(dare_ids, autore, 'consumabili_da_dare')
-            from personaggi.economia_crediti import (
-                CONTO_DEPOSITO,
-                modulo_conto_deposito_attivo,
-                normalize_conto,
-                saldo_conto,
-                saldo_spendibile,
-            )
-            from personaggi.regole_transazione import valida_proposta_transazione
             payload = {
                 'crediti_da_dare': data.get('crediti_da_dare', 0),
+                'crediti_corrente_da_dare': data.get('crediti_corrente_da_dare', 0),
+                'crediti_deposito_da_dare': data.get('crediti_deposito_da_dare', 0),
                 'oggetti_da_dare': [o.id for o in data.get('oggetti_da_dare', [])],
                 'consumabili_da_dare': dare_ids,
             }
             ok, msg = valida_proposta_transazione(autore, payload)
             if not ok:
                 raise serializers.ValidationError(msg)
-            dare = Decimal(str(data.get('crediti_da_dare') or 0))
-            conto = normalize_conto(data.get('conto_crediti'))
-            if dare > 0:
-                if conto == CONTO_DEPOSITO and not modulo_conto_deposito_attivo(autore):
-                    raise serializers.ValidationError(
-                        {"conto_crediti": "Il conto di deposito non è attivo."}
-                    )
-                disponibile = (
-                    saldo_conto(autore, conto)
-                    if modulo_conto_deposito_attivo(autore)
-                    else saldo_spendibile(autore)
+            corr = data.get('crediti_corrente_da_dare') or 0
+            dep = data.get('crediti_deposito_da_dare') or 0
+            if dep > 0 and not modulo_conto_deposito_attivo(autore):
+                raise serializers.ValidationError(
+                    {"crediti_deposito_da_dare": "Il conto di deposito non è attivo."}
                 )
-                if dare > disponibile:
+            if corr > 0 or dep > 0:
+                try:
+                    valida_saldo_cessione(autore, corr, dep)
+                except DjangoValidationError as exc:
                     raise serializers.ValidationError(
-                        {
-                            "crediti_da_dare": (
-                                f"Crediti insufficienti sul conto {conto.lower()} "
-                                f"(disponibili {disponibile})."
-                            )
-                        }
+                        exc.messages[0] if exc.messages else str(exc)
                     )
-            data['conto_crediti'] = conto
+            if dep > 0 and corr == 0:
+                data['conto_crediti'] = CONTO_DEPOSITO
         return data
     
     def create(self, validated_data):
@@ -3867,6 +4128,7 @@ class PersonaggioStaffListSerializer(serializers.ModelSerializer):
             'proprietario_nome', 'proprietario_username',
             'era', 'era_nome', 'prefettura_nome', 'campagna_nome',
             'crediti', 'crediti_corrente', 'crediti_deposito', 'punti_caratteristica', 'data_morte',
+            'punti_luminosi', 'punti_oscuri', 'punti_grigi',
             'qrcode_id', 'korp_attivi', 'avatar_url',
         )
         read_only_fields = fields
@@ -3978,6 +4240,9 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
     )
     prefettura_esterna = serializers.BooleanField(required=False)
     peso_influencer = serializers.IntegerField(required=False, min_value=1)
+    punti_luminosi = serializers.IntegerField(required=False, min_value=0)
+    punti_oscuri = serializers.IntegerField(required=False, min_value=0)
+    punti_grigi = serializers.IntegerField(required=False, min_value=0)
     badge_instafame = serializers.ChoiceField(
         choices=[("", "Nessuno"), ("GOLD", "Gold"), ("DIAMOND", "Diamond"), ("PREMIUM", "Premium")],
         required=False,
@@ -4001,6 +4266,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'era', 'prefettura', 'prefettura_esterna',
             'era_nome', 'prefettura_nome',
             'watch_enabled', 'peso_influencer', 'badge_instafame',
+            'punti_luminosi', 'punti_oscuri', 'punti_grigi',
             'avatar_url', 'qrcode_id', 'qrcode_testo',
             'carriere_membership', 'risorse_pool_ui', 'abilita_possedute', 'razza_abilita',
             'scheda_modifica_libera', 'punteggi_base', 'modelli_aura', 'can_edit_razza',
@@ -4351,7 +4617,9 @@ class MessaggioSerializer(serializers.ModelSerializer):
             'mittente_is_staff', 'tipo_messaggio', 'titolo', 'testo', 
             'data_invio', 'data_creazione', 'destinatario_personaggio', 'destinatario_personaggio_id',
             'destinatario_gruppo', 'salva_in_cronologia', 'letto', 'is_staff_message',
-            'crediti_allegati', 'conto_crediti_allegati', 'oggetti_allegati_snapshot',
+            'crediti_allegati', 'conto_crediti_allegati',
+            'crediti_corrente_allegati', 'crediti_deposito_allegati',
+            'oggetti_allegati_snapshot',
             'in_risposta_a_id', 'risposte_count'
         )
         read_only_fields = ('mittente', 'data_invio', 'tipo_messaggio')
@@ -4511,11 +4779,19 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
     mittente_personaggio_id = serializers.PrimaryKeyRelatedField(
         queryset=Personaggio.objects.all(), source='mittente_personaggio', write_only=True, required=False, allow_null=True
     )
-    crediti_da_inviare = serializers.IntegerField(required=False, min_value=0, default=0)
+    crediti_da_inviare = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, min_value=0, default=0
+    )
     conto_crediti = serializers.ChoiceField(
         choices=["CORRENTE", "DEPOSITO"],
         required=False,
         default="CORRENTE",
+    )
+    crediti_corrente_da_inviare = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, min_value=0, default=0
+    )
+    crediti_deposito_da_inviare = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, min_value=0, default=0
     )
     mostra_proprietario_giocatore = serializers.BooleanField(required=False, allow_null=True, default=None)
     oggetti_ids = serializers.ListField(
@@ -4536,12 +4812,16 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
             'mostra_proprietario_giocatore',
             'crediti_da_inviare',
             'conto_crediti',
+            'crediti_corrente_da_inviare',
+            'crediti_deposito_da_inviare',
             'oggetti_ids',
         )
 
     def create(self, validated_data):
         validated_data.pop('crediti_da_inviare', None)
         validated_data.pop('conto_crediti', None)
+        validated_data.pop('crediti_corrente_da_inviare', None)
+        validated_data.pop('crediti_deposito_da_inviare', None)
         validated_data.pop('oggetti_ids', None)
         validated_data['mittente'] = self.context['request'].user
         campagna = None
@@ -4696,6 +4976,7 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
     componenti = OggettoComponenteEditorSerializer(many=True, required=False)
     statistiche_base = OggettoStatisticaBaseSerializer(many=True, required=False, source='oggettostatisticabase_set')
     statistiche = OggettoStatisticaSerializer(many=True, required=False, source='oggettostatistica_set')
+    sezioni_condizionali = OggettoSezioneCondizionaleSerializer(many=True, required=False)
 
     class Meta:
         model = Oggetto
@@ -4709,6 +4990,9 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
             'nome': instance.classe_oggetto.nome,
         } if instance.classe_oggetto else None
         rep['classe_oggetto_nome'] = instance.classe_oggetto.nome if instance.classe_oggetto else ''
+        rep['sezioni_condizionali'] = OggettoSezioneCondizionaleSerializer(
+            instance.sezioni_condizionali.order_by('ordine', 'created_at'), many=True
+        ).data
         rep.update(_qr_fields_for_avista(instance))
         return rep
 
@@ -4717,9 +5001,11 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
         comp = validated_data.pop('componenti', [])
         s_base = validated_data.pop('oggettostatisticabase_set', [])
         s_mod = validated_data.pop('oggettostatistica_set', [])
+        sezioni = validated_data.pop('sezioni_condizionali', [])
         
         instance = Oggetto.objects.create(**validated_data)
         self.handle_nested_data(instance, components=comp, stats_base=s_base, stats_mod=s_mod)
+        self._sync_sezioni(instance, sezioni)
         return instance
 
     @transaction.atomic
@@ -4727,10 +5013,23 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
         comp = validated_data.pop('componenti', None)
         s_base = validated_data.pop('oggettostatisticabase_set', None)
         s_mod = validated_data.pop('oggettostatistica_set', None)
+        sezioni = validated_data.pop('sezioni_condizionali', None)
         
         instance = super().update(instance, validated_data)
         self.handle_nested_data(instance, components=comp, stats_base=s_base, stats_mod=s_mod)
+        self._sync_sezioni(instance, sezioni)
         return instance
+
+    def _sync_sezioni(self, instance, sezioni):
+        from .sezioni_condizionali import sync_sezioni_nested
+        sync_sezioni_nested(
+            instance,
+            sezioni,
+            sezione_model=OggettoSezioneCondizionale,
+            base_model=OggettoSezioneStatisticaBase,
+            mod_model=OggettoSezioneStatistica,
+            parent_fk_name='oggetto',
+        )
 
 # SERIALIZZATORE COMPLETO PER EDIT OGGETTO BASE (TEMPLATE)
 class OggettoBaseFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixin):

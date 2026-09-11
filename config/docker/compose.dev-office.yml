@@ -1,5 +1,8 @@
 # dev-office: replica verso master prod; dopo edit su catalogo (Tessiture, …) preferire master o pull-only.
 
+include:
+  - path: compose.coturn.yml
+
 services:
   db:
     container_name: kor35_devoffice_db
@@ -14,6 +17,7 @@ services:
     environment:
       KOR35_SYNC_NODE_ROLE: replica
       EDGE_SYNC_STATE_FILE: /app/runtime-state/edge_sync_dev-office.json
+      TURN_RELAY_ENABLED: "true"
     volumes:
       - ../../backend:/app
       - ../../docs/wiki/staff:/app/wiki_staff_content:ro
@@ -47,6 +51,9 @@ services:
       - ../../docs/wiki/carte:/app/wiki_carte_content:ro
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
+
+  coturn:
+    container_name: kor35_devoffice_coturn
 
   frontend:
     container_name: kor35_devoffice_frontend

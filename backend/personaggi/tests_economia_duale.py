@@ -18,6 +18,8 @@ from personaggi.economia_crediti import (
     addebita_bene,
     get_economia_config,
     modifica_crediti,
+    parse_importi_cessione,
+    parse_importi_messaggio,
     prezzo_da_deposito,
     saldo_corrente,
     saldo_deposito,
@@ -189,6 +191,91 @@ class EconomiaDualeTests(TestCase):
         self.assertEqual(saldo_deposito(altro), dep_b + Decimal("20.00"))
         # Corrente invariata da questo scambio
         self.assertEqual(saldo_corrente(altro), saldo_corrente(altro))
+
+    def test_p2p_due_tipologie_nella_stessa_cessione(self):
+        from personaggi.models import (
+            PropostaTransazione,
+            STATO_TRANSAZIONE_ACCETTATA,
+            STATO_TRANSAZIONE_IN_ATTESA,
+            TransazioneSospesa,
+        )
+
+        altro = Personaggio.objects.create(
+            nome="Eco PG Dual",
+            proprietario=User.objects.create_user(username="eco_user_dual", password="x"),
+            tipologia=self.tipologia,
+            campagna=self.campagna,
+        )
+        modifica_crediti(self.pg, Decimal("15"), "fondi corr extra", conto=CONTO_CORRENTE)
+        modifica_crediti(self.pg, Decimal("100"), "fondi dep extra", conto=CONTO_DEPOSITO)
+        corr_a = saldo_corrente(self.pg)
+        dep_a = saldo_deposito(self.pg)
+        corr_b = saldo_corrente(altro)
+        dep_b = saldo_deposito(altro)
+        tx = TransazioneSospesa.objects.create(
+            iniziatore=self.pg,
+            destinatario=altro,
+            stato=STATO_TRANSAZIONE_IN_ATTESA,
+        )
+        p_a = PropostaTransazione.objects.create(
+            transazione=tx,
+            autore=self.pg,
+            crediti_corrente_da_dare=Decimal("15.00"),
+            crediti_deposito_da_dare=Decimal("100.00"),
+            crediti_da_dare=Decimal("115.00"),
+            crediti_da_ricevere=0,
+            is_attiva=True,
+        )
+        p_b = PropostaTransazione.objects.create(
+            transazione=tx,
+            autore=altro,
+            crediti_da_dare=0,
+            crediti_da_ricevere=Decimal("115.00"),
+            is_attiva=True,
+        )
+        tx.ultima_proposta_iniziatore = p_a
+        tx.ultima_proposta_destinatario = p_b
+        tx.save()
+        tx.accetta()
+        self.assertEqual(tx.stato, STATO_TRANSAZIONE_ACCETTATA)
+        self.assertEqual(saldo_corrente(self.pg), corr_a - Decimal("15.00"))
+        self.assertEqual(saldo_deposito(self.pg), dep_a - Decimal("100.00"))
+        self.assertEqual(saldo_corrente(altro), corr_b + Decimal("15.00"))
+        self.assertEqual(saldo_deposito(altro), dep_b + Decimal("100.00"))
+
+    def test_parse_importi_split_e_legacy(self):
+        corr, dep = parse_importi_cessione(
+            {
+                "crediti_corrente_da_dare": "15.00",
+                "crediti_deposito_da_dare": "100.00",
+            },
+            dare=True,
+        )
+        self.assertEqual(corr, Decimal("15.00"))
+        self.assertEqual(dep, Decimal("100.00"))
+        corr, dep = parse_importi_cessione(
+            {"crediti_da_dare": "40", "conto_crediti": CONTO_DEPOSITO},
+            dare=True,
+        )
+        self.assertEqual(corr, Decimal("0.00"))
+        self.assertEqual(dep, Decimal("40.00"))
+        corr, dep = parse_importi_messaggio(
+            {
+                "crediti_corrente_da_inviare": "8",
+                "crediti_deposito_da_inviare": "12",
+            }
+        )
+        self.assertEqual(corr, Decimal("8.00"))
+        self.assertEqual(dep, Decimal("12.00"))
+
+    def test_premio_evento_accredita_corrente(self):
+        from gestione_plot.evento_premi import applica_premio_presenza_personaggio
+
+        prima = saldo_corrente(self.pg)
+        created = applica_premio_presenza_personaggio(self.evento, self.pg)
+        self.assertTrue(created)
+        self.assertEqual(saldo_corrente(self.pg), prima + Decimal("50.00"))
+        self.assertEqual(saldo_deposito(self.pg), Decimal("0.00"))
 
 
 class StaffEconomiaTrasferimentoApiTests(TestCase):

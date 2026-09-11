@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Reply, Send, X, Users, MessageCircle, Shield, Eye } from 'lucide-react';
+import { Reply, Send, X, Users, MessageCircle, Shield, Eye, Phone } from 'lucide-react';
+import { useChiamataVocale } from './ChiamataVocaleProvider';
+import { useCharacter } from './CharacterContext';
 import RichTextDisplay from './RichTextDisplay';
 import RichTextEditor from './RichTextEditor';
 import MessageAttachmentsLine from './MessageAttachmentsLine';
@@ -18,6 +20,9 @@ const ConversazioneView = ({
   const [isSending, setIsSending] = useState(false);
   const [markingRead, setMarkingRead] = useState(false);
   const messagesEndRef = useRef(null);
+  const { startCall, busy } = useChiamataVocale();
+  const { canAccessModulo } = useCharacter();
+  const chiamateAbilitate = canAccessModulo ? canAccessModulo('chiamate') : false;
 
   const titolo =
     conversazione.titolo ||
@@ -117,6 +122,32 @@ const ConversazioneView = ({
                 <Eye size={14} />
                 {markingRead ? '…' : 'Segna letti'}
               </button>
+            ) : null}
+            {chiamateAbilitate ? (
+            <button
+              type="button"
+              onClick={async () => {
+                const isStaff = titolo === 'Staff' || conversazione.conversazione_id === 'staff';
+                const other = (conversazione.partecipanti || []).find((p) => p.tipo === 'pg' && p.id);
+                try {
+                  if (isStaff) {
+                    await startCall({ versoStaff: true });
+                  } else if (other?.id) {
+                    await startCall({ personaggioId: other.id });
+                  } else {
+                    await startCall({});
+                  }
+                } catch {
+                  /* overlay */
+                }
+              }}
+              disabled={busy}
+              className="p-2 text-emerald-300 rounded-full hover:bg-emerald-900/40 hover:text-white transition-colors disabled:opacity-40"
+              title="Chiama"
+              aria-label="Chiama"
+            >
+              <Phone className="w-5 h-5" />
+            </button>
             ) : null}
             <button
               type="button"

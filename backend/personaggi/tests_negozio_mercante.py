@@ -765,3 +765,166 @@ class NegozioMercanteAcquistoAumentoTests(TestCase):
         self.assertIn(MSG_USATO_LISTINO, payload_stock["messaggio_usabilita"])
         self.assertIn("Aura Tecnologica", payload_stock["messaggio_usabilita"])
         self.assertIn(MSG_SLOT_PIENO_LISTINO, payload_stock["messaggio_usabilita"])
+
+
+class NegozioMercanteBundleTests(TestCase):
+    """Bundle: non_vendibile, stock componenti, acquisto atomico."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from personaggi.models import AURA, OggettoBase, Punteggio, Tessitura
+
+        cls.campagna, _ = Campagna.objects.get_or_create(
+            slug="kor35",
+            defaults={
+                "nome": "KOR35",
+                "is_default": True,
+                "is_base": True,
+                "attiva": True,
+            },
+        )
+        cls.user = User.objects.create_user(username="bundle_buyer", password="test")
+        cls.pg = Personaggio.objects.create(
+            nome="Buyer Bundle",
+            proprietario=cls.user,
+            campagna=cls.campagna,
+        )
+        cls.negozio = NegozioMercante.objects.create(
+            nome="Bottega Bundle",
+            campagna=cls.campagna,
+            saldo_crediti=Decimal("0"),
+            regole_apertura={"modalita": "sempre_aperto"},
+            incassa_acquisti_catalogo=True,
+        )
+        cls.ob_a = OggettoBase.objects.create(nome="Componente A", campagna=cls.campagna)
+        cls.ob_b = OggettoBase.objects.create(nome="Componente B", campagna=cls.campagna)
+        cls.aura = Punteggio.objects.create(
+            nome="Aura bundle test", tipo=AURA, sigla="BND", colore="#445566"
+        )
+        cls.tess = Tessitura.objects.create(
+            nome="Pozione test",
+            aura_richiesta=cls.aura,
+            campagna=cls.campagna,
+        )
+
+    def _fondi(self, corrente="500"):
+        from personaggi.economia_crediti import CONTO_CORRENTE, modifica_crediti
+
+        modifica_crediti(self.pg, Decimal(corrente), "fondi test bundle", conto=CONTO_CORRENTE)
+
+    def test_non_vendibile_nascosta_nel_listino_ma_nel_bundle(self):
+        from personaggi.negozio_mercante_models import (
+            NegozioMercanteBundle,
+            NegozioMercanteBundleRiga,
+            NegozioMercanteVoce,
+            VOCE_OGGETTO_BASE,
+        )
+        from personaggi.negozio_mercante_service import acquista_voce, build_listino
+
+        self._fondi()
+        voce_solo = NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_OGGETTO_BASE,
+            oggetto_base=self.ob_a,
+            prezzo_crediti=10,
+            quantita_residua=5,
+            non_vendibile=True,
+            attivo=True,
+        )
+        voce_pub = NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_OGGETTO_BASE,
+            oggetto_base=self.ob_b,
+            prezzo_crediti=20,
+            quantita_residua=5,
+            non_vendibile=False,
+            attivo=True,
+        )
+        bundle = NegozioMercanteBundle.objects.create(
+            negozio=self.negozio,
+            nome="Kit AB",
+            prezzo_crediti=25,
+            attivo=True,
+        )
+        NegozioMercanteBundleRiga.objects.create(bundle=bundle, voce=voce_solo, quantita=1)
+        NegozioMercanteBundleRiga.objects.create(bundle=bundle, voce=voce_pub, quantita=1)
+
+        listino = build_listino(self.negozio, self.pg)
+        ids = {v["id"] for v in listino["voci"]}
+        self.assertNotIn(str(voce_solo.id), ids)
+        self.assertIn(str(voce_pub.id), ids)
+        self.assertIn(str(bundle.id), ids)
+
+        with self.assertRaises(ValidationError):
+            acquista_voce(self.negozio, self.pg, voce_solo.id)
+
+    def test_acquisto_bundle_scala_stock_componenti(self):
+        from personaggi.models import ConsumabilePersonaggio, Oggetto
+        from personaggi.negozio_mercante_models import (
+            NegozioMercanteBundle,
+            NegozioMercanteBundleRiga,
+            NegozioMercanteVoce,
+            VOCE_CONSUMABILE,
+            VOCE_OGGETTO_BASE,
+        )
+        from personaggi.negozio_mercante_service import acquista_bundle, build_listino
+
+        self._fondi("500")
+        voce_ogb = NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_OGGETTO_BASE,
+            oggetto_base=self.ob_a,
+            prezzo_crediti=40,
+            quantita_residua=2,
+            non_vendibile=True,
+            attivo=True,
+        )
+        voce_con = NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_CONSUMABILE,
+            consumabile_tessitura=self.tess,
+            consumabile_nome="Fiala",
+            consumabile_livello=1,
+            prezzo_crediti=15,
+            quantita_residua=3,
+            non_vendibile=False,
+            attivo=True,
+        )
+        bundle = NegozioMercanteBundle.objects.create(
+            negozio=self.negozio,
+            nome="Starter",
+            prezzo_crediti=50,
+            attivo=True,
+        )
+        NegozioMercanteBundleRiga.objects.create(bundle=bundle, voce=voce_ogb, quantita=1)
+        NegozioMercanteBundleRiga.objects.create(bundle=bundle, voce=voce_con, quantita=2)
+
+        listino = build_listino(self.negozio, self.pg)
+        bund_row = next(v for v in listino["voci"] if v["tipo"] == "bundle")
+        self.assertEqual(bund_row["quantita_residua"], 1)  # min(2/1, 3/2)=1
+        self.assertTrue(bund_row["acquistabile"])
+
+        result = acquista_bundle(self.negozio, self.pg, bundle.id)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["prezzo"], 50)
+
+        voce_ogb.refresh_from_db()
+        voce_con.refresh_from_db()
+        self.assertEqual(voce_ogb.quantita_residua, 1)
+        self.assertEqual(voce_con.quantita_residua, 1)
+        self.assertEqual(ConsumabilePersonaggio.objects.filter(personaggio=self.pg).count(), 2)
+        self.assertTrue(
+            Oggetto.objects.filter(
+                tracciamento_inventario__inventario=self.pg,
+                tracciamento_inventario__data_fine__isnull=True,
+                nome=self.ob_a.nome,
+            ).exists()
+        )
+
+        listino2 = build_listino(self.negozio, self.pg)
+        bund_row2 = next(v for v in listino2["voci"] if v["tipo"] == "bundle")
+        self.assertEqual(bund_row2["quantita_residua"], 0)
+        self.assertFalse(bund_row2["acquistabile"])
+
+        with self.assertRaises(ValidationError):
+            acquista_bundle(self.negozio, self.pg, bundle.id)

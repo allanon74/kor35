@@ -805,6 +805,8 @@ export default function CarriereKorpsManager({ onLogout }) {
       {
         key: 'dipartimento',
         label: 'Dipartimento',
+        ui: 'select',
+        placeholder: 'Tutti i dipartimenti',
         options: carriere.map((c) => ({ id: c.id, label: c.nome })),
         match: (item, values) => {
           const raw = item.carriere_ids ?? item.carriere ?? [];
@@ -815,7 +817,8 @@ export default function CarriereKorpsManager({ onLogout }) {
       },
       {
         key: 'attiva',
-        label: 'Attiva',
+        label: 'Stato',
+        ui: 'chips',
         options: [
           { id: true, label: 'Attive' },
           { id: false, label: 'Disattive' },

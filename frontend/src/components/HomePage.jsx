@@ -80,7 +80,7 @@ export default function HomePage({ pageData, siteConfig }) {
             <p className="wiki-hero-brand text-3xl md:text-5xl text-white drop-shadow-md">KOR35</p>
           </div>
           <p className="max-w-xl text-base md:text-lg text-stone-200/95 leading-relaxed mb-8">
-            LARP forestale: regolamento, ambientazione e ingresso all&apos;app di gioco.
+            LARP multi-epoca: regolamento, ambientazione e ingresso all&apos;app di gioco.
           </p>
           <div className="flex flex-wrap gap-3">
             <button

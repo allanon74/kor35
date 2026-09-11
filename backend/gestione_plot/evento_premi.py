@@ -44,6 +44,7 @@ def calcola_crediti_premio_evento(evento: Evento, personaggio: Personaggio, ts=N
         totale += Decimal(getattr(membership.carriera, "bonus_crediti_evento", 0) or 0)
         carica = getattr(membership, "carica", None)
         if carica:
+            totale += Decimal(getattr(carica, "bonus_stipendio_evento", 0) or 0)
             totale += Decimal(getattr(carica, "bonus_crediti_evento", 0) or 0)
     return totale
 
@@ -55,7 +56,17 @@ def dettaglio_crediti_premio_evento(evento: Evento, personaggio: Personaggio, ts
     totale_bonus = Decimal("0")
     for membership in _membership_attive_evento(personaggio, when).select_related("carriera", "carica"):
         carriera_bonus = Decimal(getattr(membership.carriera, "bonus_crediti_evento", 0) or 0)
-        carica_bonus = Decimal(getattr(membership.carica, "bonus_crediti_evento", 0) or 0) if membership.carica_id else Decimal("0")
+        carica_stipendio = (
+            Decimal(getattr(membership.carica, "bonus_stipendio_evento", 0) or 0)
+            if membership.carica_id
+            else Decimal("0")
+        )
+        carica_crediti = (
+            Decimal(getattr(membership.carica, "bonus_crediti_evento", 0) or 0)
+            if membership.carica_id
+            else Decimal("0")
+        )
+        carica_bonus = carica_stipendio + carica_crediti
         totale_riga = carriera_bonus + carica_bonus
         totale_bonus += totale_riga
         righe.append(
@@ -68,6 +79,8 @@ def dettaglio_crediti_premio_evento(evento: Evento, personaggio: Personaggio, ts
                 "carica_id": membership.carica_id,
                 "carica_nome": getattr(membership.carica, "nome", "") if membership.carica_id else "",
                 "carica_bonus": str(carica_bonus),
+                "carica_bonus_stipendio": str(carica_stipendio),
+                "carica_bonus_crediti": str(carica_crediti),
                 "totale_riga": str(totale_riga),
             }
         )

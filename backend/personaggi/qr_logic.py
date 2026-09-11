@@ -77,6 +77,56 @@ def personaggio_soddisfa_requisiti_manifesto(personaggio, manifesto) -> Tuple[bo
     return personaggio_soddisfa_requisiti(personaggio, manifesto.requisiti_lettura or [])
 
 
+def risolvi_payload_manifesto(manifesto, personaggio=None) -> Dict[str, Any]:
+    """
+    Costruisce il payload scan di un manifesto (lettura + testo condizionale AND/OR).
+
+    - `requisiti_lettura`: gate hard (lista AND flat). Se fallisce → testo nascosto.
+    - `condizioni_testo` + `testo_condizionato`: testo aggiuntivo se il gruppo è soddisfatto.
+    """
+    from .requisiti_accesso import personaggio_soddisfa_requisiti_gruppo
+
+    payload: Dict[str, Any] = {
+        "id": manifesto.pk,
+        "nome": manifesto.nome,
+        "testo": manifesto.testo or "",
+        "requisiti_lettura": manifesto.requisiti_lettura or [],
+        "testo_condizionato": None,
+        "mostra_testo_condizionato": False,
+        "condizioni_testo": manifesto.condizioni_testo or {},
+        "puo_leggere": True,
+        "messaggio_accesso": None,
+    }
+
+    if personaggio is None:
+        reqs = manifesto.requisiti_lettura or []
+        if reqs:
+            payload["puo_leggere"] = False
+            payload["messaggio_accesso"] = (
+                "Accedi e indica personaggio_id per verificare i requisiti."
+            )
+            payload["testo"] = None
+        return payload
+
+    ok_r, msg_r = personaggio_soddisfa_requisiti_manifesto(personaggio, manifesto)
+    payload["puo_leggere"] = ok_r
+    payload["messaggio_accesso"] = msg_r or None
+    if not ok_r:
+        payload["testo"] = None
+        return payload
+
+    testo_cond = (getattr(manifesto, "testo_condizionato", None) or "").strip()
+    condizioni = getattr(manifesto, "condizioni_testo", None) or {}
+    requisiti_cond = condizioni.get("requisiti") if isinstance(condizioni, dict) else None
+    if testo_cond and requisiti_cond:
+        ok_c, _ = personaggio_soddisfa_requisiti_gruppo(personaggio, condizioni)
+        if ok_c:
+            payload["testo_condizionato"] = manifesto.testo_condizionato
+            payload["mostra_testo_condizionato"] = True
+
+    return payload
+
+
 def permessi_oggetto_inventario_qr(personaggio, oggetto) -> Dict[str, Any]:
     """
     Visibilità e azioni per oggetti in inventario scansionato via QR (non PG).

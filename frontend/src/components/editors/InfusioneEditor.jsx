@@ -12,6 +12,7 @@ import FormulaBuilderModal from './FormulaBuilderModal';
 import SearchableSelect from './SearchableSelect';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import ActivationCostInline from './inlines/ActivationCostInline';
+import SezioniCondizionaliEditor from './inlines/SezioniCondizionaliEditor';
 
 const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -31,9 +32,14 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     statistiche_base: [],
     modificatori: [],
     costi_attivazione: [],
+    sezioni_condizionali: [],
   };
 
-  const [formData, setFormData] = useState({ ...defaultData, ...initialData });
+  const [formData, setFormData] = useState({
+    ...defaultData,
+    ...initialData,
+    sezioni_condizionali: initialData?.sezioni_condizionali || [],
+  });
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState({ type: 'success', message: '' });
   const [isFormulaBuilderOpen, setIsFormulaBuilderOpen] = useState(false);
@@ -103,6 +109,31 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         }
       });
 
+      const sezioni = (formData.sezioni_condizionali || []).map((sez, idx) => ({
+        ordine: idx,
+        testo: sez.testo || '',
+        condizioni: sez.condizioni && typeof sez.condizioni === 'object' ? sez.condizioni : { operator: 'AND', requisiti: [] },
+        statistiche_base: (sez.statistiche_base || [])
+          .map((sb) => {
+            const sId = sb.statistica?.id || sb.statistica;
+            if (!sId) return null;
+            return { statistica: sId, valore_base: Number(sb.valore_base) || 0 };
+          })
+          .filter(Boolean),
+        modificatori: (sez.modificatori || [])
+          .map((mod) => {
+            const sId = mod.statistica?.id || mod.statistica;
+            if (!sId) return null;
+            return {
+              statistica: sId,
+              valore: Number.parseFloat(mod.valore) || 0,
+              tipo_modificatore: mod.tipo_modificatore || 'ADD',
+              solo_oggetto_ospitante: !!mod.solo_oggetto_ospitante,
+            };
+          })
+          .filter(Boolean),
+      }));
+
       const dataToSend = { 
         ...formData,
         statistica_cariche: formData.statistica_cariche?.id || formData.statistica_cariche || null,
@@ -111,6 +142,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         modificatori: Array.from(modsMap.values()),
         statistiche_base: Array.from(baseMap.values()),
         costi_attivazione: Array.from(costiMap.values()),
+        sezioni_condizionali: sezioni,
       };
       
       if (onSave) {
@@ -321,6 +353,13 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         onAdd={() => setFormData({...formData, modificatori: [...(formData.modificatori || []), {statistica: null, valore: 0, tipo_modificatore:'ADD', usa_limitazione_aura: false, limit_a_aure: [], usa_limitazione_elemento: false, limit_a_elementi: [], usa_condizione_text: false, condizione_text: '', solo_oggetto_ospitante: false}]})}
         onChange={(i, f, v) => updateInline('modificatori', i, f, v)}
         onRemove={(i) => setFormData({...formData, modificatori: formData.modificatori.filter((_, idx) => idx !== i)})}
+      />
+
+      <SezioniCondizionaliEditor
+        items={formData.sezioni_condizionali || []}
+        statsOptions={statsOptions}
+        onLogout={onLogout}
+        onChange={(sezioni_condizionali) => setFormData({ ...formData, sezioni_condizionali })}
       />
 
       <StaffMinigiocoQrSection qrcodeId={formData.qrcode_id} onLogout={onLogout} />

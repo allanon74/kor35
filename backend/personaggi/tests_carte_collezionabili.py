@@ -1,6 +1,7 @@
 """
 Test carte collezionabili — bustine, reliquiario, validazione mazzo, accesso 3 stati.
 """
+import json
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -593,6 +594,42 @@ class CartaCatalogoAutoCodiceApiTests(APITestCase):
         self.assertEqual(resp.data.get("tipo"), CARTA_TIPO_PERSONAGGIO)
         self.assertEqual(resp.data.get("rarita"), CARTA_RARITA_COMUNE)
 
+    def test_patch_multipart_con_immagine_non_500(self):
+        """Card Studio: upload illustrazione via FormData (PATCH multipart)."""
+        from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        carta = CartaCollezionabile.objects.create(
+            campagna=self.campagna,
+            espansione=self.espansione,
+            codice="AUT-001",
+            nome="Con Arte",
+            tipo=CARTA_TIPO_PERSONAGGIO,
+            energia=CARTA_ENERGIA_MARZIALE,
+            rarita=CARTA_RARITA_COMUNE,
+        )
+        buf = BytesIO()
+        Image.new("RGB", (8, 8), color=(120, 80, 40)).save(buf, format="PNG")
+        upload = SimpleUploadedFile("art.png", buf.getvalue(), content_type="image/png")
+        resp = self.client.patch(
+            f"{self.base_url}{carta.id}/",
+            {
+                "nome": "Con Arte",
+                "tipo": CARTA_TIPO_PERSONAGGIO,
+                "energia": CARTA_ENERGIA_MARZIALE,
+                "rarita": CARTA_RARITA_COMUNE,
+                "mse_campi": json.dumps({"name": "Con Arte"}),
+                "immagine": upload,
+            },
+            format="multipart",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        carta.refresh_from_db()
+        self.assertTrue(bool(carta.immagine))
+
 
 class KeywordCartaParametriTests(TestCase):
     def test_mutazione_parametrica(self):
@@ -630,7 +667,7 @@ class CarteEsempioSeedTests(TestCase):
         from personaggi.carte_esempio_seed import seed_carte_esempio
 
         stats1 = seed_carte_esempio(campagna_slug="seed-carte")
-        self.assertEqual(stats1["carte_create"], 20)
+        self.assertEqual(stats1["carte_create"], 29)
         self.assertGreaterEqual(stats1["keywords_create"], 5)
 
         stats2 = seed_carte_esempio(campagna_slug="seed-carte", skip_if_complete=True)
@@ -638,34 +675,34 @@ class CarteEsempioSeedTests(TestCase):
 
         self.assertEqual(
             CartaCollezionabile.objects.filter(campagna=self.campagna).count(),
-            20,
+            29,
         )
         self.assertEqual(
             CartaCollezionabile.objects.filter(
                 campagna=self.campagna, tipo=CARTA_TIPO_PERSONAGGIO
             ).count(),
-            10,
+            12,
         )
         self.assertEqual(
             CartaCollezionabile.objects.filter(
                 campagna=self.campagna, tipo=CARTA_TIPO_OGGETTO
             ).count(),
-            2,
+            6,
         )
         self.assertEqual(
             CartaCollezionabile.objects.filter(
                 campagna=self.campagna, tipo=CARTA_TIPO_EVENTO
             ).count(),
-            6,
+            8,
         )
         self.assertEqual(
             CartaCollezionabile.objects.filter(
                 campagna=self.campagna, tipo=CARTA_TIPO_LUOGO
             ).count(),
-            2,
+            3,
         )
         esp = EspansioneCarte.objects.get(campagna=self.campagna, slug="sette-elegie-demo")
-        self.assertEqual(esp.carte.count(), 20)
+        self.assertEqual(esp.carte.count(), 29)
         self.assertTrue(
             KeywordCarta.objects.filter(campagna=self.campagna, codice="COLPO").exists()
         )

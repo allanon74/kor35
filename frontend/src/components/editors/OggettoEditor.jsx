@@ -9,6 +9,7 @@ import EditorSaveActions from './EditorSaveActions';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import SearchableSelect from './SearchableSelect';
+import SezioniCondizionaliEditor from './inlines/SezioniCondizionaliEditor';
 
 const TIPO_CHOICES = [
     {id:'FIS', nome:'Fisico'}, {id:'MAT', nome:'Materia'}, {id:'MOD', nome:'Mod'},
@@ -39,7 +40,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
     nome: '', testo: '', tipo_oggetto: 'FIS', aura: null, classe_oggetto: null,
     is_tecnologico: false, is_equipaggiato: false, is_pesante: false,
     inventario_corrente: null,
-    attacco_base: '', slot_fisici_possibili: [], componenti: [], statistiche_base: [], statistiche: []
+    attacco_base: '', slot_fisici_possibili: [], componenti: [], statistiche_base: [], statistiche: [], sezioni_condizionali: []
   });
 
   useEffect(() => {
@@ -48,6 +49,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
       ...prev,
       ...initialData,
       slot_fisici_possibili: parseSlots(initialData.slot_fisici_possibili),
+      sezioni_condizionali: initialData.sezioni_condizionali || [],
     }));
   }, [initialData]);
 
@@ -119,7 +121,31 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
           
           statistiche_base: cleanAndDeduplicate(formData.statistiche_base, 'statistica'),
           statistiche: cleanAndDeduplicate(formData.statistiche, 'statistica', { parseModifierValore: true }),
-          componenti: cleanAndDeduplicate(formData.componenti, 'caratteristica')
+          componenti: cleanAndDeduplicate(formData.componenti, 'caratteristica'),
+          sezioni_condizionali: (formData.sezioni_condizionali || []).map((sez, idx) => ({
+            ordine: idx,
+            testo: sez.testo || '',
+            condizioni: sez.condizioni && typeof sez.condizioni === 'object' ? sez.condizioni : { operator: 'AND', requisiti: [] },
+            statistiche_base: (sez.statistiche_base || [])
+              .map((sb) => {
+                const sId = getId(sb.statistica);
+                if (!sId) return null;
+                return { statistica: sId, valore_base: Number(sb.valore_base) || 0 };
+              })
+              .filter(Boolean),
+            modificatori: (sez.modificatori || [])
+              .map((mod) => {
+                const sId = getId(mod.statistica);
+                if (!sId) return null;
+                return {
+                  statistica: sId,
+                  valore: Number.parseFloat(mod.valore) || 0,
+                  tipo_modificatore: mod.tipo_modificatore || 'ADD',
+                  solo_oggetto_ospitante: !!mod.solo_oggetto_ospitante,
+                };
+              })
+              .filter(Boolean),
+          })),
       };
 
       const isSaveAsNew = mode === 'save_as_new';
@@ -134,7 +160,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
         setFormData({
           nome: '', testo: '', tipo_oggetto: 'FIS', aura: null, classe_oggetto: null,
           is_tecnologico: false, is_equipaggiato: false, is_pesante: false,
-          inventario_corrente: null, attacco_base: '', slot_fisici_possibili: [], componenti: [], statistiche_base: [], statistiche: [],
+          inventario_corrente: null, attacco_base: '', slot_fisici_possibili: [], componenti: [], statistiche_base: [], statistiche: [], sezioni_condizionali: [],
         });
         setStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
       }
@@ -289,6 +315,13 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
             onRemove={i => setFormData({...formData, statistiche: formData.statistiche.filter((_,idx)=>idx!==i)})} 
           />
       </div>
+
+      <SezioniCondizionaliEditor
+        items={formData.sezioni_condizionali || []}
+        statsOptions={punteggiList.filter(p => p.tipo === 'ST')}
+        onLogout={onLogout}
+        onChange={(sezioni_condizionali) => setFormData({ ...formData, sezioni_condizionali })}
+      />
 
       <CharacteristicInline items={formData.componenti} options={punteggiList.filter(p => p.tipo === 'CA')} onAdd={() => setFormData({...formData, componenti: [...formData.componenti, {caratteristica:'', valore:1}]})} onChange={(i,f,v) => {const n=[...formData.componenti]; n[i][f]=v; setFormData({...formData, componenti:n});}} onRemove={i => setFormData({...formData, componenti: formData.componenti.filter((_,idx)=>idx!==i)})} />
 

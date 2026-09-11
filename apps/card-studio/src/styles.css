@@ -303,10 +303,45 @@ body {
   background: #ece9d8;
   border: 1px inset #fff;
   font-size: 12px;
-  min-height: 1.4rem;
+  min-height: 2.75rem;
+  max-height: 2.75rem;
+  overflow: auto;
+  line-height: 1.35;
+  box-sizing: border-box;
 }
 
-/* Card list table */
+.mse-statusbar-static {
+  color: #444;
+}
+
+.mse-field-description-panel {
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+  max-height: 2.75rem;
+  overflow: auto;
+  padding: 0.35rem 0.5rem;
+  margin: 0.35rem 0.35rem 0.25rem;
+  background: #ece9d8;
+  border: 1px inset #fff;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #222;
+  box-sizing: border-box;
+}
+
+.mse-field-description-panel.is-placeholder {
+  color: #555;
+  font-style: italic;
+}
+
+.mse-field-table-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 0.25rem;
+}
 
 .mse-card-list {
   flex: 1;
@@ -371,12 +406,6 @@ body {
 }
 
 /* Field table (MSE card fields) */
-
-.mse-field-table-wrap {
-  flex: 1;
-  overflow: auto;
-  padding: 0.25rem;
-}
 
 .mse-field-table {
   width: 100%;
@@ -475,10 +504,6 @@ body {
   margin: 0.35rem;
 }
 
-.mse-field-hover-hint {
-  display: none;
-}
-
 /* Preview pane */
 
 .mse-preview-frame {
@@ -540,14 +565,29 @@ body {
 
 .mse-layer-text {
   display: flex;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.mse-layer-text-inner {
+  width: 100%;
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.15;
+  line-height: 1.25;
+}
+
+.mse-layer-symbols {
+  box-sizing: border-box;
+}
+
+.mse-layer-lore {
+  font-style: italic;
 }
 
 .mse-layer-symbols img {
   object-fit: contain;
   vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .mse-image-field {
@@ -792,6 +832,12 @@ button.btn-danger {
   border: none;
   padding: 0;
   background: none;
+}
+
+.mse-export-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
 }
 
 .mse-sub-title {

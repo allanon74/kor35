@@ -15,6 +15,7 @@ Procedura **passo-passo** per simulare l’evento in bosco: niente internet vers
 | WiFi staff | `Pi_Emergenza` → `10.42.0.1` | Stesso (sempre attivo) |
 | WiFi giocatori | `kor35-larp` (Omada EAP) | Stesso — **questo** è il test principale |
 | App / API | `www.kor35.it` via internet o LAN | `www.kor35.it` risolto dal Pi (DNS locale) |
+| Chiamate vocali | STUN internet + TURN locale **oppure** TURN su **prod** (`www.kor35.it`) se il Pi è giù | Solo **TURN sul Pi** (coturn, porta 3478); STUN Google non raggiunge Internet |
 
 **Non confondere le reti:** smartphone giocatori e kiosk pilota usano la LAN Omada (`192.168.100.x`), **non** `10.42.0.1` (solo emergenza staff).
 
@@ -43,7 +44,7 @@ make status ENV=mirror
 make mirror-network-check ENV=mirror
 ```
 
-**Atteso:** container `kor35_mirror_*` e `omada_controller` **Up**; modalità rete **`router`**; sync verso master **OK** (ultimo pull recente).
+**Atteso:** container `kor35_mirror_*` (incluso **coturn**), `omada_controller` **Up**; modalità rete **`router`**; sync verso master **OK** (ultimo pull recente).
 
 Se il DB è vecchio, da PC o sul Pi (con internet):
 

@@ -17,6 +17,7 @@ from personaggi.campagna_moduli import (
     MODULO_SCOMMESSE,
     MODULO_SOCIAL,
     MODULO_TASKS,
+    MODULO_CHIAMATE,
     STAFF_TOOL_TO_MODULO,
     apply_moduli_accesso,
     get_modulo_accesso,
@@ -90,6 +91,17 @@ class CampagnaModuliAccessoTests(TestCase):
             campagna=self.campagna,
             tipologia=self.tip_png,
         )
+
+    def test_default_chiamate_open(self):
+        self.assertEqual(get_modulo_accesso(self.campagna, MODULO_CHIAMATE), MODULO_ACCESSO_OPEN)
+        self.assertTrue(personaggio_puo_accedere_modulo(self.pg_player, MODULO_CHIAMATE))
+        self.assertTrue(staff_tool_abilitato(self.campagna, "chiamate"))
+
+    def test_chiamate_off_nasconde_centralino(self):
+        apply_moduli_accesso(self.campagna, {MODULO_CHIAMATE: MODULO_ACCESSO_OFF})
+        self.campagna.refresh_from_db()
+        self.assertFalse(personaggio_puo_accedere_modulo(self.pg_player, MODULO_CHIAMATE))
+        self.assertFalse(staff_tool_abilitato(self.campagna, "chiamate"))
 
     def test_default_tasks_off(self):
         self.assertEqual(get_modulo_accesso(self.campagna, MODULO_TASKS), MODULO_ACCESSO_OFF)

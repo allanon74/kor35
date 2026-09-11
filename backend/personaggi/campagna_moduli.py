@@ -40,6 +40,7 @@ MODULO_NEGOZI = "negozi"
 MODULO_CREAZIONE_GUIDATA = "creazione_guidata"
 MODULO_CONTO_DEPOSITO = "conto_deposito"
 MODULO_RUBRICHE = "rubriche"
+MODULO_CHIAMATE = "chiamate"
 
 # tool staff id → chiave modulo (None = non gated)
 STAFF_TOOL_TO_MODULO = {
@@ -52,6 +53,7 @@ STAFF_TOOL_TO_MODULO = {
     "social-report": MODULO_SOCIAL,
     "economia-crediti": MODULO_CONTO_DEPOSITO,
     "rubriche": MODULO_RUBRICHE,
+    "chiamate": MODULO_CHIAMATE,
 }
 
 # tab player id → chiave modulo
@@ -123,6 +125,12 @@ CAMPAGNA_MODULI_REGISTRY: list[dict[str, Any]] = [
         "label": "Conto di deposito",
         "descrizione": "Economia duale: conto corrente (stipendio) e deposito (altri guadagni), trasferimento per evento.",
         "default": MODULO_ACCESSO_OFF,
+    },
+    {
+        "key": MODULO_CHIAMATE,
+        "label": "Chiamate vocali",
+        "descrizione": "Chiamate in-app personaggio↔personaggio e verso lo staff (centralino).",
+        "default": MODULO_ACCESSO_OPEN,
     },
 ]
 

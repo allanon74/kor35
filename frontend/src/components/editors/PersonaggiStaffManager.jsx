@@ -561,6 +561,22 @@ const PersonaggiStaffManager = ({ onLogout }) => {
         render: (row) => <span className="text-amber-300">{row.crediti_deposito ?? '—'}</span>,
         align: 'right',
       },
+      {
+        key: 'allineamento',
+        header: 'L/O/G',
+        getSortValue: (row) =>
+          Number(row.punti_luminosi || 0) + Number(row.punti_oscuri || 0) + Number(row.punti_grigi || 0),
+        render: (row) => (
+          <span className="text-xs whitespace-nowrap" title="Luminoso / Oscuro / Grigio">
+            <span className="text-amber-200">{row.punti_luminosi ?? 0}</span>
+            <span className="text-gray-600">/</span>
+            <span className="text-violet-300">{row.punti_oscuri ?? 0}</span>
+            <span className="text-gray-600">/</span>
+            <span className="text-gray-400">{row.punti_grigi ?? 0}</span>
+          </span>
+        ),
+        width: 90,
+      },
     ],
     [],
   );
@@ -1059,6 +1075,70 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                           <span className="text-gray-400">Punti caratteristica</span>
                           <p className="text-2xl font-bold text-blue-300">{detail.punti_caratteristica}</p>
                         </div>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-gray-300 mb-2">Allineamento (task)</h4>
+                        <div className="grid grid-cols-3 gap-3 text-sm">
+                          <div className="bg-gray-800 rounded p-3 border border-amber-900/40">
+                            <span className="text-amber-200/80">Luminoso</span>
+                            <p className="text-2xl font-bold text-amber-200">{detail.punti_luminosi ?? 0}</p>
+                          </div>
+                          <div className="bg-gray-800 rounded p-3 border border-violet-900/40">
+                            <span className="text-violet-300/80">Oscuro</span>
+                            <p className="text-2xl font-bold text-violet-300">{detail.punti_oscuri ?? 0}</p>
+                          </div>
+                          <div className="bg-gray-800 rounded p-3 border border-gray-600">
+                            <span className="text-gray-400">Grigio</span>
+                            <p className="text-2xl font-bold text-gray-300">{detail.punti_grigi ?? 0}</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2 items-end">
+                          <label className="flex flex-col gap-1 text-xs text-gray-400">
+                            Luminoso
+                            <input
+                              type="number"
+                              min={0}
+                              className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm w-20 text-amber-200"
+                              value={detail.punti_luminosi ?? 0}
+                              onChange={(e) => setDetail((d) => ({ ...d, punti_luminosi: e.target.value }))}
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-xs text-gray-400">
+                            Oscuro
+                            <input
+                              type="number"
+                              min={0}
+                              className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm w-20 text-violet-300"
+                              value={detail.punti_oscuri ?? 0}
+                              onChange={(e) => setDetail((d) => ({ ...d, punti_oscuri: e.target.value }))}
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-xs text-gray-400">
+                            Grigio
+                            <input
+                              type="number"
+                              min={0}
+                              className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm w-20 text-gray-300"
+                              value={detail.punti_grigi ?? 0}
+                              onChange={(e) => setDetail((d) => ({ ...d, punti_grigi: e.target.value }))}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => handleSaveFields({
+                              punti_luminosi: Math.max(0, parseInt(detail.punti_luminosi, 10) || 0),
+                              punti_oscuri: Math.max(0, parseInt(detail.punti_oscuri, 10) || 0),
+                              punti_grigi: Math.max(0, parseInt(detail.punti_grigi, 10) || 0),
+                            })}
+                            className="px-3 py-1.5 bg-teal-800 rounded text-sm font-bold disabled:opacity-50"
+                          >
+                            Salva allineamento
+                          </button>
+                        </div>
+                        <p className="mt-2 text-xs text-gray-500">
+                          Incrementati automaticamente (+1) quando il PG risolve una task con quell&apos;allineamento.
+                        </p>
                       </div>
                       <p className="text-xs text-gray-500">
                         Quantità positiva aggiunge, negativa sottrae. Per i crediti scegli il conto di destinazione.

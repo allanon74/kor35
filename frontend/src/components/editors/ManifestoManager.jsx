@@ -9,8 +9,11 @@ import StaffQrBadge from './StaffQrBadge';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import StaffMinigiocoPageToolbar from './StaffMinigiocoPageToolbar';
 import StaffMinigiocoUsaDefaultToggle from './StaffMinigiocoUsaDefaultToggle';
+import RichTextEditor from '../RichTextEditor';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 import { useStaffQrAssociation } from '../../hooks/useStaffQrAssociation';
+import { useRequisitiAccessoLookup } from '../../hooks/useRequisitiAccessoLookup';
+import RequisitiListaEditor, { RequisitiGruppoEditor } from './RequisitiAccessoEditor';
 import {
   applyDefaultMinigiocoToQr,
   MINIGIOCO_PAGE_KEYS,
@@ -31,6 +34,7 @@ import {
   staffCreateSerieQr,
   staffGetTrappole,
   staffCreateTrappola,
+  staffUpdateTrappola,
   staffDeleteTrappola,
 } from '../../api';
 
@@ -40,8 +44,11 @@ const TABS = [
   { id: 'trappole', label: 'Trappole' },
 ];
 
+const emptyCondizioni = () => ({ operator: 'AND', requisiti: [] });
+
 const ManifestoManager = ({ onBack, onLogout }) => {
   const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
+  const { lookup, loading: lookupLoading } = useRequisitiAccessoLookup(onLogout);
   const [tab, setTab] = useState('manifesti');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +67,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
   const [serieQrList, setSerieQrList] = useState([]);
   const [serieQrForm, setSerieQrForm] = useState({ nome: '', testo: '', serie: '' });
   const [trappole, setTrappole] = useState([]);
-  const [trappolaForm, setTrappolaForm] = useState({ nome: '', testo: '', durata_secondi: 60 });
+  const [trappolaForm, setTrappolaForm] = useState({ id: null, nome: '', testo: '', durata_secondi: 60 });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -107,35 +114,27 @@ const ManifestoManager = ({ onBack, onLogout }) => {
     }
   }, [tab, loadSerieTrappole]);
 
+  const manifestoPayload = (editingRow) => ({
+    nome: editingRow.nome,
+    testo: editingRow.testo || '',
+    requisiti_lettura: Array.isArray(editingRow.requisiti_lettura)
+      ? editingRow.requisiti_lettura
+      : [],
+    testo_condizionato: editingRow.testo_condizionato || '',
+    condizioni_testo: editingRow.condizioni_testo || emptyCondizioni(),
+  });
+
   const save = async () => {
     if (!editing?.nome?.trim()) {
       setMsg('Il nome è obbligatorio');
       return;
     }
     try {
+      const payload = manifestoPayload(editing);
       if (editing.id) {
-        await staffUpdateManifesto(
-          editing.id,
-          {
-            nome: editing.nome,
-            testo: editing.testo || '',
-            requisiti_lettura: editing.requisiti_lettura_json
-              ? JSON.parse(editing.requisiti_lettura_json)
-              : [],
-          },
-          onLogout
-        );
+        await staffUpdateManifesto(editing.id, payload, onLogout);
       } else {
-        await staffCreateManifesto(
-          {
-            nome: editing.nome,
-            testo: editing.testo || '',
-            requisiti_lettura: editing.requisiti_lettura_json
-              ? JSON.parse(editing.requisiti_lettura_json)
-              : [],
-          },
-          onLogout
-        );
+        await staffCreateManifesto(payload, onLogout);
       }
       setEditing(null);
       setMsg('Salvato.');
@@ -172,7 +171,9 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                 setEditing({
                   nome: '',
                   testo: '',
-                  requisiti_lettura_json: '[]',
+                  requisiti_lettura: [],
+                  testo_condizionato: '',
+                  condizioni_testo: emptyCondizioni(),
                 });
               }}
             >
@@ -217,7 +218,14 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                         setModalTab('dati');
                         setEditing({
                           ...m,
-                          requisiti_lettura_json: JSON.stringify(m.requisiti_lettura || [], null, 2),
+                          requisiti_lettura: Array.isArray(m.requisiti_lettura)
+                            ? m.requisiti_lettura
+                            : [],
+                          testo_condizionato: m.testo_condizionato || '',
+                          condizioni_testo:
+                            m.condizioni_testo && typeof m.condizioni_testo === 'object'
+                              ? m.condizioni_testo
+                              : emptyCondizioni(),
                         });
                       }}
                     >
@@ -265,7 +273,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
             onChange={setModalTab}
           />
           {modalTab === 'dati' && (
-          <div className="space-y-3">
+          <div className="space-y-4">
           <label className="block text-sm">
             Nome
             <input
@@ -274,22 +282,42 @@ const ManifestoManager = ({ onBack, onLogout }) => {
               onChange={(e) => setEditing({ ...editing, nome: e.target.value })}
             />
           </label>
-          <label className="block text-sm">
-            Contenuto (HTML / ricco)
-            <textarea
-              className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600 font-mono text-sm min-h-[180px]"
-              value={editing.testo || ''}
-              onChange={(e) => setEditing({ ...editing, testo: e.target.value })}
+          <RichTextEditor
+            label="Contenuto base"
+            value={editing.testo || ''}
+            onChange={(testo) => setEditing({ ...editing, testo })}
+            minHeight={160}
+          />
+          <div className="space-y-2">
+            <div className="text-xs uppercase text-gray-400 font-semibold">
+              Requisiti lettura (gate: senza = tutti leggono)
+            </div>
+            <RequisitiListaEditor
+              requisiti={editing.requisiti_lettura || []}
+              onChange={(requisiti_lettura) => setEditing({ ...editing, requisiti_lettura })}
+              lookup={lookup}
+              lookupLoading={lookupLoading}
             />
-          </label>
-          <label className="block text-sm">
-            Requisiti lettura (JSON, lista vuota = tutti)
-            <textarea
-              className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600 font-mono text-xs min-h-[80px]"
-              value={editing.requisiti_lettura_json || '[]'}
-              onChange={(e) => setEditing({ ...editing, requisiti_lettura_json: e.target.value })}
+          </div>
+          <div className="border border-indigo-900/50 rounded-lg p-3 space-y-3 bg-indigo-950/20">
+            <div className="text-xs uppercase text-indigo-300 font-semibold">
+              Testo condizionale (mostrato in aggiunta se le condizioni sono OK)
+            </div>
+            <RequisitiGruppoEditor
+              value={editing.condizioni_testo || emptyCondizioni()}
+              onChange={(condizioni_testo) => setEditing({ ...editing, condizioni_testo })}
+              lookup={lookup}
+              label="Condizioni AND/OR"
+              defaultOperator="AND"
             />
-          </label>
+            <RichTextEditor
+              label="Contenuto condizionale"
+              value={editing.testo_condizionato || ''}
+              onChange={(testo_condizionato) => setEditing({ ...editing, testo_condizionato })}
+              placeholder="Visibile solo se le condizioni sopra sono soddisfatte"
+              minHeight={120}
+            />
+          </div>
           </div>
           )}
           {modalTab === 'minigioco' && (
@@ -386,7 +414,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
           type="button"
           className="px-3 py-2 bg-indigo-600 rounded text-sm"
           onClick={() => {
-            setTrappolaForm({ nome: '', testo: '', durata_secondi: 60 });
+            setTrappolaForm({ id: null, nome: '', testo: '', durata_secondi: 60 });
             setTrappolaEditing(true);
           }}
         >
@@ -399,13 +427,28 @@ const ManifestoManager = ({ onBack, onLogout }) => {
       <ul className="space-y-2">
         {trappole.map((t) => (
           <li key={t.id} className="flex items-center gap-2 bg-gray-800/40 px-3 py-2 rounded text-sm">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="font-semibold">{t.nome}</div>
               <div className="text-xs text-gray-400">
                 {t.durata_secondi ? `Timer ${t.durata_secondi}s` : 'Solo testo'}
               </div>
             </div>
             <StaffQrBadge hasQr={t.has_qrcode} />
+            <button
+              type="button"
+              className="text-xs px-2 py-1 bg-gray-700 rounded"
+              onClick={() => {
+                setTrappolaForm({
+                  id: t.id,
+                  nome: t.nome || '',
+                  testo: t.testo || '',
+                  durata_secondi: t.durata_secondi ?? '',
+                });
+                setTrappolaEditing(true);
+              }}
+            >
+              Modifica
+            </button>
             <button
               type="button"
               className="text-xs px-2 py-1 bg-violet-800 rounded"
@@ -535,48 +578,66 @@ const ManifestoManager = ({ onBack, onLogout }) => {
 
       {trappolaEditing && (
         <StaffEditorModal
-          title="Nuova trappola"
+          title={trappolaForm.id ? `Trappola: ${trappolaForm.nome || 'senza nome'}` : 'Nuova trappola'}
+          size="lg"
           onClose={() => setTrappolaEditing(null)}
           onSave={async () => {
+            if (!trappolaForm.nome?.trim()) {
+              setMsg('Il nome della trappola è obbligatorio');
+              return;
+            }
             try {
-              await staffCreateTrappola(
-                {
-                  ...trappolaForm,
-                  durata_secondi: trappolaForm.durata_secondi === '' ? null : Number(trappolaForm.durata_secondi),
-                },
-                onLogout,
-              );
-              setTrappolaForm({ nome: '', testo: '', durata_secondi: 60 });
+              const payload = {
+                nome: trappolaForm.nome,
+                testo: trappolaForm.testo || '',
+                durata_secondi:
+                  trappolaForm.durata_secondi === '' || trappolaForm.durata_secondi == null
+                    ? null
+                    : Number(trappolaForm.durata_secondi),
+              };
+              if (trappolaForm.id) {
+                await staffUpdateTrappola(trappolaForm.id, payload, onLogout);
+                setMsg('Trappola aggiornata.');
+              } else {
+                await staffCreateTrappola(payload, onLogout);
+                setMsg('Trappola creata.');
+              }
+              setTrappolaForm({ id: null, nome: '', testo: '', durata_secondi: 60 });
               setTrappolaEditing(null);
-              setMsg('Trappola creata.');
               await loadSerieTrappole();
             } catch (e) {
-              setMsg(e.message || 'Errore creazione trappola');
+              setMsg(e.message || 'Errore salvataggio trappola');
             }
           }}
-          saveLabel="Crea trappola"
+          saveLabel="Salva"
         >
           <div className="space-y-3">
-            <input
-              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
-              placeholder="Nome"
-              value={trappolaForm.nome}
-              onChange={(e) => setTrappolaForm((f) => ({ ...f, nome: e.target.value }))}
+            <label className="block text-sm">
+              Nome
+              <input
+                className="w-full mt-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
+                placeholder="Nome"
+                value={trappolaForm.nome}
+                onChange={(e) => setTrappolaForm((f) => ({ ...f, nome: e.target.value }))}
+              />
+            </label>
+            <RichTextEditor
+              label="Testo"
+              value={trappolaForm.testo || ''}
+              onChange={(testo) => setTrappolaForm((f) => ({ ...f, testo }))}
+              minHeight={140}
             />
-            <input
-              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
-              placeholder="Testo"
-              value={trappolaForm.testo}
-              onChange={(e) => setTrappolaForm((f) => ({ ...f, testo: e.target.value }))}
-            />
-            <input
-              type="number"
-              min={0}
-              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
-              placeholder="Durata s (vuoto = solo testo)"
-              value={trappolaForm.durata_secondi}
-              onChange={(e) => setTrappolaForm((f) => ({ ...f, durata_secondi: e.target.value }))}
-            />
+            <label className="block text-sm">
+              Durata timer (secondi, vuoto = solo testo)
+              <input
+                type="number"
+                min={0}
+                className="w-full mt-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
+                placeholder="Durata s (vuoto = solo testo)"
+                value={trappolaForm.durata_secondi}
+                onChange={(e) => setTrappolaForm((f) => ({ ...f, durata_secondi: e.target.value }))}
+              />
+            </label>
           </div>
         </StaffEditorModal>
       )}

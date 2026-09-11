@@ -50,6 +50,8 @@ export default function MseCardsTab({
   onMseCampiSync,
   onRenumberSetCodici,
   canRenumberSet,
+  selectedExpansionId = "",
+  onExpansionChange,
 }) {
   const [statusText, setStatusText] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -96,23 +98,37 @@ export default function MseCardsTab({
     packages,
   });
 
-  const handleExportPng = async () => {
+  const handleExportPng = async (targetDpi = 300) => {
     if (!hasMsePreview) {
-      onStatusMessage?.("Import a stylesheet with MSE layout before exporting PNG.");
+      onStatusMessage?.("Importa uno stylesheet con layout MSE prima di esportare il PNG.");
       return;
     }
     setExporting(true);
     try {
-      const dpi = activeTemplate?.layout_spec?.dpi || activeTemplate?.layout_spec?.mse_v1?.card_size?.dpi || 300;
-      await exportCardPngFromRender(cardRender, {
+      const dpi = Number(targetDpi) || 300;
+      const safeName = String(cardForm.codice || cardForm.nome || "carta")
+        .replace(/[^\w.-]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+      const suffix = dpi >= 600 ? "-600dpi" : dpi === 300 ? "" : `-${dpi}dpi`;
+      const result = await exportCardPngFromRender(cardRender, {
         dpi,
-        fileName: `${(cardForm.codice || cardForm.nome || "card").replace(/[^\w.-]+/g, "_")}.png`,
+        fileName: `${safeName || "carta"}${suffix}.png`,
       });
-      onStatusMessage?.("PNG exported.");
+      onStatusMessage?.(
+        `PNG esportato a ${result.dpi} dpi (${result.width}×${result.height}px).`
+      );
     } catch (err) {
-      onStatusMessage?.(err.message || "Export PNG failed.");
+      onStatusMessage?.(err.message || "Export PNG fallito.");
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleCardSetChange = (expId) => {
+    const next = expId || "";
+    onExpansionChange?.(next);
+    if (cardId) {
+      updateCardField("espansione", next || null);
     }
   };
 
@@ -122,8 +138,8 @@ export default function MseCardsTab({
         <label>
           <span>Card set</span>
           <select
-            value={cardForm.espansione || ""}
-            onChange={(e) => updateCardField("espansione", e.target.value || null)}
+            value={selectedExpansionId || cardForm.espansione || ""}
+            onChange={(e) => handleCardSetChange(e.target.value)}
             disabled={!selectedGameId}
           >
             <option value="">— none —</option>
@@ -286,9 +302,26 @@ export default function MseCardsTab({
       <aside className="mse-pane mse-pane-preview">
         <div className="mse-pane-title-row">
           <h2 className="mse-pane-title">Card preview</h2>
-          <button type="button" className="mse-btn-small" onClick={handleExportPng} disabled={exporting || !hasMsePreview}>
-            {exporting ? "…" : "PNG"}
-          </button>
+          <div className="mse-export-buttons">
+            <button
+              type="button"
+              className="mse-btn-small"
+              onClick={() => handleExportPng(300)}
+              disabled={exporting || !hasMsePreview}
+              title="Esporta PNG stampabile (300 dpi, 375×523 px)"
+            >
+              {exporting ? "…" : "PNG 300dpi"}
+            </button>
+            <button
+              type="button"
+              className="mse-btn-small"
+              onClick={() => handleExportPng(600)}
+              disabled={exporting || !hasMsePreview}
+              title="Esporta PNG alta risoluzione (600 dpi, 750×1046 px)"
+            >
+              {exporting ? "…" : "PNG 600dpi"}
+            </button>
+          </div>
         </div>
         <div
           className="mse-preview-frame"
@@ -326,7 +359,10 @@ export default function MseCardsTab({
         </p>
       </details>
 
-      <footer className="mse-statusbar">{statusText || "Move the mouse over a field to see its description."}</footer>
+      <footer className="mse-statusbar mse-statusbar-static">
+        {statusText ||
+          "Le descrizioni dei campi compaiono nel riquadro sopra la tabella Card fields."}
+      </footer>
     </section>
   );
 }

@@ -123,6 +123,7 @@ function resolveFont(styleDef) {
   const nameRaw = evalMseProp(font.name, {}, null);
   const familyRaw = evalMseProp(font.family, {}, null);
   const weightRaw = evalMseProp(font.weight, {}, "normal");
+  const styleRaw = evalMseProp(font.style, {}, "normal");
   const familyName =
     (typeof nameRaw === "string" && nameRaw) ||
     (typeof familyRaw === "string" && familyRaw) ||
@@ -137,24 +138,36 @@ function resolveFont(styleDef) {
   }
   let weight = typeof weightRaw === "string" || typeof weightRaw === "number" ? weightRaw : "normal";
   if (/bold/i.test(familyName) && weight === "normal") weight = "700";
+  const styleStr = String(styleRaw || "normal").toLowerCase();
+  const fontStyle = styleStr.includes("italic") ? "italic" : "normal";
   return {
     family: mapFontFamily(familyName || "inherit"),
     size: Number(sizeRaw) || 14,
     color,
     weight,
+    style: fontStyle,
   };
 }
 
 /** Nome package symbol-font dichiarato nello style (o legacy parse bug). */
 function styleSymbolFontName(styleDef) {
+  const fromFont = styleDef?.font?.symbol_font || styleDef?.font?.["symbol font"];
+  if (fromFont) {
+    const n = evalMseProp(fromFont, {}, "");
+    if (n) return normalizeMsePackageName(n);
+  }
   const sf = pickProp(styleDef, "symbol_font", "symbol font");
   if (sf && typeof sf === "object") {
     const n = evalMseProp(sf.name, {}, "");
     if (n) return normalizeMsePackageName(n);
   }
+  if (sf) {
+    const n = evalMseProp(sf, {}, "");
+    if (n) return normalizeMsePackageName(n);
+  }
   // Parser legacy: `symbol font:` non annidato → name/size finivano sul card style.
   const rootName = evalMseProp(pickProp(styleDef, "name"), {}, "");
-  if (rootName && /mana|symbol/i.test(String(rootName))) {
+  if (rootName && /mana|symbol|aure/i.test(String(rootName))) {
     return normalizeMsePackageName(rootName);
   }
   return "";
@@ -172,8 +185,10 @@ function fieldValueForName(fieldName, card, cardFields) {
     pt: ["pt", "power_toughness"],
     power: ["power", "attack", "forza", "attacco"],
     toughness: ["toughness", "health", "robustezza", "salute"],
+    cost: ["cost", "mana_cost", "casting_cost", "costo_gioco"],
     type: ["type", "card_type", "tipo"],
     rarity: ["rarity", "rarita"],
+    lore: ["lore", "testo_lore", "flavor", "flavor_text"],
   };
   const keys = aliases[nk] || [nk, fieldName];
   for (const key of keys) {
@@ -328,7 +343,7 @@ function resolveLayersFromStyles(stylesMap, options) {
     const alwaysSymbolProp = styleDef?.font?.always_symbol || styleDef?.font?.["always symbol"] || styleDef?.always_symbol;
     const alwaysSymbol =
       Boolean(evalMseProp(alwaysSymbolProp, ctx, false)) ||
-      /casting_cost|mana_cost/i.test(normFieldKey(fieldName));
+      /casting_cost|mana_cost|^cost$/i.test(normFieldKey(fieldName));
     const symbolText = normalizeSymbolFieldText(text, alwaysSymbol);
 
     if (
@@ -340,9 +355,14 @@ function resolveLayersFromStyles(stylesMap, options) {
         fieldName,
         z,
         box,
-        glyphs: resolveSymbolLayersForText(symbolText, layerSymbolPkg, font.size),
+        glyphs: resolveSymbolLayersForText(symbolText, layerSymbolPkg, font.size, {
+          boxHeight: box.height,
+          boxWidth: box.width,
+          fieldName,
+        }),
         font,
         alignment: String(evalMseProp(pickProp(styleDef, "alignment"), ctx, "left top")),
+        wrap: renderStyle === "symbol" || /^(rules|rule_text|text|testo_gioco)$/i.test(normFieldKey(fieldName)),
       });
       return;
     }
@@ -372,7 +392,7 @@ export function resolveMseLayers({
   symbolFontPackage = null,
   packages = [],
 }) {
-  if (!mseV1) return { width: 375, height: 523, background: "#111827", layers: [] };
+  if (!mseV1) return { width: 375, height: 523, dpi: 300, background: "#111827", layers: [] };
 
   const ctxBase = { card, styling, set, card_style: {} };
   const cardStyles = { ...(mseV1.card_styles || {}), ...(mseV1.extra_card_styles || {}) };
@@ -414,6 +434,7 @@ export function resolveMseLayers({
   return {
     width: mseV1.card_size?.width || 375,
     height: mseV1.card_size?.height || 523,
+    dpi: Number(mseV1.card_size?.dpi) || 300,
     background: bg,
     layers: layers.sort((a, b) => a.z - b.z || a.box.top - b.box.top),
   };

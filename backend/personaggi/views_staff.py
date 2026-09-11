@@ -1371,7 +1371,17 @@ class RandomQrPoolEffectStaffViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "patch", "put", "delete", "head", "options"]
 
     def get_queryset(self):
-        qs = RandomQrPoolEffect.objects.select_related("pool", "nodo", "serie").order_by("ordine", "id")
+        qs = RandomQrPoolEffect.objects.select_related(
+            "pool",
+            "nodo",
+            "serie",
+            "manifesto",
+            "oggetto_base",
+            "tessitura",
+            "infusione",
+            "cerimoniale",
+            "attivata",
+        ).order_by("ordine", "id")
         pool_id = self.request.query_params.get("pool")
         if pool_id:
             qs = qs.filter(pool_id=pool_id)
@@ -2166,6 +2176,7 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
             'nome', 'testo', 'costume', 'note_master', 'watch_enabled',
             'peso_influencer', 'badge_instafame', 'era', 'prefettura',
             'prefettura_esterna', 'tipologia', 'impostazioni_ui',
+            'punti_luminosi', 'punti_oscuri', 'punti_grigi',
             'foto_trucco', 'foto_outfit', 'clear_foto_trucco', 'clear_foto_outfit',
         }
         payload = {k: v for k, v in request.data.items() if k in allowed}

@@ -920,7 +920,7 @@ const GameTab = ({ onNavigate }) => {
                         })()}
 
                         {tessituraAttacks.length > 0 && (
-                            <div className="text-[10px] uppercase tracking-wider text-purple-300/70 font-bold ml-1 mt-1">Da tessiture</div>
+                            <div className="text-xs uppercase tracking-wider text-purple-300/80 font-bold ml-1 mt-1">Da tessiture</div>
                         )}
                         {tessituraAttacks.map((attack) => {
                             const tessitura = attack.source;
@@ -991,10 +991,10 @@ const GameTab = ({ onNavigate }) => {
                                             </div>
                                         )}
                                     </div>
-                                    <div className="bg-black/30 rounded p-2 mt-2 border-l-2 border-purple-500">
+                                    <div className="bg-black/30 rounded p-3 mt-2 border-l-2 border-purple-500 overflow-x-auto">
                                         <RichHtml
                                             content={tessitura.testo_formattato_personaggio || tessitura.TestoFormattato || tessitura.formula || 'Formula non disponibile'}
-                                            className="text-xs text-purple-200 prose prose-invert prose-sm max-w-none"
+                                            className="text-sm sm:text-base text-purple-100 prose prose-invert prose-sm sm:prose-base max-w-none leading-relaxed break-words"
                                         />
                                     </div>
                                     {runtimeAttivo && (
