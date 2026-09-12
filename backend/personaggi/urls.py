@@ -267,6 +267,7 @@ urlpatterns = [
     path('api/messaggi/admin/sent/', views.MessaggioAdminSentListView.as_view(), name='api_messaggi_admin_sent'),
     path('api/messaggi/<int:pk>/<str:action_type>/', views.MessaggioActionView.as_view(), name='messaggio-azione'),
     path('api/webpush/subscribe/', views.WebPushSubscribeView.as_view(), name='api_webpush_subscribe'),
+    path('api/fcm/register/', views.FcmRegisterView.as_view(), name='api_fcm_register'),
     
     # Endpoint per Infusioni
     path('api/personaggio/me/infusioni_acquistabili/', views.InfusioniAcquistabiliView.as_view(), name='infusioni_acquistabili'),

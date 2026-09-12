@@ -52,3 +52,7 @@ android/local.properties
 # File generati dall'IDE Android Studio
 android/.idea/
 android/*.iml
+
+# Firebase / FCM (shell Android) — non committare segreti
+**/google-services.json
+**/GoogleService-Info.plist

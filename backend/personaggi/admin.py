@@ -62,6 +62,7 @@ from .models import (
     CampagnaUtente,
     CampagnaFeaturePolicy,
     NotificaPreferenze,
+    FcmDeviceToken,
     StatisticaContainer, StatisticaContainerItem,
     Era, Prefettura, EraAbilita, Regione, RegioneAbilita, CarrieraAbilita,
 )
@@ -78,6 +79,7 @@ PERSONAGGI_ADMIN_MODEL_GROUPS = {
     "CampagnaUtente": ("Campagne", 11),
     "CampagnaFeaturePolicy": ("Campagne", 12),
     "NotificaPreferenze": ("Campagne", 13),
+    "FcmDeviceToken": ("Campagne", 14),
     # Anagrafiche mondo
     "Era": ("Mondo", 20),
     "Prefettura": ("Mondo", 21),
@@ -1386,6 +1388,18 @@ class NotificaPreferenzeAdmin(admin.ModelAdmin):
     search_fields = ("user__username", "user__email", "telegram_username", "telegram_chat_id")
     readonly_fields = ("sync_id", "updated_at", "created_at", "telegram_link_code", "telegram_link_expires")
     raw_id_fields = ("user",)
+
+
+@admin.register(FcmDeviceToken)
+class FcmDeviceTokenAdmin(admin.ModelAdmin):
+    list_display = ("user", "platform", "is_active", "app_id", "last_seen_at", "updated_at")
+    list_filter = ("platform", "is_active")
+    search_fields = ("user__username", "token", "app_id")
+    readonly_fields = ("id", "created_at", "updated_at", "last_seen_at")
+    raw_id_fields = ("user",)
+
+
+
 
 class LetturaMessaggioInline(admin.TabularInline):
     model = LetturaMessaggio

@@ -222,3 +222,38 @@ class CalendarioIcsTuttiTests(APITestCase):
         ics = self.client.get(f"/api/plot/api/calendario-compiti.ics?token={token_row.token}")
         self.assertEqual(ics.status_code, 200)
         self.assertIn("Stampare volantini", ics.content.decode("utf-8"))
+
+
+class FcmRegisterTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="fcm_user", password="x")
+
+    def test_register_token(self):
+        from personaggi.models import FcmDeviceToken
+
+        self.client.force_authenticate(self.user)
+        resp = self.client.post(
+            "/api/personaggi/api/fcm/register/",
+            {"token": "tok-android-1", "platform": "android", "app_id": "nativeapp.kor35.it"},
+            format="json",
+        )
+        self.assertIn(resp.status_code, (200, 201), resp.data)
+        self.assertTrue(
+            FcmDeviceToken.objects.filter(user=self.user, token="tok-android-1", is_active=True).exists()
+        )
+
+    def test_reregister_reassigns_user(self):
+        from personaggi.models import FcmDeviceToken
+
+        other = User.objects.create_user(username="fcm_other", password="x")
+        FcmDeviceToken.objects.create(user=other, token="shared-tok", platform="android")
+        self.client.force_authenticate(self.user)
+        resp = self.client.post(
+            "/api/personaggi/api/fcm/register/",
+            {"token": "shared-tok", "platform": "android"},
+            format="json",
+        )
+        self.assertIn(resp.status_code, (200, 201), resp.data)
+        row = FcmDeviceToken.objects.get(token="shared-tok")
+        self.assertEqual(row.user_id, self.user.id)
+

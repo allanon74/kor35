@@ -33,6 +33,7 @@ def notify_user(user, *, category: str, head: str, body: str, url: str = "/") ->
     attempts = 0
     if prefs.is_enabled("webpush", category):
         attempts += _send_webpush(user, head=head, body=body, url=url, category=category)
+        attempts += _send_fcm(user, head=head, body=body, url=url, category=category)
     if prefs.is_enabled("telegram", category) and prefs.telegram_chat_id:
         attempts += _send_telegram(prefs.telegram_chat_id, head=head, body=body)
     if prefs.is_enabled("email", category) and (user.email or "").strip():
@@ -87,6 +88,68 @@ def _send_webpush(user, *, head: str, body: str, url: str, category: str = "mess
         logger.warning("Web push fallita per user=%s: %s", getattr(user, "pk", None), exc)
         return 0
 
+
+
+
+def _send_fcm(user, *, head: str, body: str, url: str, category: str = "messaggi") -> int:
+    """Invio FCM ai device token della shell Android. No-op senza FCM_SERVER_KEY."""
+    from django.conf import settings
+    from personaggi.models import FcmDeviceToken
+
+    server_key = getattr(settings, "FCM_SERVER_KEY", "") or ""
+    if not server_key.strip():
+        return 0
+    tokens = list(
+        FcmDeviceToken.objects.filter(user=user, is_active=True).values_list("token", flat=True)
+    )
+    if not tokens:
+        return 0
+
+    import json
+    from urllib import request as urlrequest
+    from urllib.error import HTTPError, URLError
+
+    sent = 0
+    payload_base = {
+        "notification": {
+            "title": head,
+            "body": body,
+        },
+        "data": {
+            "url": url or "/",
+            "category": category,
+            "head": head,
+            "body": body,
+        },
+        "priority": "high",
+    }
+    for token in tokens:
+        body_bytes = json.dumps({**payload_base, "to": token}).encode("utf-8")
+        req = urlrequest.Request(
+            "https://fcm.googleapis.com/fcm/send",
+            data=body_bytes,
+            headers={
+                "Authorization": f"key={server_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlrequest.urlopen(req, timeout=8) as resp:
+                if 200 <= getattr(resp, "status", 200) < 300:
+                    sent += 1
+                else:
+                    logger.warning("FCM status non OK per user=%s: %s", getattr(user, "pk", None), resp.status)
+        except HTTPError as exc:
+            # Token non valido → disattiva
+            if exc.code in (400, 404):
+                FcmDeviceToken.objects.filter(token=token).update(is_active=False)
+            logger.warning("FCM HTTPError user=%s: %s", getattr(user, "pk", None), exc)
+        except URLError as exc:
+            logger.warning("FCM URLError user=%s: %s", getattr(user, "pk", None), exc)
+        except Exception as exc:
+            logger.warning("FCM send fallita user=%s: %s", getattr(user, "pk", None), exc)
+    return sent
 
 def _send_telegram(chat_id: str, *, head: str, body: str) -> int:
     from personaggi.telegram_bot import send_telegram_message

@@ -2995,6 +2995,41 @@ class WebPushSubscribeView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=400)
         
+
+class FcmRegisterView(APIView):
+    """Registra/aggiorna un device token FCM (shell Android Capacitor)."""
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from personaggi.models import FcmDeviceToken
+
+        token = str(request.data.get('token') or '').strip()
+        platform = str(request.data.get('platform') or FcmDeviceToken.PLATFORM_ANDROID).strip().lower()
+        app_id = str(request.data.get('app_id') or '').strip()[:128]
+        if not token:
+            return Response({"error": "Token FCM mancante."}, status=400)
+        if platform not in {c[0] for c in FcmDeviceToken.PLATFORM_CHOICES}:
+            platform = FcmDeviceToken.PLATFORM_ANDROID
+        user_agent = (request.META.get('HTTP_USER_AGENT') or '')[:256]
+        obj, created = FcmDeviceToken.objects.update_or_create(
+            token=token,
+            defaults={
+                'user': request.user,
+                'platform': platform,
+                'app_id': app_id,
+                'user_agent': user_agent,
+                'is_active': True,
+            },
+        )
+        # Un token non può appartenere a due utenti: update_or_create già riassegna.
+        return Response(
+            {"status": "success", "created": created, "id": str(obj.id)},
+            status=201 if created else 200,
+        )
+
+
 class ModelliAuraListView(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request, aura_id):

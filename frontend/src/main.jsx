@@ -5,6 +5,7 @@ import './index.css'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { installChunkRecovery } from './chunkRecovery.js'
 import { ensureAppServiceWorker } from './lib/appServiceWorker.js'
+import { applyNativePlatformMarker, isNativeApp } from './lib/nativePlatform.js'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,7 +18,12 @@ const queryClient = new QueryClient({
 })
 
 installChunkRecovery()
-ensureAppServiceWorker()
+applyNativePlatformMarker()
+// Nella shell Capacitor il contenuto arriva dal server remoto: lo SW browser
+// non è il canale push primario (usa FCM). Restiamo allineati alla PWA sul web.
+if (!isNativeApp()) {
+  ensureAppServiceWorker()
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
