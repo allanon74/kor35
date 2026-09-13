@@ -57,6 +57,16 @@ html, body, #root {
   min-height: calc(4rem + var(--kor-safe-top));
 }
 
+/*
+ * Android 15+ forza edge-to-edge: env(safe-area-inset-top) spesso resta 0.
+ * setupNativeChrome imposta --kor-safe-top da StatusBar.getInfo().height;
+ * qui un fallback minimo se il JS non è ancora partito / non deployato.
+ */
+html[data-kor35-native] .kor-app-header {
+  padding-top: max(2rem, var(--kor-safe-top));
+  min-height: calc(4rem + max(2rem, var(--kor-safe-top)));
+}
+
 /* Assicura che l'app React prenda tutto lo spazio */
 .kor-35-app, .kor-35-app > div {
   height: 100%;

@@ -8,7 +8,7 @@
 #
 # Layout prodotto (default):
 #   C:/dev/kor35-android/                  ← apri QUESTA in Android Studio
-#   C:/dev/kor35-android/node_modules/@capacitor/{android,app,push-notifications,core}
+#   C:/dev/kor35-android/node_modules/@capacitor/{android,app,push-notifications,status-bar,core}
 #
 # Uso (WSL, root monorepo):
 #   ./scripts/android_sync_to_windows.sh
@@ -103,7 +103,8 @@ ROOT_WIN="${ROOT_WIN%\\}"
 robo "${SRC_ANDROID}" "${ROOT_WIN}"
 
 # 2) pacchetti Capacitor DENTRO il progetto (non come sibling)
-CAPS=(android app push-notifications core)
+# Allineare a frontend/android/capacitor.settings.gradle (cap sync).
+CAPS=(android app push-notifications status-bar core)
 for pkg in "${CAPS[@]}"; do
   if [[ -d "${SRC_NM}/@capacitor/${pkg}" ]]; then
     robo "${SRC_NM}/@capacitor/${pkg}" "${ROOT_WIN}\\node_modules\\@capacitor\\${pkg}"

@@ -13,6 +13,7 @@ import packageInfo from '../../package.json';
 import { isWebPushEnabled } from '../lib/webpush';
 import { ensureAppServiceWorker } from '../lib/appServiceWorker';
 import { useSharedNowTs } from '../hooks/useSharedNowTs';
+import { consumePendingPushAction } from '../lib/callDeepLink';
 
 import {
 Home, QrCode, Zap, TestTube2, Scroll, LogOut, Mail, Backpack, 
@@ -469,6 +470,8 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     window.addEventListener('kor35:open-messaggi', onOpenMessaggi);
     window.addEventListener('kor35:open-notifiche', onOpenNotifiche);
     window.addEventListener('kor35:messaggi-view', onMessaggiView);
+    // Cold start da tap FCM: consuma pending salvato prima del mount.
+    consumePendingPushAction();
     return () => {
       window.removeEventListener('kor35:open-messaggi', onOpenMessaggi);
       window.removeEventListener('kor35:open-notifiche', onOpenNotifiche);

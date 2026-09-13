@@ -149,3 +149,73 @@ export function dispatchCallWake(info = {}) {
     );
   }
 }
+
+const PENDING_PUSH_KEY = 'kor35_pending_push';
+
+/**
+ * Applica tap notifica FCM: messaggi → tab messaggi; chiamate → + wake overlay.
+ * @param {ReturnType<typeof parseCallPushPayload>|object|null|undefined} parsedOrRaw
+ */
+export function applyPushNotificationAction(parsedOrRaw) {
+  if (typeof window === 'undefined') return;
+  const parsed =
+    parsedOrRaw && typeof parsedOrRaw === 'object' && 'callId' in parsedOrRaw
+      ? parsedOrRaw
+      : parseCallPushPayload(parsedOrRaw);
+
+  if (isIncomingCallPayload(parsed) || parsed?.callId) {
+    dispatchCallWake(parsed);
+    return;
+  }
+
+  // Messaggio / avviso generico: apri comunque Messaggi (non restare sulla tab corrente).
+  window.dispatchEvent(new CustomEvent('kor35:open-messaggi'));
+}
+
+export function persistPendingPushAction(parsedOrRaw) {
+  if (typeof sessionStorage === 'undefined') return;
+  try {
+    const parsed =
+      parsedOrRaw && typeof parsedOrRaw === 'object' && 'callId' in parsedOrRaw
+        ? parsedOrRaw
+        : parseCallPushPayload(parsedOrRaw);
+    sessionStorage.setItem(PENDING_PUSH_KEY, JSON.stringify(parsed || {}));
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+/**
+ * Consuma azione push salvata (cold start: evento Capacitor prima del mount React).
+ * @returns {boolean} true se c'era un pending
+ */
+export function consumePendingPushAction() {
+  if (typeof sessionStorage === 'undefined') return false;
+  try {
+    const raw = sessionStorage.getItem(PENDING_PUSH_KEY);
+    if (!raw) return false;
+    sessionStorage.removeItem(PENDING_PUSH_KEY);
+    applyPushNotificationAction(JSON.parse(raw));
+    return true;
+  } catch {
+    try {
+      sessionStorage.removeItem(PENDING_PUSH_KEY);
+    } catch {
+      /* ignore */
+    }
+    return false;
+  }
+}
+
+/**
+ * Tap notifica: persiste + applica (con retry leggeri per race col mount React).
+ */
+export function handleNativeNotificationAction(raw) {
+  const parsed = parseCallPushPayload(raw);
+  persistPendingPushAction(parsed);
+  applyPushNotificationAction(parsed);
+  if (typeof window === 'undefined') return;
+  // React potrebbe non aver ancora agganciato kor35:open-messaggi.
+  window.setTimeout(() => consumePendingPushAction(), 400);
+  window.setTimeout(() => consumePendingPushAction(), 1200);
+}

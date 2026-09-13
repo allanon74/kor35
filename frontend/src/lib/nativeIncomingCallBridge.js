@@ -1,11 +1,13 @@
 /**
- * Bridge Capacitor: push FCM + App resume → deep-link chiamate vocali.
+ * Bridge Capacitor: push FCM + App resume → deep-link chiamate / messaggi.
  */
 import { App } from '@capacitor/app';
 import { isNativeApp } from './nativePlatform';
 import { attachNativePushListeners } from './nativePush';
 import {
+  consumePendingPushAction,
   dispatchCallWake,
+  handleNativeNotificationAction,
   isIncomingCallPayload,
   parseCallDeepLink,
   parseCallPushPayload,
@@ -59,6 +61,8 @@ export async function startNativeIncomingCallBridge() {
 
   // Deep-link già presente nell'URL (tap notifica / cold start WebView).
   consumeLocationDeepLink();
+  // Pending da tap FCM arrivato prima del mount React.
+  consumePendingPushAction();
 
   // PWA: messaggio dallo service worker
   const onSwMessage = (event) => {
@@ -101,6 +105,7 @@ export async function startNativeIncomingCallBridge() {
     // Al ritorno in foreground: se c'è ancora una chiamata ringing, il provider rifà fetch.
     window.dispatchEvent(new CustomEvent('kor35:voce-wake', { detail: { reason: 'app-resume' } }));
     consumeLocationDeepLink();
+    consumePendingPushAction();
   });
   cleanups.push(() => stateSub.remove().catch(() => {}));
 
@@ -113,8 +118,8 @@ export async function startNativeIncomingCallBridge() {
       }
     },
     onAction: (event) => {
-      const parsed = parseCallPushPayload(event?.notification || event);
-      wakeFromParsed(parsed);
+      // Tap su qualsiasi notifica (messaggio o chiamata).
+      handleNativeNotificationAction(event?.notification || event);
     },
   });
   cleanups.push(detachPush);

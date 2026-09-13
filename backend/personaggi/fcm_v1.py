@@ -127,7 +127,8 @@ def send_fcm_v1(
                 "notification": {
                     "channel_id": android_channel_id,
                     "sound": "default",
-                    "click_action": "OPEN_KOR35_PUSH",
+                    # Niente click_action custom: altrimenti Android non apre MainActivity
+                    # e Capacitor non riceve pushNotificationActionPerformed.
                 },
             },
         }

@@ -248,7 +248,7 @@ def _send_fcm_legacy(
             "body": body,
             "android_channel_id": channel_id,
             "sound": "default",
-            "click_action": "OPEN_KOR35_PUSH",
+            # Niente click_action custom (rompe il tap → MainActivity / Capacitor).
         },
         "data": data,
         "priority": "high",
