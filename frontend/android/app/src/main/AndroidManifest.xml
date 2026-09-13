@@ -24,6 +24,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Compat: vecchie push FCM con click_action OPEN_KOR35_PUSH -->
+            <intent-filter>
+                <action android:name="OPEN_KOR35_PUSH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
             <!-- Ritorno SSO Arcana / deep-link login: riapre la shell invece di restare in Chrome -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />

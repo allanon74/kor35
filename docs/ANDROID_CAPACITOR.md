@@ -144,10 +144,20 @@ Volume esempio in `compose.prod.yml` (scommentare e riavviare backend):
 
 Sintomo: pulsanti in alto non tappabili (sotto la status bar Android).
 
-Fix nativo (nuovo APK): `WindowCompat.setDecorFitsSystemWindows(true)` in `MainActivity` + plugin `@capacitor/status-bar` (`setOverlaysWebView({ overlay: false })`).
-Fix CSS (deploy frontend): classe `.kor-app-header` con `--kor-safe-top`.
+Su **Android 15+** `StatusBar.setOverlaysWebView(false)` è **ignorato** (edge-to-edge forzato).
+Il fix reale è CSS/JS: `setupNativeChrome` legge `StatusBar.getInfo().height` e imposta `--kor-safe-top`.
 
-Dopo i fix: `make android-sync WIN=1` → Run APK **e** deploy frontend su prod (JS remoto).
+Serve **deploy frontend su www.kor35.it** (WebView remota). Nuovo APK utile per plugin StatusBar / tema, ma da solo non basta.
+
+### Tap notifica: non fa nulla
+
+Cause tipiche:
+1. FCM con `click_action` custom senza intent-filter → Android non apre MainActivity.
+2. Handler JS gestiva solo chiamate (`call_id`), non i messaggi.
+
+Fix: niente `click_action` custom in FCM v1 + handler che apre Messaggi per ogni tap + intent-filter compat `OPEN_KOR35_PUSH`.
+
+Serve **deploy backend** (payload FCM) + **deploy frontend** (handler) + **nuovo APK** (intent-filter).
 
 ## Chiamate in arrivo (shell Android)
 

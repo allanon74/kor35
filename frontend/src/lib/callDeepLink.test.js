@@ -54,3 +54,35 @@ describe('dispatchCallWake', () => {
     expect(types).toContain('kor35:voce');
   });
 });
+
+describe('applyPushNotificationAction', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    sessionStorage.clear();
+  });
+
+  it('messaggio apre solo tab messaggi', async () => {
+    const { applyPushNotificationAction } = await import('./callDeepLink');
+    const spy = vi.spyOn(window, 'dispatchEvent');
+    applyPushNotificationAction({
+      data: { category: 'messaggi', url: '/?tab=messaggi', head: 'Ciao' },
+    });
+    const types = spy.mock.calls.map((c) => c[0]?.type);
+    expect(types).toContain('kor35:open-messaggi');
+    expect(types).not.toContain('kor35:voce-wake');
+  });
+
+  it('persist+consume ripristina azione pending', async () => {
+    const {
+      persistPendingPushAction,
+      consumePendingPushAction,
+    } = await import('./callDeepLink');
+    const spy = vi.spyOn(window, 'dispatchEvent');
+    persistPendingPushAction({
+      data: { category: 'messaggi', url: '/?tab=messaggi' },
+    });
+    expect(consumePendingPushAction()).toBe(true);
+    expect(spy.mock.calls.map((c) => c[0]?.type)).toContain('kor35:open-messaggi');
+    expect(consumePendingPushAction()).toBe(false);
+  });
+});
