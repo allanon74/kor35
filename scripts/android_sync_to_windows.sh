@@ -35,6 +35,8 @@ if [[ ! -d "${SRC_NM}/@capacitor/android" ]]; then
   echo "ERRORE: manca ${SRC_NM}/@capacitor/android. Esegui: cd frontend && npm ci" >&2
   exit 1
 fi
+# I moduli Capacitor dichiarano AGP 8.13.0; pin prima della copia Windows.
+"${ROOT}/scripts/pin_android_agp.sh" "${SRC_NM}/@capacitor"
 if ! command -v wslpath >/dev/null 2>&1; then
   echo "ERRORE: wslpath non trovato. Esegui dentro WSL." >&2
   exit 1

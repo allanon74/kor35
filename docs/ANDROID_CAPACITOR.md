@@ -46,7 +46,7 @@ Poi in Android Studio: **File → Open** → `C:\dev\kor35-android`
 
 Se Gradle dice *No matching variant / No variants exist* sui moduli `:capacitor-*`, stai aprendo la copia sbagliata (senza quei pacchetti). Chiudi il progetto, ri-esegui `make android-sync WIN=1`, apri di nuovo `C:\dev\kor35-android` e fai **Sync Project with Gradle Files**.
 
-Capacitor 8 richiede Android Studio **Otter | 2025.2.1+** e AGP **8.13.0**.
+Questo clone **pinnà AGP 8.10.1** (Android Studio Ladybug/Meerkat). Capacitor 8 a monte chiede 8.13.0 / Studio Otter: `make android-sync` riscrive i `build.gradle` in `node_modules/@capacitor` così Studio non rifiuta il sync.
 
 Oppure:
 

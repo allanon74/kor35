@@ -455,6 +455,7 @@ WIN_ANDROID_DIR ?= C:/dev/kor35-android
 
 android-sync:
 	cd frontend && (npm ci || npm install) && npm run cap:sync
+	./scripts/pin_android_agp.sh
 	@if [ "$(WIN)" = "1" ]; then \
 		echo "WIN=1 → copia frontend/android verso $(WIN_ANDROID_DIR)"; \
 		WIN_ANDROID_DIR="$(WIN_ANDROID_DIR)" ./scripts/android_sync_to_windows.sh; \
