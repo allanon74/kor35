@@ -513,18 +513,34 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
 
       {/* Valute */}
       {duale ? (
-        <div className="grid grid-cols-3 gap-3 mb-6 max-w-2xl mx-auto">
-          <StatRow
-            label="Corrente"
-            value={Number(crediti_corrente ?? crediti ?? 0).toFixed(2)}
-            icon={<Coins className="text-yellow-400" />}
-          />
-          <StatRow
-            label="Deposito"
-            value={Number(crediti_deposito ?? 0).toFixed(2)}
-            icon={<Coins className="text-amber-500" />}
-          />
-          <StatRow label="PC" value={punti_caratteristica || 0} icon={<Star className="text-blue-400" />} />
+        <div className="grid grid-cols-2 gap-3 mb-6 max-w-2xl mx-auto items-stretch">
+          <div className="flex flex-col p-2 bg-gray-800 rounded-md hover:bg-gray-750 transition-colors">
+            <div className="flex items-center mb-1">
+              <Coins className="text-yellow-400 shrink-0" />
+              <span className="ml-2 font-semibold text-gray-300">Crediti</span>
+            </div>
+            <div className="flex justify-between items-baseline text-sm text-gray-300">
+              <span>Correnti:</span>
+              <span className="font-bold text-white tabular-nums">
+                {Number(crediti_corrente ?? crediti ?? 0).toFixed(2)}
+              </span>
+            </div>
+            <div className="flex justify-between items-baseline text-[11px] text-gray-400 mt-0.5">
+              <span>Deposito:</span>
+              <span className="font-semibold text-gray-200 tabular-nums">
+                {Number(crediti_deposito ?? 0).toFixed(2)}
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-col p-2 bg-gray-800 rounded-md hover:bg-gray-750 transition-colors">
+            <div className="flex items-center mb-1">
+              <Star className="text-blue-400 shrink-0" />
+              <span className="ml-2 font-semibold text-gray-300">PC</span>
+            </div>
+            <p className="text-3xl font-bold text-white tabular-nums leading-none mt-0.5">
+              {punti_caratteristica || 0}
+            </p>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 mb-6 max-w-lg mx-auto">
