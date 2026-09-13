@@ -265,14 +265,21 @@ class FcmSendExtraTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="fcm_send", password="x")
 
-    @override_settings(FCM_SERVER_KEY="test-server-key")
+    @override_settings(
+        FCM_SERVER_KEY="",
+        FCM_PROJECT_ID="kor35-test",
+        FCM_SERVICE_ACCOUNT_JSON='{"type":"service_account","project_id":"kor35-test","client_email":"fcm@kor35-test.iam.gserviceaccount.com","token_uri":"https://oauth2.googleapis.com/token","private_key":"x"}',
+    )
     @patch("personaggi.notify._send_webpush", return_value=0)
+    @patch("personaggi.fcm_v1._access_token", return_value="ya29.test-token")
     @patch("urllib.request.urlopen")
-    def test_fcm_include_extra_e_canale_chiamate(self, mock_urlopen, _mock_wp):
+    def test_fcm_v1_include_extra_e_canale_chiamate(self, mock_urlopen, _mock_token, _mock_wp):
+        from personaggi.fcm_v1 import clear_fcm_v1_cache
         from personaggi.models import FcmDeviceToken
         from personaggi.notify import notify_user
         import json
 
+        clear_fcm_v1_cache()
         FcmDeviceToken.objects.create(user=self.user, token="dev-tok", platform="android")
 
         class _Resp:
@@ -299,11 +306,18 @@ class FcmSendExtraTests(APITestCase):
         self.assertEqual(n, 1)
         self.assertTrue(mock_urlopen.called)
         req = mock_urlopen.call_args[0][0]
+        self.assertIn("/v1/projects/kor35-test/messages:send", req.full_url)
+        auth = req.headers.get("Authorization") or req.get_header("Authorization")
+        self.assertTrue(str(auth).startswith("Bearer "))
         payload = json.loads(req.data.decode("utf-8"))
-        self.assertEqual(payload["data"]["call_id"], "cid-1")
-        self.assertEqual(payload["data"]["action"], "VOCE_INVITO")
-        self.assertEqual(payload["data"]["category"], "chiamate")
-        self.assertEqual(payload["notification"]["android_channel_id"], "kor35_incoming_calls")
+        self.assertEqual(payload["message"]["token"], "dev-tok")
+        self.assertEqual(payload["message"]["data"]["call_id"], "cid-1")
+        self.assertEqual(payload["message"]["data"]["action"], "VOCE_INVITO")
+        self.assertEqual(payload["message"]["data"]["category"], "chiamate")
+        self.assertEqual(
+            payload["message"]["android"]["notification"]["channel_id"],
+            "kor35_incoming_calls",
+        )
 
 
 class ChiamataPushDeepLinkTests(APITestCase):
