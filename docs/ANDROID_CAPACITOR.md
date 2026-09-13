@@ -35,13 +35,14 @@ Dopo il sync, copia su disco Windows nativo:
 
 ```bash
 make android-sync WIN=1
-# destinazione default: C:/dev/kor35-android
+# destinazione default: C:/dev/kor35-app
 # IMPORTANTE: usa slash avanti, non c:\\dev\\... (bash mangia i backslash)
 # personalizza:
 make android-sync WIN=1 WIN_ANDROID_DIR='D:/android/kor35'
 ```
 
-Poi in Android Studio: **Open** → `C:/dev/kor35-android` (o `C:\\dev\\kor35-android` in Esplora risorse) (non il path `\\wsl.localhost\...`).
+Poi in Android Studio: **Open** → `C:\dev\kor35-app\android`
+(lo script copia anche `node_modules/@capacitor/*` accanto, come richiede Capacitor). (o `C:\\dev\\kor35-android` in Esplora risorse) (non il path `\\wsl.localhost\...`).
 
 Oppure:
 

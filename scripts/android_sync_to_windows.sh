@@ -1,34 +1,42 @@
 #!/usr/bin/env bash
-# Copia frontend/android dal filesystem WSL a un path Windows nativo
-# per Android Studio (evita errore Gradle JVM su \\wsl.localhost\...).
+# Copia il progetto Android + dipendenze Capacitor su disco Windows nativo.
 #
-# Uso (da root monorepo, in WSL):
+# Capacitor settings.gradle punta a ../node_modules/@capacitor/...
+# Quindi NON basta copiare solo frontend/android: serve anche node_modules.
+#
+# Layout prodotto (default):
+#   C:/dev/kor35-app/android
+#   C:/dev/kor35-app/node_modules/@capacitor/{android,app,push-notifications,core}
+#
+# Uso (WSL, root monorepo):
 #   ./scripts/android_sync_to_windows.sh
-#   WIN_ANDROID_DIR='C:/dev/kor35-android' ./scripts/android_sync_to_windows.sh
-#   WIN_ANDROID_DIR=/mnt/c/dev/kor35-android ./scripts/android_sync_to_windows.sh
+#   WIN_ANDROID_DIR=C:/dev/kor35-app ./scripts/android_sync_to_windows.sh
 #
-# Preferisci slash avanti (C:/dev/...) o path /mnt/c/... — i backslash
-# in Make/bash vengono spesso mangiati (c:\dev → c:dev).
+# Poi in Android Studio: Open → C:\dev\kor35-app\android
 #
-# Exit codes robocopy 0–7 = successo; >=8 = errore.
+# Preferisci slash avanti (C:/...). I backslash in Make/bash si corrompono.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC_LINUX="${ROOT}/frontend/android"
-RAW_DEST="${WIN_ANDROID_DIR:-C:/dev/kor35-android}"
+SRC_ANDROID="${ROOT}/frontend/android"
+SRC_NM="${ROOT}/frontend/node_modules"
+RAW_ROOT="${WIN_ANDROID_DIR:-C:/dev/kor35-app}"
 
 echo "=== android_sync_to_windows ==="
-echo "Sorgente WSL: ${SRC_LINUX}"
-echo "Destinazione richiesta: ${RAW_DEST}"
+echo "Sorgente android: ${SRC_ANDROID}"
+echo "Root Windows:     ${RAW_ROOT}"
 
-if [[ ! -d "${SRC_LINUX}" ]]; then
-  echo "ERRORE: manca ${SRC_LINUX}. Esegui prima: make android-sync" >&2
+if [[ ! -d "${SRC_ANDROID}" ]]; then
+  echo "ERRORE: manca ${SRC_ANDROID}. Esegui prima: make android-sync" >&2
   exit 1
 fi
-
+if [[ ! -d "${SRC_NM}/@capacitor/android" ]]; then
+  echo "ERRORE: manca ${SRC_NM}/@capacitor/android. Esegui: cd frontend && npm ci" >&2
+  exit 1
+fi
 if ! command -v wslpath >/dev/null 2>&1; then
-  echo "ERRORE: wslpath non trovato. Questo script va eseguito dentro WSL." >&2
+  echo "ERRORE: wslpath non trovato. Esegui dentro WSL." >&2
   exit 1
 fi
 
@@ -42,61 +50,69 @@ do
     break
   fi
 done
-
 if [[ -z "${ROBOCOPY}" ]]; then
-  echo "ERRORE: Robocopy.exe non trovato sotto /mnt/c/Windows. Windows montato?" >&2
+  echo "ERRORE: Robocopy.exe non trovato sotto /mnt/c/Windows." >&2
   exit 1
 fi
 
-# Normalizza destinazione → path Windows con backslash per robocopy.
-normalize_dest_win() {
+to_win() {
   local dest="$1"
-  # Path Linux montato (/mnt/c/...)
   if [[ "${dest}" == /mnt/* ]]; then
-    if [[ ! -d "$(dirname "${dest}")" ]]; then
-      mkdir -p "$(dirname "${dest}")"
-    fi
+    mkdir -p "${dest}"
     wslpath -w "${dest}"
     return
   fi
-  # Slash avanti tipo C:/dev/kor35-android
   if [[ "${dest}" =~ ^[A-Za-z]:/ ]]; then
     dest="${dest//\//\\}"
   fi
-  # Se qualcuno ha passato c:\dev\... e bash ha mangiato i backslash
-  # resta tipo c:devkor35-android → recupera forma tipica
   if [[ "${dest}" =~ ^[A-Za-z]:[^/\\] ]] && [[ "${dest}" != *\\* ]] && [[ "${dest}" != */* ]]; then
-    echo "ATTENZIONE: path sospetto '${dest}' (i \\\\ sono stati mangiati dalla shell)." >&2
-    echo "Usa: WIN_ANDROID_DIR='C:/dev/kor35-android'  oppure  WIN_ANDROID_DIR=/mnt/c/dev/kor35-android" >&2
+    echo "ATTENZIONE: path sospetto '${dest}' (backslash mangiati dalla shell)." >&2
+    echo "Usa: WIN_ANDROID_DIR=C:/dev/kor35-app" >&2
     exit 2
   fi
-  # Crea la cartella padre via path /mnt se possibile
   if [[ "${dest}" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
     local drive="${BASH_REMATCH[1],,}"
     local rest="${BASH_REMATCH[2]//\\//}"
-    local parent_linux="/mnt/${drive}/$(dirname "${rest}")"
-    mkdir -p "${parent_linux}"
+    mkdir -p "/mnt/${drive}/${rest}"
   fi
   printf '%s' "${dest}"
 }
 
-DEST_WIN="$(normalize_dest_win "${RAW_DEST}")"
-SRC_WIN="$(wslpath -w "${SRC_LINUX}")"
+robo() {
+  local src_linux="$1"
+  local dest_win="$2"
+  local src_win
+  src_win="$(wslpath -w "${src_linux}")"
+  echo "Robocopy: ${src_win}  →  ${dest_win}"
+  set +e
+  "${ROBOCOPY}" "${src_win}" "${dest_win}" /MIR /NFL /NDL /NJH /NJS /nc /ns /np
+  local rc=$?
+  set -e
+  if (( rc >= 8 )); then
+    echo "ERRORE: robocopy exit ${rc} (${src_linux})" >&2
+    exit "${rc}"
+  fi
+}
 
-echo "Robocopy:"
-echo "  da: ${SRC_WIN}"
-echo "  a:  ${DEST_WIN}"
+ROOT_WIN="$(to_win "${RAW_ROOT}")"
+# Normalizza eventuale trailing slash
+ROOT_WIN="${ROOT_WIN%\\}"
 
-set +e
-"${ROBOCOPY}" "${SRC_WIN}" "${DEST_WIN}" /MIR /NFL /NDL /NJH /NJS /nc /ns /np
-rc=$?
-set -e
+# 1) progetto android
+robo "${SRC_ANDROID}" "${ROOT_WIN}\\android"
 
-if (( rc >= 8 )); then
-  echo "ERRORE: robocopy exit ${rc}" >&2
-  exit "${rc}"
-fi
+# 2) pacchetti Capacitor richiesti da capacitor.settings.gradle
+CAPS=(android app push-notifications core)
+for pkg in "${CAPS[@]}"; do
+  if [[ -d "${SRC_NM}/@capacitor/${pkg}" ]]; then
+    robo "${SRC_NM}/@capacitor/${pkg}" "${ROOT_WIN}\\node_modules\\@capacitor\\${pkg}"
+  else
+    echo "WARN: manca @capacitor/${pkg} — skip"
+  fi
+done
 
-echo "OK: progetto Android su Windows in ${DEST_WIN}"
-echo "In Android Studio: File → Open → ${DEST_WIN}"
-echo "(Non aprire il path \\\\wsl.localhost\\... )"
+echo
+echo "OK: layout Windows pronto."
+echo "Apri in Android Studio:"
+echo "  ${ROOT_WIN}\\android"
+echo "(Non aprire\\\\wsl.localhost\\... e non aprire solo C:\\dev\\kor35-android senza node_modules)"

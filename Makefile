@@ -35,7 +35,7 @@ help:
 	@echo "  make env ENV=dev-home        # crea/attiva backend/.env.<env>"
 	@echo "  make setup                   # prepara runtime + build frontend"
 	@echo "  make android-sync            # build React + Capacitor sync Android"
-	@echo "  make android-sync WIN=1      # come sopra + robocopy su C:/dev/kor35-android (WSL→Windows; usare slash /)"
+	@echo "  make android-sync WIN=1      # come sopra + robocopy su C:/dev/kor35-app (WSL→Windows; usare slash /)"
 	@echo "  make android-open            # apre Android Studio (o indica path Windows se WIN=1)"
 	@echo "  make up                      # avvia stack (con build + collectstatic)"
 	@echo "  make up-no-build             # avvio senza rebuild immagini (obbligatorio mirror offline/evento)"
@@ -446,12 +446,12 @@ prod-turn-prepare:
 # Shell Android Capacitor (PWA nel WebView + bridge nativo FCM/chiamate).
 # Richiede Node sul host (non nel container) e Android Studio per build APK.
 # CAPACITOR_SERVER_URL opzionale (default https://www.kor35.it).
-# WIN=1 (solo da WSL): dopo il sync copia frontend/android su disco Windows
+# WIN=1 (solo da WSL): dopo il sync copia android + @capacitor su C:/dev/kor35-app (layout Windows)
 #   per Android Studio (evita Gradle JVM su \\wsl.localhost\...).
-# WIN_ANDROID_DIR opzionale (default C:/dev/kor35-android). Usa slash avanti!
+# WIN_ANDROID_DIR opzionale (default C:/dev/kor35-app). Usa slash avanti!
 WIN ?= 0
 # Usa slash avanti: i backslash (c:\dev\...) in Make/bash vengono corrotti.
-WIN_ANDROID_DIR ?= C:/dev/kor35-android
+WIN_ANDROID_DIR ?= C:/dev/kor35-app
 
 android-sync:
 	cd frontend && (npm ci || npm install) && npm run cap:sync
@@ -459,7 +459,7 @@ android-sync:
 		echo "WIN=1 → copia frontend/android verso $(WIN_ANDROID_DIR)"; \
 		WIN_ANDROID_DIR="$(WIN_ANDROID_DIR)" ./scripts/android_sync_to_windows.sh; \
 	else \
-		echo "Suggerimento WSL: make android-sync WIN=1 WIN_ANDROID_DIR=C:/dev/kor35-android"; \
+		echo "Suggerimento WSL: make android-sync WIN=1 WIN_ANDROID_DIR=C:/dev/kor35-app"; \
 	fi
 
 android-open:
