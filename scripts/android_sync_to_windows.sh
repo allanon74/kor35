@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # Copia il progetto Android + dipendenze Capacitor su disco Windows nativo.
 #
-# Capacitor settings.gradle punta a ../node_modules/@capacitor/...
-# Quindi NON basta copiare solo frontend/android: serve anche node_modules.
+# Android Studio deve aprire la cartella Android (settings.gradle), non il monorepo.
+# I moduli Capacitor stanno in node_modules/@capacitor; su Windows li mettiamo
+# DENTRO il progetto copiato, così settings.gradle li trova anche se la CWD di
+# Gradle non è quella cartella.
 #
 # Layout prodotto (default):
-#   C:/dev/kor35-app/android
-#   C:/dev/kor35-app/node_modules/@capacitor/{android,app,push-notifications,core}
+#   C:/dev/kor35-android/                  ← apri QUESTA in Android Studio
+#   C:/dev/kor35-android/node_modules/@capacitor/{android,app,push-notifications,core}
 #
 # Uso (WSL, root monorepo):
 #   ./scripts/android_sync_to_windows.sh
-#   WIN_ANDROID_DIR=C:/dev/kor35-app ./scripts/android_sync_to_windows.sh
-#
-# Poi in Android Studio: Open → C:\dev\kor35-app\android
+#   WIN_ANDROID_DIR=C:/dev/kor35-android ./scripts/android_sync_to_windows.sh
 #
 # Preferisci slash avanti (C:/...). I backslash in Make/bash si corrompono.
 
@@ -21,11 +21,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_ANDROID="${ROOT}/frontend/android"
 SRC_NM="${ROOT}/frontend/node_modules"
-RAW_ROOT="${WIN_ANDROID_DIR:-C:/dev/kor35-app}"
+RAW_ROOT="${WIN_ANDROID_DIR:-C:/dev/kor35-android}"
 
 echo "=== android_sync_to_windows ==="
 echo "Sorgente android: ${SRC_ANDROID}"
-echo "Root Windows:     ${RAW_ROOT}"
+echo "Dest Windows:     ${RAW_ROOT}"
 
 if [[ ! -d "${SRC_ANDROID}" ]]; then
   echo "ERRORE: manca ${SRC_ANDROID}. Esegui prima: make android-sync" >&2
@@ -67,7 +67,7 @@ to_win() {
   fi
   if [[ "${dest}" =~ ^[A-Za-z]:[^/\\] ]] && [[ "${dest}" != *\\* ]] && [[ "${dest}" != */* ]]; then
     echo "ATTENZIONE: path sospetto '${dest}' (backslash mangiati dalla shell)." >&2
-    echo "Usa: WIN_ANDROID_DIR=C:/dev/kor35-app" >&2
+    echo "Usa: WIN_ANDROID_DIR=C:/dev/kor35-android" >&2
     exit 2
   fi
   if [[ "${dest}" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
@@ -95,13 +95,12 @@ robo() {
 }
 
 ROOT_WIN="$(to_win "${RAW_ROOT}")"
-# Normalizza eventuale trailing slash
 ROOT_WIN="${ROOT_WIN%\\}"
 
-# 1) progetto android
-robo "${SRC_ANDROID}" "${ROOT_WIN}\\android"
+# 1) progetto android (/MIR cancella anche un eventuale node_modules precedente)
+robo "${SRC_ANDROID}" "${ROOT_WIN}"
 
-# 2) pacchetti Capacitor richiesti da capacitor.settings.gradle
+# 2) pacchetti Capacitor DENTRO il progetto (non come sibling)
 CAPS=(android app push-notifications core)
 for pkg in "${CAPS[@]}"; do
   if [[ -d "${SRC_NM}/@capacitor/${pkg}" ]]; then
@@ -113,6 +112,6 @@ done
 
 echo
 echo "OK: layout Windows pronto."
-echo "Apri in Android Studio:"
-echo "  ${ROOT_WIN}\\android"
-echo "(Non aprire\\\\wsl.localhost\\... e non aprire solo C:\\dev\\kor35-android senza node_modules)"
+echo "In Android Studio: File → Open → ${ROOT_WIN}"
+echo "(Non aprire \\\\wsl.localhost\\... e non aprire C:\\\\dev\\\\kor35-app)"
+echo "Poi: File → Sync Project with Gradle Files"

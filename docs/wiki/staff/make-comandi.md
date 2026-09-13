@@ -160,6 +160,20 @@ Guida staff: Wiki «Card Studio — carta Sette Elegie» (`staff-card-studio-set
 
 ---
 
+## Shell Android (Capacitor)
+
+Node sull’host (non nel container). Da WSL + Android Studio su Windows:
+
+| Comando | Descrizione |
+|---------|-------------|
+| `make android-sync` | Build PWA + `npx cap sync android` |
+| `make android-sync WIN=1` | Come sopra + robocopy su `C:/dev/kor35-android` |
+| `make android-open WIN=1` | Stampa il path da aprire in Android Studio |
+
+Apri in Studio **`C:\dev\kor35-android`** (non `C:\dev\kor35-app` né `\\wsl.localhost\...`). Capacitor 8: Android Studio Otter 2025.2.1+. Dettaglio: `docs/ANDROID_CAPACITOR.md`.
+
+---
+
 ## Backup e Wiki staff
 
 | Comando | Descrizione |

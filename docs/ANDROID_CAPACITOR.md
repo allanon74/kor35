@@ -35,14 +35,18 @@ Dopo il sync, copia su disco Windows nativo:
 
 ```bash
 make android-sync WIN=1
-# destinazione default: C:/dev/kor35-app
+# destinazione default: C:/dev/kor35-android  (è la cartella da aprire in Studio)
 # IMPORTANTE: usa slash avanti, non c:\\dev\\... (bash mangia i backslash)
 # personalizza:
 make android-sync WIN=1 WIN_ANDROID_DIR='D:/android/kor35'
 ```
 
-Poi in Android Studio: **Open** → `C:\dev\kor35-app\android`
-(lo script copia anche `node_modules/@capacitor/*` accanto, come richiede Capacitor). (o `C:\\dev\\kor35-android` in Esplora risorse) (non il path `\\wsl.localhost\...`).
+Poi in Android Studio: **File → Open** → `C:\dev\kor35-android`
+(lo script copia `node_modules/@capacitor/*` *dentro* quella cartella). Non aprire `C:\dev\kor35-app` né `\\wsl.localhost\...`.
+
+Se Gradle dice *No matching variant / No variants exist* sui moduli `:capacitor-*`, stai aprendo la copia sbagliata (senza quei pacchetti). Chiudi il progetto, ri-esegui `make android-sync WIN=1`, apri di nuovo `C:\dev\kor35-android` e fai **Sync Project with Gradle Files**.
+
+Capacitor 8 richiede Android Studio **Otter | 2025.2.1+** e AGP **8.13.0**.
 
 Oppure:
 

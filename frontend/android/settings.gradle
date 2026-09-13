@@ -1,5 +1,35 @@
 include ':app'
 include ':capacitor-cordova-android-plugins'
-project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')
+project(':capacitor-cordova-android-plugins').projectDir = new File(settingsDir, 'capacitor-cordova-android-plugins')
 
 apply from: 'capacitor.settings.gradle'
+
+// capacitor.settings.gradle usa File('../node_modules/...') relativo alla CWD.
+// Android Studio su Windows spesso ha CWD diversa: i moduli Capacitor restano
+// vuoti e Gradle dice "No variants exist". Risolviamo da settingsDir.
+//
+// Layout WSL:     frontend/android + frontend/node_modules/@capacitor
+// Layout WIN=1:   C:/dev/kor35-android/node_modules/@capacitor (dentro il progetto)
+def capFromParent = new File(settingsDir, '../node_modules/@capacitor').canonicalFile
+def capFromLocal = new File(settingsDir, 'node_modules/@capacitor').canonicalFile
+def capRoot = capFromParent.directory ? capFromParent : capFromLocal
+
+if (!capRoot.directory) {
+    throw new GradleException(
+        "Manca node_modules/@capacitor.\n" +
+        "  cercato: ${capFromParent}\n" +
+        "  cercato: ${capFromLocal}\n" +
+        "Da WSL: cd frontend && npm ci && npx cap sync android\n" +
+        "Poi: make android-sync WIN=1  e in Android Studio apri C:\\\\dev\\\\kor35-android"
+    )
+}
+
+project(':capacitor-android').projectDir = new File(capRoot, 'android/capacitor')
+project(':capacitor-app').projectDir = new File(capRoot, 'app/android')
+project(':capacitor-push-notifications').projectDir = new File(capRoot, 'push-notifications/android')
+
+[project(':capacitor-android'), project(':capacitor-app'), project(':capacitor-push-notifications')].each { p ->
+    if (!p.projectDir.directory) {
+        throw new GradleException("Modulo ${p.name}: directory assente ${p.projectDir}")
+    }
+}

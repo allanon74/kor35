@@ -35,7 +35,7 @@ help:
 	@echo "  make env ENV=dev-home        # crea/attiva backend/.env.<env>"
 	@echo "  make setup                   # prepara runtime + build frontend"
 	@echo "  make android-sync            # build React + Capacitor sync Android"
-	@echo "  make android-sync WIN=1      # come sopra + robocopy su C:/dev/kor35-app (WSL→Windows; usare slash /)"
+	@echo "  make android-sync WIN=1      # come sopra + robocopy su C:/dev/kor35-android (WSL→Windows; usare slash /)"
 	@echo "  make android-open            # apre Android Studio (o indica path Windows se WIN=1)"
 	@echo "  make up                      # avvia stack (con build + collectstatic)"
 	@echo "  make up-no-build             # avvio senza rebuild immagini (obbligatorio mirror offline/evento)"
@@ -446,12 +446,12 @@ prod-turn-prepare:
 # Shell Android Capacitor (PWA nel WebView + bridge nativo FCM/chiamate).
 # Richiede Node sul host (non nel container) e Android Studio per build APK.
 # CAPACITOR_SERVER_URL opzionale (default https://www.kor35.it).
-# WIN=1 (solo da WSL): dopo il sync copia android + @capacitor su C:/dev/kor35-app (layout Windows)
-#   per Android Studio (evita Gradle JVM su \\wsl.localhost\...).
-# WIN_ANDROID_DIR opzionale (default C:/dev/kor35-app). Usa slash avanti!
+# WIN=1 (solo da WSL): dopo il sync copia android + @capacitor su C:/dev/kor35-android
+#   (cartella da aprire in Android Studio; evita Gradle JVM su \\wsl.localhost\...).
+# WIN_ANDROID_DIR opzionale (default C:/dev/kor35-android). Usa slash avanti!
 WIN ?= 0
 # Usa slash avanti: i backslash (c:\dev\...) in Make/bash vengono corrotti.
-WIN_ANDROID_DIR ?= C:/dev/kor35-app
+WIN_ANDROID_DIR ?= C:/dev/kor35-android
 
 android-sync:
 	cd frontend && (npm ci || npm install) && npm run cap:sync
@@ -459,13 +459,13 @@ android-sync:
 		echo "WIN=1 → copia frontend/android verso $(WIN_ANDROID_DIR)"; \
 		WIN_ANDROID_DIR="$(WIN_ANDROID_DIR)" ./scripts/android_sync_to_windows.sh; \
 	else \
-		echo "Suggerimento WSL: make android-sync WIN=1 WIN_ANDROID_DIR=C:/dev/kor35-app"; \
+		echo "Suggerimento WSL: make android-sync WIN=1 WIN_ANDROID_DIR=C:/dev/kor35-android"; \
 	fi
 
 android-open:
 	@if [ "$(WIN)" = "1" ]; then \
-		echo "Progetto su Windows: apri in Android Studio la cartella $(WIN_ANDROID_DIR)"; \
-		echo "Esempio: studio64 \"$(WIN_ANDROID_DIR)\""; \
+		echo "Apri in Android Studio (Windows) QUESTA cartella: $(WIN_ANDROID_DIR)"; \
+		echo "Non aprire C:/dev/kor35-app né \\\\wsl.localhost\\..."; \
 	else \
 		cd frontend && npx cap open android; \
 	fi
