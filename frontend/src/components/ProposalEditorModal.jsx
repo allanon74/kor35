@@ -33,9 +33,9 @@ const ITEM_TYPES = {
     'MUTAZIONE': { label: 'Mutazione (Biologico)', icon: Activity, isBound: true }
 };
 
-/** Livello cerimoniale = floor(mattoni / 5), allineato al backend. */
+/** Livello suggerito cerimoniale = floor(mattoni minimi / 5). */
 const MATTONI_PER_LIVELLO_CERIMONIALE = 5;
-const livelloCerimonialeDaMattoni = (totaleMattoni) =>
+const livelloSuggeritoCerimoniale = (totaleMattoni) =>
     Math.floor(Math.max(0, Number(totaleMattoni) || 0) / MATTONI_PER_LIVELLO_CERIMONIALE);
 
 const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
@@ -51,6 +51,8 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
     const [prerequisiti, setPrerequisiti] = useState(proposal?.prerequisiti || '');
     const [svolgimento, setSvolgimento] = useState(proposal?.svolgimento || '');
     const [effetto, setEffetto] = useState(proposal?.effetto || '');
+    const [livelloCerimoniale, setLivelloCerimoniale] = useState(proposal?.livello_proposto || proposal?.livello || 1);
+    const [mattoniGenerici, setMattoniGenerici] = useState(proposal?.mattoni_generici || 0);
 
     const [selectedAuraId, setSelectedAuraId] = useState(proposal?.aura || '');
     const [selectedInfusionAuraId, setSelectedInfusionAuraId] = useState(proposal?.aura_infusione || '');
@@ -178,6 +180,12 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
 
     // --- CALCOLI LIMITI ---
     const currentTotalCount = Object.values(componentsMap).reduce((a, b) => a + b, 0);
+    const totaleMattoniMinimi = isCerimoniale
+        ? currentTotalCount + (Number(mattoniGenerici) || 0)
+        : currentTotalCount;
+    const livelloSuggerito = isCerimoniale
+        ? livelloSuggeritoCerimoniale(totaleMattoniMinimi)
+        : 0;
 
     const auraLimit = useMemo(() => {
         if (!selectedAuraId || !char) return 0;
@@ -192,12 +200,8 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
         return Math.min(auraLimit, ccoVal);
     }, [isCerimoniale, auraLimit, char]);
 
-    const livelloCerimoniale = isCerimoniale
-        ? livelloCerimonialeDaMattoni(currentTotalCount)
-        : 0;
-
     const estimatedCost = isCerimoniale
-        ? livelloCerimoniale * 100
+        ? totaleMattoniMinimi * 100
         : currentTotalCount * 10;
 
     const paletteAuraNumericId = auraIdForBricks ? Number(auraIdForBricks) : null;
@@ -285,6 +289,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
             svolgimento: isCerimoniale ? svolgimento : null,
             effetto: isCerimoniale ? effetto : null,
             livello_proposto: isCerimoniale ? livelloCerimoniale : 1,
+            mattoni_generici: isCerimoniale ? Number(mattoniGenerici) || 0 : 0,
             spiegazione_teorie: spiegazioneTeorie.trim() || null,
             permetti_vendita: permettiVendita,
         };
@@ -315,14 +320,15 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                 return setError("Per i cerimoniali, tutti i campi descrittivi sono obbligatori.");
             }
             if (livelloCerimoniale < 1) {
-                return setError(
-                    `Il rito deve avere almeno livello 1 (servono almeno ${MATTONI_PER_LIVELLO_CERIMONIALE} mattoni).`,
-                );
+                return setError("Il rito deve avere almeno livello 1.");
             }
             if (livelloCerimoniale > maxLivelloCerimoniale) {
                 return setError(
                     `Livello ${livelloCerimoniale} oltre il limite Min(Aura, CCO)=${maxLivelloCerimoniale}.`,
                 );
+            }
+            if (totaleMattoniMinimi < 1) {
+                return setError("Indica almeno un mattone specifico o generico.");
             }
         }
 
@@ -481,21 +487,38 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                     {/* LOGICA CERIMONIALE */}
                     {isCerimoniale && selectedAuraId && (
                         <div className="space-y-6 animate-in slide-in-from-top-4 duration-500 bg-purple-900/5 p-6 rounded-2xl border border-purple-500/10">
-                            <div className="bg-purple-900/10 p-4 rounded-xl border border-purple-500/20">
-                                <label className="text-[10px] font-black text-purple-400 uppercase flex justify-between items-center mb-2">
-                                    Livello del Rituale
-                                    <span className="text-gray-500 italic lowercase tracking-tight font-normal">
-                                        mattoni ÷ {MATTONI_PER_LIVELLO_CERIMONIALE} (per difetto) · limite Min(Aura, CCO): {maxLivelloCerimoniale}
-                                    </span>
-                                </label>
-                                <div className="w-full bg-gray-800 border border-purple-500/40 rounded-lg p-3 text-white font-bold shadow-lg shadow-purple-900/10 flex justify-between items-center">
-                                    <span>Livello {livelloCerimoniale}</span>
-                                    <span className="text-xs font-normal text-gray-400">
-                                        {currentTotalCount} mattoni
-                                        {livelloCerimoniale > maxLivelloCerimoniale ? (
-                                            <span className="text-red-400 ml-2">oltre limite</span>
-                                        ) : null}
-                                    </span>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="bg-purple-900/10 p-4 rounded-xl border border-purple-500/20">
+                                    <label className="text-[10px] font-black text-purple-400 uppercase flex justify-between items-center mb-2">
+                                        Livello del Rituale
+                                        <span className="text-gray-500 italic lowercase tracking-tight font-normal">
+                                            limite Min(Aura, CCO): {maxLivelloCerimoniale}
+                                        </span>
+                                    </label>
+                                    <select
+                                        value={livelloCerimoniale}
+                                        onChange={(e) => setLivelloCerimoniale(parseInt(e.target.value, 10) || 1)}
+                                        disabled={!isDraft}
+                                        className="w-full bg-gray-800 border border-purple-500/40 rounded-lg p-3 text-white font-bold outline-none"
+                                    >
+                                        {[...Array(Math.max(maxLivelloCerimoniale, livelloCerimoniale, 1) + 1).keys()].slice(1).map((n) => (
+                                            <option key={n} value={n}>Livello {n}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="bg-purple-900/10 p-4 rounded-xl border border-purple-500/20">
+                                    <label className="text-[10px] font-black text-purple-300 uppercase block mb-2">Livello suggerito</label>
+                                    <div className="w-full bg-gray-950 border border-purple-500/20 rounded-lg p-3 text-white font-bold flex justify-between">
+                                        <span>{livelloSuggerito}</span>
+                                        <span className="text-[10px] font-normal text-gray-500">mattoni÷{MATTONI_PER_LIVELLO_CERIMONIALE}</span>
+                                    </div>
+                                </div>
+                                <div className="bg-purple-900/10 p-4 rounded-xl border border-purple-500/20">
+                                    <label className="text-[10px] font-black text-purple-300 uppercase block mb-2">Totale mattoni minimi</label>
+                                    <div className="w-full bg-gray-950 border border-purple-500/20 rounded-lg p-3 text-white font-bold flex justify-between">
+                                        <span>{totaleMattoniMinimi}</span>
+                                        <span className="text-[10px] font-normal text-gray-500">{currentTotalCount} + {Number(mattoniGenerici)||0} gen.</span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -610,8 +633,8 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                 </div>
                                 <div className="text-right">
                                     {isCerimoniale ? (
-                                        <span className={`text-[10px] font-bold block uppercase mb-1 ${livelloCerimoniale > maxLivelloCerimoniale ? 'text-red-500' : 'text-gray-400'}`}>
-                                            Mattoni: {currentTotalCount} → Liv. {livelloCerimoniale}
+                                        <span className="text-[10px] font-bold block uppercase mb-1 text-gray-400">
+                                            Totale minimi: {totaleMattoniMinimi} · suggerito L{livelloSuggerito}
                                         </span>
                                     ) : (
                                         <span className={`text-[10px] font-bold block uppercase mb-1 ${currentTotalCount >= auraLimit ? 'text-red-500' : 'text-gray-400'}`}>
@@ -621,6 +644,25 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                     <span className="text-sm font-black text-yellow-500 font-mono tracking-tighter italic">Costo Invio: {estimatedCost} CR</span>
                                 </div>
                             </div>
+
+                            {isCerimoniale && (
+                                <div className="bg-purple-950/30 border border-purple-500/20 rounded-xl p-3 flex flex-wrap items-center gap-4">
+                                    <label className="text-[10px] font-black text-purple-300 uppercase tracking-widest">
+                                        Mattoni generici
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        value={mattoniGenerici}
+                                        disabled={!isDraft}
+                                        onChange={(e) => setMattoniGenerici(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                                        className="w-24 bg-gray-900 border border-purple-500/40 rounded-lg p-2 text-white text-sm font-bold outline-none"
+                                    />
+                                    <span className="text-[10px] text-gray-500">
+                                        Non legati all&apos;aura; entrano nel totale minimo e nei costi.
+                                    </span>
+                                </div>
+                            )}
 
                             <div className="bg-gray-800/20 p-4 rounded-2xl border border-gray-700/50 max-h-[500px] overflow-y-auto shadow-inner grid grid-cols-1 md:grid-cols-3 gap-3">
                                 {displayItems.map(item => {

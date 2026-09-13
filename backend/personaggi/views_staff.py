@@ -658,17 +658,16 @@ class ApprovaPropostaView(APIView):
         
         livello_finale = data.get('livello', proposta.livello)
         if tipo == TIPO_PROPOSTA_CERIMONIALE:
-            # Livello = floor(mattoni / 5); override staff solo se esplicito e coerente col payload componenti
-            livello_da_mattoni = proposta.livello
-            if 'componenti' in data and data.get('componenti') is not None:
-                try:
-                    tot = sum(int(c.get('valore') or 0) for c in data.get('componenti') or [])
-                    from personaggi.models import livello_cerimoniale_da_mattoni
-                    livello_da_mattoni = livello_cerimoniale_da_mattoni(tot)
-                except (TypeError, ValueError):
-                    pass
-            livello_finale = livello_da_mattoni or 0
+            # Livello manuale (Master); default dalla proposta
+            livello_finale = data.get('liv', proposta.livello_proposto) or 1
             data['liv'] = livello_finale
+            if 'mattoni_generici' not in data:
+                data['mattoni_generici'] = getattr(proposta, 'mattoni_generici', 0) or 0
+            # Allinea la proposta ai mattoni del payload prima del calcolo costo
+            try:
+                proposta.mattoni_generici = int(data.get('mattoni_generici') or 0)
+            except (TypeError, ValueError):
+                pass
 
         _, costo_totale = calcola_costo_creazione_proposta(
             personaggio, proposta, livello_finale=livello_finale

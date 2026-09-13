@@ -3049,10 +3049,12 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
         personaggio = proposta.personaggio
         if proposta.stato != STATO_PROPOSTA_BOZZA: return Response({"error": "La proposta non è in stato di bozza."}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Livello: tessiture/infusioni = somma mattoni; cerimoniali = floor(mattoni / 5)
+        # Livello: tessiture/infusioni = somma mattoni; cerimoniali = livello proposto (manuale)
         livello = proposta.livello
+        if proposta.tipo == 'CER':
+            livello = getattr(proposta, 'livello_proposto', 1) or 1
         if livello == 0:
-            return Response({"error": "La proposta deve avere almeno un componente (per i cerimoniali servono almeno 5 mattoni per livello 1)."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "La proposta deve avere almeno un componente / livello valido."}, status=status.HTTP_400_BAD_REQUEST)
 
 # --- CALCOLO COSTO INVIO (BUROCRAZIA) ---
         costo_base = COSTO_DEFAULT_INVIO_PROPOSTA # Default 10
@@ -3074,14 +3076,18 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
                  if val > 0: costo_base = val
         
                  
-        costo_invio = livello * costo_base
+        # Cerimoniali: costo = totale mattoni minimi (specifici + generici) × stat invio
+        if proposta.tipo == 'CER':
+            costo_invio = int(proposta.totale_mattoni_minimi() or 0) * costo_base
+        else:
+            costo_invio = livello * costo_base
 
         if personaggio.crediti < costo_invio: 
             return Response({"error": f"Crediti insufficienti. Richiesti: {costo_invio} CR."}, status=status.HTTP_400_BAD_REQUEST)
 
         val_aura = personaggio.get_valore_aura_effettivo(proposta.aura)
         if val_aura < 1: return Response({"error": "Non possiedi l'aura selezionata."}, status=status.HTTP_400_BAD_REQUEST)
-        if livello > val_aura: return Response({"error": f"Troppi componenti ({livello}) per il valore della tua aura ({val_aura})."}, status=status.HTTP_400_BAD_REQUEST)
+        if livello > val_aura: return Response({"error": f"Livello ({livello}) superiore al valore della tua aura ({val_aura})."}, status=status.HTTP_400_BAD_REQUEST)
         
         if proposta.tipo == 'CER':
             valore_cco = personaggio.get_valore_statistica('CCO')

@@ -8,7 +8,7 @@ import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 
 const MATTONI_PER_LIVELLO_CERIMONIALE = 5;
-const livelloCerimonialeDaMattoni = (totaleMattoni) =>
+const livelloSuggeritoCerimoniale = (totaleMattoni) =>
   Math.floor(Math.max(0, Number(totaleMattoni) || 0) / MATTONI_PER_LIVELLO_CERIMONIALE);
 
 // Aggiunto onCancel e onSave ai props
@@ -23,6 +23,7 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
     svolgimento: '',
     effetto: '',
     liv: 1,
+    mattoni_generici: 0,
     non_acquistabile: false,
     escluso_negozio_ufficiale: false,
     non_vendibile: false,
@@ -33,11 +34,13 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState({ type: 'success', message: '' });
 
-  const totaleMattoni = useMemo(
+  const totaleSpecifici = useMemo(
     () => (formData.componenti || []).reduce((acc, c) => acc + (Number(c.valore) || 0), 0),
     [formData.componenti],
   );
-  const livelloCalcolato = livelloCerimonialeDaMattoni(totaleMattoni);
+  const mattoniGenerici = Number(formData.mattoni_generici) || 0;
+  const totaleMattoniMinimi = totaleSpecifici + mattoniGenerici;
+  const livelloSuggerito = livelloSuggeritoCerimoniale(totaleMattoniMinimi);
 
   // Gestione alias per chiusura
   const handleClose = onCancel || onBack;
@@ -53,7 +56,8 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
       setSaving(true);
       const dataToSend = { 
         ...formData,
-        liv: livelloCalcolato,
+        liv: Number(formData.liv) || 1,
+        mattoni_generici: mattoniGenerici,
         aura_richiesta: formData.aura_richiesta?.id || formData.aura_richiesta || null
       };
 
@@ -115,15 +119,38 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
             <div className="md:col-span-2">
                 <Input label="Nome Cerimoniale" value={formData.nome} onChange={v => setFormData({...formData, nome: v})} />
             </div>
-            <div className="w-full text-left">
-              <label className="text-[10px] text-gray-500 uppercase font-black block mb-1 tracking-tighter">
-                Livello (mattoni / {MATTONI_PER_LIVELLO_CERIMONIALE})
-              </label>
-              <div className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white shadow-inner flex justify-between">
-                <span className="font-bold">{livelloCalcolato}</span>
-                <span className="text-gray-500 text-xs">{totaleMattoni} mattoni</span>
-              </div>
+            <Input
+              label="Livello (liv)"
+              type="number"
+              value={formData.liv}
+              onChange={v => setFormData({...formData, liv: parseInt(v, 10) || 1})}
+            />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="w-full text-left">
+            <label className="text-[10px] text-gray-500 uppercase font-black block mb-1 tracking-tighter">
+              Livello suggerito
+            </label>
+            <div className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white shadow-inner flex justify-between">
+              <span className="font-bold">{livelloSuggerito}</span>
+              <span className="text-gray-500 text-xs">mattoni÷{MATTONI_PER_LIVELLO_CERIMONIALE}</span>
             </div>
+          </div>
+          <div className="w-full text-left">
+            <label className="text-[10px] text-gray-500 uppercase font-black block mb-1 tracking-tighter">
+              Totale mattoni minimi
+            </label>
+            <div className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white shadow-inner flex justify-between">
+              <span className="font-bold">{totaleMattoniMinimi}</span>
+              <span className="text-gray-500 text-xs">{totaleSpecifici} + {mattoniGenerici} gen.</span>
+            </div>
+          </div>
+          <Input
+            label="Mattoni generici"
+            type="number"
+            value={formData.mattoni_generici}
+            onChange={v => setFormData({...formData, mattoni_generici: Math.max(0, parseInt(v, 10) || 0)})}
+          />
         </div>
         <div className="space-y-2">
           <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer flex items-center gap-2 justify-end">

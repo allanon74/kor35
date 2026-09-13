@@ -1,52 +1,34 @@
-from django.db import migrations
-from django.db.models import Sum
-
-
-MATTONI_PER_LIVELLO = 5
-
-
-def _livello_da_mattoni(totale):
-    try:
-        tot = int(totale or 0)
-    except (TypeError, ValueError):
-        tot = 0
-    if tot < 0:
-        tot = 0
-    return tot // MATTONI_PER_LIVELLO
-
-
-def forwards(apps, schema_editor):
-    Cerimoniale = apps.get_model('personaggi', 'Cerimoniale')
-    PropostaTecnica = apps.get_model('personaggi', 'PropostaTecnica')
-
-    for cer in Cerimoniale.objects.all().iterator():
-        totale = (
-            cer.componenti.aggregate(tot=Sum('valore'))['tot'] or 0
-        )
-        nuovo = _livello_da_mattoni(totale)
-        if cer.liv != nuovo:
-            Cerimoniale.objects.filter(pk=cer.pk).update(liv=nuovo)
-
-    for prop in PropostaTecnica.objects.filter(tipo='CER').iterator():
-        totale = (
-            prop.componenti.aggregate(tot=Sum('valore'))['tot'] or 0
-        )
-        nuovo = _livello_da_mattoni(totale)
-        if prop.livello_proposto != nuovo:
-            PropostaTecnica.objects.filter(pk=prop.pk).update(livello_proposto=nuovo)
-
-
-def backwards(apps, schema_editor):
-    # Non ripristiniamo i valori manuali precedenti.
-    pass
+from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
+    """
+    Rettifica cerimoniali:
+    - mattoni_generici su Cerimoniale e PropostaTecnica
+    - livello resta manuale (non ricalcolato); floor(mattoni/5) è solo suggerito a runtime
+    """
 
     dependencies = [
         ('personaggi', '0269_chiamata_vocale'),
     ]
 
     operations = [
-        migrations.RunPython(forwards, backwards),
+        migrations.AddField(
+            model_name='cerimoniale',
+            name='mattoni_generici',
+            field=models.PositiveIntegerField(
+                default=0,
+                help_text="Mattoni obbligatori non legati a un'aura specifica; sommati ai componenti per il totale minimo.",
+                verbose_name='Mattoni generici',
+            ),
+        ),
+        migrations.AddField(
+            model_name='propostatecnica',
+            name='mattoni_generici',
+            field=models.PositiveIntegerField(
+                default=0,
+                help_text='Solo cerimoniali: mattoni obbligatori non specifici d\'aura, sommati ai componenti.',
+                verbose_name='Mattoni generici',
+            ),
+        ),
     ]

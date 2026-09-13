@@ -46,12 +46,12 @@ COSTO_CREAZIONE_MUTAZIONE_PER_MATTONE = 100  # Fallback per stat_costo_creazione
 COSTO_PER_MATTONE_CREAZIONE = 10  # Costo invio proposta (fallback)
 COSTO_DEFAULT_PER_MATTONE = 100  # Fallback generico
 COSTO_DEFAULT_INVIO_PROPOSTA = 10  # Fallback invio proposta
-# Livello cerimoniale = floor(somma mattoni / MATTONI_PER_LIVELLO_CERIMONIALE)
+# Livello suggerito cerimoniale = floor(totale mattoni minimi / MATTONI_PER_LIVELLO_CERIMONIALE)
 MATTONI_PER_LIVELLO_CERIMONIALE = 5
 
 
-def livello_cerimoniale_da_mattoni(totale_mattoni) -> int:
-    """Livello cerimoniale: mattoni diviso 5, arrotondato per difetto."""
+def livello_suggerito_cerimoniale(totale_mattoni) -> int:
+    """Livello suggerito: mattoni minimi diviso 5, arrotondato per difetto."""
     try:
         totale = int(totale_mattoni or 0)
     except (TypeError, ValueError):
@@ -59,6 +59,10 @@ def livello_cerimoniale_da_mattoni(totale_mattoni) -> int:
     if totale < 0:
         totale = 0
     return totale // MATTONI_PER_LIVELLO_CERIMONIALE
+
+
+# Alias retrocompatibile (test / import legacy)
+livello_cerimoniale_da_mattoni = livello_suggerito_cerimoniale
 
 # Fallback consumabili (se non impostati sull'aura)
 FALLBACK_STAT_COSTO_CONSUMABILI = 30
@@ -3139,6 +3143,11 @@ class Cerimoniale(Tecnica):
     proposta_creazione = models.OneToOneField('PropostaTecnica', on_delete=models.SET_NULL, null=True, blank=True, related_name='cerimoniale_generato', verbose_name="Proposta Originale")
     
     liv = models.IntegerField(default=1, verbose_name="Livello")
+    mattoni_generici = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Mattoni generici",
+        help_text="Mattoni obbligatori non legati a un'aura specifica; sommati ai componenti per il totale minimo.",
+    )
     non_acquistabile = models.BooleanField(
         default=False,
         verbose_name="Non acquistabile",
@@ -3160,31 +3169,31 @@ class Cerimoniale(Tecnica):
         verbose_name = "Cerimoniale"
         verbose_name_plural = "Cerimoniali"
 
-    def totale_mattoni(self) -> int:
-        """Somma dei valori dei componenti (mattoni) del cerimoniale."""
-        return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
-
-    def sync_liv_da_mattoni(self, *, save=True):
-        """Allinea il campo `liv` a floor(mattoni / 5) per ordinamenti e filtri DB."""
-        nuovo = livello_cerimoniale_da_mattoni(self.totale_mattoni())
-        if self.liv != nuovo:
-            self.liv = nuovo
-            if save and self.pk:
-                type(self).objects.filter(pk=self.pk).update(liv=nuovo)
-        return nuovo
-
     def save(self, *args, **kwargs):
         if self.escluso_negozio_ufficiale or self.non_vendibile:
             self.non_acquistabile = True
-        # Se i componenti esistono già, allinea liv prima del save.
-        if self.pk:
-            self.liv = livello_cerimoniale_da_mattoni(self.totale_mattoni())
         super().save(*args, **kwargs)
+
+    def totale_mattoni_specifici(self) -> int:
+        """Somma dei valori dei componenti (mattoni) legati all'aura."""
+        return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
+
+    def totale_mattoni_minimi(self) -> int:
+        """Mattoni specifici + mattoni generici (base per costi e livello suggerito)."""
+        return self.totale_mattoni_specifici() + int(self.mattoni_generici or 0)
+
+    # Alias usato da codice/test precedenti
+    def totale_mattoni(self) -> int:
+        return self.totale_mattoni_minimi()
+
+    @property
+    def livello_suggerito(self):
+        return livello_suggerito_cerimoniale(self.totale_mattoni_minimi())
     
     @property
     def livello(self):
-        # Livello = floor(somma mattoni / 5). Il campo `liv` è uno specchio per query/order_by.
-        return livello_cerimoniale_da_mattoni(self.totale_mattoni())
+        # Livello effettivo: scelto a mano dal Master (campo `liv`).
+        return self.liv
     
     @property
     def costo_crediti(self): 
@@ -3192,7 +3201,7 @@ class Cerimoniale(Tecnica):
         if self.aura_richiesta and self.aura_richiesta.stat_costo_acquisto_cerimoniale:
             val = self.aura_richiesta.stat_costo_acquisto_cerimoniale.valore_base_predefinito
             if val > 0: base = val
-        return self.livello * base
+        return self.totale_mattoni_minimi() * base
         
     @property
     def TestoFormattato(self):
@@ -3208,19 +3217,6 @@ class CerimonialeCaratteristica(SyncableModel, models.Model):
     caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
     valore = models.IntegerField(default=1)
     class Meta: unique_together = ('cerimoniale', 'caratteristica')
-
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        if self.cerimoniale_id:
-            self.cerimoniale.sync_liv_da_mattoni(save=True)
-
-    def delete(self, *args, **kwargs):
-        cer_id = self.cerimoniale_id
-        super().delete(*args, **kwargs)
-        if cer_id:
-            cer = Cerimoniale.objects.filter(pk=cer_id).first()
-            if cer:
-                cer.sync_liv_da_mattoni(save=True)
 
 class InfusioneCaratteristica(SyncableModel, models.Model):
     infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE, related_name='componenti')
@@ -8615,6 +8611,11 @@ class PropostaTecnica(SyncableModel, models.Model):
     svolgimento = models.TextField("Svolgimento (Cerimoniale)", blank=True, null=True)
     effetto = models.TextField("Effetto (Cerimoniale)", blank=True, null=True)
     livello_proposto = models.IntegerField(default=1, verbose_name="Livello Scelto")
+    mattoni_generici = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Mattoni generici",
+        help_text="Solo cerimoniali: mattoni obbligatori non specifici d'aura, sommati ai componenti.",
+    )
     # -----------------------------------
 
     spiegazione_teorie = models.TextField(
@@ -8637,25 +8638,28 @@ class PropostaTecnica(SyncableModel, models.Model):
     def __str__(self): 
         return f"{self.get_tipo_display()} - {self.nome} ({self.personaggio.nome})"
     
-    def totale_mattoni(self) -> int:
+    def totale_mattoni_specifici(self) -> int:
         return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
 
-    def sync_livello_proposto_da_mattoni(self, *, save=True):
-        """Per proposte CER, allinea livello_proposto a floor(mattoni / 5)."""
+    def totale_mattoni_minimi(self) -> int:
+        if self.tipo == TIPO_PROPOSTA_CERIMONIALE:
+            return self.totale_mattoni_specifici() + int(self.mattoni_generici or 0)
+        return self.totale_mattoni_specifici()
+
+    def totale_mattoni(self) -> int:
+        return self.totale_mattoni_minimi()
+
+    @property
+    def livello_suggerito(self):
         if self.tipo != TIPO_PROPOSTA_CERIMONIALE:
-            return self.livello_proposto
-        nuovo = livello_cerimoniale_da_mattoni(self.totale_mattoni())
-        if self.livello_proposto != nuovo:
-            self.livello_proposto = nuovo
-            if save and self.pk:
-                type(self).objects.filter(pk=self.pk).update(livello_proposto=nuovo)
-        return nuovo
+            return self.totale_mattoni_specifici()
+        return livello_suggerito_cerimoniale(self.totale_mattoni_minimi())
 
     @property
     def livello(self): 
         if self.tipo == TIPO_PROPOSTA_CERIMONIALE:
-            return livello_cerimoniale_da_mattoni(self.totale_mattoni())
-        return self.totale_mattoni()
+            return self.livello_proposto
+        return self.totale_mattoni_specifici()
 
 class PropostaTecnicaCaratteristica(SyncableModel, models.Model):
     proposta = models.ForeignKey(PropostaTecnica, on_delete=models.CASCADE, related_name='componenti')
@@ -8665,21 +8669,6 @@ class PropostaTecnicaCaratteristica(SyncableModel, models.Model):
     class Meta: 
         ordering = ['caratteristica__nome']
         unique_together = ('proposta', 'caratteristica')
-
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        if self.proposta_id:
-            proposta = PropostaTecnica.objects.filter(pk=self.proposta_id).first()
-            if proposta:
-                proposta.sync_livello_proposto_da_mattoni(save=True)
-
-    def delete(self, *args, **kwargs):
-        prop_id = self.proposta_id
-        super().delete(*args, **kwargs)
-        if prop_id:
-            proposta = PropostaTecnica.objects.filter(pk=prop_id).first()
-            if proposta:
-                proposta.sync_livello_proposto_da_mattoni(save=True)
 
 class PropostaTecnicaMattone(SyncableModel, models.Model):
     # LEGACY: Mantenuto per evitare errori di importazione se ci sono riferimenti, ma non usato

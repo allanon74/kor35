@@ -1994,17 +1994,24 @@ class CerimonialeSerializer(serializers.ModelSerializer):
     componenti = serializers.SerializerMethodField()
     TestoFormattato = serializers.CharField(read_only=True)
     costo_crediti = serializers.IntegerField(read_only=True)
+    totale_mattoni_minimi = serializers.SerializerMethodField()
+    livello_suggerito = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Cerimoniale
         fields = (
-            'id', 'nome', 'liv', 'livello', 'aura_richiesta',
+            'id', 'nome', 'liv', 'livello', 'livello_suggerito',
+            'mattoni_generici', 'totale_mattoni_minimi',
+            'aura_richiesta',
             'prerequisiti', 'svolgimento', 'effetto',
             'TestoFormattato', 'costo_crediti', 'componenti', 'non_acquistabile'
         )
 
     def get_componenti(self, obj):
         return _serialize_componenti_con_nome_mattone(obj)
+
+    def get_totale_mattoni_minimi(self, obj):
+        return obj.totale_mattoni_minimi()
 
 
 def _qr_fields_for_avista(instance):
@@ -2072,8 +2079,7 @@ class CerimonialeStaffListSerializer(serializers.ModelSerializer):
     aura_richiesta = PunteggioSmallSerializer(read_only=True)
     has_qrcode = serializers.BooleanField(read_only=True)
     qrcode_id = serializers.CharField(read_only=True, allow_null=True)
-    # Property calcolata: floor(mattoni / 5)
-    livello = serializers.IntegerField(read_only=True)
+    livello = serializers.IntegerField(source='liv', read_only=True)
 
     class Meta:
         model = Cerimoniale
@@ -2087,9 +2093,6 @@ class TecnicaBaseMasterMixin:
             instance.componenti.all().delete()
             for comp in components_data:
                 instance.componenti.create(**comp)
-            # Bulk delete bypassa Model.delete(): riallinea liv cerimoniale se serve.
-            if hasattr(instance, 'sync_liv_da_mattoni'):
-                instance.sync_liv_da_mattoni(save=True)
 
         # 2. Statistiche Base (Pivot)
         if stats_base_data is not None:
@@ -2232,6 +2235,8 @@ class CerimonialeFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMa
     def to_representation(self, instance):
         rep = super().to_representation(instance)
         rep['aura_richiesta'] = PunteggioSmallSerializer(instance.aura_richiesta).data if instance.aura_richiesta else None
+        rep['totale_mattoni_minimi'] = instance.totale_mattoni_minimi()
+        rep['livello_suggerito'] = instance.livello_suggerito
         rep.update(_qr_fields_for_avista(instance))
         return rep
 
@@ -2244,13 +2249,8 @@ class CerimonialeFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMa
     
     @transaction.atomic
     def update(self, instance, validated_data):
-        # Estraiamo i dati annidati per gestirli manualmente via Mixin
         comp = validated_data.pop('componenti', None)
-
-        # Aggiorniamo i campi base della cerimoniale
         instance = super().update(instance, validated_data)
-        
-        # Aggiorniamo le tabelle correlate (pulizia e ricreazione)
         self.handle_nested_data(instance, comp, None)
         return instance
 
@@ -2290,15 +2290,23 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
             'id', 'tipo', 'stato', 'nome', 'descrizione',
             'aura', 'aura_details', 'aura_infusione',
             'componenti', 'componenti_data',
-            'livello', 'livello_proposto', 'costo_invio_pagato', 'note_staff', 'data_creazione',
+            'livello', 'livello_proposto', 'livello_suggerito',
+            'mattoni_generici', 'totale_mattoni_minimi',
+            'costo_invio_pagato', 'note_staff', 'data_creazione',
             'slot_corpo_permessi', 'tipo_risultato_atteso', 
             'prerequisiti', 'svolgimento', 'effetto', 'spiegazione_teorie', 'permetti_vendita',
             'personaggio_nome', 'autore_nome',
         )
-        read_only_fields = ('stato', 'costo_invio_pagato', 'note_staff', 'data_creazione')
+        read_only_fields = ('stato', 'costo_invio_pagato', 'note_staff', 'data_creazione', 'livello', 'livello_suggerito', 'totale_mattoni_minimi')
         extra_kwargs = {
             'tipo_risultato_atteso': {'required': False, 'allow_null': True}
         }
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['totale_mattoni_minimi'] = instance.totale_mattoni_minimi()
+        rep['livello_suggerito'] = instance.livello_suggerito
+        return rep
 
     def create(self, validated_data):
         comp_data = validated_data.pop('componenti_data', [])
@@ -2315,7 +2323,6 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
                     caratteristica_id=c_id,
                     valore=val
                 )
-        proposta.sync_livello_proposto_da_mattoni(save=True)
         return proposta
 
     def update(self, instance, validated_data):
@@ -2340,7 +2347,6 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
                         caratteristica_id=c_id,
                         valore=val
                     )
-            instance.sync_livello_proposto_da_mattoni(save=True)
         return instance
 
 

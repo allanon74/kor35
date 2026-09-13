@@ -108,9 +108,10 @@ const StaffProposalTab = ({ onLogout }) => {
             testo: p.descrizione, // ridondanza utile per alcuni editor
             aura_richiesta: (p.aura && typeof p.aura === 'object') ? p.aura.id : p.aura,
             
-            // Livello cerimoniale = floor(mattoni / 5) (proprietà `livello` sul backend)
+            // Livello manuale Master; mattoni generici dalla proposta se non editati
             livello: p.livello,
-            liv: p.livello ?? p.livello_proposto ?? 0, 
+            liv: p.livello_proposto || p.livello || 1,
+            mattoni_generici: p.mattoni_generici || 0, 
             
             // FIX CRITICO: Passiamo 'componenti' con la chiave standard, non 'override'
             componenti: cleanComponenti,

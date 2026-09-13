@@ -29,7 +29,8 @@ def applica_sconto_rct_tecnica(personaggio, costo_base: int) -> int:
 def calcola_costo_creazione_proposta(personaggio, proposta, livello_finale=None) -> Tuple[int, int]:
     """
     Costo creazione da proposta approvata: (pieno, effettivo con sconto RCT).
-    livello_finale: override staff (es. liv/livello dal payload di approvazione).
+    - Infusioni/tessiture: moltiplicatore = livello (somma mattoni) o override `livello_finale`.
+    - Cerimoniali: moltiplicatore = totale mattoni minimi (specifici + generici).
     """
     from .models import (
         TIPO_PROPOSTA_CERIMONIALE,
@@ -46,15 +47,18 @@ def calcola_costo_creazione_proposta(personaggio, proposta, livello_finale=None)
     elif proposta.tipo == TIPO_PROPOSTA_CERIMONIALE:
         stat_costo = aura.stat_costo_creazione_cerimoniale
 
-    if livello_finale is None:
-        livello_finale = proposta.livello
-    livello_finale = int(livello_finale or 0)
+    if proposta.tipo == TIPO_PROPOSTA_CERIMONIALE:
+        quantita = int(proposta.totale_mattoni_minimi() or 0)
+    else:
+        if livello_finale is None:
+            livello_finale = proposta.livello
+        quantita = int(livello_finale or 0)
 
     costo_unitario = 0
     if stat_costo:
         costo_unitario = personaggio.get_valore_statistica(stat_costo.sigla)
 
-    costo_pieno = int(costo_unitario) * livello_finale
+    costo_pieno = int(costo_unitario) * quantita
     costo_effettivo = applica_sconto_rct_tecnica(personaggio, costo_pieno)
     return costo_pieno, costo_effettivo
 
