@@ -43,6 +43,6 @@ Template env: `config/env_templates/backend.<profilo>.env.example`
 
 - PWA resta il canale completo per iOS/Windows/browser.
 - App Android = Capacitor WebView + FCM/chiamate native; UI identica alla PWA.
-- Comandi: `make android-sync`, `make android-open` (Node/Android Studio sull'host).
+- Comandi: `make android-sync`, da WSL `make android-sync WIN=1` (robocopy su `C:\dev\kor35-android`), `make android-open`.
 - Regole: `.cursor/rules/android-capacitor.mdc`.
 
