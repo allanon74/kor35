@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
 # Copia il progetto Android + dipendenze Capacitor su disco Windows nativo.
 #
-# Capacitor settings.gradle punta a ../node_modules/@capacitor/...
-# Quindi NON basta copiare solo frontend/android: serve anche node_modules.
-#
-# Layout prodotto (default):
-#   C:/dev/kor35-app/android
-#   C:/dev/kor35-app/node_modules/@capacitor/{android,app,push-notifications,status-bar,core}
+# UNICO PATH CANONICO (non usarne altri):
+#   C:/dev/kor35-app/android          ← apri QUESTA in Android Studio
+#   C:/dev/kor35-app/node_modules/... ← sibling obbligatorio (Capacitor)
 #
 # Uso (WSL, root monorepo):
+#   make android-sync WIN=1
+#   # oppure:
 #   ./scripts/android_sync_to_windows.sh
-#   WIN_ANDROID_DIR=C:/dev/kor35-app ./scripts/android_sync_to_windows.sh
 #
-# Poi in Android Studio: Open → C:\dev\kor35-app\android
-#
+# NON usare C:/dev/kor35-android (layout legacy/rotto).
 # Preferisci slash avanti (C:/...). I backslash in Make/bash si corrompono.
 
 set -euo pipefail
@@ -21,11 +18,23 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_ANDROID="${ROOT}/frontend/android"
 SRC_NM="${ROOT}/frontend/node_modules"
-RAW_ROOT="${WIN_ANDROID_DIR:-C:/dev/kor35-app}"
+
+# Path fisso: override solo se sai cosa fai.
+CANONICAL_ROOT="C:/dev/kor35-app"
+RAW_ROOT="${WIN_ANDROID_DIR:-$CANONICAL_ROOT}"
+
+# Normalizza alias legacy → canonico
+case "${RAW_ROOT}" in
+  C:/dev/kor35-android|C:\\dev\\kor35-android|c:/dev/kor35-android|c:\\dev\\kor35-android)
+    echo "WARN: ${RAW_ROOT} è il path legacy. Uso il canonico ${CANONICAL_ROOT}" >&2
+    RAW_ROOT="${CANONICAL_ROOT}"
+    ;;
+esac
 
 echo "=== android_sync_to_windows ==="
 echo "Sorgente android: ${SRC_ANDROID}"
 echo "Root Windows:     ${RAW_ROOT}"
+echo "Apri in Studio:   ${RAW_ROOT}/android"
 
 if [[ ! -d "${SRC_ANDROID}" ]]; then
   echo "ERRORE: manca ${SRC_ANDROID}. Esegui prima: make android-sync" >&2
@@ -95,25 +104,76 @@ robo() {
 }
 
 ROOT_WIN="$(to_win "${RAW_ROOT}")"
-# Normalizza eventuale trailing slash
 ROOT_WIN="${ROOT_WIN%\\}"
 
 # 1) progetto android
 robo "${SRC_ANDROID}" "${ROOT_WIN}\\android"
 
 # 2) pacchetti Capacitor richiesti da capacitor.settings.gradle
-# Allineare a frontend/android/capacitor.settings.gradle (cap sync).
 CAPS=(android app push-notifications status-bar core)
+MISSING=0
 for pkg in "${CAPS[@]}"; do
   if [[ -d "${SRC_NM}/@capacitor/${pkg}" ]]; then
     robo "${SRC_NM}/@capacitor/${pkg}" "${ROOT_WIN}\\node_modules\\@capacitor\\${pkg}"
   else
-    echo "WARN: manca @capacitor/${pkg} — skip"
+    echo "ERRORE: manca @capacitor/${pkg} in node_modules (npm ci / cap sync)." >&2
+    MISSING=1
   fi
 done
+if [[ "${MISSING}" -ne 0 ]]; then
+  exit 1
+fi
+
+# 3) verifica post-copia (evita "No variants exist" in Studio)
+verify_linux_path() {
+  local drive rest linux_path
+  if [[ "${RAW_ROOT}" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
+    drive="${BASH_REMATCH[1],,}"
+    rest="${BASH_REMATCH[2]//\\//}"
+    linux_path="/mnt/${drive}/${rest}"
+  else
+    echo "WARN: impossibile verificare path Linux per ${RAW_ROOT}" >&2
+    return 0
+  fi
+  local fail=0
+  local f
+  for f in \
+    "${linux_path}/android/capacitor.settings.gradle" \
+    "${linux_path}/node_modules/@capacitor/status-bar/android/build.gradle" \
+    "${linux_path}/node_modules/@capacitor/push-notifications/android/build.gradle" \
+    "${linux_path}/node_modules/@capacitor/app/android/build.gradle" \
+    "${linux_path}/node_modules/@capacitor/android/capacitor/build.gradle"
+  do
+    if [[ ! -f "${f}" ]]; then
+      echo "ERRORE: manca dopo sync: ${f}" >&2
+      fail=1
+    fi
+  done
+  if [[ "${fail}" -ne 0 ]]; then
+    echo "Sync incompleto: non aprire Android Studio finché non è OK." >&2
+    exit 1
+  fi
+  # Hint in chiaro sul disco Windows
+  cat > "${linux_path}/APRI_IN_ANDROID_STUDIO.txt" <<EOF
+Apri in Android Studio SOLO questa cartella:
+
+  ${RAW_ROOT}/android
+
+(equivalente Windows: $(echo "${RAW_ROOT}" | sed 's|/|\\|g')\\android)
+
+NON aprire:
+  - C:\\dev\\kor35-android
+  - \\\\wsl.localhost\\...
+  - la cartella parent senza \\android
+EOF
+}
+
+verify_linux_path
 
 echo
-echo "OK: layout Windows pronto."
-echo "Apri in Android Studio:"
-echo "  ${ROOT_WIN}\\android"
-echo "(Non aprire\\\\wsl.localhost\\... e non aprire solo C:\\dev\\kor35-android senza node_modules)"
+echo "=============================================="
+echo " OK — path UNICO da usare da ora in poi:"
+echo "   ${ROOT_WIN}\\android"
+echo " Comando: make android-sync WIN=1"
+echo "=============================================="
+echo "Ignora C:\\dev\\kor35-android (legacy)."

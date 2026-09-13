@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: android-sync android-open help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db prod-turn-prepare pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart timer-dispatch timer-dispatch-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run bootstrap-kor35-mse-template bootstrap-kor35-mse-template-dry-run
+.PHONY: android-sync android-open android-path help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db prod-turn-prepare pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart timer-dispatch timer-dispatch-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run bootstrap-kor35-mse-template bootstrap-kor35-mse-template-dry-run
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -446,27 +446,37 @@ prod-turn-prepare:
 # Shell Android Capacitor (PWA nel WebView + bridge nativo FCM/chiamate).
 # Richiede Node sul host (non nel container) e Android Studio per build APK.
 # CAPACITOR_SERVER_URL opzionale (default https://www.kor35.it).
-# WIN=1 (solo da WSL): dopo il sync copia android + @capacitor su C:/dev/kor35-app (layout Windows)
-#   per Android Studio (evita Gradle JVM su \\wsl.localhost\...).
-# WIN_ANDROID_DIR opzionale (default C:/dev/kor35-app). Usa slash avanti!
+#
+# PATH WINDOWS UNICO (WSL → Android Studio):
+#   make android-sync WIN=1
+#   Apri SEMPRE: C:\dev\kor35-app\android
+# Non usare C:\dev\kor35-android (legacy/rotto).
 WIN ?= 0
-# Usa slash avanti: i backslash (c:\dev\...) in Make/bash vengono corrotti.
+# Override solo se necessario. Slash avanti obbligatori.
 WIN_ANDROID_DIR ?= C:/dev/kor35-app
 
 android-sync:
 	cd frontend && (npm ci || npm install) && npm run cap:sync
 	@if [ "$(WIN)" = "1" ]; then \
-		echo "WIN=1 → copia frontend/android verso $(WIN_ANDROID_DIR)"; \
+		echo "WIN=1 → sync Windows su $(WIN_ANDROID_DIR) (apri $(WIN_ANDROID_DIR)/android)"; \
 		WIN_ANDROID_DIR="$(WIN_ANDROID_DIR)" ./scripts/android_sync_to_windows.sh; \
 	else \
-		echo "Suggerimento WSL: make android-sync WIN=1 WIN_ANDROID_DIR=C:/dev/kor35-app"; \
+		echo "Da WSL + Android Studio Windows: make android-sync WIN=1"; \
+		echo "Poi apri SEMPRE: C:\\dev\\kor35-app\\android"; \
 	fi
 
 android-open:
 	@if [ "$(WIN)" = "1" ]; then \
-		echo "Progetto su Windows: apri in Android Studio la cartella $(WIN_ANDROID_DIR)"; \
-		echo "Esempio: studio64 \"$(WIN_ANDROID_DIR)\""; \
+		echo ""; \
+		echo "=============================================="; \
+		echo " Apri in Android Studio SOLO:"; \
+		echo "   C:\\dev\\kor35-app\\android"; \
+		echo " (equiv. $(WIN_ANDROID_DIR)/android)"; \
+		echo "=============================================="; \
+		echo "NON aprire C:\\dev\\kor35-android"; \
 	else \
 		cd frontend && npx cap open android; \
 	fi
 
+android-path:
+	@echo "C:\\dev\\kor35-app\\android"
