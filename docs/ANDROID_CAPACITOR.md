@@ -68,12 +68,18 @@ CAPACITOR_SERVER_URL=http://10.42.0.1 make android-sync WIN=1
 2. Capacitor registra FCM → token salvato via API autenticata.
 3. `notify_user(..., category=...)` se preferenza `webpush` attiva: prova Web Push **e** FCM.
 
-## Prossimi passi (non in questo spike)
+## Chiamate in arrivo (shell Android)
 
-- Notifica full-screen / ConnectionService per chiamate in arrivo.
-- Foreground service audio durante WebRTC.
+- Push FCM/webpush per `category=chiamate` include `call_id`, `action` (`VOCE_INVITO` / `VOCE_PERSA`) e URL `/?tab=messaggi&call={call_id}&voce={voce_action}`.
+- Canale Android `kor35_incoming_calls` (IMPORTANCE_HIGH) creato in `MainActivity` (più `kor35_default` per il resto).
+- Bridge JS `nativeIncomingCallBridge` + `callDeepLink`: tap notifica / resume app → `kor35:voce-wake` → refresh chiamata ringing.
+- ConnectionService Telecom / fullscreen intent nativo / foreground service audio WebRTC: ancora da fare.
+
+## Prossimi passi
+
+- Notifica full-screen Intent / ConnectionService (Telecom) per lockscreen.
+- Foreground service microfono durante WebRTC.
 - CI che pubblica AAB su Play Internal testing.
-- Deep link per aprire conversazione/chiamata.
 
 ## Documentazione agenti
 

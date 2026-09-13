@@ -157,6 +157,7 @@ def scadi_chiamate_vecchie() -> int:
                 user_ids=dest_push,
                 head="Chiamata persa",
                 body=f"Hai perso una chiamata da {call.chiamante.nome}.",
+                action="VOCE_PERSA",
             )
         n += 1
     return n
@@ -311,10 +312,18 @@ def _push_invito(call: ChiamataVocale, user_ids: list[int]):
         user_ids=user_ids,
         head="Chiamata vocale",
         body=body,
+        action="VOCE_INVITO",
     )
 
 
-def _push_esito(call: ChiamataVocale, *, user_ids: list[int], head: str, body: str):
+def _push_esito(
+    call: ChiamataVocale,
+    *,
+    user_ids: list[int],
+    head: str,
+    body: str,
+    action: str | None = None,
+):
     try:
         from personaggi.notify import notify_user_ids
     except Exception:
@@ -322,13 +331,27 @@ def _push_esito(call: ChiamataVocale, *, user_ids: list[int], head: str, body: s
         return
     if not user_ids:
         return
+    call_id = str(call.pk)
+    voce_action = action or (
+        "VOCE_PERSA" if "persa" in (head or "").lower() else "VOCE_INVITO"
+    )
+    # Deep-link per shell Capacitor / PWA: apre messaggi e risveglia overlay chiamata.
+    url = f"/?tab=messaggi&call={call_id}&voce={voce_action}"
+    extra = {
+        "call_id": call_id,
+        "action": voce_action,
+        "chiamante_id": call.chiamante_id or "",
+        "chiamante_nome": getattr(call.chiamante, "nome", "") or "",
+        "verso_staff": "1" if call.verso_staff else "0",
+    }
     try:
         notify_user_ids(
             user_ids,
             category="chiamate",
             head=head,
             body=body,
-            url="/?tab=messaggi",
+            url=url,
+            extra=extra,
         )
     except Exception:
         logger.exception("Push chiamata fallita call=%s", getattr(call, "pk", None))

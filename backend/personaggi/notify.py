@@ -1,5 +1,5 @@
 """
-Dispatcher unico per le notifiche utente: web push, Telegram, email.
+Dispatcher unico per le notifiche utente: web push, Telegram, email, FCM.
 
 Rispetta `NotificaPreferenze` (default: web push on, Telegram/email off).
 """
@@ -25,15 +25,39 @@ def get_or_create_preferenze(user) -> NotificaPreferenze:
     return prefs
 
 
-def notify_user(user, *, category: str, head: str, body: str, url: str = "/") -> int:
+def _stringify_extra(extra: dict | None) -> dict[str, str]:
+    """FCM data payload richiede valori stringa."""
+    if not extra:
+        return {}
+    out: dict[str, str] = {}
+    for key, value in extra.items():
+        if value is None:
+            continue
+        out[str(key)] = str(value)
+    return out
+
+
+def notify_user(
+    user,
+    *,
+    category: str,
+    head: str,
+    body: str,
+    url: str = "/",
+    extra: dict | None = None,
+) -> int:
     """Invia sui canali abilitati. Ritorna il numero di tentativi (non necessariamente consegnati)."""
     if not user or category not in NOTIFICA_CATEGORIE:
         return 0
     prefs = get_or_create_preferenze(user)
     attempts = 0
     if prefs.is_enabled("webpush", category):
-        attempts += _send_webpush(user, head=head, body=body, url=url, category=category)
-        attempts += _send_fcm(user, head=head, body=body, url=url, category=category)
+        attempts += _send_webpush(
+            user, head=head, body=body, url=url, category=category, extra=extra
+        )
+        attempts += _send_fcm(
+            user, head=head, body=body, url=url, category=category, extra=extra
+        )
     if prefs.is_enabled("telegram", category) and prefs.telegram_chat_id:
         attempts += _send_telegram(prefs.telegram_chat_id, head=head, body=body)
     if prefs.is_enabled("email", category) and (user.email or "").strip():
@@ -41,7 +65,15 @@ def notify_user(user, *, category: str, head: str, body: str, url: str = "/") ->
     return attempts
 
 
-def notify_users(users: Iterable, *, category: str, head: str, body: str, url: str = "/") -> int:
+def notify_users(
+    users: Iterable,
+    *,
+    category: str,
+    head: str,
+    body: str,
+    url: str = "/",
+    extra: dict | None = None,
+) -> int:
     seen = set()
     total = 0
     for user in users:
@@ -52,35 +84,63 @@ def notify_users(users: Iterable, *, category: str, head: str, body: str, url: s
             continue
         if uid is not None:
             seen.add(uid)
-        total += notify_user(user, category=category, head=head, body=body, url=url)
+        total += notify_user(
+            user, category=category, head=head, body=body, url=url, extra=extra
+        )
     return total
 
 
-def notify_user_ids(user_ids: Iterable, *, category: str, head: str, body: str, url: str = "/") -> int:
+def notify_user_ids(
+    user_ids: Iterable,
+    *,
+    category: str,
+    head: str,
+    body: str,
+    url: str = "/",
+    extra: dict | None = None,
+) -> int:
     ids = sorted({int(u) for u in user_ids if u})
     if not ids:
         return 0
     users = {u.pk: u for u in User.objects.filter(pk__in=ids)}
-    return notify_users((users.get(i) for i in ids), category=category, head=head, body=body, url=url)
+    return notify_users(
+        (users.get(i) for i in ids),
+        category=category,
+        head=head,
+        body=body,
+        url=url,
+        extra=extra,
+    )
 
 
-def _send_webpush(user, *, head: str, body: str, url: str, category: str = "messaggi") -> int:
+def _send_webpush(
+    user,
+    *,
+    head: str,
+    body: str,
+    url: str,
+    category: str = "messaggi",
+    extra: dict | None = None,
+) -> int:
     try:
         from webpush import send_user_notification
     except Exception as exc:  # pragma: no cover
         logger.warning("webpush non disponibile: %s", exc)
         return 0
     try:
+        payload = {
+            "head": head,
+            "body": body,
+            "icon": "/pwa-192x192.png",
+            "url": url or "/?tab=messaggi",
+            "tag": f"kor35-{category}",
+            "renotify": True,
+            "category": category,
+        }
+        payload.update(_stringify_extra(extra))
         send_user_notification(
             user=user,
-            payload={
-                "head": head,
-                "body": body,
-                "icon": "/pwa-192x192.png",
-                "url": url or "/?tab=messaggi",
-                "tag": f"kor35-{category}",
-                "renotify": True,
-            },
+            payload=payload,
             ttl=86400,
         )
         return 1
@@ -89,11 +149,16 @@ def _send_webpush(user, *, head: str, body: str, url: str, category: str = "mess
         return 0
 
 
-
-
-def _send_fcm(user, *, head: str, body: str, url: str, category: str = "messaggi") -> int:
+def _send_fcm(
+    user,
+    *,
+    head: str,
+    body: str,
+    url: str,
+    category: str = "messaggi",
+    extra: dict | None = None,
+) -> int:
     """Invio FCM ai device token della shell Android. No-op senza FCM_SERVER_KEY."""
-    from django.conf import settings
     from personaggi.models import FcmDeviceToken
 
     server_key = getattr(settings, "FCM_SERVER_KEY", "") or ""
@@ -109,19 +174,28 @@ def _send_fcm(user, *, head: str, body: str, url: str, category: str = "messaggi
     from urllib import request as urlrequest
     from urllib.error import HTTPError, URLError
 
+    # Canali creati da MainActivity (shell Capacitor).
+    channel_id = "kor35_incoming_calls" if category == "chiamate" else "kor35_default"
+    data = {
+        "url": url or "/",
+        "category": category,
+        "head": head,
+        "body": body,
+    }
+    data.update(_stringify_extra(extra))
+
     sent = 0
     payload_base = {
         "notification": {
             "title": head,
             "body": body,
+            "android_channel_id": channel_id,
+            "sound": "default",
+            "click_action": "OPEN_KOR35_PUSH",
         },
-        "data": {
-            "url": url or "/",
-            "category": category,
-            "head": head,
-            "body": body,
-        },
+        "data": data,
         "priority": "high",
+        "content_available": True,
     }
     for token in tokens:
         body_bytes = json.dumps({**payload_base, "to": token}).encode("utf-8")
@@ -139,7 +213,11 @@ def _send_fcm(user, *, head: str, body: str, url: str, category: str = "messaggi
                 if 200 <= getattr(resp, "status", 200) < 300:
                     sent += 1
                 else:
-                    logger.warning("FCM status non OK per user=%s: %s", getattr(user, "pk", None), resp.status)
+                    logger.warning(
+                        "FCM status non OK per user=%s: %s",
+                        getattr(user, "pk", None),
+                        resp.status,
+                    )
         except HTTPError as exc:
             # Token non valido → disattiva
             if exc.code in (400, 404):
@@ -150,6 +228,7 @@ def _send_fcm(user, *, head: str, body: str, url: str, category: str = "messaggi
         except Exception as exc:
             logger.warning("FCM send fallita user=%s: %s", getattr(user, "pk", None), exc)
     return sent
+
 
 def _send_telegram(chat_id: str, *, head: str, body: str) -> int:
     from personaggi.telegram_bot import send_telegram_message

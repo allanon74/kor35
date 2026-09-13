@@ -689,19 +689,19 @@ export function ChiamataVocaleProvider({ children }) {
     };
   }, [applySignal, chiamateAbilitate]);
 
-  useEffect(() => {
-    if (!chiamateAbilitate) return undefined;
-    let cancelled = false;
-    getChiamataVocaleAttiva(onLogout)
+  const refreshActiveCallFromServer = useCallback(() => {
+    if (!chiamateAbilitate) return Promise.resolve();
+    return getChiamataVocaleAttiva(onLogout)
       .then((data) => {
-        if (cancelled || !data?.chiamata) return;
+        if (!data?.chiamata) return;
         if (data.chiamata.stato === 'in_corso') {
+          // Non ripristiniamo mid-call dopo kill: chiudi lato server per evitare zombie.
           chiudiChiamataVocale(data.chiamata.id, onLogout).catch(() => {});
           return;
         }
         if (data.chiamata.stato === 'ringing') {
           setCall(data.chiamata);
-          if (data.chiamata.ruolo === 'callee') {
+          if (data.chiamata.ruolo === 'callee' && !stopRingRef.current) {
             const ctx = ensureAudioContext();
             if (ctx) {
               ctx.resume().catch(() => {});
@@ -711,10 +711,24 @@ export function ChiamataVocaleProvider({ children }) {
         }
       })
       .catch(() => {});
+  }, [chiamateAbilitate, ensureAudioContext, onLogout]);
+
+  useEffect(() => {
+    if (!chiamateAbilitate) return undefined;
+    let cancelled = false;
+    refreshActiveCallFromServer().finally(() => {
+      /* cancelled checked inside then via setState race ok */
+    });
+    const onWake = () => {
+      if (cancelled) return;
+      refreshActiveCallFromServer();
+    };
+    window.addEventListener('kor35:voce-wake', onWake);
     return () => {
       cancelled = true;
+      window.removeEventListener('kor35:voce-wake', onWake);
     };
-  }, [ensureAudioContext, onLogout, chiamateAbilitate]);
+  }, [chiamateAbilitate, refreshActiveCallFromServer]);
 
   const startCall = useCallback(
     async ({ personaggioId = null, versoStaff = false } = {}) => {

@@ -22,6 +22,7 @@ KOR35 resta **PWA/webapp-first**:
 | Progetto Android | `frontend/android/` |
 | Detection shell | `frontend/src/lib/nativePlatform.js` |
 | Push FCM | `frontend/src/lib/nativePush.js` + `devicePush.js` |
+| Deep-link chiamate | `frontend/src/lib/callDeepLink.js` + `nativeIncomingCallBridge.js` |
 | Web Push PWA | `frontend/src/lib/webpush.js` |
 | Token FCM backend | modello `personaggi.FcmDeviceToken`, `POST /api/personaggi/api/fcm/register/` |
 | Invio | `personaggi/notify.py` → `_send_fcm` (canale preferenze `webpush`) |
