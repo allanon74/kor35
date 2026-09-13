@@ -6,7 +6,7 @@
 #
 # Layout prodotto (default):
 #   C:/dev/kor35-app/android
-#   C:/dev/kor35-app/node_modules/@capacitor/{android,app,push-notifications,core}
+#   C:/dev/kor35-app/node_modules/@capacitor/{android,app,push-notifications,status-bar,core}
 #
 # Uso (WSL, root monorepo):
 #   ./scripts/android_sync_to_windows.sh
@@ -102,7 +102,8 @@ ROOT_WIN="${ROOT_WIN%\\}"
 robo "${SRC_ANDROID}" "${ROOT_WIN}\\android"
 
 # 2) pacchetti Capacitor richiesti da capacitor.settings.gradle
-CAPS=(android app push-notifications core)
+# Allineare a frontend/android/capacitor.settings.gradle (cap sync).
+CAPS=(android app push-notifications status-bar core)
 for pkg in "${CAPS[@]}"; do
   if [[ -d "${SRC_NM}/@capacitor/${pkg}" ]]; then
     robo "${SRC_NM}/@capacitor/${pkg}" "${ROOT_WIN}\\node_modules\\@capacitor\\${pkg}"
