@@ -9,6 +9,8 @@ from rest_framework.test import APITestCase
 
 from gestione_plot.models import CalendarioFeedToken, Evento, StaffCompito, StaffCompitoAssegnazione
 from personaggi.models import (
+    Personaggio,
+    ChiamataVocale,
     CAMPAGNA_ROLE_HELPER,
     CAMPAGNA_ROLE_MASTER,
     CAMPAGNA_ROLE_PLAYER,
@@ -257,3 +259,78 @@ class FcmRegisterTests(APITestCase):
         row = FcmDeviceToken.objects.get(token="shared-tok")
         self.assertEqual(row.user_id, self.user.id)
 
+
+
+class FcmSendExtraTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="fcm_send", password="x")
+
+    @override_settings(FCM_SERVER_KEY="test-server-key")
+    @patch("personaggi.notify._send_webpush", return_value=0)
+    @patch("urllib.request.urlopen")
+    def test_fcm_include_extra_e_canale_chiamate(self, mock_urlopen, _mock_wp):
+        from personaggi.models import FcmDeviceToken
+        from personaggi.notify import notify_user
+        import json
+
+        FcmDeviceToken.objects.create(user=self.user, token="dev-tok", platform="android")
+
+        class _Resp:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return b"{}"
+
+        mock_urlopen.return_value = _Resp()
+        n = notify_user(
+            self.user,
+            category="chiamate",
+            head="Chiamata vocale",
+            body="Alice ti sta chiamando.",
+            url="/?tab=messaggi&call=cid-1&voce=VOCE_INVITO",
+            extra={"call_id": "cid-1", "action": "VOCE_INVITO"},
+        )
+        self.assertEqual(n, 1)
+        self.assertTrue(mock_urlopen.called)
+        req = mock_urlopen.call_args[0][0]
+        payload = json.loads(req.data.decode("utf-8"))
+        self.assertEqual(payload["data"]["call_id"], "cid-1")
+        self.assertEqual(payload["data"]["action"], "VOCE_INVITO")
+        self.assertEqual(payload["data"]["category"], "chiamate")
+        self.assertEqual(payload["notification"]["android_channel_id"], "kor35_incoming_calls")
+
+
+class ChiamataPushDeepLinkTests(APITestCase):
+    @patch("personaggi.notify.notify_user_ids")
+    def test_push_esito_passa_call_id_e_url(self, mock_notify):
+        from personaggi.chiamate_vocali import _push_esito
+        from personaggi.models import ChiamataVocale, Personaggio
+
+        campagna = Campagna.objects.create(slug="push-call", nome="Push Call", attiva=True)
+        owner = User.objects.create_user(username="caller_push", password="x")
+        pg = Personaggio.objects.create(nome="Caller", proprietario=owner, campagna=campagna)
+        call = ChiamataVocale.objects.create(
+            campagna=campagna,
+            chiamante=pg,
+            verso_staff=True,
+            stato=ChiamataVocale.STATO_RINGING,
+        )
+        _push_esito(
+            call,
+            user_ids=[owner.id],
+            head="Chiamata vocale",
+            body="test",
+            action="VOCE_INVITO",
+        )
+        self.assertTrue(mock_notify.called)
+        kwargs = mock_notify.call_args.kwargs
+        self.assertEqual(kwargs["category"], "chiamate")
+        self.assertIn(str(call.pk), kwargs["url"])
+        self.assertEqual(kwargs["extra"]["call_id"], str(call.pk))
+        self.assertEqual(kwargs["extra"]["action"], "VOCE_INVITO")

@@ -104,6 +104,9 @@ self.addEventListener('push', function (event) {
     renotify: Boolean(eventData.renotify),
     data: {
       url: eventData.url || eventData.data?.url || '/?tab=messaggi',
+      category: eventData.category || eventData.data?.category || null,
+      call_id: eventData.call_id || eventData.data?.call_id || null,
+      action: eventData.action || eventData.data?.action || null,
     },
   };
 
@@ -113,6 +116,15 @@ self.addEventListener('push', function (event) {
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
   const targetUrl = event.notification.data?.url || '/?tab=messaggi';
+  const callPayload = {
+    type: 'kor35:voce-wake',
+    payload: {
+      url: targetUrl,
+      category: event.notification.data?.category || null,
+      call_id: event.notification.data?.call_id || null,
+      action: event.notification.data?.action || null,
+    },
+  };
   event.waitUntil(
     (async () => {
       const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
@@ -121,10 +133,12 @@ self.addEventListener('notificationclick', function (event) {
           const clientUrl = new URL(client.url);
           if (clientUrl.origin === self.location.origin) {
             await client.focus();
+            client.postMessage({ type: 'kor35:open-url', url: targetUrl });
+            if (callPayload.payload.call_id || callPayload.payload.action || callPayload.payload.category === 'chiamate') {
+              client.postMessage(callPayload);
+            }
             if ('navigate' in client) {
               await client.navigate(targetUrl);
-            } else {
-              client.postMessage({ type: 'kor35:open-url', url: targetUrl });
             }
             return;
           }

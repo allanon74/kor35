@@ -1616,12 +1616,45 @@ CAMPAGNA_ROLES_COMPITO = (
 
 
 def get_default_campagna_id():
-    Campagna = apps.get_model("personaggi", "Campagna")
-    campagna, _ = Campagna.objects.get_or_create(
-        slug="kor35",
-        defaults={"nome": "Kor35", "is_default": True, "is_base": True, "attiva": True},
-    )
-    return campagna.id
+    """Id campagna default (slug=kor35).
+
+    Solo SQL grezzo: usabile come default di AddField durante migrate.
+    Il modello Campagna live può avere colonne (es. moduli_accesso da 0250)
+    assenti nello schema storico (0150); un ORM get_or_create abortirebbe
+    la transaction di migrate.
+    """
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT id FROM personaggi_campagna WHERE slug = %s LIMIT 1",
+            ["kor35"],
+        )
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+
+        new_id = uuid.uuid4()
+        sync_id = uuid.uuid4()
+        cursor.execute(
+            """
+            INSERT INTO personaggi_campagna
+                (id, sync_id, slug, nome, descrizione, is_default, is_base, attiva, created_at, updated_at)
+            VALUES
+                (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+            ON CONFLICT (slug) DO NOTHING
+            RETURNING id
+            """,
+            [new_id, sync_id, "kor35", "Kor35", "", True, True, True],
+        )
+        inserted = cursor.fetchone()
+        if inserted:
+            return inserted[0]
+        cursor.execute(
+            "SELECT id FROM personaggi_campagna WHERE slug = %s LIMIT 1",
+            ["kor35"],
+        )
+        return cursor.fetchone()[0]
 
 class A_modello(SyncableModel, models.Model):
     id = models.AutoField("Codice Identificativo", primary_key=True)

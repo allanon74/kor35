@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { installChunkRecovery } from './chunkRecovery.js'
 import { ensureAppServiceWorker } from './lib/appServiceWorker.js'
 import { applyNativePlatformMarker, isNativeApp } from './lib/nativePlatform.js'
+import { startNativeIncomingCallBridge } from './lib/nativeIncomingCallBridge.js'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,6 +25,8 @@ applyNativePlatformMarker()
 if (!isNativeApp()) {
   ensureAppServiceWorker()
 }
+
+startNativeIncomingCallBridge().catch(() => {})
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
