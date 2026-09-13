@@ -43,6 +43,6 @@ Template env: `config/env_templates/backend.<profilo>.env.example`
 
 - PWA resta il canale completo per iOS/Windows/browser.
 - App Android = Capacitor WebView + FCM/chiamate native; UI identica alla PWA.
-- Comandi: `make android-sync WIN=1`, poi apri **solo** `C:\dev\kor35-app` (`make android-path`). Non usare `C:\dev\kor35-android` né `...\android` nested.
+- Comandi: `make android-sync WIN=1`, poi apri **solo** `C:\dev\kor35-app\android` (`make android-path`). Path **bloccato** — non usare `C:\dev\kor35-android` né il parent `C:\dev\kor35-app`.
 - Regole: `.cursor/rules/android-capacitor.mdc`.
 

@@ -1,48 +1,60 @@
 #!/usr/bin/env bash
-# Copia il progetto Android (già self-contained) su disco Windows nativo.
+# Copia il progetto Android (self-contained, plugin vendored) su disco Windows.
 #
-# UNICO PATH CANONICO — apri QUESTA cartella in Android Studio:
-#   C:/dev/kor35-app
+# =============================================================================
+# PATH BLOCCATO — NON CAMBIARE SENZA RICHIESTA ESPLICITA DELL'UTENTE
+# =============================================================================
+# Unica cartella da aprire in Android Studio:
+#   C:\dev\kor35-app\android
 #
-# (È la root Gradle: settings.gradle, gradlew, app/, capacitor-plugins/)
-# Non serve più un sibling node_modules: i plugin Capacitor sono vendored.
+# Layout:
+#   C:/dev/kor35-app/          ← destinazione sync (contenitore)
+#   C:/dev/kor35-app/android/  ← root Gradle (settings.gradle, gradlew, …)
+#
+# I plugin Capacitor sono dentro android/capacitor-plugins/ (niente node_modules).
+# =============================================================================
 #
 # Uso (WSL, root monorepo):
 #   make android-sync WIN=1
 #
-# NON usare C:/dev/kor35-android (layout legacy/rotto).
+# NON usare C:/dev/kor35-android.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_ANDROID="${ROOT}/frontend/android"
 
+# Contenitore Windows (override solo se necessario). La cartella Studio è SEMPRE …/android
 CANONICAL_ROOT="C:/dev/kor35-app"
+CANONICAL_OPEN="${CANONICAL_ROOT}/android"
 RAW_ROOT="${WIN_ANDROID_DIR:-$CANONICAL_ROOT}"
 
 case "${RAW_ROOT}" in
   C:/dev/kor35-android|C:\\dev\\kor35-android|c:/dev/kor35-android|c:\\dev\\kor35-android)
-    echo "WARN: ${RAW_ROOT} è il path legacy. Uso il canonico ${CANONICAL_ROOT}" >&2
+    echo "WARN: ${RAW_ROOT} è legacy. Uso ${CANONICAL_ROOT}" >&2
     RAW_ROOT="${CANONICAL_ROOT}"
     ;;
   */android|*/android/)
-    echo "WARN: non usare .../android come destinazione. Uso ${CANONICAL_ROOT}" >&2
-    echo "      (dopo il fix la root Gradle È C:/dev/kor35-app, non una sottocartella)" >&2
+    # Se qualcuno passa già …/android come WIN_ANDROID_DIR, usa il parent
+    echo "WARN: WIN_ANDROID_DIR non deve includere /android. Uso parent → ${CANONICAL_ROOT}" >&2
     RAW_ROOT="${CANONICAL_ROOT}"
     ;;
 esac
 
+OPEN_PATH="${RAW_ROOT%/}/android"
+
 echo "=== android_sync_to_windows ==="
 echo "Sorgente:       ${SRC_ANDROID}"
-echo "Destinazione:   ${RAW_ROOT}"
-echo "Apri in Studio: ${RAW_ROOT}"
+echo "Destinazione:   ${OPEN_PATH}"
+echo "Apri in Studio: ${OPEN_PATH}"
+echo "(path bloccato: ${CANONICAL_OPEN})"
 
 if [[ ! -d "${SRC_ANDROID}" ]]; then
   echo "ERRORE: manca ${SRC_ANDROID}. Esegui prima: make android-sync" >&2
   exit 1
 fi
 if [[ ! -f "${SRC_ANDROID}/capacitor-plugins/capacitor-status-bar/build.gradle" ]]; then
-  echo "ERRORE: plugin non vendored. Esegui: make android-sync (senza solo WIN)" >&2
+  echo "ERRORE: plugin non vendored. Esegui: make android-sync" >&2
   echo "Atteso: frontend/android/capacitor-plugins/capacitor-status-bar/build.gradle" >&2
   exit 1
 fi
@@ -105,14 +117,13 @@ robo() {
   fi
 }
 
-ROOT_WIN="$(to_win "${RAW_ROOT}")"
-ROOT_WIN="${ROOT_WIN%\\}"
+OPEN_WIN="$(to_win "${OPEN_PATH}")"
+OPEN_WIN="${OPEN_WIN%\\}"
 
-# Copia l'intero progetto Android come root Windows (self-contained).
-robo "${SRC_ANDROID}" "${ROOT_WIN}"
+# Copia progetto Android → C:/dev/kor35-app/android (self-contained)
+robo "${SRC_ANDROID}" "${OPEN_WIN}"
 
-# Rimuovi resti legacy confusi (sottocartella android + node_modules sibling).
-if [[ "${RAW_ROOT}" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
+if [[ "${OPEN_PATH}" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
   drive="${BASH_REMATCH[1],,}"
   rest="${BASH_REMATCH[2]//\\//}"
   linux_path="/mnt/${drive}/${rest}"
@@ -121,11 +132,6 @@ else
 fi
 
 if [[ -n "${linux_path}" ]]; then
-  # Se esiste ancora una nested android/ da sync vecchi, avvisa.
-  if [[ -d "${linux_path}/android" ]] && [[ -f "${linux_path}/settings.gradle" ]]; then
-    echo "WARN: trovata nested ${RAW_ROOT}/android (sync vecchio). Ignorala: apri ${RAW_ROOT}" >&2
-  fi
-
   fail=0
   for f in \
     "${linux_path}/settings.gradle" \
@@ -144,33 +150,42 @@ if [[ -n "${linux_path}" ]]; then
     exit 1
   fi
 
-  # Se capacitor.settings punta ancora a node_modules → build rotta
   if grep -q 'node_modules' "${linux_path}/capacitor.settings.gradle"; then
     echo "ERRORE: capacitor.settings.gradle punta ancora a node_modules." >&2
     echo "Rilancia make android-sync (deve eseguire vendor-capacitor-android-plugins)." >&2
     exit 1
   fi
 
+  # Hint anche nel contenitore parent (se qualcuno apre la cartella sbagliata)
+  parent_linux="$(dirname "${linux_path}")"
+  cat > "${parent_linux}/NON_APRIRE_QUI.txt" <<EOF
+NON aprire questa cartella in Android Studio.
+
+Apri SOLO:
+  ${OPEN_PATH}
+
+(equivalente: $(echo "${OPEN_PATH}" | sed 's|/|\\|g'))
+EOF
+
   cat > "${linux_path}/APRI_IN_ANDROID_STUDIO.txt" <<EOF
-Apri in Android Studio SOLO questa cartella:
+PATH BLOCCATO — unica cartella da aprire in Android Studio:
 
-  ${RAW_ROOT}
+  ${OPEN_PATH}
 
-(equivalente: $(echo "${RAW_ROOT}" | sed 's|/|\\|g'))
+(equivalente: $(echo "${OPEN_PATH}" | sed 's|/|\\|g'))
 
 Deve contenere: settings.gradle, gradlew.bat, app/, capacitor-plugins/
 
 NON aprire:
   - C:\\dev\\kor35-android
-  - ${RAW_ROOT}\\android   (vecchio layout nested)
+  - C:\\dev\\kor35-app          (parent: niente Gradle root)
   - \\\\wsl.localhost\\...
 EOF
 fi
 
 echo
 echo "=============================================="
-echo " OK — apri in Android Studio SOLO:"
-echo "   ${ROOT_WIN}"
+echo " OK — PATH UNICO (bloccato):"
+echo "   ${OPEN_WIN}"
 echo " Comando: make android-sync WIN=1"
 echo "=============================================="
-echo "Chiudi progetti vecchi (kor35-android / ...\\android nested)."

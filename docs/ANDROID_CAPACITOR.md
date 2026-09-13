@@ -84,23 +84,23 @@ make android-open
 
 ### WSL + Android Studio su Windows (consigliato)
 
-**Path UNICO — non cambiarlo:**
+**PATH BLOCCATO — unica cartella, non cambiarla:**
 
 ```text
-C:\dev\kor35-app
+C:\dev\kor35-app\android
 ```
 
 ```bash
 make android-sync WIN=1
-make android-path   # stampa C:\dev\kor35-app
+make android-path   # stampa C:\dev\kor35-app\android
 ```
 
-- Default: `C:/dev/kor35-app` = **root Gradle** (contiene `settings.gradle`, `gradlew.bat`, `app/`, `capacitor-plugins/`).
+- Sync verso `C:/dev/kor35-app/android` = **root Gradle** (`settings.gradle`, `gradlew.bat`, `app/`, `capacitor-plugins/`).
 - I plugin Capacitor sono **vendored** in `capacitor-plugins/` (niente sibling `node_modules`).
-- **Non** usare `C:\dev\kor35-android` né `C:\dev\kor35-app\android` (layout legacy → `No variants` / «no configuration»).
+- **Non** aprire `C:\dev\kor35-android`, né il parent `C:\dev\kor35-app` (Studio: «no configuration»).
 - **Non** aprire `\\wsl.localhost\...`.
-- Override solo se necessario: `WIN_ANDROID_DIR='D:/altro'` (slash avanti).
-- Se Studio dice «no configuration» sulla cartella: stai aprendo la cartella sbagliata (manca `settings.gradle`).
+- Override contenitore solo se necessario: `WIN_ANDROID_DIR='D:/altro'` → Studio resta `D:/altro/android`.
+- Se Studio dice «no configuration»: cartella sbagliata (manca `settings.gradle`).
 
 Oppure:
 
@@ -170,9 +170,9 @@ vecchio che punta a `../node_modules` assente.
 
 1. Da WSL (repo aggiornato su questo branch): `make android-sync WIN=1`
 2. Chiudi tutti i progetti Android Studio vecchi.
-3. **File → Open** solo `C:\dev\kor35-app` (deve avere `gradlew.bat` + `capacitor-plugins\`).
-4. Non aprire `C:\dev\kor35-app\android` né `C:\dev\kor35-android`.
-5. Verifica file: `C:\dev\kor35-app\capacitor-plugins\capacitor-status-bar\build.gradle`
+3. **File → Open** solo `C:\dev\kor35-app\android` (deve avere `gradlew.bat` + `capacitor-plugins\`).
+4. Non aprire `C:\dev\kor35-app` (parent) né `C:\dev\kor35-android`.
+5. Verifica file: `C:\dev\kor35-app\android\capacitor-plugins\capacitor-status-bar\build.gradle`
 
 ## Chiamate in arrivo (shell Android)
 
