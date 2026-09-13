@@ -158,21 +158,20 @@ def _send_fcm(
     category: str = "messaggi",
     extra: dict | None = None,
 ) -> int:
-    """Invio FCM ai device token della shell Android. No-op senza FCM_SERVER_KEY."""
+    """
+    Invio FCM ai device token della shell Android.
+
+    Preferisce HTTP v1 (service account). La Legacy key (`FCM_SERVER_KEY`) resta
+    solo come fallback per progetti vecchi: sui Firebase nuovi è disabilitata.
+    """
+    from personaggi.fcm_v1 import fcm_v1_configured, send_fcm_v1
     from personaggi.models import FcmDeviceToken
 
-    server_key = getattr(settings, "FCM_SERVER_KEY", "") or ""
-    if not server_key.strip():
-        return 0
     tokens = list(
         FcmDeviceToken.objects.filter(user=user, is_active=True).values_list("token", flat=True)
     )
     if not tokens:
         return 0
-
-    import json
-    from urllib import request as urlrequest
-    from urllib.error import HTTPError, URLError
 
     # Canali creati da MainActivity (shell Capacitor).
     channel_id = "kor35_incoming_calls" if category == "chiamate" else "kor35_default"
@@ -183,6 +182,64 @@ def _send_fcm(
         "body": body,
     }
     data.update(_stringify_extra(extra))
+
+    if fcm_v1_configured():
+        sent = 0
+        for token in tokens:
+            ok, err = send_fcm_v1(
+                token=token,
+                head=head,
+                body=body,
+                data=data,
+                android_channel_id=channel_id,
+            )
+            if ok:
+                sent += 1
+                continue
+            err_u = (err or "").upper()
+            if any(code in err_u for code in ("UNREGISTERED", "NOT_FOUND", "INVALID_ARGUMENT")):
+                FcmDeviceToken.objects.filter(token=token).update(is_active=False)
+            logger.warning(
+                "FCM v1 send fallita user=%s err=%s",
+                getattr(user, "pk", None),
+                err,
+            )
+        return sent
+
+    return _send_fcm_legacy(
+        user,
+        tokens=tokens,
+        head=head,
+        body=body,
+        data=data,
+        channel_id=channel_id,
+    )
+
+
+def _send_fcm_legacy(
+    user,
+    *,
+    tokens: list[str],
+    head: str,
+    body: str,
+    data: dict[str, str],
+    channel_id: str,
+) -> int:
+    """Fallback Legacy HTTP (spesso disabilitato su Firebase nuovi)."""
+    from personaggi.models import FcmDeviceToken
+
+    server_key = getattr(settings, "FCM_SERVER_KEY", "") or ""
+    if not server_key.strip():
+        return 0
+
+    import json
+    from urllib import request as urlrequest
+    from urllib.error import HTTPError, URLError
+
+    logger.warning(
+        "FCM: uso Legacy FCM_SERVER_KEY (deprecata). Configura FCM_SERVICE_ACCOUNT_FILE "
+        "per HTTP v1 — sui progetti Firebase nuovi la Legacy API è disabilitata."
+    )
 
     sent = 0
     payload_base = {
@@ -214,19 +271,18 @@ def _send_fcm(
                     sent += 1
                 else:
                     logger.warning(
-                        "FCM status non OK per user=%s: %s",
+                        "FCM legacy status non OK per user=%s: %s",
                         getattr(user, "pk", None),
                         resp.status,
                     )
         except HTTPError as exc:
-            # Token non valido → disattiva
             if exc.code in (400, 404):
                 FcmDeviceToken.objects.filter(token=token).update(is_active=False)
-            logger.warning("FCM HTTPError user=%s: %s", getattr(user, "pk", None), exc)
+            logger.warning("FCM legacy HTTPError user=%s: %s", getattr(user, "pk", None), exc)
         except URLError as exc:
-            logger.warning("FCM URLError user=%s: %s", getattr(user, "pk", None), exc)
+            logger.warning("FCM legacy URLError user=%s: %s", getattr(user, "pk", None), exc)
         except Exception as exc:
-            logger.warning("FCM send fallita user=%s: %s", getattr(user, "pk", None), exc)
+            logger.warning("FCM legacy send fallita user=%s: %s", getattr(user, "pk", None), exc)
     return sent
 
 

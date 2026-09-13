@@ -11,14 +11,50 @@
 - `capacitor.config.json` con `server.url` default `https://www.kor35.it` (override `CAPACITOR_SERVER_URL` per edge).
 - Detection: `isNativeApp()` / `data-kor35-native`.
 - Push unificato: in app → FCM; in browser → Web Push.
-- Backend: `FcmDeviceToken` + `POST /api/personaggi/api/fcm/register/` + invio opzionale se `FCM_SERVER_KEY` è valorizzata.
+- Backend: `FcmDeviceToken` + `POST /api/personaggi/api/fcm/register/` + invio FCM **HTTP v1** (service account).
 
 ## Prerequisiti host sviluppatore
 
 1. Node 20+ e Android Studio (SDK recente, JDK 21).
 2. Progetto Firebase con app Android `nativeapp.kor35.it`.
 3. Copiare `google-services.json` in `frontend/android/app/` (gitignored).
-4. In `backend/.env.<profilo>`: `FCM_SERVER_KEY=...` (legacy HTTP key; no-op se vuota).
+4. Backend: **FCM HTTP v1** (non usare la Legacy API — in Console risulta *Disabilitata*).
+
+### Firebase: Legacy disabilitata → HTTP v1
+
+La voce **API Cloud Messaging (legacy) = Disabilitata** è normale sui progetti nuovi.
+KOR35 invia le push con l’API **HTTP v1** e un **account di servizio** (non con `FCM_SERVER_KEY`).
+
+1. Firebase Console → ⚙️ **Impostazioni progetto** → tab **Account di servizio**.
+2. In Google Cloud Console abilita **Firebase Cloud Messaging API**
+   (API e servizi → Libreria → cerca “Firebase Cloud Messaging API” → Abilita).
+3. Nella tab Account di servizio Firebase: **Genera nuova chiave privata** → scarichi un JSON
+   (`project_id`, `client_email`, `private_key`, …).
+4. Sul server salva il file **fuori da git**, es. `/srv/kor35/secrets/firebase-fcm.json`
+   (permessi `600`).
+5. Nel `backend/.env.prod`:
+
+```bash
+FCM_SERVICE_ACCOUNT_FILE=/app/secrets/firebase-fcm.json
+# opzionale se già nel JSON:
+FCM_PROJECT_ID=il-tuo-project-id-firebase
+# Legacy: lascia vuota
+FCM_SERVER_KEY=
+```
+
+6. Monta il file nel container backend (volume read-only), es.:
+
+```yaml
+services:
+  backend:
+    volumes:
+      - /srv/kor35/secrets/firebase-fcm.json:/app/secrets/firebase-fcm.json:ro
+```
+
+7. Riavvia il backend: `make restart-be ENV=prod`.
+
+Nota: `google-services.json` serve all’**app** per ottenere il token sul telefono.
+Il JSON del service account serve solo al **backend** per *inviare* le push.
 
 ## Build / sync
 
