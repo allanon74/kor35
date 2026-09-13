@@ -11,6 +11,8 @@ Progetto Django + React, architettura **master** (prod) + **replica** (mirror/Pi
 | `.cursor/rules/prod-docker-ops.mdc` | SSH prod (`kor35-prod` + proxy corkscrew), compose, log, sync |
 | `.cursor/rules/mirror-pi-ops.mdc` | SSH mirror Pi: **`pi@kor35.ddns.net:10022`**, chiave `~/.ssh/id_docker`, `make mirror-pi-*` |
 | `.cursor/rules/wiki-staff-ops.mdc` | Wiki staff da `docs/wiki/staff/` → `make wiki-staff-sync` |
+| `.cursor/rules/android-capacitor.mdc` | Shell Android Capacitor (PWA-first, FCM nativo) |
+| `docs/ANDROID_CAPACITOR.md` | Runbook build/sync app Android |
 | `docs/wiki/carte/README.md` | Wiki regolamento carte → `make wiki-carte-sync` |
 | `.cursor/rules/django-tests-docker.mdc` | Test Django in Docker: **sempre `--keepdb`** + `exec -T` |
 | `config/docker/SYNC.md` | Runbook Docker: ruoli nodo, `make sync-db`, media rsync |
@@ -36,3 +38,11 @@ Progetto Django + React, architettura **master** (prod) + **replica** (mirror/Pi
 - `prod` — master (`KOR35_SYNC_NODE_ROLE=master`)
 
 Template env: `config/env_templates/backend.<profilo>.env.example`
+
+## Shell Android (Capacitor)
+
+- PWA resta il canale completo per iOS/Windows/browser.
+- App Android = Capacitor WebView + FCM/chiamate native; UI identica alla PWA.
+- Comandi: `make android-sync`, `make android-open` (Node/Android Studio sull'host).
+- Regole: `.cursor/rules/android-capacitor.mdc`.
+

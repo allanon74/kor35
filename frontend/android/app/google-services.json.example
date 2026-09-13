@@ -1,0 +1,21 @@
+{
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "kor35-replace-me",
+    "storage_bucket": "kor35-replace-me.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:replace_me",
+        "android_client_info": {
+          "package_name": "nativeapp.kor35.it"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [{ "current_key": "REPLACE_ME" }],
+      "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -189,3 +189,7 @@ backend/.env.*
 # Chiavi SSH generate in locale per CI/deploy (mai nel repo)
 kor35-actions
 kor35-actions.pub
+
+# Firebase / FCM (shell Android) — non committare segreti
+**/google-services.json
+**/GoogleService-Info.plist

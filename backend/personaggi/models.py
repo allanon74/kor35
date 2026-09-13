@@ -1801,6 +1801,53 @@ class NotificaPreferenze(SyncableModel, models.Model):
         self.canali = data
 
 
+class FcmDeviceToken(models.Model):
+    """
+    Token FCM per la shell Android Capacitor.
+
+    Non è SyncableModel: i token sono legati al nodo a cui l'app parla
+    (master in quotidiano; edge solo se la WebView punta all'edge).
+    FCM richiede Internet verso Google — in bosco offline restano WS/in-app.
+    Preferenze canale: riusa la chiave `webpush` (stesso intent utente).
+    """
+
+    PLATFORM_ANDROID = "android"
+    PLATFORM_IOS = "ios"
+    PLATFORM_CHOICES = (
+        (PLATFORM_ANDROID, "Android"),
+        (PLATFORM_IOS, "iOS"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="fcm_device_tokens",
+    )
+    token = models.CharField(max_length=512, unique=True)
+    platform = models.CharField(
+        max_length=16,
+        choices=PLATFORM_CHOICES,
+        default=PLATFORM_ANDROID,
+    )
+    app_id = models.CharField(max_length=128, blank=True, default="")
+    user_agent = models.CharField(max_length=256, blank=True, default="")
+    last_seen_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Token FCM dispositivo"
+        verbose_name_plural = "Token FCM dispositivi"
+        indexes = [
+            models.Index(fields=["user", "is_active"]),
+        ]
+
+    def __str__(self):
+        return f"FCM {self.platform} user={self.user_id}"
+
+
 class Tabella(A_modello):
     nome = models.CharField(max_length=90)
     descrizione = models.TextField(null=True, blank=True)

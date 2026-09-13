@@ -54,3 +54,18 @@ Quando aggiungi un nuovo tool/tab nella sezione staff, registralo **sempre in tu
 4. **Test**: verifica che `validate_staff_dashboard_layout(default_staff_dashboard_layout())` passi (file `backend/gestione_plot/tests_staff_dashboard_layout.py`).
 
 Gli `id` devono coincidere tra frontend e backend (es. `scommesse`, `qr-debug`).
+
+## 7. Shell Android Capacitor (PWA-first)
+
+KOR35 rimane una **PWA** per iOS/Windows/browser. Su Android è ammessa una **shell Capacitor**
+(`frontend/android/`) che mostra la stessa webapp e usa bridge nativi solo per push (FCM),
+chiamate in arrivo e audio in background.
+
+Regole fisse:
+
+- Non riscrivere la UI in nativo; non duplicare la business logic.
+- Feature detection: `isNativeApp()` → FCM; altrimenti Web Push. Non rompere iOS/desktop.
+- URL API relativi anche nella WebView; host shell via `CAPACITOR_SERVER_URL` (master o edge).
+- `FcmDeviceToken` non è SyncableModel; `google-services.json` / `FCM_SERVER_KEY` fuori dal git.
+- Dettaglio: `.cursor/rules/android-capacitor.mdc` e `docs/ANDROID_CAPACITOR.md`.
+

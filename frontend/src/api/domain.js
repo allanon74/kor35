@@ -482,6 +482,25 @@ export const saveWebPushSubscription = async (subscription, onLogout) => {
   );
 };
 
+/** Registra un device token FCM della shell Android Capacitor. */
+export const saveFcmDeviceToken = async ({ token, platform = 'android', appId = '' }, onLogout) => {
+  if (!token) {
+    throw new Error('Token FCM mancante.');
+  }
+  return fetchAuthenticated(
+    '/api/personaggi/api/fcm/register/',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        token,
+        platform,
+        app_id: appId || 'nativeapp.kor35.it',
+      }),
+    },
+    onLogout
+  );
+};
+
 // --- NUOVE FUNZIONI PER INFUSIONI E TESSITURE ---
 
 /**

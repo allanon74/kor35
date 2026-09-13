@@ -1,0 +1,42 @@
+---
+description: Shell Android Capacitor — PWA first, nativo solo per push/chiamate
+alwaysApply: true
+---
+
+# Android Capacitor (shell nativa) — regole fisse
+
+## Architettura obbligatoria
+
+KOR35 resta **PWA/webapp-first**:
+
+- iOS / iPhone / Windows / browser desktop → **solo PWA** (vite-plugin-pwa + service worker + Web Push + WebRTC).
+- Android può avere un’**app Play Store** che è una **shell Capacitor**: WebView che mostra la **stessa** UI/PWA, più bridge nativi per ciò che il browser fa male (FCM, chiamate in arrivo, audio in background).
+
+**Non** riscrivere la UI in Kotlin/Jetpack Compose. **Non** duplicare la logica di gioco in nativo.
+
+## Dove vive il codice
+
+| Pezzo | Path |
+|---|---|
+| Config Capacitor | `frontend/capacitor.config.jsonon` |
+| Progetto Android | `frontend/android/` |
+| Detection shell | `frontend/src/lib/nativePlatform.js` |
+| Push FCM | `frontend/src/lib/nativePush.js` + `devicePush.js` |
+| Web Push PWA | `frontend/src/lib/webpush.js` |
+| Token FCM backend | modello `personaggi.FcmDeviceToken`, `POST /api/personaggi/api/fcm/register/` |
+| Invio | `personaggi/notify.py` → `_send_fcm` (canale preferenze `webpush`) |
+
+## Regole di implementazione
+
+1. **Feature detection**: in JS, se `isNativeApp()` usa FCM / plugin Capacitor; altrimenti Web Push / WebRTC come oggi. iOS e desktop non devono rompersi.
+2. **URL relativi**: anche nella WebView Android valgono le regole PWA — niente host assoluti hardcoded in produzione. La shell punta al nodo via `CAPACITOR_SERVER_URL` (default `https://www.kor35.it`; in evento IP/hostname edge).
+3. **Segreti**: `google-services.json` / chiavi FCM **mai** in git (`FCM_SERVER_KEY` solo in env).
+4. **Sync edge**: `FcmDeviceToken` **non** è SyncableModel (token per nodo + FCM richiede Internet Google).
+5. **Chiamate vocali**: WebRTC resta in React; nativo = keep-alive / notifica full-screen / foreground service — non un secondo stack audio parallelo senza bridge.
+6. **Build**: `make android-sync` (host con Node + Android SDK). Stack Docker continua a servire la PWA; l’APK è un canale aggiuntivo.
+
+## Cosa non fare
+
+- Non sostituire la PWA con un’app nativa “completa”.
+- Non usare solo TWA/Bubblewrap se servono FCM affidabile / incoming call (serve Capacitor o equivalente con bridge).
+- Non assumere che FCM funzioni offline in bosco: lì restano WebSocket / UI in-app; FCM è per master/rete dati.

@@ -6,6 +6,7 @@ import {
   deleteMessage, 
   getAdminPendingProposalsCount, 
   saveWebPushSubscription,
+  saveFcmDeviceToken,
   fetchAuthenticated,
   getPreferredPersonaggio,
   setPreferredPersonaggio,
@@ -26,7 +27,8 @@ import {
 import NotificationPopup from './NotificationPopup';
 import { putOfflineGameStateSnapshot, putOfflineCharacterDetail } from '../lib/offlineGameStateDb';
 import { putOfflineMessages, getOfflineMessages } from '../lib/offlineMessagesDb';
-import { activateWebPush, isWebPushSupported } from '../lib/webpush';
+import { isWebPushSupported } from '../lib/webpush';
+import { activateDevicePush, isDevicePushSupported } from '../lib/devicePush';
 import { ensureAppServiceWorker } from '../lib/appServiceWorker';
 import { canAccessModuloMode, getModuloAccesso } from '../lib/campagnaModuli';
 import { htmlToPlainText } from '../utils/htmlSanitizer';
@@ -682,25 +684,35 @@ export const CharacterProvider = ({ children, onLogout }) => {
   }, [isGlobalSuperuser, viewAll, onLogout]);
 
   const subscribeToPush = useCallback(async () => {
-    const result = await activateWebPush();
+    const result = await activateDevicePush();
     if (!result.ok) return result;
     try {
-      await saveWebPushSubscription(result.subscription, onLogout);
-      return { ok: true };
+      if (result.channel === 'fcm') {
+        await saveFcmDeviceToken(
+          { token: result.token, platform: result.platform || 'android' },
+          onLogout
+        );
+      } else {
+        await saveWebPushSubscription(result.subscription, onLogout);
+      }
+      return { ok: true, channel: result.channel };
     } catch (e) {
-      console.error('WebPush Error:', e);
+      console.error('Device push error:', e);
       return {
         ok: false,
         reason: 'error',
-        message: e?.message || 'Errore nel salvataggio della sottoscrizione.',
+        message: e?.message || 'Errore nel salvataggio della sottoscrizione push.',
       };
     }
   }, [onLogout]);
 
-  // Re-sottoscrive in silenzio solo se l'utente ha già concesso il permesso.
+  // Re-sottoscrive in silenzio solo se l'utente ha già concesso il permesso
+  // (web) oppure se siamo nella shell nativa (FCM gestisce i permessi a parte).
   useEffect(() => {
-    if (!selectedCharacterId || !isWebPushSupported()) return;
-    if (Notification.permission !== 'granted') return;
+    if (!selectedCharacterId || !isDevicePushSupported()) return;
+    if (isWebPushSupported() && typeof Notification !== 'undefined') {
+      if (Notification.permission !== 'granted') return;
+    }
     subscribeToPush();
   }, [selectedCharacterId, subscribeToPush]);
 
@@ -918,6 +930,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
     handleDeleteMessage,
     subscribeToPush,
     isWebPushSupported,
+    isDevicePushSupported,
     giocoEventoStato,
     eventoAperto: !!giocoEventoStato.evento_aperto,
     azioniLiveAbilitate: !!giocoEventoStato.azioni_live_abilitate,

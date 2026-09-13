@@ -8,10 +8,11 @@ import {
   postCalendarioFeedTokenRigenera,
 } from '../api';
 import { useCharacter } from './CharacterContext';
-import { isWebPushSupported } from '../lib/webpush';
+import { isDevicePushSupported } from '../lib/devicePush';
+import { isNativeApp } from '../lib/nativePlatform';
 
 const CHANNELS = [
-  { id: 'webpush', label: 'Web push KOR35', hint: 'Notifiche del browser / PWA', Icon: Smartphone },
+  { id: 'webpush', label: 'Push KOR35', hint: 'Browser/PWA oppure app Android (FCM)', Icon: Smartphone },
   { id: 'telegram', label: 'Telegram', hint: 'Messaggi sul bot KOR35', Icon: Send },
   { id: 'email', label: 'Email', hint: 'Casella Gmail di campagna', Icon: Mail },
 ];
@@ -228,12 +229,15 @@ export default function NotificheTab({ onLogout, embedded = false }) {
 
       <section className="rounded-xl border border-gray-700 bg-gray-900/60 p-4 space-y-3">
         <h2 className="font-bold text-white flex items-center gap-2">
-          <Smartphone size={16} className="text-violet-300" /> Web push KOR35
+          <Smartphone size={16} className="text-violet-300" />
+          {isNativeApp() ? 'Notifiche app Android' : 'Web push KOR35'}
         </h2>
         <p className="text-sm text-gray-400">
-          Default acceso. Serve il permesso del browser (HTTPS). Funziona anche nella PWA installata.
+          {isNativeApp()
+            ? 'Default acceso. Usa FCM nativo sull\'app Android (più affidabile con app in background).'
+            : 'Default acceso. Serve il permesso del browser (HTTPS). Funziona anche nella PWA installata.'}
         </p>
-        {isWebPushSupported() ? (
+        {isDevicePushSupported() ? (
           <button
             type="button"
             onClick={attivaWebPush}
