@@ -7,6 +7,7 @@ import { installChunkRecovery } from './chunkRecovery.js'
 import { ensureAppServiceWorker } from './lib/appServiceWorker.js'
 import { applyNativePlatformMarker, isNativeApp } from './lib/nativePlatform.js'
 import { startNativeIncomingCallBridge } from './lib/nativeIncomingCallBridge.js'
+import { startNativeArcanaSsoBridge } from './lib/nativeArcanaSsoBridge.js'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,6 +28,7 @@ if (!isNativeApp()) {
 }
 
 startNativeIncomingCallBridge().catch(() => {})
+startNativeArcanaSsoBridge().catch(() => {})
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
