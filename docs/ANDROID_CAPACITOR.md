@@ -118,9 +118,36 @@ CAPACITOR_SERVER_URL=http://10.42.0.1 make android-sync WIN=1
 
 ## Flusso push
 
-1. Utente in app Android apre Notifiche → “Attiva su questo dispositivo”.
-2. Capacitor registra FCM → token salvato via API autenticata.
+1. Utente in app Android: banner in Home o tab Notifiche → **Attiva** (FCM nativo).
+2. Capacitor registra FCM → token salvato via `POST …/fcm/register/`.
 3. `notify_user(..., category=...)` se preferenza `webpush` attiva: prova Web Push **e** FCM.
+
+### Troubleshooting: push OK su Windows PWA, zero su Android
+
+Sono **due canali diversi**. Windows usa Web Push (VAPID); l’APK usa **FCM**.
+
+| Check | Dove |
+|-------|------|
+| `google-services.json` reale in `frontend/android/app/` al build APK | altrimenti timeout registrazione FCM |
+| Service account montato su prod + `FCM_SERVICE_ACCOUNT_FILE` | altrimenti il backend non *invia* FCM (Web Push sì) |
+| Riga `FcmDeviceToken` per l’utente | admin / DB dopo «Attiva» in app |
+| Preferenza notifiche categoria (messaggi / chiamate) | come sulla PWA |
+| Frontend deployato su `www.kor35.it` | l’APK carica la WebView remota |
+
+Volume esempio in `compose.prod.yml` (scommentare e riavviare backend):
+
+```yaml
+- /srv/kor35/secrets/firebase-fcm.json:/app/secrets/firebase-fcm.json:ro
+```
+
+### Status bar: header sotto la barra notifiche
+
+Sintomo: pulsanti in alto non tappabili (sotto la status bar Android).
+
+Fix nativo (nuovo APK): `WindowCompat.setDecorFitsSystemWindows(true)` in `MainActivity` + plugin `@capacitor/status-bar` (`setOverlaysWebView({ overlay: false })`).
+Fix CSS (deploy frontend): classe `.kor-app-header` con `--kor-safe-top`.
+
+Dopo i fix: `make android-sync WIN=1` → Run APK **e** deploy frontend su prod (JS remoto).
 
 ## Chiamate in arrivo (shell Android)
 

@@ -16,6 +16,7 @@
   --kor-warning: #d97706;
   --kor-tab-bar-height: 60px;
   --kor-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --kor-safe-top: env(safe-area-inset-top, 0px);
 
   /* Wiki pubblica (tema light / brand forest-ember) */
   --wiki-ink: #1c1410;
@@ -44,6 +45,16 @@ html, body, #root {
 /* Padding inferiore tab giocatore: clearance menu + safe area iOS/Android */
 .pb-safe-tab {
   padding-bottom: calc(6rem + var(--kor-safe-bottom));
+}
+
+.pb-safe {
+  padding-bottom: max(0.25rem, var(--kor-safe-bottom));
+}
+
+/* Header sotto status bar / notch (shell Capacitor e PWA standalone) */
+.kor-app-header {
+  padding-top: max(0.75rem, var(--kor-safe-top));
+  min-height: calc(4rem + var(--kor-safe-top));
 }
 
 /* Assicura che l'app React prenda tutto lo spazio */
