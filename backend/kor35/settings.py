@@ -148,7 +148,14 @@ THUMBNAIL_PROCESSORS = (
 
 
 # Configurazione WebPush
+# FCM — shell Android Capacitor
+# Preferire HTTP v1 (service account). Legacy FCM_SERVER_KEY è deprecata/disabilitata
+# sui progetti Firebase nuovi.
 FCM_SERVER_KEY = env("FCM_SERVER_KEY", default="").strip()
+FCM_PROJECT_ID = env("FCM_PROJECT_ID", default="").strip()
+FCM_SERVICE_ACCOUNT_FILE = env("FCM_SERVICE_ACCOUNT_FILE", default="").strip()
+# Alternativa inline (scomoda in .env multilinea): JSON del service account in una riga.
+FCM_SERVICE_ACCOUNT_JSON = env("FCM_SERVICE_ACCOUNT_JSON", default="").strip()
 
 WEBPUSH_SETTINGS = {
     "VAPID_PUBLIC_KEY": "BIOIApSIeJdV1tp5iVxyLtm8KzM43_AQWV2ymS4iMjkIG1R5g399o6WRdZJY-xcUBZPyJ7EFRVgWqlbalOkGSYw",
