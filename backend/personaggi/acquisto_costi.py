@@ -76,8 +76,61 @@ def calcola_costi_abilita_acquisto(personaggio, abilita) -> Tuple[int, Decimal]:
     return costo_pc_finale, costo_crediti_finale
 
 
+def _campo_stat_acquisto_per_tecnica(tecnica) -> str | None:
+    from .models import Cerimoniale, Infusione, Tessitura
+
+    if isinstance(tecnica, Tessitura):
+        return "stat_costo_acquisto_tessitura"
+    if isinstance(tecnica, Infusione):
+        return "stat_costo_acquisto_infusione"
+    if isinstance(tecnica, Cerimoniale):
+        return "stat_costo_acquisto_cerimoniale"
+    return None
+
+
+def _quantita_acquisto_tecnica(tecnica) -> int:
+    """Moltiplicatore listino: livello (inf/tes) oppure totale mattoni minimi (cerimoniale)."""
+    from .models import Cerimoniale
+
+    if isinstance(tecnica, Cerimoniale):
+        return int(tecnica.totale_mattoni_minimi() or 0)
+    return int(getattr(tecnica, "livello", 0) or 0)
+
+
+def calcola_costo_pieno_tecnica_acquisto(personaggio, tecnica) -> int:
+    """
+    Listino acquisto tecnica per il personaggio.
+
+    Usa la stat configurata sull'aura (`stat_costo_acquisto_*`) con il valore
+    effettivo di scheda (`get_valore_statistica`), come creazione/crafting —
+    non il solo `valore_base_predefinito` del catalogo Statistica.
+
+    Così override su PersonaggioStatisticaBase / tipología (es. Costo generico = 100)
+    non vengono ignorati a favore di un default catalogo stale (es. 10).
+    """
+    from .models import COSTO_PER_MATTONE_TESSITURA
+    from .services import GestioneCraftingService
+
+    quantita = _quantita_acquisto_tecnica(tecnica)
+    if quantita <= 0:
+        return 0
+
+    campo = _campo_stat_acquisto_per_tecnica(tecnica)
+    aura = getattr(tecnica, "aura_richiesta", None)
+    if campo and aura is not None:
+        unitario = GestioneCraftingService.get_valore_statistica_aura(personaggio, aura, campo)
+        return int(unitario or 0) * quantita
+
+    # Attivata legacy / tecnica senza campo aura: proprietà catalogo
+    if hasattr(tecnica, "costo_crediti"):
+        return int(tecnica.costo_crediti or 0)
+    return quantita * COSTO_PER_MATTONE_TESSITURA
+
+
 def calcola_costo_tecnica_acquisto(personaggio, tecnica) -> int:
-    return int(personaggio.get_costo_item_scontato(tecnica))
+    """Costo effettivo acquisto (listino personaggio-aware + sconto RCT)."""
+    pieno = calcola_costo_pieno_tecnica_acquisto(personaggio, tecnica)
+    return applica_sconto_rct_tecnica(personaggio, pieno)
 
 
 def _importo_pagato_da_movimento(movimento) -> Optional[Decimal]:
@@ -160,7 +213,7 @@ def rimborso_crediti_da_pivot(pivot, *, item, acquired_at) -> Decimal:
         )
         if found is not None:
             return found
-        return Decimal(getattr(item, "costo_crediti", 0) or 0)
+        return Decimal(calcola_costo_pieno_tecnica_acquisto(pivot.personaggio, tecnica))
 
     return Decimal(0)
 

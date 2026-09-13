@@ -1863,10 +1863,10 @@ class InfusioneSerializer(serializers.ModelSerializer):
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
-    costo_crediti = serializers.IntegerField(read_only=True)
+    costo_crediti = serializers.SerializerMethodField()
 
     # Gestione Costi
-    costo_pieno = serializers.IntegerField(source='costo_crediti', read_only=True)
+    costo_pieno = serializers.SerializerMethodField()
     costo_effettivo = serializers.SerializerMethodField()
 
     class Meta:
@@ -1882,10 +1882,23 @@ class InfusioneSerializer(serializers.ModelSerializer):
             'tipo_risultato', 'non_acquistabile',
         )
 
-    def get_costo_effettivo(self, obj):
+    def get_costo_pieno(self, obj):
+        from personaggi.acquisto_costi import calcola_costo_pieno_tecnica_acquisto
+
         personaggio = self.context.get('personaggio')
         if personaggio:
-            return personaggio.get_costo_item_scontato(obj)
+            return calcola_costo_pieno_tecnica_acquisto(personaggio, obj)
+        return obj.costo_crediti
+
+    def get_costo_crediti(self, obj):
+        return self.get_costo_pieno(obj)
+
+    def get_costo_effettivo(self, obj):
+        from personaggi.acquisto_costi import calcola_costo_tecnica_acquisto
+
+        personaggio = self.context.get('personaggio')
+        if personaggio:
+            return calcola_costo_tecnica_acquisto(personaggio, obj)
         return obj.costo_crediti
 
     def get_componenti(self, obj):
@@ -1904,10 +1917,10 @@ class TessituraSerializer(serializers.ModelSerializer):
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
-    costo_crediti = serializers.IntegerField(read_only=True)
+    costo_crediti = serializers.SerializerMethodField()
 
     # Gestione Costi
-    costo_pieno = serializers.IntegerField(source='costo_crediti', read_only=True)
+    costo_pieno = serializers.SerializerMethodField()
     costo_effettivo = serializers.SerializerMethodField()
 
     class Meta:
@@ -1924,10 +1937,23 @@ class TessituraSerializer(serializers.ModelSerializer):
             'non_acquistabile',
         )
 
-    def get_costo_effettivo(self, obj):
+    def get_costo_pieno(self, obj):
+        from personaggi.acquisto_costi import calcola_costo_pieno_tecnica_acquisto
+
         personaggio = self.context.get('personaggio')
         if personaggio:
-            return personaggio.get_costo_item_scontato(obj)
+            return calcola_costo_pieno_tecnica_acquisto(personaggio, obj)
+        return obj.costo_crediti
+
+    def get_costo_crediti(self, obj):
+        return self.get_costo_pieno(obj)
+
+    def get_costo_effettivo(self, obj):
+        from personaggi.acquisto_costi import calcola_costo_tecnica_acquisto
+
+        personaggio = self.context.get('personaggio')
+        if personaggio:
+            return calcola_costo_tecnica_acquisto(personaggio, obj)
         return obj.costo_crediti
 
     def get_componenti(self, obj):
@@ -1993,7 +2019,7 @@ class CerimonialeSerializer(serializers.ModelSerializer):
     aura_richiesta = PunteggioSmallSerializer(read_only=True)
     componenti = serializers.SerializerMethodField()
     TestoFormattato = serializers.CharField(read_only=True)
-    costo_crediti = serializers.IntegerField(read_only=True)
+    costo_crediti = serializers.SerializerMethodField()
     totale_mattoni_minimi = serializers.SerializerMethodField()
     livello_suggerito = serializers.IntegerField(read_only=True)
 
@@ -2013,6 +2039,13 @@ class CerimonialeSerializer(serializers.ModelSerializer):
     def get_totale_mattoni_minimi(self, obj):
         return obj.totale_mattoni_minimi()
 
+    def get_costo_crediti(self, obj):
+        from personaggi.acquisto_costi import calcola_costo_pieno_tecnica_acquisto
+
+        personaggio = self.context.get('personaggio')
+        if personaggio:
+            return calcola_costo_pieno_tecnica_acquisto(personaggio, obj)
+        return obj.costo_crediti
 
 def _qr_fields_for_avista(instance):
     """has_qrcode + qrcode_id per serializer staff (lista o dettaglio A_vista)."""

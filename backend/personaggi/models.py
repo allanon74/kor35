@@ -3014,7 +3014,14 @@ class Infusione(Tecnica):
         super().save(*args, **kwargs)
     
     @property
-    def costo_crediti(self): 
+    def costo_crediti(self):
+        """
+        Listino catalogo (senza personaggio): livello × valore_base_predefinito
+        della stat_costo_acquisto_infusione sull'aura (fallback 100).
+
+        L'acquisto reale usa calcola_costo_pieno_tecnica_acquisto (valore effettivo
+        della statistica sul PG), allineato a creazione/crafting.
+        """
         base = COSTO_PER_MATTONE_INFUSIONE
         if self.aura_richiesta and self.aura_richiesta.stat_costo_acquisto_infusione:
             val = self.aura_richiesta.stat_costo_acquisto_infusione.valore_base_predefinito
@@ -3103,7 +3110,15 @@ class Tessitura(Tecnica):
         super().save(*args, **kwargs)
     
     @property
-    def costo_crediti(self): 
+    def costo_crediti(self):
+        """
+        Listino catalogo (senza personaggio): livello × valore_base_predefinito
+        della stat_costo_acquisto_tessitura sull'aura (fallback 100).
+
+        L'acquisto reale (Accademia) usa calcola_costo_pieno_tecnica_acquisto —
+        valore effettivo della statistica sul PG (come creazione/crafting), così
+        non si applica un default catalogo stale (es. 10) se in scheda vale 100.
+        """
         base = COSTO_PER_MATTONE_TESSITURA
         if self.aura_richiesta and self.aura_richiesta.stat_costo_acquisto_tessitura:
             val = self.aura_richiesta.stat_costo_acquisto_tessitura.valore_base_predefinito
@@ -3196,7 +3211,13 @@ class Cerimoniale(Tecnica):
         return self.liv
     
     @property
-    def costo_crediti(self): 
+    def costo_crediti(self):
+        """
+        Listino catalogo (senza personaggio): totale mattoni minimi ×
+        valore_base_predefinito di stat_costo_acquisto_cerimoniale (fallback 100).
+
+        Acquisto reale: calcola_costo_pieno_tecnica_acquisto (valore effettivo PG).
+        """
         base = COSTO_PER_MATTONE_CERIMONIALE
         if self.aura_richiesta and self.aura_richiesta.stat_costo_acquisto_cerimoniale:
             val = self.aura_richiesta.stat_costo_acquisto_cerimoniale.valore_base_predefinito
@@ -7801,15 +7822,23 @@ class Personaggio(Inventario):
             return 0
 
     def get_costo_item_scontato(self, item):
+        # Tecniche Accademia: listino da stat_costo_acquisto_* (valore effettivo PG) + RCT
+        if isinstance(item, (Infusione, Tessitura, Cerimoniale)):
+            from .acquisto_costi import calcola_costo_tecnica_acquisto
+            return calcola_costo_tecnica_acquisto(self, item)
         costo_base = 0
-        if hasattr(item, 'costo_crediti'): costo_base = item.costo_crediti
-        if costo_base <= 0: return 0
-        if isinstance(item, (Infusione, Tessitura, Attivata, Cerimoniale)):
+        if hasattr(item, 'costo_crediti'):
+            costo_base = item.costo_crediti
+        if costo_base <= 0:
+            return 0
+        if isinstance(item, Attivata):
             from .acquisto_costi import applica_sconto_rct_tecnica
             return applica_sconto_rct_tecnica(self, costo_base)
         sconto_perc = 0
-        if isinstance(item, Oggetto): sconto_perc = self.get_valore_statistica('RCO')
-        elif isinstance(item, Abilita): sconto_perc = self.get_valore_statistica('RCA')
+        if isinstance(item, Oggetto):
+            sconto_perc = self.get_valore_statistica('RCO')
+        elif isinstance(item, Abilita):
+            sconto_perc = self.get_valore_statistica('RCA')
         if sconto_perc > 0:
             sconto_perc = min(sconto_perc, 50)
             riduzione = (costo_base * sconto_perc) / 100
