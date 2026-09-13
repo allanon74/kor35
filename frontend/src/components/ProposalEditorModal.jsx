@@ -33,6 +33,11 @@ const ITEM_TYPES = {
     'MUTAZIONE': { label: 'Mutazione (Biologico)', icon: Activity, isBound: true }
 };
 
+/** Livello cerimoniale = floor(mattoni / 5), allineato al backend. */
+const MATTONI_PER_LIVELLO_CERIMONIALE = 5;
+const livelloCerimonialeDaMattoni = (totaleMattoni) =>
+    Math.floor(Math.max(0, Number(totaleMattoni) || 0) / MATTONI_PER_LIVELLO_CERIMONIALE);
+
 const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
     const { selectedCharacterData: char, selectedCharacterId } = useCharacter();
     
@@ -46,7 +51,6 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
     const [prerequisiti, setPrerequisiti] = useState(proposal?.prerequisiti || '');
     const [svolgimento, setSvolgimento] = useState(proposal?.svolgimento || '');
     const [effetto, setEffetto] = useState(proposal?.effetto || '');
-    const [livelloCerimoniale, setLivelloCerimoniale] = useState(proposal?.livello || 1);
 
     const [selectedAuraId, setSelectedAuraId] = useState(proposal?.aura || '');
     const [selectedInfusionAuraId, setSelectedInfusionAuraId] = useState(proposal?.aura_infusione || '');
@@ -188,7 +192,13 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
         return Math.min(auraLimit, ccoVal);
     }, [isCerimoniale, auraLimit, char]);
 
-    const estimatedCost = currentTotalCount * (isCerimoniale ? 100 : 10);
+    const livelloCerimoniale = isCerimoniale
+        ? livelloCerimonialeDaMattoni(currentTotalCount)
+        : 0;
+
+    const estimatedCost = isCerimoniale
+        ? livelloCerimoniale * 100
+        : currentTotalCount * 10;
 
     const paletteAuraNumericId = auraIdForBricks ? Number(auraIdForBricks) : null;
     const paletteAuraMeta =
@@ -304,7 +314,16 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
             if (!prerequisiti || !svolgimento || !effetto) {
                 return setError("Per i cerimoniali, tutti i campi descrittivi sono obbligatori.");
             }
-            if (livelloCerimoniale < 1) return setError("Il rito deve avere almeno livello 1.");
+            if (livelloCerimoniale < 1) {
+                return setError(
+                    `Il rito deve avere almeno livello 1 (servono almeno ${MATTONI_PER_LIVELLO_CERIMONIALE} mattoni).`,
+                );
+            }
+            if (livelloCerimoniale > maxLivelloCerimoniale) {
+                return setError(
+                    `Livello ${livelloCerimoniale} oltre il limite Min(Aura, CCO)=${maxLivelloCerimoniale}.`,
+                );
+            }
         }
 
         setIsSaving(true);
@@ -412,7 +431,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                             <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Aura Principale</label>
                             <select 
                                 value={selectedAuraId} 
-                                onChange={e => {setComponentsMap({}); setSelectedAuraId(e.target.value); setLivelloCerimoniale(1);}} 
+                                onChange={e => {setComponentsMap({}); setSelectedAuraId(e.target.value);}} 
                                 disabled={!isDraft} 
                                 className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:border-indigo-500 outline-none transition-all cursor-pointer"
                             >
@@ -465,18 +484,19 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                             <div className="bg-purple-900/10 p-4 rounded-xl border border-purple-500/20">
                                 <label className="text-[10px] font-black text-purple-400 uppercase flex justify-between items-center mb-2">
                                     Livello del Rituale
-                                    <span className="text-gray-500 italic lowercase tracking-tight font-normal">Limite Min(Aura, CCO): {maxLivelloCerimoniale}</span>
+                                    <span className="text-gray-500 italic lowercase tracking-tight font-normal">
+                                        mattoni ÷ {MATTONI_PER_LIVELLO_CERIMONIALE} (per difetto) · limite Min(Aura, CCO): {maxLivelloCerimoniale}
+                                    </span>
                                 </label>
-                                <select 
-                                    value={livelloCerimoniale} 
-                                    onChange={e => setLivelloCerimoniale(parseInt(e.target.value))}
-                                    className="w-full bg-gray-800 border border-purple-500/40 rounded-lg p-3 text-white font-bold outline-none shadow-lg shadow-purple-900/10"
-                                >
-                                    {[...Array(maxLivelloCerimoniale + 1).keys()].slice(1).map(n => (
-                                        <option key={n} value={n}>Livello {n}</option>
-                                    ))}
-                                    {maxLivelloCerimoniale === 0 && <option value="0">Coralità Insufficiente</option>}
-                                </select>
+                                <div className="w-full bg-gray-800 border border-purple-500/40 rounded-lg p-3 text-white font-bold shadow-lg shadow-purple-900/10 flex justify-between items-center">
+                                    <span>Livello {livelloCerimoniale}</span>
+                                    <span className="text-xs font-normal text-gray-400">
+                                        {currentTotalCount} mattoni
+                                        {livelloCerimoniale > maxLivelloCerimoniale ? (
+                                            <span className="text-red-400 ml-2">oltre limite</span>
+                                        ) : null}
+                                    </span>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 gap-5">
@@ -589,7 +609,11 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                     <p className="text-[10px] text-gray-600 mt-0.5">Componi la struttura del potere selezionando i componenti.</p>
                                 </div>
                                 <div className="text-right">
-                                    {!isCerimoniale && (
+                                    {isCerimoniale ? (
+                                        <span className={`text-[10px] font-bold block uppercase mb-1 ${livelloCerimoniale > maxLivelloCerimoniale ? 'text-red-500' : 'text-gray-400'}`}>
+                                            Mattoni: {currentTotalCount} → Liv. {livelloCerimoniale}
+                                        </span>
+                                    ) : (
                                         <span className={`text-[10px] font-bold block uppercase mb-1 ${currentTotalCount >= auraLimit ? 'text-red-500' : 'text-gray-400'}`}>
                                             Totale: {currentTotalCount} / {auraLimit}
                                         </span>

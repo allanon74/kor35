@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useCharacter } from '../CharacterContext';
 import { staffUpdateCerimoniale, staffCreateCerimoniale } from '../../api';
 import CharacteristicInline from './inlines/CharacteristicInline';
@@ -6,6 +6,10 @@ import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
+
+const MATTONI_PER_LIVELLO_CERIMONIALE = 5;
+const livelloCerimonialeDaMattoni = (totaleMattoni) =>
+  Math.floor(Math.max(0, Number(totaleMattoni) || 0) / MATTONI_PER_LIVELLO_CERIMONIALE);
 
 // Aggiunto onCancel e onSave ai props
 const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
@@ -29,6 +33,12 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState({ type: 'success', message: '' });
 
+  const totaleMattoni = useMemo(
+    () => (formData.componenti || []).reduce((acc, c) => acc + (Number(c.valore) || 0), 0),
+    [formData.componenti],
+  );
+  const livelloCalcolato = livelloCerimonialeDaMattoni(totaleMattoni);
+
   // Gestione alias per chiusura
   const handleClose = onCancel || onBack;
 
@@ -43,6 +53,7 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
       setSaving(true);
       const dataToSend = { 
         ...formData,
+        liv: livelloCalcolato,
         aura_richiesta: formData.aura_richiesta?.id || formData.aura_richiesta || null
       };
 
@@ -104,7 +115,15 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
             <div className="md:col-span-2">
                 <Input label="Nome Cerimoniale" value={formData.nome} onChange={v => setFormData({...formData, nome: v})} />
             </div>
-            <Input label="Livello (liv)" type="number" value={formData.liv} onChange={v => setFormData({...formData, liv: v})} />
+            <div className="w-full text-left">
+              <label className="text-[10px] text-gray-500 uppercase font-black block mb-1 tracking-tighter">
+                Livello (mattoni / {MATTONI_PER_LIVELLO_CERIMONIALE})
+              </label>
+              <div className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white shadow-inner flex justify-between">
+                <span className="font-bold">{livelloCalcolato}</span>
+                <span className="text-gray-500 text-xs">{totaleMattoni} mattoni</span>
+              </div>
+            </div>
         </div>
         <div className="space-y-2">
           <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer flex items-center gap-2 justify-end">

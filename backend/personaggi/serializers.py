@@ -2072,7 +2072,8 @@ class CerimonialeStaffListSerializer(serializers.ModelSerializer):
     aura_richiesta = PunteggioSmallSerializer(read_only=True)
     has_qrcode = serializers.BooleanField(read_only=True)
     qrcode_id = serializers.CharField(read_only=True, allow_null=True)
-    livello = serializers.IntegerField(source='liv', read_only=True)
+    # Property calcolata: floor(mattoni / 5)
+    livello = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Cerimoniale
@@ -2086,6 +2087,9 @@ class TecnicaBaseMasterMixin:
             instance.componenti.all().delete()
             for comp in components_data:
                 instance.componenti.create(**comp)
+            # Bulk delete bypassa Model.delete(): riallinea liv cerimoniale se serve.
+            if hasattr(instance, 'sync_liv_da_mattoni'):
+                instance.sync_liv_da_mattoni(save=True)
 
         # 2. Statistiche Base (Pivot)
         if stats_base_data is not None:
@@ -2311,6 +2315,7 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
                     caratteristica_id=c_id,
                     valore=val
                 )
+        proposta.sync_livello_proposto_da_mattoni(save=True)
         return proposta
 
     def update(self, instance, validated_data):
@@ -2335,6 +2340,7 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
                         caratteristica_id=c_id,
                         valore=val
                     )
+            instance.sync_livello_proposto_da_mattoni(save=True)
         return instance
 
 

@@ -3049,13 +3049,10 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
         personaggio = proposta.personaggio
         if proposta.stato != STATO_PROPOSTA_BOZZA: return Response({"error": "La proposta non è in stato di bozza."}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Livello calcolato sui valori delle caratteristiche
+        # Livello: tessiture/infusioni = somma mattoni; cerimoniali = floor(mattoni / 5)
         livello = proposta.livello
-        if proposta.tipo == 'CER':
-             # Per i cerimoniali usiamo il livello scelto manualmente
-             livello = getattr(proposta, 'livello_proposto', 1)
         if livello == 0:
-            return Response({"error": "La proposta deve avere almeno un componente."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "La proposta deve avere almeno un componente (per i cerimoniali servono almeno 5 mattoni per livello 1)."}, status=status.HTTP_400_BAD_REQUEST)
 
 # --- CALCOLO COSTO INVIO (BUROCRAZIA) ---
         costo_base = COSTO_DEFAULT_INVIO_PROPOSTA # Default 10

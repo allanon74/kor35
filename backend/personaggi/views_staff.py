@@ -658,7 +658,17 @@ class ApprovaPropostaView(APIView):
         
         livello_finale = data.get('livello', proposta.livello)
         if tipo == TIPO_PROPOSTA_CERIMONIALE:
-             livello_finale = data.get('liv', proposta.livello_proposto) or 1
+            # Livello = floor(mattoni / 5); override staff solo se esplicito e coerente col payload componenti
+            livello_da_mattoni = proposta.livello
+            if 'componenti' in data and data.get('componenti') is not None:
+                try:
+                    tot = sum(int(c.get('valore') or 0) for c in data.get('componenti') or [])
+                    from personaggi.models import livello_cerimoniale_da_mattoni
+                    livello_da_mattoni = livello_cerimoniale_da_mattoni(tot)
+                except (TypeError, ValueError):
+                    pass
+            livello_finale = livello_da_mattoni or 0
+            data['liv'] = livello_finale
 
         _, costo_totale = calcola_costo_creazione_proposta(
             personaggio, proposta, livello_finale=livello_finale
@@ -697,9 +707,7 @@ class ApprovaPropostaView(APIView):
                     serializer = TessituraFullEditorSerializer(data=data)
                     
                 elif tipo == TIPO_PROPOSTA_CERIMONIALE:
-                    # Assicuriamoci che il livello sia settato
-                    if 'liv' not in data:
-                        data['liv'] = livello_finale
+                    data['liv'] = livello_finale
                     serializer = CerimonialeFullEditorSerializer(data=data)
                 
                 if not serializer.is_valid():
