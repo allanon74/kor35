@@ -20,6 +20,7 @@
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.0.1",
     "@capacitor/push-notifications": "^8.1.2",
+    "@capacitor/status-bar": "^8.0.3",
     "@headlessui/react": "^2.2.9",
     "@heroicons/react": "^2.2.0",
     "@tailwindcss/postcss": "^4.1.16",

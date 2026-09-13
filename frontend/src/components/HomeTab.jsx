@@ -52,10 +52,22 @@ const LoadingComponent = () => (
 // --- Componente Scheda ---
 
 const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
-  const { punteggiList, statisticaContainers, subscribeToPush, isWebPushSupported, refreshCharacterData, canSeeStaffCompiti } = useCharacter();
+  const {
+    punteggiList,
+    statisticaContainers,
+    subscribeToPush,
+    isWebPushSupported,
+    isDevicePushSupported,
+    refreshCharacterData,
+    canSeeStaffCompiti,
+  } = useCharacter();
   const [pushActivating, setPushActivating] = useState(false);
   const [pushBannerDismissed, setPushBannerDismissed] = useState(false);
   const [pushFeedback, setPushFeedback] = useState(null);
+  const nativeShell =
+    typeof document !== 'undefined' && !!document.documentElement?.dataset?.kor35Native;
+  const fcmAlreadyOk =
+    typeof localStorage !== 'undefined' && localStorage.getItem('kor35_fcm_ok') === '1';
 
   const handleActivatePush = useCallback(async () => {
     setPushActivating(true);
@@ -64,7 +76,19 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
       const result = await subscribeToPush();
       if (result?.ok) {
         setPushBannerDismissed(true);
-        setPushFeedback({ type: 'success', message: 'Notifiche push attivate.' });
+        if (nativeShell) {
+          try {
+            localStorage.setItem('kor35_fcm_ok', '1');
+          } catch {
+            /* ignore */
+          }
+        }
+        setPushFeedback({
+          type: 'success',
+          message: nativeShell
+            ? 'Notifiche app Android attivate (FCM).'
+            : 'Notifiche push attivate.',
+        });
         return;
       }
       if (result?.reason === 'denied') {
@@ -77,13 +101,18 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
     } finally {
       setPushActivating(false);
     }
-  }, [subscribeToPush]);
+  }, [nativeShell, subscribeToPush]);
 
+  // Web: banner se permesso non ancora granted.
+  // Native: banner finché FCM non è stato attivato almeno una volta su questo device.
   const showPushBanner =
-    isWebPushSupported() &&
+    isDevicePushSupported() &&
     !pushBannerDismissed &&
-    typeof Notification !== 'undefined' &&
-    Notification.permission !== 'granted';
+    (nativeShell
+      ? !fcmAlreadyOk
+      : isWebPushSupported() &&
+        typeof Notification !== 'undefined' &&
+        Notification.permission !== 'granted');
   
   // State per la modal dei modificatori
   const [modalStatistica, setModalStatistica] = useState(null);
@@ -449,7 +478,7 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
 
       {canSeeStaffCompiti ? <StaffCompitiWidget onLogout={onLogout} /> : null}
 
-      {/* Banner Notifiche */}
+      {/* Banner Notifiche (web: permesso browser; Android shell: FCM nativo) */}
       {showPushBanner && (
          <div className="mb-6 p-4 bg-indigo-900/50 rounded-lg border border-indigo-500 flex flex-col sm:flex-row justify-between items-center gap-3">
             <div className="flex items-center gap-3">
@@ -457,8 +486,14 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
                     <Bell size={20} className="text-white" />
                 </div>
                 <div>
-                    <p className="font-bold text-white text-sm">Notifiche Push</p>
-                    <p className="text-xs text-indigo-200">Ricevi messaggi anche ad app chiusa.</p>
+                    <p className="font-bold text-white text-sm">
+                      {nativeShell ? 'Notifiche app (FCM)' : 'Notifiche Push'}
+                    </p>
+                    <p className="text-xs text-indigo-200">
+                      {nativeShell
+                        ? 'Sull’app Android le push PWA non bastano: attiva FCM per chiamate e messaggi a schermo spento.'
+                        : 'Ricevi messaggi anche ad app chiusa.'}
+                    </p>
                     {pushFeedback?.type === 'error' && (
                       <p className="text-xs text-red-300 mt-1">{pushFeedback.message}</p>
                     )}

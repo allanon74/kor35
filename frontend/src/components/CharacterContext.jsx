@@ -29,6 +29,7 @@ import { putOfflineGameStateSnapshot, putOfflineCharacterDetail } from '../lib/o
 import { putOfflineMessages, getOfflineMessages } from '../lib/offlineMessagesDb';
 import { isWebPushSupported } from '../lib/webpush';
 import { activateDevicePush, isDevicePushSupported } from '../lib/devicePush';
+import { isNativeApp } from '../lib/nativePlatform';
 import { ensureAppServiceWorker } from '../lib/appServiceWorker';
 import { canAccessModuloMode, getModuloAccesso } from '../lib/campagnaModuli';
 import { htmlToPlainText } from '../utils/htmlSanitizer';
@@ -692,6 +693,11 @@ export const CharacterProvider = ({ children, onLogout }) => {
           { token: result.token, platform: result.platform || 'android' },
           onLogout
         );
+        try {
+          localStorage.setItem('kor35_fcm_ok', '1');
+        } catch {
+          /* ignore */
+        }
       } else {
         await saveWebPushSubscription(result.subscription, onLogout);
       }
@@ -706,11 +712,12 @@ export const CharacterProvider = ({ children, onLogout }) => {
     }
   }, [onLogout]);
 
-  // Re-sottoscrive in silenzio solo se l'utente ha già concesso il permesso
-  // (web) oppure se siamo nella shell nativa (FCM gestisce i permessi a parte).
+  // Re-sottoscrive: in shell nativa sempre (FCM ha i propri permessi);
+  // sul web solo se Notification.permission è già granted.
   useEffect(() => {
     if (!selectedCharacterId || !isDevicePushSupported()) return;
-    if (isWebPushSupported() && typeof Notification !== 'undefined') {
+    if (!isNativeApp()) {
+      if (!isWebPushSupported() || typeof Notification === 'undefined') return;
       if (Notification.permission !== 'granted') return;
     }
     subscribeToPush();

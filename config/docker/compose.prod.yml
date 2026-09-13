@@ -24,6 +24,8 @@ services:
     volumes:
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
+      # FCM HTTP v1 (opzionale): scommenta e imposta FCM_SERVICE_ACCOUNT_FILE=/app/secrets/firebase-fcm.json
+      # - /srv/kor35/secrets/firebase-fcm.json:/app/secrets/firebase-fcm.json:ro
     # Primo avvio su DB vuoto: migrate richiede diversi minuti; l'healthcheck di default (120s) falliva prima di Gunicorn.
     healthcheck:
       test:

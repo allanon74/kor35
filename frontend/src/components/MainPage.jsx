@@ -1405,7 +1405,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       <div className="flex-1 flex flex-col min-w-0 relative">
           
           {/* --- HEADER --- */}
-          <header className="relative flex justify-between items-center p-3 shadow-md shrink-0 border-b border-gray-700 z-10 h-16 backdrop-blur-sm bg-gray-800/95">
+          <header className="kor-app-header relative flex justify-between items-center p-3 shadow-md shrink-0 border-b border-gray-700 z-10 backdrop-blur-sm bg-gray-800/95">
               <div className="flex items-center gap-3 z-20">
                   <button
                     type="button"

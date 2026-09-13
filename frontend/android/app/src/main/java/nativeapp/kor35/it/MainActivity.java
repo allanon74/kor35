@@ -4,11 +4,12 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.os.Build;
 import android.os.Bundle;
+import androidx.core.view.WindowCompat;
 import com.getcapacitor.BridgeActivity;
 
 /**
- * Shell Capacitor: crea i canali notifica high-importance usati da FCM
- * (kor35_incoming_calls / kor35_default) per squillo chiamate e push generici.
+ * Shell Capacitor: canali FCM + inset di sistema
+ * (la WebView non deve finire sotto la status bar).
  */
 public class MainActivity extends BridgeActivity {
     public static final String CHANNEL_INCOMING_CALLS = "kor35_incoming_calls";
@@ -17,6 +18,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         ensureNotificationChannels();
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
         super.onCreate(savedInstanceState);
     }
 
