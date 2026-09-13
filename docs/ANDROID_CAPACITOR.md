@@ -56,6 +56,24 @@ services:
 Nota: `google-services.json` serve all’**app** per ottenere il token sul telefono.
 Il JSON del service account serve solo al **backend** per *inviare* le push.
 
+## SSO Arcana Domine nella shell Android
+
+Sintomo tipico: tap su «Accedi con Arcana Domine» → si apre **Chrome** e a fine login
+resti nel browser invece che nell’app.
+
+**Causa:** il dominio Arcana non era in `server.allowNavigation` di Capacitor, quindi la
+WebView scaricava la navigazione al browser esterno; il callback
+`https://www.kor35.it/login?arcana_ticket=…` restava in Chrome.
+
+**Fix (già in repo):**
+1. `allowNavigation` include `arcanadomine.it` / `*.arcanadomine.it` → il flusso OAuth resta in WebView.
+2. Intent-filter su `/login` + schema `kor35://login` → se Chrome ha ancora il ticket, Android può riaprire l’app.
+3. Bridge JS `nativeArcanaSsoBridge` gestisce `appUrlOpen` / launch URL.
+
+Dopo il fix: `make android-sync WIN=1`, reinstalla l’APK, riprova il login SSO.
+Se il dominio reale di Arcana non è `*.arcanadomine.it`, aggiungilo in
+`frontend/capacitor.config.json` → `server.allowNavigation`.
+
 ## Build / sync
 
 ```bash

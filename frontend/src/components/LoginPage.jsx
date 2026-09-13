@@ -134,7 +134,10 @@ const LoginPage = ({ onLoginSuccess }) => {
     localStorage.removeItem('kor35_is_staff');
     localStorage.removeItem('kor35_is_master');
     localStorage.removeItem('kor35_login_method');
-    window.location.href = `${API_BASE_URL}/api/auth/arcana/login/?next=${encodeURIComponent('/app')}`;
+    // Stessa WebView (shell Capacitor): non usare target=_blank / window.open.
+    window.location.assign(
+      `${API_BASE_URL}/api/auth/arcana/login/?next=${encodeURIComponent('/app')}`
+    );
   };
 
   const showLocalForm = !showArcanaSso || useLocalPassword;
