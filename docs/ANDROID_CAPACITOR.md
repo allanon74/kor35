@@ -87,19 +87,20 @@ make android-open
 **Path UNICO — non cambiarlo:**
 
 ```text
-C:\dev\kor35-app\android
+C:\dev\kor35-app
 ```
 
 ```bash
 make android-sync WIN=1
-make android-path   # stampa C:\dev\kor35-app\android
+make android-path   # stampa C:\dev\kor35-app
 ```
 
-- Default: `C:/dev/kor35-app` (root) + sottocartella `android/` da aprire in Studio.
-- Capacitor richiede anche `C:/dev/kor35-app/node_modules/@capacitor/...` (sibling).
-- **Non** usare `C:\dev\kor35-android` (legacy, layout rotto → errori Gradle `capacitor-status-bar`).
+- Default: `C:/dev/kor35-app` = **root Gradle** (contiene `settings.gradle`, `gradlew.bat`, `app/`, `capacitor-plugins/`).
+- I plugin Capacitor sono **vendored** in `capacitor-plugins/` (niente sibling `node_modules`).
+- **Non** usare `C:\dev\kor35-android` né `C:\dev\kor35-app\android` (layout legacy → `No variants` / «no configuration»).
 - **Non** aprire `\\wsl.localhost\...`.
 - Override solo se necessario: `WIN_ANDROID_DIR='D:/altro'` (slash avanti).
+- Se Studio dice «no configuration» sulla cartella: stai aprendo la cartella sbagliata (manca `settings.gradle`).
 
 Oppure:
 
@@ -161,6 +162,17 @@ Cause tipiche:
 Fix: niente `click_action` custom in FCM v1 + handler che apre Messaggi per ogni tap + intent-filter compat `OPEN_KOR35_PUSH`.
 
 Serve **deploy backend** (payload FCM) + **deploy frontend** (handler) + **nuovo APK** (intent-filter).
+
+### Gradle: `No variants` / `:capacitor-status-bar` / «no configuration»
+
+Causa tipica: Android Studio apre una cartella senza `settings.gradle`/`gradlew`, oppure un sync
+vecchio che punta a `../node_modules` assente.
+
+1. Da WSL (repo aggiornato su questo branch): `make android-sync WIN=1`
+2. Chiudi tutti i progetti Android Studio vecchi.
+3. **File → Open** solo `C:\dev\kor35-app` (deve avere `gradlew.bat` + `capacitor-plugins\`).
+4. Non aprire `C:\dev\kor35-app\android` né `C:\dev\kor35-android`.
+5. Verifica file: `C:\dev\kor35-app\capacitor-plugins\capacitor-status-bar\build.gradle`
 
 ## Chiamate in arrivo (shell Android)
 

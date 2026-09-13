@@ -92,6 +92,12 @@ lint/tmp/
 # Cordova plugins for Capacitor
 capacitor-cordova-android-plugins
 
+# Plugin Capacitor vendored (generati da scripts/vendor-capacitor-android-plugins.mjs)
+capacitor-plugins/
+
+# Hint locale post-sync Windows
+APRI_IN_ANDROID_STUDIO.txt
+
 # Copied web assets
 app/src/main/assets/public
 

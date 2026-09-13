@@ -35,7 +35,7 @@ help:
 	@echo "  make env ENV=dev-home        # crea/attiva backend/.env.<env>"
 	@echo "  make setup                   # prepara runtime + build frontend"
 	@echo "  make android-sync            # build React + Capacitor sync Android"
-	@echo "  make android-sync WIN=1      # sync + copia su C:/dev/kor35-app (apri C:\\dev\\kor35-app\\android)"
+	@echo "  make android-sync WIN=1      # sync + copia su C:/dev/kor35-app (apri C:\\dev\\kor35-app)"
 	@echo "  make android-path            # stampa il path UNICO da aprire in Android Studio"
 	@echo "  make android-open WIN=1      # ricorda il path Windows da aprire"
 	@echo "  make up                      # avvia stack (con build + collectstatic)"
@@ -450,8 +450,8 @@ prod-turn-prepare:
 #
 # PATH WINDOWS UNICO (WSL → Android Studio):
 #   make android-sync WIN=1
-#   Apri SEMPRE: C:\dev\kor35-app\android
-# Non usare C:\dev\kor35-android (legacy/rotto).
+#   Apri SEMPRE: C:\dev\kor35-app   (root Gradle, self-contained)
+# Non usare C:\dev\kor35-android né ...\kor35-app\android (legacy).
 WIN ?= 0
 # Override solo se necessario. Slash avanti obbligatori.
 WIN_ANDROID_DIR ?= C:/dev/kor35-app
@@ -459,11 +459,11 @@ WIN_ANDROID_DIR ?= C:/dev/kor35-app
 android-sync:
 	cd frontend && (npm ci || npm install) && npm run cap:sync
 	@if [ "$(WIN)" = "1" ]; then \
-		echo "WIN=1 → sync Windows su $(WIN_ANDROID_DIR) (apri $(WIN_ANDROID_DIR)/android)"; \
+		echo "WIN=1 → sync Windows su $(WIN_ANDROID_DIR) (apri $(WIN_ANDROID_DIR))"; \
 		WIN_ANDROID_DIR="$(WIN_ANDROID_DIR)" ./scripts/android_sync_to_windows.sh; \
 	else \
 		echo "Da WSL + Android Studio Windows: make android-sync WIN=1"; \
-		echo "Poi apri SEMPRE: C:\\dev\\kor35-app\\android"; \
+		echo "Poi apri SEMPRE: C:\\dev\\kor35-app"; \
 	fi
 
 android-open:
@@ -471,13 +471,13 @@ android-open:
 		echo ""; \
 		echo "=============================================="; \
 		echo " Apri in Android Studio SOLO:"; \
-		echo "   C:\\dev\\kor35-app\\android"; \
-		echo " (equiv. $(WIN_ANDROID_DIR)/android)"; \
+		echo "   C:\\dev\\kor35-app"; \
+		echo " (equiv. $(WIN_ANDROID_DIR))"; \
 		echo "=============================================="; \
-		echo "NON aprire C:\\dev\\kor35-android"; \
+		echo "NON aprire C:\\dev\\kor35-android né ...\\android nested"; \
 	else \
 		cd frontend && npx cap open android; \
 	fi
 
 android-path:
-	@echo "C:\\dev\\kor35-app\\android"
+	@echo "C:\\dev\\kor35-app"
