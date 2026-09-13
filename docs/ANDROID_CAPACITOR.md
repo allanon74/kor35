@@ -84,19 +84,22 @@ make android-open
 
 ### WSL + Android Studio su Windows (consigliato)
 
-Gradle non può usare il JDK Windows se il progetto sta su `\\wsl.localhost\...`.
-Dopo il sync, copia su disco Windows nativo:
+**Path UNICO — non cambiarlo:**
+
+```text
+C:\dev\kor35-app\android
+```
 
 ```bash
 make android-sync WIN=1
-# destinazione default: C:/dev/kor35-app
-# IMPORTANTE: usa slash avanti, non c:\\dev\\... (bash mangia i backslash)
-# personalizza:
-make android-sync WIN=1 WIN_ANDROID_DIR='D:/android/kor35'
+make android-path   # stampa C:\dev\kor35-app\android
 ```
 
-Poi in Android Studio: **Open** → `C:\dev\kor35-app\android`
-(lo script copia anche `node_modules/@capacitor/*` accanto, come richiede Capacitor). (o `C:\\dev\\kor35-android` in Esplora risorse) (non il path `\\wsl.localhost\...`).
+- Default: `C:/dev/kor35-app` (root) + sottocartella `android/` da aprire in Studio.
+- Capacitor richiede anche `C:/dev/kor35-app/node_modules/@capacitor/...` (sibling).
+- **Non** usare `C:\dev\kor35-android` (legacy, layout rotto → errori Gradle `capacitor-status-bar`).
+- **Non** aprire `\\wsl.localhost\...`.
+- Override solo se necessario: `WIN_ANDROID_DIR='D:/altro'` (slash avanti).
 
 Oppure:
 
