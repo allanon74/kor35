@@ -34,6 +34,9 @@ help:
 	@echo "Target principali:"
 	@echo "  make env ENV=dev-home        # crea/attiva backend/.env.<env>"
 	@echo "  make setup                   # prepara runtime + build frontend"
+	@echo "  make android-sync            # build React + Capacitor sync Android"
+	@echo "  make android-sync WIN=1      # come sopra + robocopy su C:\\dev\\kor35-android (WSL→Windows)"
+	@echo "  make android-open            # apre Android Studio (o indica path Windows se WIN=1)"
 	@echo "  make up                      # avvia stack (con build + collectstatic)"
 	@echo "  make up-no-build             # avvio senza rebuild immagini (obbligatorio mirror offline/evento)"
 	@echo "  make up-no-static            # avvio senza collectstatic"
@@ -443,9 +446,23 @@ prod-turn-prepare:
 # Shell Android Capacitor (PWA nel WebView + bridge nativo FCM/chiamate).
 # Richiede Node sul host (non nel container) e Android Studio per build APK.
 # CAPACITOR_SERVER_URL opzionale (default https://www.kor35.it).
+# WIN=1 (solo da WSL): dopo il sync copia frontend/android su disco Windows
+#   per Android Studio (evita Gradle JVM su \\wsl.localhost\...).
+# WIN_ANDROID_DIR opzionale (default C:\dev\kor35-android).
+WIN ?= 0
+WIN_ANDROID_DIR ?= C:\dev\kor35-android
+
 android-sync:
 	cd frontend && (npm ci || npm install) && npm run cap:sync
+	@if [ "$(WIN)" = "1" ]; then \
+		WIN_ANDROID_DIR="$(WIN_ANDROID_DIR)" ./scripts/android_sync_to_windows.sh; \
+	fi
 
 android-open:
-	cd frontend && npx cap open android
+	@if [ "$(WIN)" = "1" ]; then \
+		echo "Progetto su Windows: apri in Android Studio la cartella $(WIN_ANDROID_DIR)"; \
+		echo "Esempio: studio64 \"$(WIN_ANDROID_DIR)\""; \
+	else \
+		cd frontend && npx cap open android; \
+	fi
 

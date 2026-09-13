@@ -23,10 +23,24 @@
 ## Build / sync
 
 ```bash
-# dalla root monorepo (Node sull'host, non nel container Django)
+# dalla root monorepo (Node sull'host / in WSL, non nel container Django)
 make android-sync
 make android-open
 ```
+
+### WSL + Android Studio su Windows (consigliato)
+
+Gradle non può usare il JDK Windows se il progetto sta su `\\wsl.localhost\...`.
+Dopo il sync, copia su disco Windows nativo:
+
+```bash
+make android-sync WIN=1
+# destinazione default: C:\dev\kor35-android
+# personalizza:
+make android-sync WIN=1 WIN_ANDROID_DIR='D:\android\kor35'
+```
+
+Poi in Android Studio: **Open** → `C:\dev\kor35-android` (non il path `\\wsl.localhost\...`).
 
 Oppure:
 
@@ -42,6 +56,8 @@ Per puntare all’edge in evento:
 
 ```bash
 CAPACITOR_SERVER_URL=http://10.42.0.1 npm run build && npx cap sync android
+# oppure:
+CAPACITOR_SERVER_URL=http://10.42.0.1 make android-sync WIN=1
 ```
 
 ## Flusso push
