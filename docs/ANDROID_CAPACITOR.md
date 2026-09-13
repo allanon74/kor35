@@ -84,23 +84,24 @@ make android-open
 
 ### WSL + Android Studio su Windows (consigliato)
 
-Gradle non può usare il JDK Windows se il progetto sta su `\\wsl.localhost\...`.
-Dopo il sync, copia su disco Windows nativo:
+**Path UNICO — non cambiarlo:**
+
+```text
+C:\dev\kor35-app\android
+```
 
 ```bash
 make android-sync WIN=1
-# destinazione default: C:/dev/kor35-android  (è la cartella da aprire in Studio)
-# IMPORTANTE: usa slash avanti, non c:\\dev\\... (bash mangia i backslash)
-# personalizza:
-make android-sync WIN=1 WIN_ANDROID_DIR='D:/android/kor35'
+make android-path   # stampa C:\dev\kor35-app\android
 ```
 
-Poi in Android Studio: **File → Open** → `C:\dev\kor35-android`
-(lo script copia `node_modules/@capacitor/*` *dentro* quella cartella). Non aprire `C:\dev\kor35-app` né `\\wsl.localhost\...`.
+- Default: `C:/dev/kor35-app` (root) + sottocartella `android/` da aprire in Studio.
+- Capacitor richiede anche `C:/dev/kor35-app/node_modules/@capacitor/...` (sibling).
+- **Non** usare `C:\dev\kor35-android` (legacy, layout rotto → errori Gradle `capacitor-status-bar`).
+- **Non** aprire `\\wsl.localhost\...`.
+- Override solo se necessario: `WIN_ANDROID_DIR='D:/altro'` (slash avanti).
 
-Se Gradle dice *No matching variant / No variants exist* sui moduli `:capacitor-*`, stai aprendo la copia sbagliata (senza quei pacchetti). Chiudi il progetto, ri-esegui `make android-sync WIN=1`, apri di nuovo `C:\dev\kor35-android` e fai **Sync Project with Gradle Files**.
-
-Questo clone **pinnà AGP 8.10.1** (Android Studio Ladybug/Meerkat). Capacitor 8 a monte chiede 8.13.0 / Studio Otter: `make android-sync` riscrive i `build.gradle` in `node_modules/@capacitor` così Studio non rifiuta il sync.
+Questo clone **pinna AGP 8.10.1** (Android Studio Ladybug/Meerkat). Capacitor 8 a monte chiede 8.13.0 / Studio Otter: `make android-sync` riscrive i `build.gradle` in `node_modules/@capacitor` così Studio non rifiuta il sync.
 
 Oppure:
 

@@ -167,10 +167,11 @@ Node sull’host (non nel container). Da WSL + Android Studio su Windows:
 | Comando | Descrizione |
 |---------|-------------|
 | `make android-sync` | Build PWA + `npx cap sync android` |
-| `make android-sync WIN=1` | Come sopra + robocopy su `C:/dev/kor35-android` |
+| `make android-sync WIN=1` | Come sopra + robocopy su `C:/dev/kor35-app` |
+| `make android-path` | Stampa il path UNICO da aprire in Android Studio |
 | `make android-open WIN=1` | Stampa il path da aprire in Android Studio |
 
-Apri in Studio **`C:\dev\kor35-android`** (non `C:\dev\kor35-app` né `\\wsl.localhost\...`). AGP pinnato a **8.10.1** per lo Studio attuale. Dettaglio: `docs/ANDROID_CAPACITOR.md`.
+Apri in Studio **`C:\dev\kor35-app\android`** (non `C:\dev\kor35-android` né `\\wsl.localhost\...`). AGP pinnato a **8.10.1** per lo Studio attuale. Dettaglio: `docs/ANDROID_CAPACITOR.md`.
 
 ---
 
