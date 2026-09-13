@@ -139,7 +139,7 @@ class AcquistoTessituraStatAuraEffettivaTest(TestCase):
             tipo=AURA,
             stat_costo_acquisto_tessitura=self.stat_costo,
         )
-        self.car = Punteggio.objects.create(nome="Int Test", sigla="INTT", tipo=CARATTERISTICA)
+        self.car = Punteggio.objects.create(nome="Int Test", sigla="INT", tipo=CARATTERISTICA)
         self.tessitura = Tessitura.objects.create(
             nome="Tess Magica Test",
             testo="x",
