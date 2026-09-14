@@ -5267,9 +5267,11 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
             for item in stats:
                 aure = item.pop('limit_a_aure', [])
                 elementi = item.pop('limit_a_elementi', [])
+                classi = item.pop('classi_oggetto_conteggio', [])
                 new_stat = AbilitaStatistica.objects.create(abilita=instance, **item)
                 if aure: new_stat.limit_a_aure.set(aure)
                 if elementi: new_stat.limit_a_elementi.set(elementi)
+                if classi: new_stat.classi_oggetto_conteggio.set(classi)
 
         # 7. Regole semantiche formula
         if formula_rules is not None:

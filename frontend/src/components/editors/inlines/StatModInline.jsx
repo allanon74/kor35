@@ -53,11 +53,23 @@ const SLOT_EQUIP_CONTEGGIO_OPTIONS = [
 const EMPTY_SLOT_EQUIP_STAT = {
     usa_bonus_slot_equip: false,
     slot_equip_ammessi: [],
+    classi_oggetto_conteggio: [],
     modalita_conteggio_slot_equip: 'TUTTI_OGGETTI',
     valore_per_unita_slot_equip: 1,
 };
 
-const StatModInline = ({ items, options, auraOptions, elementOptions, onChange, onAdd, onRemove, showSlotEquipBonus = false, showSoloOggettoOspitante = false }) => {
+const StatModInline = ({
+    items,
+    options,
+    auraOptions,
+    elementOptions,
+    classeOptions = [],
+    onChange,
+    onAdd,
+    onRemove,
+    showSlotEquipBonus = false,
+    showSoloOggettoOspitante = false,
+}) => {
   const toggleM2M = (index, field, id) => {
     const currentList = items[index][field] || [];
     const newList = currentList.includes(id)
@@ -188,6 +200,22 @@ const StatModInline = ({ items, options, auraOptions, elementOptions, onChange, 
                           </button>
                         ))}
                       </div>
+                      {classeOptions.length > 0 && (
+                        <div className="mt-3">
+                          <label className="text-[9px] uppercase text-emerald-600 font-black block mb-2">
+                            Classi oggetto (opzionale)
+                          </label>
+                          <p className="text-[10px] text-gray-500 mb-2">
+                            Se selezionate, conta solo oggetti di queste classi (anche senza slot).
+                          </p>
+                          <M2MSelector
+                            options={classeOptions}
+                            selected={item.classi_oggetto_conteggio || []}
+                            onToggle={(id) => toggleM2M(i, 'classi_oggetto_conteggio', id)}
+                            color="emerald"
+                          />
+                        </div>
+                      )}
                     </div>
                     )}
                     <div className="w-40">

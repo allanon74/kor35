@@ -2659,20 +2659,33 @@ def parse_slot_equip_ammessi(raw):
     return out
 
 
-def conta_equipaggiamento_nei_slot(personaggio, slot_keys):
+def conta_equipaggiamento_nei_slot(personaggio, slot_keys, classi_oggetto_ids=None):
     """
-    Conta oggetti fisici equipaggiati, potenziamenti MAT/MOD e host modificati,
-    limitatamente agli slot indicati.
+    Conta oggetti fisici equipaggiati, potenziamenti MAT/MOD e host modificati.
+
+    - Se `slot_keys` è valorizzato: filtra per slot_equip.
+    - Se `classi_oggetto_ids` è valorizzato: filtra per classe_oggetto.
+    - Serve almeno uno dei due filtri; altrimenti restituisce zeri.
     """
     slots = set(parse_slot_equip_ammessi(slot_keys))
-    if not slots:
+    classi_ids = set()
+    if classi_oggetto_ids:
+        for cid in classi_oggetto_ids:
+            try:
+                classi_ids.add(int(cid))
+            except (TypeError, ValueError):
+                continue
+    if not slots and not classi_ids:
         return {'oggetti': 0, 'potenziamenti': 0, 'oggetti_modificati': 0}
 
     oggetti_qs = personaggio.get_oggetti().filter(
         tipo_oggetto=TIPO_OGGETTO_FISICO,
         is_equipaggiato=True,
-        slot_equip__in=slots,
     ).prefetch_related('potenziamenti_installati')
+    if slots:
+        oggetti_qs = oggetti_qs.filter(slot_equip__in=slots)
+    if classi_ids:
+        oggetti_qs = oggetti_qs.filter(classe_oggetto_id__in=classi_ids)
 
     n_oggetti = 0
     n_potenziamenti = 0
@@ -2762,14 +2775,22 @@ def calcola_bonus_abilita_slot_equip(personaggio, stat_link):
         detail_prefix = 'COG'
     else:
         slots = parse_slot_equip_ammessi(stat_link.slot_equip_ammessi)
-        counts = conta_equipaggiamento_nei_slot(personaggio, slots)
+        classi_ids = []
+        if hasattr(stat_link, "classi_oggetto_conteggio"):
+            classi_ids = list(stat_link.classi_oggetto_conteggio.values_list("id", flat=True))
+        counts = conta_equipaggiamento_nei_slot(personaggio, slots, classi_oggetto_ids=classi_ids)
         count_key = {
             SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI: 'oggetti',
             SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO: 'potenziamenti',
             SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI: 'oggetti_modificati',
         }.get(modalita, 'oggetti')
         n_units = counts.get(count_key, 0)
-        detail_prefix = f"equip. slot [{', '.join(slots) if slots else '—'}]"
+        if classi_ids and not slots:
+            detail_prefix = f"equip. classi [{', '.join(str(c) for c in classi_ids)}]"
+        elif classi_ids and slots:
+            detail_prefix = f"equip. slot [{', '.join(slots)}] ∩ classi"
+        else:
+            detail_prefix = f"equip. slot [{', '.join(slots) if slots else '—'}]"
 
     if per_unita and n_units:
         bonus += per_unita * n_units
@@ -2814,6 +2835,14 @@ class AbilitaStatistica(CondizioneStatisticaMixin):
         default=1,
         verbose_name="Valore per unità",
         help_text="Moltiplicatore applicato alla modalità di conteggio scelta.",
+    )
+    classi_oggetto_conteggio = models.ManyToManyField(
+        "ClasseOggetto",
+        blank=True,
+        related_name="abilita_statistiche_conteggio",
+        verbose_name="Classi oggetto (conteggio)",
+        help_text="Se valorizzato, conta solo oggetti equipaggiati di queste classi "
+        "(es. Spada/Bastone per Gladiatore). Combinabile con gli slot.",
     )
 
     class Meta: unique_together = ('abilita', 'statistica')
@@ -7279,13 +7308,17 @@ class Personaggio(Inventario):
                 _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
 
         # 1. Abilità
-        for l in AbilitaStatistica.objects.filter(abilita__personaggioabilita__personaggio=self).select_related('statistica'): 
+        for l in AbilitaStatistica.objects.filter(
+            abilita__personaggioabilita__personaggio=self
+        ).select_related('statistica').prefetch_related('classi_oggetto_conteggio'):
             _apply_abilita_stat_link(l)
 
         # 1b. Forma camaleonte del giorno: stessi modificatori di una forma reale.
         forma_oggi = self.get_forma_camaleonte_del_giorno()
         if forma_oggi:
-            for l in AbilitaStatistica.objects.filter(abilita=forma_oggi).select_related('statistica'):
+            for l in AbilitaStatistica.objects.filter(abilita=forma_oggi).select_related(
+                'statistica'
+            ).prefetch_related('classi_oggetto_conteggio'):
                 _apply_abilita_stat_link(l)
         
         # 2. Oggetti e Innesti (CON CHECK TIMER)

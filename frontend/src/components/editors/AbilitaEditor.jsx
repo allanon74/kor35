@@ -74,7 +74,15 @@ function mergeAbilitaFormState(initialData) {
         punteggi_assegnati: Array.isArray(initialData.punteggi_assegnati) ? initialData.punteggi_assegnati : [],
         punteggi_dipendenti: Array.isArray(initialData.punteggi_dipendenti) ? initialData.punteggi_dipendenti : [],
         prerequisiti: Array.isArray(initialData.prerequisiti) ? initialData.prerequisiti : [],
-        statistiche: Array.isArray(initialData.statistiche) ? initialData.statistiche : [],
+        statistiche: Array.isArray(initialData.statistiche)
+            ? initialData.statistiche.map((s) => ({
+                ...s,
+                classi_oggetto_conteggio: Array.isArray(s.classi_oggetto_conteggio)
+                    ? s.classi_oggetto_conteggio.map((c) => (typeof c === 'object' ? c.id : c))
+                    : [],
+                slot_equip_ammessi: Array.isArray(s.slot_equip_ammessi) ? s.slot_equip_ammessi : [],
+            }))
+            : [],
         formula_rules: Array.isArray(initialData.formula_rules) ? initialData.formula_rules : [],
         effetto_uso_risorsa_str:
             initialData.effetto_uso_risorsa != null
@@ -91,6 +99,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
     const [punteggi, setPunteggi] = useState([]); 
     const [abilitaList, setAbilitaList] = useState([]); 
     const [tiersList, setTiersList] = useState([]); 
+    const [classiOggetto, setClassiOggetto] = useState([]);
     const [semanticMattoniOptions, setSemanticMattoniOptions] = useState([]);
     const [effettoWizard, setEffettoWizard] = useState(EMPTY_EFFETTO_WIZARD);
     const [recuperoWizard, setRecuperoWizard] = useState(EMPTY_RECUPERO_WIZARD);
@@ -134,6 +143,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                 setPunteggi(resources?.punteggi || []);
                 setAbilitaList(resources?.abilita || []);
                 setTiersList(resources?.tiers || []);
+                setClassiOggetto(resources?.classiOggetto || []);
                 const semantic = await staffGetFormulaSemanticOptions(onLogout);
                 setSemanticMattoniOptions((semantic?.elementi_mattoni || []).map((m) => ({ ...m, nome: m.label || m.nome })));
             } catch (err) {
@@ -935,6 +945,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                         options={statsOptions}        
                         auraOptions={auraOptions}
                         elementOptions={elementOptions}
+                        classeOptions={classiOggetto}
                         
                         // Gestione Aggiunta
                         onAdd={() => setFormData({

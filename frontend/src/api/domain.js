@@ -2888,12 +2888,14 @@ const fetchAbilitaEditorResources = async (onLogout, { force = false } = {}) => 
         fetchAuthenticated('/api/personaggi/api/punteggi/all/', { method: 'GET' }, onLogout),
         fetchAuthenticated('/api/personaggi/api/abilita/', { method: 'GET' }, onLogout),
         fetchAuthenticated('/api/personaggi/api/tier/', { method: 'GET' }, onLogout),
+        fetchAuthenticated('/api/personaggi/api/classi_oggetto/', { method: 'GET' }, onLogout),
     ])
-        .then(([punteggi, abilita, tiers]) => {
+        .then(([punteggi, abilita, tiers, classiOggetto]) => {
             const data = {
                 punteggi: punteggi || [],
                 abilita: abilita || [],
                 tiers: tiers || [],
+                classiOggetto: Array.isArray(classiOggetto) ? classiOggetto : (classiOggetto?.results || []),
             };
             abilitaEditorResourcesCache = { data, ts: Date.now() };
             return data;
