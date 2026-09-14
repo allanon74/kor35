@@ -2856,6 +2856,44 @@ class Abilita(A_modello):
         default=False,
         help_text="Se attiva, questa forma AIN usa una forma del giorno randomica (deterministica).",
     )
+    # Sblocco creazione/utilizzo oltre il valore aura (es. professioni T3 Lv5/Lv6).
+    AMBITO_CREAZIONE_TES_AURA = "TES_AURA"
+    AMBITO_CREAZIONE_MATERIA = "MATERIA"
+    AMBITO_CREAZIONE_MUTAZIONE = "MUTAZIONE"
+    AMBITO_CREAZIONE_MOD = "MOD"
+    AMBITO_CREAZIONE_CONSUMABILE = "CONSUMABILE"
+    AMBITO_CREAZIONE_CHOICES = (
+        ("", "—"),
+        (AMBITO_CREAZIONE_TES_AURA, "Tecniche (tessiture/proposte per aura)"),
+        (AMBITO_CREAZIONE_MATERIA, "Materie (forgiatura)"),
+        (AMBITO_CREAZIONE_MUTAZIONE, "Mutazioni (forgiatura)"),
+        (AMBITO_CREAZIONE_MOD, "MOD / Innesti (forgiatura)"),
+        (AMBITO_CREAZIONE_CONSUMABILE, "Consumabili / Alchimia"),
+    )
+    sblocca_creazione_livello = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Sblocca creazione fino a livello",
+        help_text="Se valorizzato, il PG con questa abilità può creare/usare fino a questo livello "
+        "nell'ambito indicato (max con il valore aura).",
+    )
+    ambito_creazione = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        choices=AMBITO_CREAZIONE_CHOICES,
+        verbose_name="Ambito sblocco creazione",
+    )
+    aura_creazione = models.ForeignKey(
+        Punteggio,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        limit_choices_to={"tipo": AURA},
+        related_name="abilita_sblocco_creazione",
+        verbose_name="Aura sblocco creazione",
+        help_text="Obbligatoria per ambito Tecniche: quale aura (es. Magica, Sacra) viene sbloccata.",
+    )
     effetto_uso_risorsa = models.JSONField(
         null=True,
         blank=True,
@@ -6987,12 +7025,55 @@ class Personaggio(Inventario):
         if not aura:
             return 0
         return self.get_valore_aura_effettivo(aura)
+
+    def max_livello_creazione(self, *, ambito, aura=None):
+        """
+        Livello massimo di creazione/utilizzo: max(valore aura di base, sblocchi da abilità).
+
+        ambiti:
+        - TES_AURA: richiede `aura` (proposta/tecnica)
+        - MATERIA / MUTAZIONE / MOD: aure AMS / AIN / ATE
+        - CONSUMABILE: aura ALC
+        """
+        base = 0
+        if ambito == Abilita.AMBITO_CREAZIONE_TES_AURA:
+            if aura is None:
+                return 0
+            base = int(self.get_valore_aura_effettivo(aura) or 0)
+        elif ambito == Abilita.AMBITO_CREAZIONE_MATERIA:
+            base = int(self.get_valore_aura_per_sigla("AMS") or 0)
+        elif ambito == Abilita.AMBITO_CREAZIONE_MUTAZIONE:
+            base = int(self.get_valore_aura_per_sigla("AIN") or 0)
+        elif ambito == Abilita.AMBITO_CREAZIONE_MOD:
+            base = int(self.get_valore_aura_per_sigla("ATE") or 0)
+        elif ambito == Abilita.AMBITO_CREAZIONE_CONSUMABILE:
+            base = int(self.get_valore_aura_per_sigla("ALC") or 0)
+        else:
+            return 0
+
+        bonus = 0
+        qs = Abilita.objects.filter(
+            personaggioabilita__personaggio=self,
+            sblocca_creazione_livello__isnull=False,
+            ambito_creazione=ambito,
+        )
+        if ambito == Abilita.AMBITO_CREAZIONE_TES_AURA and aura is not None:
+            qs = qs.filter(models.Q(aura_creazione_id=aura.id) | models.Q(aura_creazione_id__isnull=True))
+        for liv in qs.values_list("sblocca_creazione_livello", flat=True):
+            try:
+                bonus = max(bonus, int(liv or 0))
+            except (TypeError, ValueError):
+                continue
+        return max(base, bonus)
     
     def valida_acquisto_tecnica(self, t):
         if not t.aura_richiesta: return False, "Aura mancante."
         
         # 1. Controllo Livello Aura (sempre sull'aura richiesta della scheda tecnica)
-        if t.livello > self.get_valore_aura_effettivo(t.aura_richiesta): 
+        max_liv = self.max_livello_creazione(
+            ambito=Abilita.AMBITO_CREAZIONE_TES_AURA, aura=t.aura_richiesta
+        )
+        if t.livello > max_liv:
             return False, "Livello tecnica superiore al valore Aura."
         
         # 2. Cerimoniali: coralità, senza vincoli sui mattoni / caratteristiche dei componenti

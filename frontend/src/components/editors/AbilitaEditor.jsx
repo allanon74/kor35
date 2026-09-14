@@ -20,6 +20,9 @@ const EMPTY_ABILITA_FORM = {
     costo_crediti: 0,
     is_tratto_aura: false,
     camaleontica: false,
+    sblocca_creazione_livello: '',
+    ambito_creazione: '',
+    aura_creazione: null,
     nascondi_in_scheda_abilita: false,
     escluso_negozio_ufficiale: false,
     non_vendibile: false,
@@ -46,6 +49,12 @@ const EMPTY_RECUPERO_WIZARD = {
     rigenerazioni: [{ stat_sigla: 'PV', ogni_minuti: 5, step: 1 }],
 };
 
+function pkOrNull(value) {
+    if (value == null || value === '') return null;
+    if (typeof value === 'object') return value.id ?? null;
+    return value;
+}
+
 /** La lista staff restituisce righe senza relazioni annidate: senza merge, .map sugli inline va in errore. */
 function mergeAbilitaFormState(initialData) {
     if (!initialData) {
@@ -54,6 +63,11 @@ function mergeAbilitaFormState(initialData) {
     return {
         ...EMPTY_ABILITA_FORM,
         ...initialData,
+        aura_riferimento: pkOrNull(initialData.aura_riferimento),
+        aura_creazione: pkOrNull(initialData.aura_creazione),
+        sblocca_creazione_livello:
+            initialData.sblocca_creazione_livello == null ? '' : initialData.sblocca_creazione_livello,
+        ambito_creazione: initialData.ambito_creazione || '',
         tiers: Array.isArray(initialData.tiers) ? initialData.tiers : [],
         requisiti: Array.isArray(initialData.requisiti) ? initialData.requisiti : [],
         punteggi_assegnati: Array.isArray(initialData.punteggi_assegnati) ? initialData.punteggi_assegnati : [],
@@ -171,6 +185,14 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                 caratteristica_2: formData.caratteristica_2 ? parseInt(formData.caratteristica_2) : null,
                 caratteristica_3: formData.caratteristica_3 ? parseInt(formData.caratteristica_3) : null,
                 aura_riferimento: formData.aura_riferimento ? parseInt(formData.aura_riferimento) : null,
+                aura_creazione: formData.aura_creazione ? parseInt(formData.aura_creazione, 10) : null,
+                sblocca_creazione_livello: (() => {
+                    const raw = formData.sblocca_creazione_livello;
+                    if (raw === '' || raw === null || raw === undefined) return null;
+                    const n = parseInt(raw, 10);
+                    return Number.isFinite(n) ? n : null;
+                })(),
+                ambito_creazione: formData.ambito_creazione || '',
                 tiers: tiers.map(t => ({...t, tabella: parseInt(t.tabella)})),
                 requisiti: requisiti.map(r => ({...r, requisito: parseInt(r.requisito)})),
                 punteggi_assegnati: punteggiAssegnati.map(p => ({...p, punteggio: parseInt(p.punteggio)})),
@@ -412,6 +434,57 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                                 )}
                             </div>
                         )}
+                    </div>
+
+                    <div className="bg-gray-900/30 p-3 rounded border border-amber-900/30 space-y-2">
+                        <p className="text-xs font-bold text-amber-400 uppercase">Sblocco creazione (T3)</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div>
+                                <label className="text-[10px] text-gray-500 uppercase font-bold">Livello max</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-white"
+                                    value={formData.sblocca_creazione_livello ?? ''}
+                                    onChange={(e) =>
+                                        setFormData({ ...formData, sblocca_creazione_livello: e.target.value })
+                                    }
+                                    placeholder="es. 5"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-gray-500 uppercase font-bold">Ambito</label>
+                                <select
+                                    className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-white text-sm"
+                                    value={formData.ambito_creazione || ''}
+                                    onChange={(e) =>
+                                        setFormData({ ...formData, ambito_creazione: e.target.value })
+                                    }
+                                >
+                                    <option value="">—</option>
+                                    <option value="TES_AURA">Tecniche (per aura)</option>
+                                    <option value="MATERIA">Materie</option>
+                                    <option value="MUTAZIONE">Mutazioni</option>
+                                    <option value="MOD">MOD / Innesti</option>
+                                    <option value="CONSUMABILE">Consumabili / Alchimia</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-gray-500 uppercase font-bold">Aura (se Tecniche)</label>
+                                <SearchableSelect
+                                    options={aure}
+                                    value={formData.aura_creazione || ''}
+                                    onChange={(val) =>
+                                        setFormData({ ...formData, aura_creazione: val || null })
+                                    }
+                                    placeholder="- Aura -"
+                                />
+                            </div>
+                        </div>
+                        <p className="text-[11px] text-gray-500">
+                            Consente creare/usare fino a questo livello anche se l&apos;aura del PG è più bassa
+                            (es. professioni Tier 3 Lv.5/6).
+                        </p>
                     </div>
 
                     <div className="bg-gray-900/30 p-3 rounded border border-indigo-900/30 space-y-3">

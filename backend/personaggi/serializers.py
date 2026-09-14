@@ -3147,6 +3147,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     creazioni_consumabili_in_corso = serializers.SerializerMethodField()
     creazioni_consumabili_pronte = serializers.SerializerMethodField()
     valore_aura_alchimia = serializers.SerializerMethodField()
+    max_livello_creazione = serializers.SerializerMethodField()
 
     movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
     is_staff = serializers.BooleanField(source='proprietario.is_staff', read_only=True)
@@ -3186,6 +3187,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'attivate_possedute', 'infusioni_possedute', 'tessiture_possedute',
             'cerimoniali_posseduti',
             'consumabili', 'creazioni_consumabili_in_corso', 'creazioni_consumabili_pronte', 'valore_aura_alchimia',
+            'max_livello_creazione',
             'movimenti_credito',
             'TestoFormattatoPersonale',
             'is_staff', 'modelli_aura',
@@ -3484,11 +3486,25 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         return [{'id': cc.id, 'tessitura_id': cc.tessitura_id, 'tessitura_nome': cc.tessitura.nome} for cc in creazioni]
 
     def get_valore_aura_alchimia(self, personaggio):
-        from .models import Punteggio, AURA
-        aura_alc = Punteggio.objects.filter(tipo=AURA, sigla='ALC').first()
-        if not aura_alc:
-            return 0
-        return personaggio.get_valore_aura_effettivo(aura_alc)
+        from .models import Abilita
+        return personaggio.max_livello_creazione(ambito=Abilita.AMBITO_CREAZIONE_CONSUMABILE)
+
+    def get_max_livello_creazione(self, personaggio):
+        """Limiti creazione per UI (proposte / craft): max(aura, sblocchi abilità T3)."""
+        from .models import Abilita, Punteggio, AURA
+
+        tes = {}
+        for aura in Punteggio.objects.filter(tipo=AURA, is_generica=False).only("id", "sigla", "nome"):
+            tes[aura.sigla] = personaggio.max_livello_creazione(
+                ambito=Abilita.AMBITO_CREAZIONE_TES_AURA, aura=aura
+            )
+        return {
+            "tes_aura": tes,
+            "materia": personaggio.max_livello_creazione(ambito=Abilita.AMBITO_CREAZIONE_MATERIA),
+            "mutazione": personaggio.max_livello_creazione(ambito=Abilita.AMBITO_CREAZIONE_MUTAZIONE),
+            "mod": personaggio.max_livello_creazione(ambito=Abilita.AMBITO_CREAZIONE_MOD),
+            "consumabile": personaggio.max_livello_creazione(ambito=Abilita.AMBITO_CREAZIONE_CONSUMABILE),
+        }
 
     def get_consumabili(self, personaggio):
         from django.utils import timezone
@@ -5180,6 +5196,7 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         rep = super().to_representation(instance)
         rep['aura_riferimento'] = PunteggioSmallSerializer(instance.aura_riferimento).data if instance.aura_riferimento else None
+        rep['aura_creazione'] = PunteggioSmallSerializer(instance.aura_creazione).data if instance.aura_creazione else None
         return rep
 
     @transaction.atomic

@@ -1053,9 +1053,16 @@ class GestioneCraftingService:
         if not aura_principale:
             return False, f"Aura richiesta non configurata nel sistema ({sigla_req})."
 
-        val_aura_principale = forgiatore.get_valore_aura_effettivo(aura_principale)
-        if val_aura_principale < livello:
-            return False, f"Requisito Aura insufficiente: {aura_principale.nome} ({val_aura_principale}/{livello})."
+        from personaggi.models import Abilita
+        ambito = {
+            "MATERIA": Abilita.AMBITO_CREAZIONE_MATERIA,
+            "MUTAZIONE": Abilita.AMBITO_CREAZIONE_MUTAZIONE,
+            "MOD": Abilita.AMBITO_CREAZIONE_MOD,
+            "INNESTO": Abilita.AMBITO_CREAZIONE_MOD,
+        }.get(risultato, Abilita.AMBITO_CREAZIONE_MATERIA)
+        max_liv = forgiatore.max_livello_creazione(ambito=ambito)
+        if max_liv < livello:
+            return False, f"Requisito Aura insufficiente: {aura_principale.nome} ({max_liv}/{livello})."
 
         # Materia: richiede anche aura secondaria dell'infusione.
         if risultato == 'MATERIA':
@@ -1377,7 +1384,10 @@ class CreazioneConsumabileService:
         aura_alc = Punteggio.objects.filter(tipo=AURA, sigla=cls.SIGLA_AURA_ALCHIMIA).first()
         if not aura_alc:
             return False, "Aura Alchimia (ALC) non configurata."
-        valore_alc = personaggio.get_valore_aura_effettivo(aura_alc)
+        from personaggi.models import Abilita
+        valore_alc = personaggio.max_livello_creazione(
+            ambito=Abilita.AMBITO_CREAZIONE_CONSUMABILE
+        )
         livello = max(1, tessitura.livello)
         if livello > valore_alc:
             return False, f"Livello tessitura ({livello}) superiore al valore Aura Alchimia ({valore_alc})."

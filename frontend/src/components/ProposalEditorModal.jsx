@@ -190,7 +190,14 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
     const auraLimit = useMemo(() => {
         if (!selectedAuraId || !char) return 0;
         const auraObj = availableAuras.find(a => a.id == selectedAuraId);
-        return auraObj ? (char.punteggi_base[auraObj.nome] || 0) : 0;
+        if (!auraObj) return 0;
+        const base = char.punteggi_base?.[auraObj.nome] || 0;
+        const unlock = char.max_livello_creazione?.tes_aura?.[auraObj.sigla];
+        const unlockNum = Number(unlock);
+        if (Number.isFinite(unlockNum) && unlockNum > 0) {
+            return Math.max(base, unlockNum);
+        }
+        return base;
     }, [selectedAuraId, char, availableAuras]);
 
     const maxLivelloCerimoniale = useMemo(() => {

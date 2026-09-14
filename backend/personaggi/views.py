@@ -3122,7 +3122,15 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
 
         val_aura = personaggio.get_valore_aura_effettivo(proposta.aura)
         if val_aura < 1: return Response({"error": "Non possiedi l'aura selezionata."}, status=status.HTTP_400_BAD_REQUEST)
-        if livello > val_aura: return Response({"error": f"Livello ({livello}) superiore al valore della tua aura ({val_aura})."}, status=status.HTTP_400_BAD_REQUEST)
+        from personaggi.models import Abilita
+        max_liv = personaggio.max_livello_creazione(
+            ambito=Abilita.AMBITO_CREAZIONE_TES_AURA, aura=proposta.aura
+        )
+        if livello > max_liv:
+            return Response(
+                {"error": f"Livello ({livello}) superiore al livello creazione consentito ({max_liv})."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         
         if proposta.tipo == 'CER':
             valore_cco = personaggio.get_valore_statistica('CCO')
@@ -4277,8 +4285,16 @@ class CapableArtisansView(APIView):
                 # --- FORGIATURA COOPERATIVA ---
                 inf = Infusione.objects.get(pk=infusione_id)
                 
-                # Il richiedente DEVE avere l'aura principale per poter chiedere aiuto
-                if requester.get_valore_aura_effettivo(inf.aura_richiesta) < inf.livello:
+                # Il richiedente DEVE poter forgiare almeno per livello (aura o sblocco T3)
+                from personaggi.models import Abilita
+                risultato = GestioneCraftingService._classifica_risultato_infusione(inf)
+                ambito = {
+                    "MATERIA": Abilita.AMBITO_CREAZIONE_MATERIA,
+                    "MUTAZIONE": Abilita.AMBITO_CREAZIONE_MUTAZIONE,
+                    "MOD": Abilita.AMBITO_CREAZIONE_MOD,
+                    "INNESTO": Abilita.AMBITO_CREAZIONE_MOD,
+                }.get(risultato, Abilita.AMBITO_CREAZIONE_MATERIA)
+                if requester.max_livello_creazione(ambito=ambito) < inf.livello:
                     # Se manca la base, nessuno può aiutarlo
                     return Response([])
 
