@@ -1456,13 +1456,29 @@ class CreazioneConsumabileService:
 
         tessitura = creazione.tessitura
         aura_tessitura = tessitura.aura_richiesta
-        aura_alc = Punteggio.objects.filter(tipo=AURA, sigla=cls.SIGLA_AURA_ALCHIMIA).first()
-        valore_alc = personaggio.get_valore_aura_effettivo(aura_alc) if aura_alc else 0
+        from personaggi.models import Abilita, Statistica
+        valore_alc = personaggio.max_livello_creazione(
+            ambito=Abilita.AMBITO_CREAZIONE_CONSUMABILE
+        )
         livello = max(1, tessitura.livello)
         numero_base = cls._get_valore_consumabili(
             personaggio, aura_tessitura, 'stat_numero_consumabili', FALLBACK_STAT_NUMERO_CONSUMABILI
         )
-        utilizzi = max(1, int(numero_base) + 2 * max(0, valore_alc - livello))
+        # Bonus da abilità (es. Alchimia Avanzata Extra → AbilitaStatistica NCO +1).
+        # Si usa solo la parte ADD dei modificatori, non il valore_base di NCO.
+        nco = Statistica.objects.filter(sigla="NCO").only("parametro").first()
+        bonus_nco = 0
+        if nco and nco.parametro:
+            try:
+                bonus_nco = int(
+                    float(
+                        (personaggio.modificatori_calcolati.get(nco.parametro) or {}).get("add", 0)
+                        or 0
+                    )
+                )
+            except (TypeError, ValueError):
+                bonus_nco = 0
+        utilizzi = max(1, int(numero_base) + 2 * max(0, valore_alc - livello) + max(0, bonus_nco))
         giorni_durata = cls._get_valore_consumabili(
             personaggio, aura_tessitura, 'stat_durata_consumabili', FALLBACK_STAT_DURATA_CONSUMABILI
         )

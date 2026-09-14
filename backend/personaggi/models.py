@@ -2894,6 +2894,12 @@ class Abilita(A_modello):
         verbose_name="Aura sblocco creazione",
         help_text="Obbligatoria per ambito Tecniche: quale aura (es. Magica, Sacra) viene sbloccata.",
     )
+    raddoppia_pa_da_equip = models.BooleanField(
+        default=False,
+        verbose_name="Raddoppia PA da equipaggiamento",
+        help_text="Se attivo, ogni +PA proveniente da oggetti/potenziamenti attivi viene aggiunto di nuovo "
+        "(es. Uso Armatura Avanzata Extra).",
+    )
     effetto_uso_risorsa = models.JSONField(
         null=True,
         blank=True,
@@ -7316,13 +7322,31 @@ class Personaggio(Inventario):
                 if mod.statistica and mod.statistica.parametro:
                     _add(mod.statistica.parametro, mod.tipo_modificatore, mod.valore)
 
+        equip_pa_add = 0.0
+
+        def _add_equip_track(parametro, tipo_mod, valore):
+            nonlocal equip_pa_add
+            _add(parametro, tipo_mod, valore)
+            if (
+                parametro == "armat"
+                and tipo_mod == MODIFICATORE_ADDITIVO
+            ):
+                try:
+                    equip_pa_add += float(valore or 0)
+                except (TypeError, ValueError):
+                    pass
+
         for oggetto in oggetti_inventario:
             # USIAMO LA FONTE DI VERITÀ UNICA: is_active()
             # Questo controlla: Equipaggiamento, Timer, Cariche (spegne_a_zero) e Gerarchia
             if oggetto.is_active():
                 for stat_link in oggetto.oggettostatistica_set.all(): 
                     if _is_global(stat_link):
-                        _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
+                        _add_equip_track(
+                            stat_link.statistica.parametro,
+                            stat_link.tipo_modificatore,
+                            stat_link.valore,
+                        )
                 _apply_sezioni_oggetto(oggetto)
                 
                 # Potenziamenti (Mod/Materia)
@@ -7332,8 +7356,16 @@ class Personaggio(Inventario):
                     if potenziamento.is_active():
                         for stat_link_pot in potenziamento.oggettostatistica_set.all(): 
                             if _is_global(stat_link_pot):
-                                _add(stat_link_pot.statistica.parametro, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
+                                _add_equip_track(
+                                    stat_link_pot.statistica.parametro,
+                                    stat_link_pot.tipo_modificatore,
+                                    stat_link_pot.valore,
+                                )
                         _apply_sezioni_oggetto(potenziamento)
+
+        # Uso Armatura Avanzata Extra: raddoppia i +PA provenienti da equip attivo.
+        if equip_pa_add and self.abilita_possedute.filter(raddoppia_pa_da_equip=True).exists():
+            _add("armat", MODIFICATORE_ADDITIVO, equip_pa_add)
 
         # 3. Caratteristiche Base
         cb = self.caratteristiche_base

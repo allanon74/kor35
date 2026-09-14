@@ -26,6 +26,7 @@ const EMPTY_ABILITA_FORM = {
     nascondi_in_scheda_abilita: false,
     escluso_negozio_ufficiale: false,
     non_vendibile: false,
+    raddoppia_pa_da_equip: false,
     aura_riferimento: null,
     livello_riferimento: 0,
     tiers: [],
@@ -488,6 +489,22 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                     </div>
 
                     <div className="bg-gray-900/30 p-3 rounded border border-indigo-900/30 space-y-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={!!formData.raddoppia_pa_da_equip}
+                                onChange={(e) =>
+                                    setFormData({ ...formData, raddoppia_pa_da_equip: e.target.checked })
+                                }
+                            />
+                            <span className="text-xs font-bold text-emerald-300 uppercase">
+                                Raddoppia PA da equipaggiamento
+                            </span>
+                        </label>
+                        <p className="text-[11px] text-gray-400">
+                            Ogni +PA da oggetti/potenziamenti attivi viene aggiunto di nuovo
+                            (es. Uso Armatura Avanzata Extra).
+                        </p>
                         <label className="flex items-center gap-2 cursor-pointer">
                             <input
                                 type="checkbox"
