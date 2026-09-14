@@ -112,12 +112,12 @@ class Command(BaseCommand):
             ab.sblocca_creazione_livello = livello
             ab.ambito_creazione = ambito
             ab.aura_creazione = aura
+            # updated_at solo via _touch (un unico bump LWW, no doppio write).
             ab.save(
                 update_fields=[
                     "sblocca_creazione_livello",
                     "ambito_creazione",
                     "aura_creazione",
-                    "updated_at",
                 ]
             )
             self._touch(ab)

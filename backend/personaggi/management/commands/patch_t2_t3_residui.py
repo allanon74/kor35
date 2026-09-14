@@ -73,7 +73,8 @@ class Command(BaseCommand):
         self.stdout.write(f"UPDATE {nome} → {field}=True")
         if not dry:
             setattr(ab, field, True)
-            ab.save(update_fields=[field, "updated_at"])
+            # updated_at solo via _touch (un unico bump LWW).
+            ab.save(update_fields=[field])
             self._touch(ab)
         return True
 

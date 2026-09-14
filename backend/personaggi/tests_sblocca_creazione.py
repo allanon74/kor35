@@ -117,3 +117,25 @@ class MaxLivelloCreazioneTests(TestCase):
         )
         ok, _msg = self.pg.valida_acquisto_tecnica(t)
         self.assertFalse(ok)
+
+    def test_tes_aura_senza_aura_creazione_non_sblocca_tutte(self):
+        """TES_AURA con aura_creazione NULL non deve alzare il cap su nessuna aura."""
+        ab = self._abilita(
+            nome="Unlock TES senza aura",
+            sblocca_creazione_livello=6,
+            ambito_creazione=Abilita.AMBITO_CREAZIONE_TES_AURA,
+            aura_creazione=None,
+        )
+        PersonaggioAbilita.objects.create(personaggio=self.pg, abilita=ab)
+        self.assertEqual(
+            self.pg.max_livello_creazione(
+                ambito=Abilita.AMBITO_CREAZIONE_TES_AURA, aura=self.aura_ama
+            ),
+            2,
+        )
+        self.assertEqual(
+            self.pg.max_livello_creazione(
+                ambito=Abilita.AMBITO_CREAZIONE_TES_AURA, aura=self.aura_asa
+            ),
+            0,
+        )

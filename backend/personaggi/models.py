@@ -7132,8 +7132,12 @@ class Personaggio(Inventario):
             sblocca_creazione_livello__isnull=False,
             ambito_creazione=ambito,
         )
-        if ambito == Abilita.AMBITO_CREAZIONE_TES_AURA and aura is not None:
-            qs = qs.filter(models.Q(aura_creazione_id=aura.id) | models.Q(aura_creazione_id__isnull=True))
+        if ambito == Abilita.AMBITO_CREAZIONE_TES_AURA:
+            # aura_creazione è obbligatoria per TES_AURA: niente match su NULL
+            # (altrimenti uno sblocco senza aura varrebbe per tutte le aure).
+            if aura is None:
+                return base
+            qs = qs.filter(aura_creazione_id=aura.id)
         for liv in qs.values_list("sblocca_creazione_livello", flat=True):
             try:
                 bonus = max(bonus, int(liv or 0))

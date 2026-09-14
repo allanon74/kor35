@@ -103,6 +103,7 @@ class Command(BaseCommand):
         self.stdout.write(f"UPDATE {ab.nome} → raddoppia_pa_da_equip=True")
         if not dry:
             ab.raddoppia_pa_da_equip = True
-            ab.save(update_fields=["raddoppia_pa_da_equip", "updated_at"])
+            # updated_at solo via _touch (un unico bump LWW).
+            ab.save(update_fields=["raddoppia_pa_da_equip"])
             self._touch(ab)
         return True

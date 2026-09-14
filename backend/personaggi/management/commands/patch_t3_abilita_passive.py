@@ -145,6 +145,8 @@ class Command(BaseCommand):
         if not dry:
             link.incremento = 1
             link.ogni_x = 1
+            # Figlio e genitore sono record diversi: ok aggiornare updated_at sul link
+            # e fare un solo _touch sul genitore Abilita (no doppio write sullo stesso pk).
             link.save(update_fields=["incremento", "ogni_x", "updated_at"])
             self._touch(ab)
         return True
