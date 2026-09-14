@@ -19,6 +19,7 @@ const EMPTY_ABILITA_FORM = {
     costo_pc: 0,
     costo_crediti: 0,
     is_tratto_aura: false,
+    camaleontica: false,
     nascondi_in_scheda_abilita: false,
     escluso_negozio_ufficiale: false,
     non_vendibile: false,
@@ -389,6 +390,26 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                                         onChange={e => setFormData({...formData, livello_riferimento: parseInt(e.target.value)})}
                                     />
                                 </div>
+                                {Number(formData.livello_riferimento) === 2 && (
+                                    <label className="flex items-center gap-2 cursor-pointer pt-1">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!formData.camaleontica}
+                                            onChange={(e) =>
+                                                setFormData({ ...formData, camaleontica: e.target.checked })
+                                            }
+                                        />
+                                        <span className="text-xs font-bold text-purple-300 uppercase">
+                                            Forma camaleontica
+                                        </span>
+                                    </label>
+                                )}
+                                {Number(formData.livello_riferimento) === 2 && (
+                                    <p className="text-[11px] text-gray-500">
+                                        Se attiva, ogni giorno usa gli effetti di un&apos;altra forma AIN (non camaleontica)
+                                        scelta in modo deterministico.
+                                    </p>
+                                )}
                             </div>
                         )}
                     </div>

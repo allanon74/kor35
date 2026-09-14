@@ -28,6 +28,8 @@ from .models import (
     SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI,
     SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO,
     SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI,
+    SLOT_EQUIP_CONTEGGIO_COG_OCCUPATI,
+    SLOT_EQUIP_CONTEGGIO_COG_VUOTI,
     Statistica,
     Tessitura,
     TessituraCostoAttivazione,
@@ -954,6 +956,35 @@ class AbilitaBonusSlotEquipTests(TestCase):
             ospitato_su=self.oggetto_ring,
         )
         # 1 mod melee + 1 materia ring
+        self.assertEqual(self._bonus(), 2.0)
+
+    def test_modalita_cog_occupati(self):
+        # Spada ha 1 MOD → consuma 1 slot COG; anello nudo no.
+        self._set_modalita(SLOT_EQUIP_CONTEGGIO_COG_OCCUPATI)
+        self.assertEqual(self._bonus(), 1.0)
+
+    def test_modalita_cog_vuoti(self):
+        cog, _ = Statistica.objects.get_or_create(
+            sigla="COG",
+            defaults={
+                "nome": "Capacità Oggetti",
+                "parametro": "COG",
+                "valore_base_predefinito": 3,
+            },
+        )
+        if not cog.parametro:
+            cog.parametro = "COG"
+            cog.save(update_fields=["parametro", "updated_at"])
+        PersonaggioStatisticaBase.objects.update_or_create(
+            personaggio=self.pg,
+            statistica=cog,
+            defaults={"valore_base": 3},
+        )
+        for attr in ("_punteggi_base_cache", "_modificatori_calcolati_cache"):
+            if hasattr(self.pg, attr):
+                delattr(self.pg, attr)
+        # 1 COG usata (spada modificata) → 2 vuoti
+        self._set_modalita(SLOT_EQUIP_CONTEGGIO_COG_VUOTI)
         self.assertEqual(self._bonus(), 2.0)
 
 

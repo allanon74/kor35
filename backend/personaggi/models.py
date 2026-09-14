@@ -2617,18 +2617,29 @@ PHYSICAL_EQUIP_SLOT_KEYS = (
 SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI = 'TUTTI_OGGETTI'
 SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO = 'OGNI_POTENZIAMENTO'
 SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI = 'OGGETTI_MODIFICATI'
+SLOT_EQUIP_CONTEGGIO_COG_OCCUPATI = 'COG_OCCUPATI'
+SLOT_EQUIP_CONTEGGIO_COG_VUOTI = 'COG_VUOTI'
 
 SLOT_EQUIP_CONTEGGIO_CHOICES = (
     (SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI, 'Tutti gli oggetti equipaggiati'),
     (SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO, 'Ogni Materia/Mod installata'),
     (SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI, 'Oggetti modificati (almeno 1 MAT/MOD)'),
+    (SLOT_EQUIP_CONTEGGIO_COG_OCCUPATI, 'Slot COG occupati'),
+    (SLOT_EQUIP_CONTEGGIO_COG_VUOTI, 'Slot COG vuoti'),
 )
 
 SLOT_EQUIP_CONTEGGIO_LABELS = {
     SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI: 'oggetti equipaggiati',
     SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO: 'MAT/MOD installati',
     SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI: 'oggetti modificati',
+    SLOT_EQUIP_CONTEGGIO_COG_OCCUPATI: 'slot COG occupati',
+    SLOT_EQUIP_CONTEGGIO_COG_VUOTI: 'slot COG vuoti',
 }
+
+_SLOT_EQUIP_CONTEGGIO_COG_MODES = frozenset({
+    SLOT_EQUIP_CONTEGGIO_COG_OCCUPATI,
+    SLOT_EQUIP_CONTEGGIO_COG_VUOTI,
+})
 
 
 def parse_slot_equip_ammessi(raw):
@@ -2684,27 +2695,85 @@ def conta_equipaggiamento_nei_slot(personaggio, slot_keys):
     }
 
 
+def stima_cog_max_senza_bonus_cog_slot(personaggio):
+    """
+    Stima COG max senza bonus che dipendono da COG_OCCUPATI/COG_VUOTI.
+    Usata dentro calcola_bonus_abilita_slot_equip per evitare ricorsione su
+    modificatori_calcolati / get_valore_statistica.
+    """
+    st = Statistica.objects.filter(sigla='COG').first()
+    if not st:
+        return 0
+    base = int(personaggio.punteggi_base.get(st.nome, 0) or 0)
+    add = 0.0
+    mol = 1.0
+
+    def _accumula(link):
+        nonlocal add, mol
+        if link.usa_bonus_slot_equip:
+            mode = link.modalita_conteggio_slot_equip or SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI
+            if mode in _SLOT_EQUIP_CONTEGGIO_COG_MODES:
+                return
+            # Altri conteggi slot su COG: non includere qui (evita ricorsione).
+            return
+        valore = float(link.valore or 0)
+        if link.tipo_modificatore == MODIFICATORE_ADDITIVO:
+            add += valore
+        elif link.tipo_modificatore == MODIFICATORE_MOLTIPLICATIVO and valore:
+            mol *= valore
+
+    for link in AbilitaStatistica.objects.filter(
+        abilita__personaggioabilita__personaggio=personaggio,
+        statistica=st,
+    ):
+        _accumula(link)
+
+    forma_oggi = None
+    getter = getattr(personaggio, 'get_forma_camaleonte_del_giorno', None)
+    if callable(getter):
+        forma_oggi = getter()
+    if forma_oggi:
+        for link in AbilitaStatistica.objects.filter(abilita=forma_oggi, statistica=st):
+            _accumula(link)
+
+    return int(round((base + add) * mol))
+
+
 def calcola_bonus_abilita_slot_equip(personaggio, stat_link):
-    """Bonus dinamico da AbilitaStatistica legato agli slot equipaggiati."""
+    """Bonus dinamico da AbilitaStatistica legato agli slot equipaggiati o alla COG."""
     if not stat_link.usa_bonus_slot_equip:
         return 0.0, ''
 
-    slots = parse_slot_equip_ammessi(stat_link.slot_equip_ammessi)
-    counts = conta_equipaggiamento_nei_slot(personaggio, slots)
-    bonus = 0.0
-    parts = []
-
     modalita = stat_link.modalita_conteggio_slot_equip or SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI
     per_unita = int(stat_link.valore_per_unita_slot_equip or 0)
-    count_key = {
-        SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI: 'oggetti',
-        SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO: 'potenziamenti',
-        SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI: 'oggetti_modificati',
-    }.get(modalita, 'oggetti')
-    n_units = counts.get(count_key, 0)
+    bonus = 0.0
+    parts = []
+    detail_prefix = ''
+
+    if modalita in _SLOT_EQUIP_CONTEGGIO_COG_MODES:
+        from personaggi.services import GestioneOggettiService
+
+        cog_used = int(GestioneOggettiService.calcola_cog_utilizzata(personaggio) or 0)
+        if modalita == SLOT_EQUIP_CONTEGGIO_COG_OCCUPATI:
+            n_units = cog_used
+        else:
+            cog_max = stima_cog_max_senza_bonus_cog_slot(personaggio)
+            n_units = max(0, cog_max - cog_used)
+        detail_prefix = 'COG'
+    else:
+        slots = parse_slot_equip_ammessi(stat_link.slot_equip_ammessi)
+        counts = conta_equipaggiamento_nei_slot(personaggio, slots)
+        count_key = {
+            SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI: 'oggetti',
+            SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO: 'potenziamenti',
+            SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI: 'oggetti_modificati',
+        }.get(modalita, 'oggetti')
+        n_units = counts.get(count_key, 0)
+        detail_prefix = f"equip. slot [{', '.join(slots) if slots else '—'}]"
+
     if per_unita and n_units:
         bonus += per_unita * n_units
-        label = SLOT_EQUIP_CONTEGGIO_LABELS.get(modalita, count_key)
+        label = SLOT_EQUIP_CONTEGGIO_LABELS.get(modalita, modalita)
         parts.append(f"{n_units} {label}")
 
     flat = float(stat_link.valore or 0)
@@ -2715,8 +2784,7 @@ def calcola_bonus_abilita_slot_equip(personaggio, stat_link):
     if not parts:
         return 0.0, ''
 
-    slot_label = ', '.join(slots) if slots else '—'
-    detail = f"equip. slot [{slot_label}]: " + ', '.join(parts)
+    detail = f"{detail_prefix}: " + ', '.join(parts)
     return bonus, detail
 
 

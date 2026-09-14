@@ -42,9 +42,14 @@ const AbilitaDetailModal = ({ skill, onClose }) => {
       TUTTI_OGGETTI: 'oggetto equipaggiato',
       OGNI_POTENZIAMENTO: 'MAT/MOD',
       OGGETTI_MODIFICATI: 'oggetto modificato',
+      COG_OCCUPATI: 'slot COG occupato',
+      COG_VUOTI: 'slot COG vuoto',
     };
     const parts = [`+${perUnit}/${modeLabels[mode] || 'unità'}`];
     if (link.valore) parts.push(`${link.valore > 0 ? '+' : ''}${link.valore} fisso`);
+    if (mode === 'COG_OCCUPATI' || mode === 'COG_VUOTI') {
+      return ` (${parts.join(', ')})`;
+    }
     return ` (${parts.join(', ')} negli slot: ${slots})`;
   };
 
