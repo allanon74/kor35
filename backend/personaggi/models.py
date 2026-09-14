@@ -2929,6 +2929,22 @@ class Abilita(A_modello):
         help_text="Se attivo, ogni +PA proveniente da oggetti/potenziamenti attivi viene aggiunto di nuovo "
         "(es. Uso Armatura Avanzata Extra).",
     )
+    immunita_scarica_chakra_esterna = models.BooleanField(
+        default=False,
+        verbose_name="Immunità scarica chakra esterna",
+        help_text="Se attivo, variazione staff/QR negativa su CHA non può ridurre il pool "
+        "(es. Chakra Avanzato Extra). Il consumo volontario del PG resta possibile.",
+    )
+    consente_pesanti_una_mano = models.BooleanField(
+        default=False,
+        verbose_name="Consente oggetti pesanti a una mano",
+        help_text="Es. Forza Straordinaria Avanzata II. Abilita regole dipendenti che richiedono questa capacità.",
+    )
+    permette_mix_materia_mod = models.BooleanField(
+        default=False,
+        verbose_name="Permette mix Materia+Mod",
+        help_text="Es. Macchinista 1: montare una Materia su host con Mod (e viceversa) anche oltre whitelist classe.",
+    )
     effetto_uso_risorsa = models.JSONField(
         null=True,
         blank=True,
@@ -3097,6 +3113,12 @@ class abilita_punteggio_dipendente(A_modello):
     )
     incremento = models.IntegerField(default=1)
     ogni_x = models.IntegerField(default=1)
+    richiede_pesanti_una_mano = models.BooleanField(
+        default=False,
+        verbose_name="Richiede pesanti a una mano",
+        help_text="Se attivo, la regola vale solo se il PG ha un'abilità con consente_pesanti_una_mano "
+        "(es. Cavaliere 1 → DaM da Robustezza solo con Forza Straordinaria II).",
+    )
 
     class Meta:
         unique_together = [["abilita", "punteggio_target", "punteggio_sorgente"]]
@@ -6551,35 +6573,47 @@ class Personaggio(Inventario):
             raise ValueError('Variazione non valida.')
         if delta == 0:
             raise ValueError('La variazione non può essere zero.')
-        stat = Statistica.objects.filter(sigla=sigla, is_risorsa_pool=True).first()
+        sigla_norm = (sigla or '').strip().upper()
+        if sigla_norm == 'CHK':
+            sigla_norm = 'CHA'
+        if delta < 0 and sigla_norm == 'CHA':
+            if self.abilita_possedute.filter(immunita_scarica_chakra_esterna=True).exists():
+                raise ValueError(
+                    'I chakra di questo personaggio non possono essere scaricati da fonti esterne '
+                    '(Chakra Avanzato Extra).'
+                )
+        stat = Statistica.objects.filter(sigla=sigla_norm, is_risorsa_pool=True).first()
+        if not stat:
+            # retry original sigla for non-CHK cases already normalized
+            stat = Statistica.objects.filter(sigla=sigla, is_risorsa_pool=True).first()
         if not stat:
             raise ValueError('Statistica non configurata come risorsa a pool.')
-        max_v = self.get_valore_massimo_risorsa_runtime(sigla)
+        max_v = self.get_valore_massimo_risorsa_runtime(stat.sigla)
         if max_v <= 0:
             raise ValueError('Pool non disponibile (massimo 0).')
-        cur = self.get_risorsa_corrente(sigla)
+        cur = self.get_risorsa_corrente(stat.sigla)
         nuovo = max(0, min(max_v, cur + delta))
         if nuovo == cur:
             raise ValueError(
                 'Impossibile applicare la variazione: il totale è già al minimo (0) o al massimo previsto da scheda.'
             )
         diff = nuovo - cur
-        self._set_risorsa_corrente(sigla, nuovo)
+        self._set_risorsa_corrente(stat.sigla, nuovo)
         self.save(update_fields=['risorse_consumabili'])
         who = getattr(staff_user, 'username', None) or getattr(staff_user, 'email', None) or 'staff'
         segno = f'+{diff}' if diff > 0 else str(diff)
-        desc = f'Regolazione staff {segno} pt. {stat.nome} ({sigla})'
+        desc = f'Regolazione staff {segno} pt. {stat.nome} ({stat.sigla})'
         if motivo:
             desc = f'{desc} — {motivo}'
         RisorsaStatisticaMovimento.objects.create(
             personaggio=self,
-            statistica_sigla=sigla,
+            statistica_sigla=stat.sigla,
             importo=diff,
             descrizione=desc[:240],
             tipo_movimento=RISORSA_MOV_STAFF,
         )
         self.aggiungi_log(f'{desc}. Totale: {nuovo}/{max_v} (operatore: {who}).')
-        self.sync_recuperi_automatici(only_sigla=sigla)
+        self.sync_recuperi_automatici(only_sigla=stat.sigla)
         if hasattr(self, '_modificatori_calcolati_cache'):
             delattr(self, '_modificatori_calcolati_cache')
         return nuovo
@@ -6717,9 +6751,15 @@ class Personaggio(Inventario):
             abilita_id__in=abilita_ids
         ).select_related("punteggio_target", "punteggio_sorgente")
 
+        ha_pesanti_una_mano = Abilita.objects.filter(
+            id__in=abilita_ids, consente_pesanti_una_mano=True
+        ).exists()
+
         regole = []
         for regola in regole_qs:
             if regola.ogni_x <= 0:
+                continue
+            if regola.richiede_pesanti_una_mano and not ha_pesanti_una_mano:
                 continue
             regole.append({
                 "id": regola.id,

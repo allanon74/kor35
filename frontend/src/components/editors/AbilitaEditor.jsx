@@ -27,6 +27,9 @@ const EMPTY_ABILITA_FORM = {
     escluso_negozio_ufficiale: false,
     non_vendibile: false,
     raddoppia_pa_da_equip: false,
+    immunita_scarica_chakra_esterna: false,
+    consente_pesanti_una_mano: false,
+    permette_mix_materia_mod: false,
     aura_riferimento: null,
     livello_riferimento: 0,
     tiers: [],
@@ -213,6 +216,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                     punteggio_sorgente: parseInt(p.punteggio_sorgente),
                     incremento: parseInt(p.incremento || 0),
                     ogni_x: Math.max(1, parseInt(p.ogni_x || 1)),
+                    richiede_pesanti_una_mano: !!p.richiede_pesanti_una_mano,
                 })),
                 prerequisiti: prerequisiti.map(p => ({...p, prerequisito: parseInt(p.prerequisito)})),
                 formula_rules: formulaRules.map((r) => ({
@@ -515,6 +519,51 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                             Ogni +PA da oggetti/potenziamenti attivi viene aggiunto di nuovo
                             (es. Uso Armatura Avanzata Extra).
                         </p>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={!!formData.immunita_scarica_chakra_esterna}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        immunita_scarica_chakra_esterna: e.target.checked,
+                                    })
+                                }
+                            />
+                            <span className="text-xs font-bold text-emerald-300 uppercase">
+                                Immunità scarica chakra esterna
+                            </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={!!formData.consente_pesanti_una_mano}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        consente_pesanti_una_mano: e.target.checked,
+                                    })
+                                }
+                            />
+                            <span className="text-xs font-bold text-emerald-300 uppercase">
+                                Consente pesanti a una mano
+                            </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={!!formData.permette_mix_materia_mod}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        permette_mix_materia_mod: e.target.checked,
+                                    })
+                                }
+                            />
+                            <span className="text-xs font-bold text-emerald-300 uppercase">
+                                Mix Materia + Mod (Macchinista)
+                            </span>
+                        </label>
                         <label className="flex items-center gap-2 cursor-pointer">
                             <input
                                 type="checkbox"
@@ -848,6 +897,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                                             incremento: 1,
                                             ogni_x: 1,
                                             punteggio_sorgente: null,
+                                            richiede_pesanti_una_mano: false,
                                         },
                                     ],
                                 })
@@ -927,6 +977,25 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                                 >
                                     X
                                 </button>
+                            </div>
+                            <div className="md:col-span-12">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={!!row.richiede_pesanti_una_mano}
+                                        onChange={(e) => {
+                                            const next = [...(formData.punteggi_dipendenti || [])];
+                                            next[idx] = {
+                                                ...next[idx],
+                                                richiede_pesanti_una_mano: e.target.checked,
+                                            };
+                                            setFormData({ ...formData, punteggi_dipendenti: next });
+                                        }}
+                                    />
+                                    <span className="text-[10px] uppercase text-amber-300 font-bold">
+                                        Solo se pesanti a una mano (Forza II / flag)
+                                    </span>
+                                </label>
                             </div>
                         </div>
                     ))}

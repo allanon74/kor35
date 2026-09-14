@@ -3848,7 +3848,7 @@ class AssemblyValidationView(APIView):
 
         # 1. Verifica Hardware (Compatibilità Fisica/Regole Classe)
         # Questo controllo verifica se l'oggetto "entra" fisicamente e rispetta la classe
-        is_hardware_ok, hw_msg = GestioneOggettiService.verifica_compatibilita_hardware(host, mod)
+        is_hardware_ok, hw_msg = GestioneOggettiService.verifica_compatibilita_hardware(host, mod, personaggio=pg)
 
         # 2. Verifica Competenze (Skill Personaggio)
         # Questo controllo verifica se il personaggio ha le capacità (Aura/Stats)
@@ -3968,7 +3968,7 @@ def post(self, request):
         mod = get_object_or_404(Oggetto, pk=mod_id)
 
         # 1. Verifica Hardware (Compatibilità Fisica/Regole Classe)
-        is_hardware_ok, hw_msg = GestioneOggettiService.verifica_compatibilita_hardware(host, mod)
+        is_hardware_ok, hw_msg = GestioneOggettiService.verifica_compatibilita_hardware(host, mod, personaggio=pg)
 
         # 2. Verifica Competenze (Skill Personaggio)
         # Nota: questo controllo include anche l'hardware internamente, ma lo separiamo per chiarezza UI

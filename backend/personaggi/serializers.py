@@ -5152,7 +5152,7 @@ class AbilitaPunteggioEditorSerializer(serializers.ModelSerializer):
 class AbilitaPunteggioDipendenteEditorSerializer(serializers.ModelSerializer):
     class Meta:
         model = abilita_punteggio_dipendente
-        fields = ['punteggio_target', 'incremento', 'ogni_x', 'punteggio_sorgente']
+        fields = ['punteggio_target', 'incremento', 'ogni_x', 'punteggio_sorgente', 'richiede_pesanti_una_mano']
         read_only_fields = ['abilita']
 
 class AbilitaPrerequisitoEditorSerializer(serializers.ModelSerializer):
