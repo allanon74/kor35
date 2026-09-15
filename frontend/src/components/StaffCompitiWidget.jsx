@@ -55,7 +55,13 @@ export function useMieiStaffCompiti(onLogout, { enabled = true } = {}) {
   }, [refresh]);
 
   const aperti = useMemo(
-    () => items.filter((c) => c.attivo && !c.mia_assegnazione?.completato_at),
+    () =>
+      items.filter((c) => {
+        if (c.automatico || String(c.id || '').startsWith('auto:')) {
+          return c.attivo && (c.conteggio || 0) > 0 && !!c.mia_assegnazione;
+        }
+        return c.attivo && !c.mia_assegnazione?.completato_at;
+      }),
     [items],
   );
 
@@ -124,34 +130,40 @@ export default function StaffCompitiWidget({ onLogout, compact = false }) {
       </div>
       <ul className="space-y-2">
         {aperti.map((c) => {
-          const overdue = isOverdue(c.scadenza, c.mia_assegnazione?.completato_at);
+          const auto = !!c.automatico || String(c.id || '').startsWith('auto:');
+          const overdue = !auto && isOverdue(c.scadenza, c.mia_assegnazione?.completato_at);
           return (
             <li
               key={c.id}
               className={`rounded-lg border p-2.5 ${
-                overdue
-                  ? 'border-red-800 bg-red-950/40'
-                  : 'border-sky-900/80 bg-gray-900/50'
+                auto
+                  ? 'border-amber-800/70 bg-amber-950/30'
+                  : overdue
+                    ? 'border-red-800 bg-red-950/40'
+                    : 'border-sky-900/80 bg-gray-900/50'
               }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-semibold text-white text-sm truncate">{c.titolo}</div>
-                  <div className={`text-[11px] mt-0.5 ${overdue ? 'text-red-300 font-bold' : 'text-sky-300'}`}>
-                    {formatScadenza(c.scadenza)}
-                    {overdue ? ' · in ritardo' : ''}
+                  <div className={`text-[11px] mt-0.5 ${overdue ? 'text-red-300 font-bold' : auto ? 'text-amber-300' : 'text-sky-300'}`}>
+                    {auto
+                      ? 'Compito automatico'
+                      : `${formatScadenza(c.scadenza)}${overdue ? ' · in ritardo' : ''}`}
                   </div>
                   {c.descrizione ? (
                     <p className="text-xs text-gray-400 mt-1 line-clamp-3 whitespace-pre-wrap">{c.descrizione}</p>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => completa(c.id, false)}
-                  className="inline-flex items-center gap-1 rounded-md bg-emerald-800 hover:bg-emerald-700 px-2 py-1 text-[11px] font-bold text-emerald-50 shrink-0"
-                >
-                  <Check size={12} /> Fatto
-                </button>
+                {!auto ? (
+                  <button
+                    type="button"
+                    onClick={() => completa(c.id, false)}
+                    className="inline-flex items-center gap-1 rounded-md bg-emerald-800 hover:bg-emerald-700 px-2 py-1 text-[11px] font-bold text-emerald-50 shrink-0"
+                  >
+                    <Check size={12} /> Fatto
+                  </button>
+                ) : null}
               </div>
             </li>
           );

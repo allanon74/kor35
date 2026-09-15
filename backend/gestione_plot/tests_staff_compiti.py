@@ -164,3 +164,185 @@ class StaffCompitiApiTests(APITestCase):
         self.assertTrue(str(resp.data["path"]).endswith(str(resp.data["token"])))
         self.assertTrue(resp.data["include_compiti"])
         self.assertIn("calendario.ics", resp.data["path"])
+
+
+class StaffCompitiAutomaticiApiTests(APITestCase):
+    def setUp(self):
+        from decimal import Decimal
+
+        from personaggi.models import (
+            AURA,
+            Personaggio,
+            PropostaTecnica,
+            Punteggio,
+            STATO_PROPOSTA_IN_VALUTAZIONE,
+            TipologiaPersonaggio,
+            TIPO_PROPOSTA_TESSITURA,
+        )
+
+        self.campagna = Campagna.objects.create(slug="compiti-auto", nome="Compiti Auto", attiva=True)
+        self.master = User.objects.create_user(username="master_auto", password="x")
+        self.staffer = User.objects.create_user(username="staff_auto", password="x")
+        self.helper = User.objects.create_user(username="helper_auto", password="x")
+        self.player = User.objects.create_user(username="player_auto", password="x")
+
+        for user, ruolo in (
+            (self.master, CAMPAGNA_ROLE_MASTER),
+            (self.staffer, CAMPAGNA_ROLE_STAFFER),
+            (self.helper, CAMPAGNA_ROLE_HELPER),
+            (self.player, CAMPAGNA_ROLE_PLAYER),
+        ):
+            CampagnaUtente.objects.create(campagna=self.campagna, user=user, ruolo=ruolo, attivo=True)
+
+        tipologia = TipologiaPersonaggio.objects.create(
+            nome="Std auto test",
+            crediti_iniziali=Decimal("1000"),
+            caratteristiche_iniziali=10,
+        )
+        pg = Personaggio.objects.create(
+            nome="Proponente",
+            proprietario=self.player,
+            tipologia=tipologia,
+            campagna=self.campagna,
+        )
+        aura = Punteggio.objects.create(nome="Aura Auto", sigla="AAU", tipo=AURA)
+        self.proposta = PropostaTecnica.objects.create(
+            personaggio=pg,
+            tipo=TIPO_PROPOSTA_TESSITURA,
+            stato=STATO_PROPOSTA_IN_VALUTAZIONE,
+            nome="Tessitura proposta",
+            descrizione="da verificare",
+            aura=aura,
+        )
+
+    def _auth(self, user, method, url, data=None):
+        self.client.force_authenticate(user=user)
+        return getattr(self.client, method)(
+            url,
+            data,
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+
+    def test_master_configura_e_vede_task_automatica(self):
+        from gestione_plot.models import COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES
+
+        resp = self._auth(
+            self.master,
+            "put",
+            "/api/plot/api/calendario-compiti/automatici/",
+            {
+                "items": [
+                    {
+                        "codice": COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES,
+                        "assegnatari": [self.master.id],
+                        "attivo": True,
+                    }
+                ]
+            },
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        tes = next(
+            (r for r in resp.data["items"] if r["codice"] == COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES),
+            None,
+        )
+        self.assertIsNotNone(tes)
+        self.assertEqual(tes["conteggio"], 1)
+        self.assertEqual([a["id"] for a in tes["assegnatari"]], [self.master.id])
+
+        lista = self._auth(self.master, "get", "/api/plot/api/calendario-compiti/")
+        self.assertEqual(lista.status_code, status.HTTP_200_OK)
+        self.assertTrue(lista.data[0]["automatico"])
+        self.assertEqual(lista.data[0]["titolo"], "Verifica tessiture: 1")
+        self.assertTrue(str(lista.data[0]["id"]).startswith("auto:"))
+
+    def test_assegnatario_vede_in_miei_non_assegnato_no(self):
+        from gestione_plot.models import (
+            COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES,
+            StaffCompitoAutomatico,
+            StaffCompitoAutomaticoAssegnazione,
+        )
+
+        config, _ = StaffCompitoAutomatico.objects.get_or_create(
+            campagna=self.campagna,
+            codice=COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES,
+            defaults={"attivo": True},
+        )
+        StaffCompitoAutomaticoAssegnazione.objects.create(config=config, user=self.staffer)
+
+        miei_staff = self._auth(self.staffer, "get", "/api/plot/api/calendario-compiti/miei/")
+        self.assertEqual(miei_staff.status_code, status.HTTP_200_OK)
+        auto = [r for r in miei_staff.data if r.get("automatico")]
+        self.assertEqual(len(auto), 1)
+        self.assertEqual(auto[0]["titolo"], "Verifica tessiture: 1")
+
+        miei_master = self._auth(self.master, "get", "/api/plot/api/calendario-compiti/miei/")
+        self.assertEqual(miei_master.status_code, status.HTTP_200_OK)
+        self.assertEqual([r for r in miei_master.data if r.get("automatico")], [])
+
+    def test_senza_proposte_non_appare(self):
+        from gestione_plot.models import (
+            COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES,
+            StaffCompitoAutomatico,
+            StaffCompitoAutomaticoAssegnazione,
+        )
+        from personaggi.models import STATO_PROPOSTA_APPROVATA
+
+        config, _ = StaffCompitoAutomatico.objects.get_or_create(
+            campagna=self.campagna,
+            codice=COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES,
+            defaults={"attivo": True},
+        )
+        StaffCompitoAutomaticoAssegnazione.objects.create(config=config, user=self.master)
+        self.proposta.stato = STATO_PROPOSTA_APPROVATA
+        self.proposta.save(update_fields=["stato", "updated_at"])
+
+        lista = self._auth(self.master, "get", "/api/plot/api/calendario-compiti/")
+        self.assertEqual(lista.status_code, status.HTTP_200_OK)
+        self.assertEqual([r for r in lista.data if r.get("automatico")], [])
+
+    def test_staffer_non_puo_configurare(self):
+        from gestione_plot.models import COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES
+
+        resp = self._auth(
+            self.staffer,
+            "put",
+            "/api/plot/api/calendario-compiti/automatici/",
+            {
+                "items": [
+                    {
+                        "codice": COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES,
+                        "assegnatari": [self.staffer.id],
+                    }
+                ]
+            },
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_automatico_prima_dei_manuali(self):
+        from gestione_plot.models import (
+            COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES,
+            StaffCompito,
+            StaffCompitoAssegnazione,
+            StaffCompitoAutomatico,
+            StaffCompitoAutomaticoAssegnazione,
+        )
+
+        config, _ = StaffCompitoAutomatico.objects.get_or_create(
+            campagna=self.campagna,
+            codice=COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES,
+            defaults={"attivo": True},
+        )
+        StaffCompitoAutomaticoAssegnazione.objects.create(config=config, user=self.master)
+        compito = StaffCompito.objects.create(
+            campagna=self.campagna,
+            titolo="Manuale",
+            scadenza=timezone.now() + timedelta(hours=1),
+            creato_da=self.master,
+        )
+        StaffCompitoAssegnazione.objects.create(compito=compito, user=self.master)
+
+        lista = self._auth(self.master, "get", "/api/plot/api/calendario-compiti/")
+        self.assertEqual(lista.status_code, status.HTTP_200_OK)
+        self.assertTrue(lista.data[0]["automatico"])
+        self.assertEqual(lista.data[1]["titolo"], "Manuale")

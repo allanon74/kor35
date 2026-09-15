@@ -4130,6 +4130,15 @@ export const rigeneraStaffCompitiFeedToken = (onLogout) =>
         body: JSON.stringify({}),
     }, onLogout);
 
+export const getStaffCompitiAutomatici = (onLogout) =>
+    fetchAuthenticated(`${CALENDARIO_COMPITI}/automatici/`, { method: 'GET' }, onLogout);
+
+export const updateStaffCompitiAutomatici = (items, onLogout) =>
+    fetchAuthenticated(`${CALENDARIO_COMPITI}/automatici/`, {
+        method: 'PUT',
+        body: JSON.stringify({ items }),
+    }, onLogout);
+
 const NOTIFICHE_API = '/api/personaggi/api/notifiche';
 
 export const getNotificaPreferenze = (onLogout) =>
