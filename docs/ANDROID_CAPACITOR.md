@@ -84,7 +84,7 @@ make android-open
 
 ### WSL + Android Studio su Windows (consigliato)
 
-**Path UNICO — non cambiarlo:**
+**PATH BLOCCATO — unica cartella, non cambiarla:**
 
 ```text
 C:\dev\kor35-app\android
@@ -95,11 +95,12 @@ make android-sync WIN=1
 make android-path   # stampa C:\dev\kor35-app\android
 ```
 
-- Default: `C:/dev/kor35-app` (root) + sottocartella `android/` da aprire in Studio.
-- Capacitor richiede anche `C:/dev/kor35-app/node_modules/@capacitor/...` (sibling).
-- **Non** usare `C:\dev\kor35-android` (legacy, layout rotto → errori Gradle `capacitor-status-bar`).
+- Sync verso `C:/dev/kor35-app/android` = **root Gradle** (`settings.gradle`, `gradlew.bat`, `app/`, `capacitor-plugins/`).
+- I plugin Capacitor sono **vendored** in `capacitor-plugins/` (niente sibling `node_modules`).
+- **Non** aprire `C:\dev\kor35-android`, né il parent `C:\dev\kor35-app` (Studio: «no configuration»).
 - **Non** aprire `\\wsl.localhost\...`.
-- Override solo se necessario: `WIN_ANDROID_DIR='D:/altro'` (slash avanti).
+- Override contenitore solo se necessario: `WIN_ANDROID_DIR='D:/altro'` → Studio resta `D:/altro/android`.
+- Se Studio dice «no configuration»: cartella sbagliata (manca `settings.gradle`).
 
 Questo clone **pinna AGP 8.10.1** (Android Studio Ladybug/Meerkat). Capacitor 8 a monte chiede 8.13.0 / Studio Otter: `make android-sync` riscrive i `build.gradle` in `node_modules/@capacitor` così Studio non rifiuta il sync.
 
@@ -163,6 +164,17 @@ Cause tipiche:
 Fix: niente `click_action` custom in FCM v1 + handler che apre Messaggi per ogni tap + intent-filter compat `OPEN_KOR35_PUSH`.
 
 Serve **deploy backend** (payload FCM) + **deploy frontend** (handler) + **nuovo APK** (intent-filter).
+
+### Gradle: `No variants` / `:capacitor-status-bar` / «no configuration»
+
+Causa tipica: Android Studio apre una cartella senza `settings.gradle`/`gradlew`, oppure un sync
+vecchio che punta a `../node_modules` assente.
+
+1. Da WSL (repo aggiornato su questo branch): `make android-sync WIN=1`
+2. Chiudi tutti i progetti Android Studio vecchi.
+3. **File → Open** solo `C:\dev\kor35-app\android` (deve avere `gradlew.bat` + `capacitor-plugins\`).
+4. Non aprire `C:\dev\kor35-app` (parent) né `C:\dev\kor35-android`.
+5. Verifica file: `C:\dev\kor35-app\android\capacitor-plugins\capacitor-status-bar\build.gradle`
 
 ## Chiamate in arrivo (shell Android)
 

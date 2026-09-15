@@ -18,7 +18,7 @@ KOR35 resta **PWA/webapp-first**:
 
 | Pezzo | Path |
 |---|---|
-| Config Capacitor | `frontend/capacitor.config.jsonon` |
+| Config Capacitor | `frontend/capacitor.config.json` |
 | Progetto Android | `frontend/android/` |
 | Detection shell | `frontend/src/lib/nativePlatform.js` |
 | Push FCM | `frontend/src/lib/nativePush.js` + `devicePush.js` |
@@ -37,7 +37,8 @@ KOR35 resta **PWA/webapp-first**:
 5. **Chiamate vocali**: WebRTC resta in React; nativo = keep-alive / notifica full-screen / foreground service — non un secondo stack audio parallelo senza bridge.
 6. **Build**: `make android-sync` (host con Node). Da WSL + Android Studio su Windows:
    `make android-sync WIN=1` → apri **sempre** `C:\dev\kor35-app\android`
-   (non `C:\dev\kor35-android`, non `\\wsl.localhost\...`).
+   (**path bloccato**; self-contained con `capacitor-plugins/`; non `C:\dev\kor35-android`,
+   non il parent `C:\dev\kor35-app`, non `\\wsl.localhost\...`).
    Stack Docker continua a servire la PWA; l’APK è un canale aggiuntivo.
 
 ## Cosa non fare

@@ -35,8 +35,8 @@ help:
 	@echo "  make env ENV=dev-home        # crea/attiva backend/.env.<env>"
 	@echo "  make setup                   # prepara runtime + build frontend"
 	@echo "  make android-sync            # build React + Capacitor sync Android"
-	@echo "  make android-sync WIN=1      # sync + copia su C:/dev/kor35-app (apri C:\\dev\\kor35-app\\android)"
-	@echo "  make android-path            # stampa il path UNICO da aprire in Android Studio"
+	@echo "  make android-sync WIN=1      # sync + copia; apri SOLO C:\\dev\\kor35-app\\android"
+	@echo "  make android-path            # stampa il path UNICO (bloccato) per Android Studio"
 	@echo "  make android-open WIN=1      # ricorda il path Windows da aprire"
 	@echo "  make up                      # avvia stack (con build + collectstatic)"
 	@echo "  make up-no-build             # avvio senza rebuild immagini (obbligatorio mirror offline/evento)"
@@ -448,19 +448,20 @@ prod-turn-prepare:
 # Richiede Node sul host (non nel container) e Android Studio per build APK.
 # CAPACITOR_SERVER_URL opzionale (default https://www.kor35.it).
 #
-# PATH WINDOWS UNICO (WSL → Android Studio):
+# PATH WINDOWS BLOCCATO (non cambiare senza richiesta esplicita utente):
 #   make android-sync WIN=1
-#   Apri SEMPRE: C:\dev\kor35-app\android
-# Non usare C:\dev\kor35-android (legacy/rotto).
+#   Apri SEMPRE e SOLO: C:\dev\kor35-app\android
+# Contiene root Gradle self-contained (capacitor-plugins vendored).
+# Non usare C:\dev\kor35-android né C:\dev\kor35-app (parent).
 WIN ?= 0
-# Override solo se necessario. Slash avanti obbligatori.
+# Contenitore sync. La cartella Studio è sempre $(WIN_ANDROID_DIR)/android
 WIN_ANDROID_DIR ?= C:/dev/kor35-app
 
 android-sync:
 	cd frontend && (npm ci || npm install) && npm run cap:sync
 	./scripts/pin_android_agp.sh
 	@if [ "$(WIN)" = "1" ]; then \
-		echo "WIN=1 → sync Windows su $(WIN_ANDROID_DIR) (apri $(WIN_ANDROID_DIR)/android)"; \
+		echo "WIN=1 → sync Windows; apri $(WIN_ANDROID_DIR)/android"; \
 		WIN_ANDROID_DIR="$(WIN_ANDROID_DIR)" ./scripts/android_sync_to_windows.sh; \
 	else \
 		echo "Da WSL + Android Studio Windows: make android-sync WIN=1"; \
@@ -471,11 +472,10 @@ android-open:
 	@if [ "$(WIN)" = "1" ]; then \
 		echo ""; \
 		echo "=============================================="; \
-		echo " Apri in Android Studio SOLO:"; \
+		echo " PATH UNICO (bloccato) — apri SOLO:"; \
 		echo "   C:\\dev\\kor35-app\\android"; \
-		echo " (equiv. $(WIN_ANDROID_DIR)/android)"; \
 		echo "=============================================="; \
-		echo "NON aprire C:\\dev\\kor35-android"; \
+		echo "NON aprire C:\\dev\\kor35-android né C:\\dev\\kor35-app (parent)"; \
 	else \
 		cd frontend && npx cap open android; \
 	fi

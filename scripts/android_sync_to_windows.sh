@@ -1,47 +1,61 @@
 #!/usr/bin/env bash
-# Copia il progetto Android + dipendenze Capacitor su disco Windows nativo.
+# Copia il progetto Android (self-contained, plugin vendored) su disco Windows.
 #
-# UNICO PATH CANONICO (non usarne altri):
-#   C:/dev/kor35-app/android          ← apri QUESTA in Android Studio
-#   C:/dev/kor35-app/node_modules/... ← sibling obbligatorio (Capacitor)
+# =============================================================================
+# PATH BLOCCATO — NON CAMBIARE SENZA RICHIESTA ESPLICITA DELL'UTENTE
+# =============================================================================
+# Unica cartella da aprire in Android Studio:
+#   C:\dev\kor35-app\android
+#
+# Layout:
+#   C:/dev/kor35-app/          ← destinazione sync (contenitore)
+#   C:/dev/kor35-app/android/  ← root Gradle (settings.gradle, gradlew, …)
+#
+# I plugin Capacitor sono dentro android/capacitor-plugins/ (niente node_modules).
+# =============================================================================
 #
 # Uso (WSL, root monorepo):
 #   make android-sync WIN=1
-#   # oppure:
-#   ./scripts/android_sync_to_windows.sh
 #
-# NON usare C:/dev/kor35-android (layout legacy/rotto).
-# Preferisci slash avanti (C:/...). I backslash in Make/bash si corrompono.
+# NON usare C:/dev/kor35-android.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_ANDROID="${ROOT}/frontend/android"
-SRC_NM="${ROOT}/frontend/node_modules"
 
-# Path fisso: override solo se sai cosa fai.
+# Contenitore Windows (override solo se necessario). La cartella Studio è SEMPRE …/android
 CANONICAL_ROOT="C:/dev/kor35-app"
+CANONICAL_OPEN="${CANONICAL_ROOT}/android"
 RAW_ROOT="${WIN_ANDROID_DIR:-$CANONICAL_ROOT}"
 
-# Normalizza alias legacy → canonico
 case "${RAW_ROOT}" in
   C:/dev/kor35-android|C:\\dev\\kor35-android|c:/dev/kor35-android|c:\\dev\\kor35-android)
-    echo "WARN: ${RAW_ROOT} è il path legacy. Uso il canonico ${CANONICAL_ROOT}" >&2
+    echo "WARN: ${RAW_ROOT} è legacy. Uso ${CANONICAL_ROOT}" >&2
+    RAW_ROOT="${CANONICAL_ROOT}"
+    ;;
+  */android|*/android/)
+    # Se qualcuno passa già …/android come WIN_ANDROID_DIR, usa il parent
+    echo "WARN: WIN_ANDROID_DIR non deve includere /android. Uso parent → ${CANONICAL_ROOT}" >&2
     RAW_ROOT="${CANONICAL_ROOT}"
     ;;
 esac
 
+OPEN_PATH="${RAW_ROOT%/}/android"
+
 echo "=== android_sync_to_windows ==="
-echo "Sorgente android: ${SRC_ANDROID}"
-echo "Root Windows:     ${RAW_ROOT}"
-echo "Apri in Studio:   ${RAW_ROOT}/android"
+echo "Sorgente:       ${SRC_ANDROID}"
+echo "Destinazione:   ${OPEN_PATH}"
+echo "Apri in Studio: ${OPEN_PATH}"
+echo "(path bloccato: ${CANONICAL_OPEN})"
 
 if [[ ! -d "${SRC_ANDROID}" ]]; then
   echo "ERRORE: manca ${SRC_ANDROID}. Esegui prima: make android-sync" >&2
   exit 1
 fi
-if [[ ! -d "${SRC_NM}/@capacitor/android" ]]; then
-  echo "ERRORE: manca ${SRC_NM}/@capacitor/android. Esegui: cd frontend && npm ci" >&2
+if [[ ! -f "${SRC_ANDROID}/capacitor-plugins/capacitor-status-bar/build.gradle" ]]; then
+  echo "ERRORE: plugin non vendored. Esegui: make android-sync" >&2
+  echo "Atteso: frontend/android/capacitor-plugins/capacitor-status-bar/build.gradle" >&2
   exit 1
 fi
 # I moduli Capacitor dichiarano AGP 8.13.0; pin prima della copia Windows.
@@ -105,46 +119,29 @@ robo() {
   fi
 }
 
-ROOT_WIN="$(to_win "${RAW_ROOT}")"
-ROOT_WIN="${ROOT_WIN%\\}"
+OPEN_WIN="$(to_win "${OPEN_PATH}")"
+OPEN_WIN="${OPEN_WIN%\\}"
 
-# 1) progetto android
-robo "${SRC_ANDROID}" "${ROOT_WIN}\\android"
+# Copia progetto Android → C:/dev/kor35-app/android (self-contained)
+robo "${SRC_ANDROID}" "${OPEN_WIN}"
 
-# 2) pacchetti Capacitor richiesti da capacitor.settings.gradle
-CAPS=(android app push-notifications status-bar core)
-MISSING=0
-for pkg in "${CAPS[@]}"; do
-  if [[ -d "${SRC_NM}/@capacitor/${pkg}" ]]; then
-    robo "${SRC_NM}/@capacitor/${pkg}" "${ROOT_WIN}\\node_modules\\@capacitor\\${pkg}"
-  else
-    echo "ERRORE: manca @capacitor/${pkg} in node_modules (npm ci / cap sync)." >&2
-    MISSING=1
-  fi
-done
-if [[ "${MISSING}" -ne 0 ]]; then
-  exit 1
+if [[ "${OPEN_PATH}" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
+  drive="${BASH_REMATCH[1],,}"
+  rest="${BASH_REMATCH[2]//\\//}"
+  linux_path="/mnt/${drive}/${rest}"
+else
+  linux_path=""
 fi
 
-# 3) verifica post-copia (evita "No variants exist" in Studio)
-verify_linux_path() {
-  local drive rest linux_path
-  if [[ "${RAW_ROOT}" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
-    drive="${BASH_REMATCH[1],,}"
-    rest="${BASH_REMATCH[2]//\\//}"
-    linux_path="/mnt/${drive}/${rest}"
-  else
-    echo "WARN: impossibile verificare path Linux per ${RAW_ROOT}" >&2
-    return 0
-  fi
-  local fail=0
-  local f
+if [[ -n "${linux_path}" ]]; then
+  fail=0
   for f in \
-    "${linux_path}/android/capacitor.settings.gradle" \
-    "${linux_path}/node_modules/@capacitor/status-bar/android/build.gradle" \
-    "${linux_path}/node_modules/@capacitor/push-notifications/android/build.gradle" \
-    "${linux_path}/node_modules/@capacitor/app/android/build.gradle" \
-    "${linux_path}/node_modules/@capacitor/android/capacitor/build.gradle"
+    "${linux_path}/settings.gradle" \
+    "${linux_path}/gradlew.bat" \
+    "${linux_path}/capacitor.settings.gradle" \
+    "${linux_path}/capacitor-plugins/capacitor-status-bar/build.gradle" \
+    "${linux_path}/capacitor-plugins/capacitor-android/build.gradle" \
+    "${linux_path}/app/build.gradle"
   do
     if [[ ! -f "${f}" ]]; then
       echo "ERRORE: manca dopo sync: ${f}" >&2
@@ -152,30 +149,45 @@ verify_linux_path() {
     fi
   done
   if [[ "${fail}" -ne 0 ]]; then
-    echo "Sync incompleto: non aprire Android Studio finché non è OK." >&2
     exit 1
   fi
-  # Hint in chiaro sul disco Windows
+
+  if grep -q 'node_modules' "${linux_path}/capacitor.settings.gradle"; then
+    echo "ERRORE: capacitor.settings.gradle punta ancora a node_modules." >&2
+    echo "Rilancia make android-sync (deve eseguire vendor-capacitor-android-plugins)." >&2
+    exit 1
+  fi
+
+  # Hint anche nel contenitore parent (se qualcuno apre la cartella sbagliata)
+  parent_linux="$(dirname "${linux_path}")"
+  cat > "${parent_linux}/NON_APRIRE_QUI.txt" <<EOF
+NON aprire questa cartella in Android Studio.
+
+Apri SOLO:
+  ${OPEN_PATH}
+
+(equivalente: $(echo "${OPEN_PATH}" | sed 's|/|\\|g'))
+EOF
+
   cat > "${linux_path}/APRI_IN_ANDROID_STUDIO.txt" <<EOF
-Apri in Android Studio SOLO questa cartella:
+PATH BLOCCATO — unica cartella da aprire in Android Studio:
 
-  ${RAW_ROOT}/android
+  ${OPEN_PATH}
 
-(equivalente Windows: $(echo "${RAW_ROOT}" | sed 's|/|\\|g')\\android)
+(equivalente: $(echo "${OPEN_PATH}" | sed 's|/|\\|g'))
+
+Deve contenere: settings.gradle, gradlew.bat, app/, capacitor-plugins/
 
 NON aprire:
   - C:\\dev\\kor35-android
+  - C:\\dev\\kor35-app          (parent: niente Gradle root)
   - \\\\wsl.localhost\\...
-  - la cartella parent senza \\android
 EOF
-}
-
-verify_linux_path
+fi
 
 echo
 echo "=============================================="
-echo " OK — path UNICO da usare da ora in poi:"
-echo "   ${ROOT_WIN}\\android"
+echo " OK — PATH UNICO (bloccato):"
+echo "   ${OPEN_WIN}"
 echo " Comando: make android-sync WIN=1"
 echo "=============================================="
-echo "Ignora C:\\dev\\kor35-android (legacy)."
