@@ -82,7 +82,34 @@ make android-sync
 make android-open
 ```
 
-### WSL + Android Studio su Windows (consigliato)
+### APK senza Android Studio (consigliato)
+
+Un solo comando, una sola copia del progetto (`frontend/android` nel repo):
+
+```bash
+make android-apk              # debug
+make android-apk RELEASE=1    # release non firmata
+```
+
+Cosa fa: installa l'SDK in `~/android-sdk` se manca, esegue `cap sync` + vendor
+plugin, poi `gradlew assembleDebug`. In WSL copia l'APK in `C:\dev\kor35-apk\`
+(override con `ANDROID_APK_WIN_DIR`).
+
+Installazione sul telefono (da PowerShell, telefono in USB debug):
+
+```powershell
+adb install -r C:\dev\kor35-apk\kor35-debug.apk
+```
+
+Oppure copia l'APK sul telefono e aprilo.
+
+Questo evita il problema tipico del flusso con Studio: **due copie** su disco
+Windows (`C:\dev\kor35-app` e `C:\dev\kor35-app\android`) e Studio ancorato a
+quella sbagliata. Indizio nei log di Studio: il path in
+`file:///C:/dev/kor35-app/build/reports/...` (senza `/android/`) indica che sta
+compilando il parent, quindi **non** vede le modifiche sincronizzate.
+
+### WSL + Android Studio su Windows (alternativa)
 
 **PATH BLOCCATO — unica cartella, non cambiarla:**
 
