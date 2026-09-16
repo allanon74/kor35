@@ -103,6 +103,12 @@ if ! JDK_HOME="$(detect_jdk_home)"; then
   fi
 fi
 
+if [[ ! -x "${JDK_HOME}/bin/javac" ]]; then
+  echo "ERRORE: ${JDK_HOME} non contiene bin/javac (installazione JDK incompleta)." >&2
+  echo "  sudo apt install --reinstall -y ${APT_JDK_PACKAGE}" >&2
+  exit 1
+fi
+
 export JAVA_HOME="${JDK_HOME}"
 export PATH="${JAVA_HOME}/bin:${PATH}"
 echo "JDK      : ${JAVA_HOME} ($("${JAVA_HOME}/bin/javac" -version 2>&1))"
@@ -148,8 +154,43 @@ echo
 echo "--- gradle ${GRADLE_TASK} ---"
 cd "${ANDROID_DIR}"
 chmod +x gradlew
-# -Dorg.gradle.java.home: evita che un JRE registrato come toolchain vinca sul JDK.
-./gradlew "${GRADLE_TASK}" "-Dorg.gradle.java.home=${JAVA_HOME}"
+
+# AGP chiede una *toolchain* Java: se un demone Gradle è stato avviato con un JRE
+# (o con una detection cached) resta convinto che il JDK non abbia il compilatore
+# → "does not provide the required capabilities: [JAVA_COMPILER]".
+# Demone fermato + installazione dichiarata esplicitamente = detection pulita.
+./gradlew --stop >/dev/null 2>&1 || true
+
+GRADLE_LOG="$(mktemp)"
+trap 'rm -f "${GRADLE_LOG}"' EXIT
+
+run_gradle() {
+  set +e
+  ./gradlew "${GRADLE_TASK}" \
+    "-Dorg.gradle.java.home=${JAVA_HOME}" \
+    "-Porg.gradle.java.installations.paths=${JAVA_HOME}" \
+    "-Dorg.gradle.java.installations.paths=${JAVA_HOME}" \
+    "-Dorg.gradle.java.installations.auto-detect=false" \
+    "-Dorg.gradle.java.installations.auto-download=false" 2>&1 | tee "${GRADLE_LOG}"
+  local rc=${PIPESTATUS[0]}
+  set -e
+  return "${rc}"
+}
+
+if ! run_gradle; then
+  # Gradle memorizza le capability dei JVM in ~/.gradle/caches/<ver>/jvms:
+  # una voce stantia (rilevata quando c'era solo il JRE) sopravvive ai riavvii
+  # del demone. Ripulisci e riprova una volta.
+  if grep -q 'JAVA_COMPILER' "${GRADLE_LOG}"; then
+    echo
+    echo "Cache JVM di Gradle non valida per ${JAVA_HOME}: la ripulisco e riprovo…"
+    ./gradlew --stop >/dev/null 2>&1 || true
+    rm -rf "${HOME}"/.gradle/caches/*/jvms
+    run_gradle
+  else
+    exit 1
+  fi
+fi
 
 APK_PATH="${ANDROID_DIR}/${APK_REL}"
 if [[ ! -f "${APK_PATH}" ]]; then
