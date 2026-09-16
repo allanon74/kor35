@@ -216,6 +216,17 @@ Dopo il fix: `make android-sync WIN=1` → rebuild/install APK → apri
 Il JS `setupNativeChrome` azzera `--kor-safe-top` su Android per non **raddoppiare**
 il padding già applicato nativamente.
 
+#### Banda bianca sotto la status bar
+
+L'area del padding mostra il **window background**, non la WebView. L'activity parte
+con `AppTheme.NoActionBarLaunch` (`Theme.SplashScreen`, background = `splash.png`
+bianca) e senza il plugin SplashScreen quel tema **resta**: risultato, striscia
+bianca con il logo dello splash.
+
+Fix: `MainActivity.setTheme(R.style.AppTheme_NoActionBar)` prima di `super.onCreate`,
+`postSplashScreenTheme` nel tema di lancio, `colorSurface` (#111827) come
+`windowBackground`/`background` e fondo scuro su content view e WebView.
+
 ### Tap notifica: non fa nulla
 
 Cause tipiche:

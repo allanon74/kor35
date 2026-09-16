@@ -3,6 +3,7 @@ package nativeapp.kor35.it;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
@@ -31,11 +32,33 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         ensureNotificationChannels();
+        // L'activity nasce con AppTheme.NoActionBarLaunch (Theme.SplashScreen), il cui
+        // background è la splash bianca. Senza il plugin SplashScreen quel tema resta:
+        // l'area del padding inset mostrerebbe una banda bianca sotto la status bar.
+        setTheme(R.style.AppTheme_NoActionBar);
         // Consistente su API < 35 e ≥ 35: disegna edge-to-edge, poi paddiamo noi.
         EdgeToEdge.enable(this);
         super.onCreate(savedInstanceState);
         applySystemBarInsetsToWebContent();
+        applyChromeBackground();
         styleSystemBars();
+    }
+
+    /** Fondo scuro anche su window/layout/WebView: nessuna banda chiara ai bordi. */
+    private void applyChromeBackground() {
+        getWindow().setBackgroundDrawable(new ColorDrawable(CHROME_COLOR));
+
+        View content = findViewById(android.R.id.content);
+        if (content != null) {
+            content.setBackgroundColor(CHROME_COLOR);
+            if (content instanceof ViewGroup && ((ViewGroup) content).getChildCount() > 0) {
+                ((ViewGroup) content).getChildAt(0).setBackgroundColor(CHROME_COLOR);
+            }
+        }
+
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().setBackgroundColor(CHROME_COLOR);
+        }
     }
 
     /**
