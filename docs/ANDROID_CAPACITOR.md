@@ -101,6 +101,16 @@ Lo script cerca `javac` (`JAVA_HOME`, PATH, `/usr/lib/jvm/*`) e, se manca, prova
 `sudo apt install -y openjdk-21-jdk-headless` (disattivabile con
 `ANDROID_APK_NO_APT=1`).
 
+Lo stesso errore **persiste anche con il JDK installato** se Gradle ha memorizzato
+le capability del JVM prima: la rilevazione resta nel demone e in
+`~/.gradle/caches/<ver>/jvms`. Lo script quindi:
+
+1. ferma i demoni (`gradlew --stop`);
+2. passa `-Dorg.gradle.java.home` e disattiva l'auto-detect delle toolchain, così
+   l'unico JVM candidato è il JDK trovato;
+3. se il messaggio `JAVA_COMPILER` compare comunque, svuota `…/caches/*/jvms` e
+   riprova una volta.
+
 Installazione sul telefono (da PowerShell, telefono in USB debug):
 
 ```powershell
