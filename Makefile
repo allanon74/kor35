@@ -523,6 +523,11 @@ android-doctor:
 	  fi; \
 	  if [[ -f "$$ol/app/google-services.json" ]]; then echo "OK: google-services.json"; \
 	  else echo "NOTA: google-services.json assente (push FCM off)"; fi; \
+	  agp=$$(grep -hoE "com.android.tools.build:gradle:[0-9.]+" "$$ol/build.gradle" 2>/dev/null | sort -u); \
+	  agp_all=$$(grep -rhoE "com.android.tools.build:gradle:[0-9.]+" "$$ol" 2>/dev/null | sort -u | tr "\n" " "); \
+	  if [[ $$(echo "$$agp_all" | wc -w) -gt 1 ]]; then \
+	    echo "MANCA: AGP allineato (trovati: $$agp_all) -> No matching variant"; ok=0; \
+	  else echo "OK: AGP unico ($$agp)"; fi; \
 	  if [[ "$$ok" -eq 1 ]]; then echo "DOCTOR OK — Studio deve mostrare il device selector"; \
 	  else echo "DOCTOR FAIL — rilancia: make android-sync WIN=1"; exit 1; fi'
 

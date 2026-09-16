@@ -144,6 +144,23 @@ Volume esempio in `compose.prod.yml` (scommentare e riavviare backend):
 - /srv/kor35/secrets/firebase-fcm.json:/app/secrets/firebase-fcm.json:ro
 ```
 
+### `No matching variant of project :capacitor-status-bar` / `No variants exist`
+
+Significa che il modulo plugin non ha prodotto varianti compatibili con `:app`.
+Causa tipica: **versioni AGP diverse** tra progetto root e moduli Capacitor
+(il messaggio riporta l'`AgpVersionAttr` atteso dal consumer, es. `8.10.1`).
+
+I moduli Capacitor 8 dichiarano AGP `8.13.0` nel loro `buildscript`; se
+`android/build.gradle` ne dichiara un'altra, Gradle/Studio non trova varianti.
+
+`vendor-capacitor-android-plugins.mjs` legge l'AGP dal root e **riscrive** la
+stessa versione nei moduli vendored (plugin + cordova). Per cambiare versione si
+edita solo `frontend/android/build.gradle`, poi `make android-sync WIN=1`.
+
+Verifica: `make android-doctor WIN=1` segnala se trova più di una versione AGP.
+Se Android Studio è più vecchio dell'AGP richiesto, abbassa la versione nel root:
+i moduli vengono riallineati automaticamente al prossimo sync.
+
 ### Solo «Add Configuration…», nessun device selector
 
 Sintomo: la cartella si apre ma Studio non ha né modulo app né device.

@@ -41,8 +41,36 @@ const PLUGINS = [
   },
 ];
 
+const AGP_COORD_RE = /(classpath\s+['"]com\.android\.tools\.build:gradle:)([^'"]+)(['"])/g;
+
 function rmRf(dir) {
   fs.rmSync(dir, { recursive: true, force: true });
+}
+
+/** AGP dichiarato dal progetto root (android/build.gradle). */
+function readRootAgpVersion() {
+  const rootGradle = fs.readFileSync(path.join(androidRoot, 'build.gradle'), 'utf8');
+  const match = /classpath\s+['"]com\.android\.tools\.build:gradle:([^'"]+)['"]/.exec(rootGradle);
+  if (!match) {
+    console.error('ERRORE: AGP non trovato in android/build.gradle');
+    process.exit(1);
+  }
+  return match[1];
+}
+
+/**
+ * I moduli Capacitor dichiarano un proprio AGP nel buildscript. Se differisce da
+ * quello del root, Gradle/Studio non trova varianti compatibili
+ * ("No matching variant of project :capacitor-status-bar"): allineale.
+ */
+function alignAgpVersion(buildGradlePath, agpVersion) {
+  const original = fs.readFileSync(buildGradlePath, 'utf8');
+  const patched = original.replace(AGP_COORD_RE, `$1${agpVersion}$3`);
+  if (patched !== original) {
+    fs.writeFileSync(buildGradlePath, patched);
+    return true;
+  }
+  return false;
 }
 
 function copyDir(src, dest) {
@@ -60,13 +88,16 @@ function ensureAssetsDir() {
   fs.mkdirSync(assets, { recursive: true });
 }
 
-function checkCordovaPluginsDir() {
-  const varsFile = path.join(
-    androidRoot,
-    'capacitor-cordova-android-plugins',
-    'cordova.variables.gradle',
-  );
-  if (fs.existsSync(varsFile)) return;
+function checkCordovaPluginsDir(agpVersion) {
+  const cordovaRoot = path.join(androidRoot, 'capacitor-cordova-android-plugins');
+  const varsFile = path.join(cordovaRoot, 'cordova.variables.gradle');
+  if (fs.existsSync(varsFile)) {
+    const cordovaGradle = path.join(cordovaRoot, 'build.gradle');
+    if (fs.existsSync(cordovaGradle) && alignAgpVersion(cordovaGradle, agpVersion)) {
+      console.log(`  AGP allineato a ${agpVersion} in capacitor-cordova-android-plugins`);
+    }
+    return;
+  }
 
   console.error('ERRORE: manca capacitor-cordova-android-plugins/cordova.variables.gradle');
   console.error('Senza quel file Gradle non configura :app (Studio: solo "Add Configuration").');
@@ -81,6 +112,9 @@ function main() {
   }
 
   ensureAssetsDir();
+
+  const agpVersion = readRootAgpVersion();
+  console.log(`AGP root: ${agpVersion}`);
 
   rmRf(vendorRoot);
   fs.mkdirSync(vendorRoot, { recursive: true });
@@ -102,6 +136,9 @@ function main() {
     if (!fs.existsSync(buildGradle)) {
       console.error(`ERRORE: copia fallita per ${plugin.gradleName}`);
       process.exit(1);
+    }
+    if (alignAgpVersion(buildGradle, agpVersion)) {
+      console.log(`  AGP allineato a ${agpVersion} in ${plugin.gradleName}`);
     }
     lines.push(`include ':${plugin.gradleName}'`);
     lines.push(
@@ -130,7 +167,7 @@ function main() {
     ].join('\n'),
   );
 
-  checkCordovaPluginsDir();
+  checkCordovaPluginsDir(agpVersion);
 
   console.log('OK: capacitor.settings.gradle usa ./capacitor-plugins/ (self-contained)');
 }
