@@ -144,20 +144,43 @@ Volume esempio in `compose.prod.yml` (scommentare e riavviare backend):
 - /srv/kor35/secrets/firebase-fcm.json:/app/secrets/firebase-fcm.json:ro
 ```
 
-### `…\android` senza run configuration (device selector assente)
+### Solo «Add Configuration…», nessun device selector
 
-La cartella è **incompleta**: mancano file che non stanno in git e che il mirror
-non portava (o cancellava).
+Sintomo: la cartella si apre ma Studio non ha né modulo app né device.
+Non è un problema di cartella sbagliata: **il Gradle sync di `:app` fallisce**.
 
-| File | Serve per | Perché mancava |
-|---|---|---|
-| `local.properties` (`sdk.dir`) | Gradle trova l'SDK; senza → `SDK location not found`, nessuna run config | gitignored; `robocopy /MIR` lo cancellava dalla destinazione |
-| `.idea/` | run configurations di Studio | gitignored; cancellato da `/MIR` |
-| `capacitor-cordova-android-plugins/` | `settings.gradle` + `app/capacitor.build.gradle` la includono; se manca il sync Gradle fallisce | generata da `npx cap sync` |
+Riproduzione fuori da Studio (mostra la vera causa):
 
-`make android-sync WIN=1` ora esclude `.idea/`, `.gradle/`, `build/` e
-`local.properties` dal mirror, crea `local.properties` con `sdk.dir` (riusando
-quello del progetto precedente se c'è) e verifica la cartella cordova.
+```bash
+cd frontend/android && ./gradlew projects
+```
+
+Deve elencare `:app` + i moduli `:capacitor-*`. Se invece dà:
+
+```text
+Could not read script '…/capacitor-cordova-android-plugins/cordova.variables.gradle'
+```
+
+manca la cartella Cordova, richiesta da `settings.gradle` e
+`app/capacitor.build.gradle`. Senza `:app`, Studio non crea la run configuration.
+
+**Catena del bug:** `app/src/main/assets/` non era in git → `npx cap sync` non
+riusciva a scrivere `capacitor.plugins.json` e abortiva →
+`capacitor-cordova-android-plugins/` non veniva generata (era anche gitignored).
+
+Fix in repo: `capacitor-cordova-android-plugins/` è **versionata**,
+`app/src/main/assets/.gitkeep` esiste, e `cap:sync` crea la cartella assets prima
+del sync. `vendor-capacitor-android-plugins.mjs` verifica entrambe.
+
+File per-macchina che il mirror **non** deve toccare:
+
+| File | Serve per |
+|---|---|
+| `local.properties` (`sdk.dir`) | senza → `SDK location not found`, nessuna run config |
+| `.idea/` | run configurations di Studio |
+
+`make android-sync WIN=1` esclude `.idea/`, `.gradle/`, `build/` e
+`local.properties` dal mirror e crea `local.properties` con `sdk.dir`.
 
 Verifica: `make android-doctor WIN=1`.
 

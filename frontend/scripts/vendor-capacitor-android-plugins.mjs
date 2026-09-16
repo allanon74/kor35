@@ -50,11 +50,37 @@ function copyDir(src, dest) {
   fs.cpSync(src, dest, { recursive: true });
 }
 
+/**
+ * `cap sync` scrive app/src/main/assets/capacitor.plugins.json: se la cartella
+ * non esiste il sync aborta e capacitor-cordova-android-plugins/ non viene
+ * generata → Gradle non configura :app → Studio senza run configuration.
+ */
+function ensureAssetsDir() {
+  const assets = path.join(androidRoot, 'app', 'src', 'main', 'assets');
+  fs.mkdirSync(assets, { recursive: true });
+}
+
+function checkCordovaPluginsDir() {
+  const varsFile = path.join(
+    androidRoot,
+    'capacitor-cordova-android-plugins',
+    'cordova.variables.gradle',
+  );
+  if (fs.existsSync(varsFile)) return;
+
+  console.error('ERRORE: manca capacitor-cordova-android-plugins/cordova.variables.gradle');
+  console.error('Senza quel file Gradle non configura :app (Studio: solo "Add Configuration").');
+  console.error('Rigenera con: cd frontend && npx cap update android');
+  process.exit(1);
+}
+
 function main() {
   if (!fs.existsSync(androidRoot)) {
     console.error(`ERRORE: manca ${androidRoot}`);
     process.exit(1);
   }
+
+  ensureAssetsDir();
 
   rmRf(vendorRoot);
   fs.mkdirSync(vendorRoot, { recursive: true });
@@ -103,6 +129,8 @@ function main() {
       '',
     ].join('\n'),
   );
+
+  checkCordovaPluginsDir();
 
   console.log('OK: capacitor.settings.gradle usa ./capacitor-plugins/ (self-contained)');
 }
