@@ -8,20 +8,17 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
-import androidx.activity.EdgeToEdge;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
-import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 
 /**
- * Shell Capacitor: canali FCM + inset di sistema.
+ * Shell Capacitor: canali FCM + colori delle barre di sistema.
  *
- * Su Android 15+ (targetSdk ≥ 35) l'edge-to-edge è forzato: la WebView finisce
- * sotto status/navigation bar. setOverlaysWebView(false) e CSS env(safe-area-*)
- * non bastano. Padding nativo sul content root = fix affidabile.
+ * Gli inset NON si applicano come padding nativo: sposterebbero la WebView e
+ * lascerebbero una striscia vuota sopra la UI. Su Android 15+ il plugin core
+ * SystemBars (insetsHandling = "css") inietta `--safe-area-inset-*` nella pagina
+ * e il CSS insetta header/contenuto (vedi index.css, --kor-safe-top).
  */
 public class MainActivity extends BridgeActivity {
     public static final String CHANNEL_INCOMING_CALLS = "kor35_incoming_calls";
@@ -33,13 +30,10 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         ensureNotificationChannels();
         // L'activity nasce con AppTheme.NoActionBarLaunch (Theme.SplashScreen), il cui
-        // background è la splash bianca. Senza il plugin SplashScreen quel tema resta:
-        // l'area del padding inset mostrerebbe una banda bianca sotto la status bar.
+        // background è la splash bianca: senza il plugin SplashScreen quel tema resta
+        // e si vedrebbe bianco dietro la WebView durante il caricamento.
         setTheme(R.style.AppTheme_NoActionBar);
-        // Consistente su API < 35 e ≥ 35: disegna edge-to-edge, poi paddiamo noi.
-        EdgeToEdge.enable(this);
         super.onCreate(savedInstanceState);
-        applySystemBarInsetsToWebContent();
         applyChromeBackground();
         styleSystemBars();
     }
@@ -59,38 +53,6 @@ public class MainActivity extends BridgeActivity {
         if (getBridge() != null && getBridge().getWebView() != null) {
             getBridge().getWebView().setBackgroundColor(CHROME_COLOR);
         }
-    }
-
-    /**
-     * Applica systemBars + displayCutout come padding sul content root
-     * (CoordinatorLayout Capacitor). Non sul WebView: lì gli inset arrivano a 0.
-     */
-    private void applySystemBarInsetsToWebContent() {
-        final View content = findViewById(android.R.id.content);
-        if (content == null) {
-            return;
-        }
-
-        // Preferisci il primo figlio (layout bridge) se presente.
-        final View target =
-            (content instanceof ViewGroup && ((ViewGroup) content).getChildCount() > 0)
-                ? ((ViewGroup) content).getChildAt(0)
-                : content;
-
-        ViewCompat.setOnApplyWindowInsetsListener(target, (v, windowInsets) -> {
-            Insets bars = windowInsets.getInsets(
-                WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
-            );
-            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
-            // Azzera solo ciò che abbiamo consumato; lascia passare IME ecc.
-            return new WindowInsetsCompat.Builder(windowInsets)
-                .setInsets(
-                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout(),
-                    Insets.NONE
-                )
-                .build();
-        });
-        ViewCompat.requestApplyInsets(target);
     }
 
     private void styleSystemBars() {

@@ -144,7 +144,7 @@ const LoginPage = ({ onLoginSuccess }) => {
 
   return (
     <div
-      className="flex items-center justify-center min-h-screen px-4"
+      className="kor-safe-shell flex items-center justify-center min-h-screen px-4"
       style={{
         background:
           'radial-gradient(ellipse at 20% 0%, #7f1d1d66, transparent 50%), linear-gradient(165deg, #0c0a09 0%, #1c100c 40%, #111827 100%)',

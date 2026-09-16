@@ -16,7 +16,7 @@
         <item name="android:background">@color/colorSurface</item>
         <item name="android:windowBackground">@color/colorSurface</item>
         <item name="android:colorBackground">@color/colorSurface</item>
-        <!-- Colori barre; gli inset li applica MainActivity (Android 15+ edge-to-edge). -->
+        <!-- Colori barre; gli inset li gestisce il CSS (SystemBars insetsHandling=css). -->
         <item name="android:statusBarColor">@color/colorPrimaryDark</item>
         <item name="android:navigationBarColor">@color/colorPrimaryDark</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>

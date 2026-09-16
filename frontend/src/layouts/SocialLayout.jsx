@@ -5,7 +5,7 @@ import { ArrowLeft, Compass, Sparkles } from 'lucide-react';
 const SocialLayout = ({ children }) => {
   return (
     <div className="h-screen bg-linear-to-b from-[#0f0b13] via-[#1d1020] to-[#0f0b13] text-white overflow-hidden flex flex-col">
-      <header className="shrink-0 min-h-14 border-b border-amber-300/25 bg-black/50 backdrop-blur px-3 py-2 flex items-center justify-between gap-2">
+      <header className="kor-safe-shell shrink-0 min-h-14 border-b border-amber-300/25 bg-black/50 backdrop-blur px-3 py-2 flex items-center justify-between gap-2">
         <Link
           to="/app"
           className="inline-flex items-center gap-2 text-sm text-gray-200 hover:text-white shrink-0"

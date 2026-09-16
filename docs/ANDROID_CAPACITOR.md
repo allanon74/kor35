@@ -203,29 +203,27 @@ Verifica: `make android-doctor WIN=1`.
 Sintomo: UI / pulsanti in alto sotto la status bar Android (non tappabili).
 
 **Causa:** con `targetSdk` ≥ 35 Android forza edge-to-edge. `StatusBar.setOverlaysWebView(false)`
-è un no-op e `env(safe-area-inset-top)` nella WebView resta spesso 0.
+è un no-op e `env(safe-area-inset-top)` nella WebView Android resta 0.
 
-**Fix (nativo, richiede nuovo APK):** `MainActivity` fa `EdgeToEdge.enable` e applica
-`WindowInsets` (systemBars + cutout) come **padding** sul layout bridge Capacitor.
-Così tutta la WebView (anche con `server.url` remoto) resta sotto la status bar,
-senza dipendere dal deploy del frontend.
+**Come lo risolviamo (senza strisce vuote):** l'inset sta **dentro la pagina**, non
+come padding nativo della WebView.
 
-Dopo il fix: `make android-sync WIN=1` → rebuild/install APK → apri
-`C:\dev\kor35-app\android`.
+1. `capacitor.config.json` → `SystemBars.insetsHandling: "css"`: il plugin core
+   inietta `--safe-area-inset-top/right/bottom/left` (px reali) nella pagina.
+2. `index.css` → `--kor-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px))`.
+3. La UI usa quel valore: `.kor-app-header` (header MainPage), `.kor-safe-header`
+   (header ad altezza fissa) e `.kor-safe-shell` (pagine senza header: Start, Login).
 
-Il JS `setupNativeChrome` azzera `--kor-safe-top` su Android per non **raddoppiare**
-il padding già applicato nativamente.
+Così l'area della status bar è coperta dallo **sfondo dell'header/shell**: niente
+banda vuota, niente contenuto sotto le icone di sistema.
 
-#### Banda bianca sotto la status bar
+**Da non fare:** padding nativo (`WindowInsets` sul layout bridge) o
+`EdgeToEdge.enable` in `MainActivity`. Sposta l'intera WebView e lascia una
+striscia vuota che mostra il window background (con il tema di lancio, la splash
+**bianca**). `MainActivity` fa solo `setTheme(AppTheme.NoActionBar)`, colori barre
+e fondo scuro.
 
-L'area del padding mostra il **window background**, non la WebView. L'activity parte
-con `AppTheme.NoActionBarLaunch` (`Theme.SplashScreen`, background = `splash.png`
-bianca) e senza il plugin SplashScreen quel tema **resta**: risultato, striscia
-bianca con il logo dello splash.
-
-Fix: `MainActivity.setTheme(R.style.AppTheme_NoActionBar)` prima di `super.onCreate`,
-`postSplashScreenTheme` nel tema di lancio, `colorSurface` (#111827) come
-`windowBackground`/`background` e fondo scuro su content view e WebView.
+Serve **deploy frontend** (CSS/JS) + **nuovo APK** (config Capacitor + tema).
 
 ### Tap notifica: non fa nulla
 

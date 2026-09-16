@@ -35,7 +35,7 @@ KOR35 resta **PWA/webapp-first**:
    Backend: `FCM_SERVICE_ACCOUNT_FILE` (HTTP v1). `FCM_SERVER_KEY` è legacy/deprecata.
 4. **Sync edge**: `FcmDeviceToken` **non** è SyncableModel (token per nodo + FCM richiede Internet Google).
 5. **Chiamate vocali**: WebRTC resta in React; nativo = keep-alive / notifica full-screen / foreground service — non un secondo stack audio parallelo senza bridge.
-6. **Status bar / safe area (Android 15+)**: gestita in `MainActivity` con `EdgeToEdge` + padding `WindowInsets` sul layout bridge. Non affidarsi a `StatusBar.setOverlaysWebView` né solo a CSS `env(safe-area-*)` nella WebView remota.
+6. **Status bar / safe area (Android 15+)**: inset **dentro la pagina**. `SystemBars.insetsHandling: "css"` inietta `--safe-area-inset-*`; il CSS li usa via `--kor-safe-top` (`.kor-app-header`, `.kor-safe-header`, `.kor-safe-shell`). Non usare padding nativo `WindowInsets` né `EdgeToEdge.enable`: spostano la WebView e lasciano una striscia vuota. `StatusBar.setOverlaysWebView` è un no-op su Android 15+.
 7. **Build**: `make android-sync` (host con Node). Da WSL + Android Studio su Windows:
    `make android-sync WIN=1` → apri **sempre** `C:\dev\kor35-app\android`
    (**path bloccato**; self-contained con `capacitor-plugins/`; non `C:\dev\kor35-android`,

@@ -15,8 +15,13 @@
   --kor-success: #059669;
   --kor-warning: #d97706;
   --kor-tab-bar-height: 60px;
-  --kor-safe-bottom: env(safe-area-inset-bottom, 0px);
-  --kor-safe-top: env(safe-area-inset-top, 0px);
+  /*
+   * Safe area: nella WebView Android env(safe-area-inset-*) resta 0, quindi il
+   * plugin core SystemBars di Capacitor inietta --safe-area-inset-* (px reali).
+   * Ordine: variabile Capacitor se presente, altrimenti env() (PWA/iOS).
+   */
+  --kor-safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --kor-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
 
   /* Wiki pubblica (tema light / brand forest-ember) */
   --wiki-ink: #1c1410;
@@ -52,13 +57,25 @@ html, body, #root {
 }
 
 /*
- * Header sotto notch (PWA / iOS): usa --kor-safe-top (default = env(safe-area-inset-top)).
- * Shell Android: MainActivity applica già gli inset nativi → --kor-safe-top = 0px
- * (vedi nativeChrome.js). Non aggiungere padding extra su html[data-kor35-native].
+ * Safe area top: l'inset sta DENTRO la UI, non come padding nativo della WebView
+ * (che lascerebbe una striscia vuota). L'area della status bar è quindi coperta
+ * dallo sfondo dell'header / dello shell.
  */
 .kor-app-header {
-  padding-top: max(0.75rem, var(--kor-safe-top));
+  padding-top: calc(0.75rem + var(--kor-safe-top));
   min-height: calc(4rem + var(--kor-safe-top));
+}
+
+/* Header a altezza fissa (h-16): estendilo sotto la status bar. */
+.kor-safe-header {
+  padding-top: var(--kor-safe-top);
+  height: calc(4rem + var(--kor-safe-top));
+}
+
+/* Pagine senza header proprio (Start, Login): inset sul contenitore a tutta altezza. */
+.kor-safe-shell {
+  box-sizing: border-box;
+  padding-top: var(--kor-safe-top);
 }
 
 /* Assicura che l'app React prenda tutto lo spazio */

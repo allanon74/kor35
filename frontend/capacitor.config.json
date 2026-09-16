@@ -35,7 +35,7 @@
       "backgroundColor": "#111827"
     },
     "SystemBars": {
-      "insetsHandling": "disable",
+      "insetsHandling": "css",
       "style": "DARK",
       "hidden": false
     }
