@@ -3,18 +3,20 @@
 #
 # =============================================================================
 # PATH BLOCCATO — NON CAMBIARE SENZA RICHIESTA ESPLICITA DELL'UTENTE
+#   Apri in Android Studio:  C:\dev\kor35-app\android
 # =============================================================================
-# Unica cartella da aprire in Android Studio:
-#   C:\dev\kor35-app\android
 #
-# Layout:
-#   C:/dev/kor35-app/          ← SOLO contenitore (niente settings.gradle qui)
-#   C:/dev/kor35-app/android/  ← root Gradle (settings.gradle, gradlew, app/, …)
+# Cosa serve perché Studio mostri device selector + Run (non "Add Configuration"):
+#   - settings.gradle / build.gradle / app/build.gradle           (dal repo)
+#   - capacitor-plugins/…            (vendored, no node_modules)
+#   - capacitor-cordova-android-plugins/  (generata da `npx cap sync`)
+#   - local.properties  → sdk.dir                (per-macchina, NON in git)
+#   - .idea/            → run configurations Studio (per-macchina)
 #
-# Dopo ogni sync rimuoviamo eventuali file Gradle lasciati per errore nel parent
-# (sync “piatto” legacy): altrimenti Studio apre C:\dev\kor35-app e sembra
-# funzionare, mentre …\android risulta “senza configuration”.
-# =============================================================================
+# local.properties e .idea NON esistono nel repo: robocopy /MIR li cancellerebbe
+# dalla destinazione. Sono esclusi dal mirror e local.properties viene creato.
+#
+# Uso (WSL, root monorepo):  make android-sync WIN=1
 
 set -euo pipefail
 
@@ -22,7 +24,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_ANDROID="${ROOT}/frontend/android"
 
 CANONICAL_ROOT="C:/dev/kor35-app"
-CANONICAL_OPEN="${CANONICAL_ROOT}/android"
 RAW_ROOT="${WIN_ANDROID_DIR:-$CANONICAL_ROOT}"
 
 case "${RAW_ROOT}" in
@@ -40,9 +41,7 @@ OPEN_PATH="${RAW_ROOT%/}/android"
 
 echo "=== android_sync_to_windows ==="
 echo "Sorgente:       ${SRC_ANDROID}"
-echo "Destinazione:   ${OPEN_PATH}"
 echo "Apri in Studio: ${OPEN_PATH}"
-echo "(path bloccato: ${CANONICAL_OPEN})"
 
 if [[ ! -d "${SRC_ANDROID}" ]]; then
   echo "ERRORE: manca ${SRC_ANDROID}. Esegui prima: make android-sync" >&2
@@ -67,6 +66,17 @@ if [[ ! -f "${SRC_ANDROID}/capacitor-plugins/capacitor-status-bar/build.gradle" 
   echo "ERRORE: plugin non vendored dopo retry." >&2
   exit 1
 fi
+
+# settings.gradle include ':capacitor-cordova-android-plugins' e
+# app/capacitor.build.gradle fa apply from ../capacitor-cordova-android-plugins/…
+# Se manca, il Gradle sync fallisce → Studio non crea la run configuration.
+if [[ ! -f "${SRC_ANDROID}/capacitor-cordova-android-plugins/cordova.variables.gradle" ]]; then
+  echo "ERRORE: manca ${SRC_ANDROID}/capacitor-cordova-android-plugins/" >&2
+  echo "Senza quella cartella Studio non configura il modulo app." >&2
+  echo "Rigenerala: cd frontend && npx cap sync android" >&2
+  exit 1
+fi
+
 if ! command -v wslpath >/dev/null 2>&1; then
   echo "ERRORE: wslpath non trovato. Esegui dentro WSL." >&2
   exit 1
@@ -88,14 +98,13 @@ if [[ -z "${ROBOCOPY}" ]]; then
 fi
 
 to_linux() {
-  local dest="$1"
-  if [[ "${dest}" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
+  if [[ "$1" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
     local drive="${BASH_REMATCH[1],,}"
     local rest="${BASH_REMATCH[2]//\\//}"
     printf '%s' "/mnt/${drive}/${rest}"
-    return
+  else
+    printf '%s' ""
   fi
-  printf '%s' ""
 }
 
 to_win() {
@@ -108,10 +117,6 @@ to_win() {
   if [[ "${dest}" =~ ^[A-Za-z]:/ ]]; then
     dest="${dest//\//\\}"
   fi
-  if [[ "${dest}" =~ ^[A-Za-z]:[^/\\] ]] && [[ "${dest}" != *\\* ]] && [[ "${dest}" != */* ]]; then
-    echo "ATTENZIONE: path sospetto '${dest}'." >&2
-    exit 2
-  fi
   if [[ "${dest}" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
     local drive="${BASH_REMATCH[1],,}"
     local rest="${BASH_REMATCH[2]//\\//}"
@@ -120,145 +125,91 @@ to_win() {
   printf '%s' "${dest}"
 }
 
-robo() {
+# Mirror del progetto, ma NON toccare stato locale di Studio:
+#   /XD .idea .gradle build   → preserva run configurations e cache
+#   /XF local.properties      → preserva sdk.dir
+robo_project() {
   local src_linux="$1"
   local dest_win="$2"
   local src_win
   src_win="$(wslpath -w "${src_linux}")"
   echo "Robocopy: ${src_win}  →  ${dest_win}"
   set +e
-  "${ROBOCOPY}" "${src_win}" "${dest_win}" /MIR /NFL /NDL /NJH /NJS /nc /ns /np
+  "${ROBOCOPY}" "${src_win}" "${dest_win}" /MIR \
+    /XD "${dest_win}\\.idea" "${dest_win}\\.gradle" "${dest_win}\\build" \
+    /XF local.properties \
+    /NFL /NDL /NJH /NJS /nc /ns /np
   local rc=$?
   set -e
   if (( rc >= 8 )); then
-    echo "ERRORE: robocopy exit ${rc} (${src_linux})" >&2
+    echo "ERRORE: robocopy exit ${rc}" >&2
     exit "${rc}"
   fi
 }
 
-# --- pulizia parent: togli progetto Gradle “piatto” legacy ---
-# Se settings.gradle sta in C:\dev\kor35-app\, Studio apre il parent e
-# …\android sembra “senza configuration”.
-cleanup_parent_gradle_root() {
-  local parent_linux="$1"
-  local open_linux="$2"
-  [[ -n "${parent_linux}" && -d "${parent_linux}" ]] || return 0
-
-  # Non toccare la destinazione corretta.
-  if [[ "${parent_linux}" == "${open_linux}" ]]; then
-    return 0
-  fi
-
-  local removed=0
-  local name
-  for name in \
-    settings.gradle build.gradle gradle.properties variables.gradle \
-    gradlew gradlew.bat local.properties \
-    capacitor.settings.gradle \
-    app gradle .idea .gradle build \
-    capacitor-plugins capacitor-cordova-android-plugins \
-    APRI_IN_ANDROID_STUDIO.txt
-  do
-    local p="${parent_linux}/${name}"
-    if [[ -e "${p}" ]]; then
-      echo "Cleanup parent legacy: rimuovo ${p}"
-      rm -rf "${p}"
-      removed=1
+detect_sdk_dir_win() {
+  local u
+  for u in /mnt/c/Users/*; do
+    if [[ -d "${u}/AppData/Local/Android/Sdk" ]]; then
+      wslpath -w "${u}/AppData/Local/Android/Sdk"
+      return 0
     fi
   done
-
-  cat > "${parent_linux}/NON_APRIRE_QUI.txt" <<EOF
-NON aprire questa cartella in Android Studio.
-
-Questa è solo la cartella contenitore.
-Apri SOLO:
-
-  ${OPEN_PATH}
-
-(equivalente: $(echo "${OPEN_PATH}" | sed 's|/|\\|g'))
-
-Se Android Studio riapre da solo questa cartella:
-  File → Close Project → Open → seleziona la cartella android sopra.
-EOF
-
-  if [[ "${removed}" -eq 1 ]]; then
-    echo "OK: parent ripulito (niente più root Gradle in ${RAW_ROOT})."
-  fi
+  return 1
 }
 
-# Copia local.properties (sdk.dir) se esiste già altrove, così Studio riconosce l'SDK.
-seed_local_properties() {
+# Senza local.properties → "SDK location not found" → nessuna run configuration.
+ensure_local_properties() {
   local open_linux="$1"
   local parent_linux="$2"
   local dest="${open_linux}/local.properties"
-  if [[ -f "${dest}" ]]; then
+
+  if [[ -f "${dest}" ]] && grep -q '^sdk.dir=' "${dest}"; then
+    echo "OK: local.properties già presente (sdk.dir)."
     return 0
   fi
 
-  local candidate=""
-  if [[ -f "${parent_linux}/local.properties.bak_kor35" ]]; then
-    candidate="${parent_linux}/local.properties.bak_kor35"
-  fi
-  # SDK Windows tipico
-  local sdk_guess=""
-  if [[ -d "/mnt/c/Users" ]]; then
-    local u
-    for u in /mnt/c/Users/*; do
-      if [[ -d "${u}/AppData/Local/Android/Sdk" ]]; then
-        sdk_guess="${u}/AppData/Local/Android/Sdk"
-        break
-      fi
-    done
-  fi
-
-  if [[ -n "${candidate}" ]]; then
-    cp "${candidate}" "${dest}"
-    echo "Ripristinato local.properties da backup."
+  # 1) riusa quello del progetto che funzionava (parent, sync legacy)
+  if [[ -n "${parent_linux}" && -f "${parent_linux}/local.properties" ]]; then
+    cp "${parent_linux}/local.properties" "${dest}"
+    echo "OK: local.properties copiato dal progetto precedente (${RAW_ROOT})."
     return 0
   fi
 
-  if [[ -n "${sdk_guess}" ]]; then
-    local sdk_win
-    sdk_win="$(wslpath -w "${sdk_guess}" | sed 's/\\/\\\\/g')"
-    printf 'sdk.dir=%s\n' "${sdk_win}" > "${dest}"
-    echo "Creato local.properties → sdk.dir=${sdk_win}"
-  else
-    echo "WARN: nessun SDK Android trovato; al primo open Studio chiederà l'SDK." >&2
+  # 2) altrimenti individua l'SDK Android su Windows
+  local sdk_win=""
+  if sdk_win="$(detect_sdk_dir_win)"; then
+    printf 'sdk.dir=%s\n' "${sdk_win//\\/\\\\}" > "${dest}"
+    echo "OK: creato local.properties → sdk.dir=${sdk_win}"
+    return 0
   fi
+
+  echo "WARN: SDK Android non trovato: al primo Open, Studio chiederà l'SDK." >&2
+  return 0
 }
 
 OPEN_WIN="$(to_win "${OPEN_PATH}")"
 OPEN_WIN="${OPEN_WIN%\\}"
-PARENT_WIN="$(to_win "${RAW_ROOT}")"
-PARENT_WIN="${PARENT_WIN%\\}"
-
 linux_path="$(to_linux "${OPEN_PATH}")"
 parent_linux="$(to_linux "${RAW_ROOT}")"
 
-# Backup local.properties dal parent prima della pulizia (se c'era sync piatto)
-if [[ -n "${parent_linux}" && -f "${parent_linux}/local.properties" ]]; then
-  cp "${parent_linux}/local.properties" "${parent_linux}/local.properties.bak_kor35" || true
-fi
-
-# 1) pulisci parent PRIMA così non resta un secondo progetto
-cleanup_parent_gradle_root "${parent_linux}" "${linux_path}"
-
-# 2) copia progetto completo in …/android
-robo "${SRC_ANDROID}" "${OPEN_WIN}"
+robo_project "${SRC_ANDROID}" "${OPEN_WIN}"
 
 if [[ -z "${linux_path}" || ! -d "${linux_path}" ]]; then
-  echo "ERRORE: destinazione Linux non raggiungibile: ${OPEN_PATH}" >&2
+  echo "ERRORE: destinazione non raggiungibile: ${OPEN_PATH}" >&2
   exit 1
 fi
+
+ensure_local_properties "${linux_path}" "${parent_linux}"
 
 fail=0
 for f in \
   "${linux_path}/settings.gradle" \
-  "${linux_path}/gradlew.bat" \
   "${linux_path}/build.gradle" \
+  "${linux_path}/gradlew.bat" \
   "${linux_path}/capacitor.settings.gradle" \
   "${linux_path}/capacitor-plugins/capacitor-status-bar/build.gradle" \
-  "${linux_path}/capacitor-plugins/capacitor-android/build.gradle" \
+  "${linux_path}/capacitor-cordova-android-plugins/cordova.variables.gradle" \
   "${linux_path}/app/build.gradle" \
   "${linux_path}/app/src/main/AndroidManifest.xml"
 do
@@ -277,45 +228,29 @@ then
   echo "ERRORE: capacitor.settings.gradle punta ancora a node_modules." >&2
   exit 1
 fi
-if ! grep -q "capacitor-plugins/capacitor-status-bar" \
-  "${linux_path}/capacitor.settings.gradle"
-then
-  echo "ERRORE: capacitor.settings.gradle non usa capacitor-plugins/." >&2
-  exit 1
+
+if [[ ! -f "${linux_path}/app/google-services.json" ]]; then
+  echo "NOTA: app/google-services.json assente → build OK ma push FCM non funzionano." >&2
 fi
 
-seed_local_properties "${linux_path}" "${parent_linux}"
-
-# Ripeti cleanup: robocopy non deve aver ricreato nulla nel parent
-cleanup_parent_gradle_root "${parent_linux}" "${linux_path}"
-
-cat > "${linux_path}/APRI_IN_ANDROID_STUDIO.txt" <<EOF
-PATH BLOCCATO — unica cartella da aprire in Android Studio:
+# Il parent resta com'è: non cancelliamo nulla di tuo. Solo un promemoria.
+if [[ -n "${parent_linux}" && -d "${parent_linux}" && "${parent_linux}" != "${linux_path}" ]]; then
+  cat > "${parent_linux}/APRI_LA_CARTELLA_ANDROID.txt" <<EOF
+Progetto aggiornato da 'make android-sync WIN=1':
 
   ${OPEN_PATH}
 
-(equivalente: $(echo "${OPEN_PATH}" | sed 's|/|\\|g'))
-
-Checklist file (devono esserci TUTTI):
-  - settings.gradle
-  - gradlew.bat
-  - app\\build.gradle
-  - capacitor-plugins\\capacitor-status-bar\\build.gradle
-
-NON aprire:
-  - C:\\dev\\kor35-app          (parent — solo contenitore)
-  - C:\\dev\\kor35-android
-  - \\\\wsl.localhost\\...
-
-In Studio: File → Close Project → Open → questa cartella → Trust Project → Sync Gradle.
+Apri quella cartella in Android Studio.
+Questa cartella (parent) può contenere una copia vecchia: non viene più aggiornata.
 EOF
+fi
 
 echo
 echo "=============================================="
-echo " OK — apri in Android Studio SOLO:"
+echo " OK — apri in Android Studio:"
 echo "   ${OPEN_WIN}"
 echo
-echo " Se Studio riapre C:\\dev\\kor35-app (parent):"
-echo "   File → Close Project, poi Open sulla cartella android."
-echo " Il parent è stato ripulito (niente più app lì)."
+echo " Presenti: settings.gradle, app/, capacitor-plugins/,"
+echo "           capacitor-cordova-android-plugins/, local.properties"
+echo " Preservati (non sovrascritti): .idea/, .gradle/, build/"
 echo "=============================================="

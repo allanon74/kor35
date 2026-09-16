@@ -37,6 +37,7 @@ help:
 	@echo "  make android-sync            # build React + Capacitor sync Android"
 	@echo "  make android-sync WIN=1      # sync + copia; apri SOLO C:\\dev\\kor35-app\\android"
 	@echo "  make android-path            # stampa il path UNICO (bloccato) per Android Studio"
+	@echo "  make android-doctor WIN=1    # verifica che C:\\dev\\kor35-app\\android sia la root Gradle"
 	@echo "  make android-open WIN=1      # ricorda il path Windows da aprire"
 	@echo "  make up                      # avvia stack (con build + collectstatic)"
 	@echo "  make up-no-build             # avvio senza rebuild immagini (obbligatorio mirror offline/evento)"
@@ -481,3 +482,36 @@ android-open:
 
 android-path:
 	@echo "C:\\dev\\kor35-app\\android"
+
+# Verifica layout Windows: …/android completo (Gradle + SDK + cordova).
+android-doctor:
+	@WIN_ANDROID_DIR="$(WIN_ANDROID_DIR)" bash -c ' \
+	  root="$${WIN_ANDROID_DIR:-C:/dev/kor35-app}"; \
+	  open="$${root%/}/android"; \
+	  to_linux() { \
+	    case "$$1" in \
+	      [A-Za-z]:/*|[A-Za-z]:\\*) \
+	        d=$$(echo "$${1:0:1}" | tr A-Z a-z); \
+	        rest="$${1:2}"; rest="$${rest//\\//}"; \
+	        echo "/mnt/$$d/$$rest" ;; \
+	      *) echo "" ;; \
+	    esac; \
+	  }; \
+	  ol=$$(to_linux "$$open"); \
+	  echo "Progetto: $$open"; \
+	  ok=1; \
+	  for f in settings.gradle build.gradle gradlew.bat app/build.gradle \
+	           capacitor.settings.gradle \
+	           capacitor-plugins/capacitor-status-bar/build.gradle \
+	           capacitor-cordova-android-plugins/cordova.variables.gradle \
+	           local.properties; do \
+	    if [[ ! -f "$$ol/$$f" ]]; then echo "MANCA: $$f"; ok=0; else echo "OK: $$f"; fi; \
+	  done; \
+	  if [[ -f "$$ol/local.properties" ]] && ! grep -q "^sdk.dir=" "$$ol/local.properties"; then \
+	    echo "MANCA: sdk.dir in local.properties"; ok=0; \
+	  fi; \
+	  if [[ -f "$$ol/app/google-services.json" ]]; then echo "OK: google-services.json"; \
+	  else echo "NOTA: google-services.json assente (push FCM off)"; fi; \
+	  if [[ "$$ok" -eq 1 ]]; then echo "DOCTOR OK — Studio deve mostrare il device selector"; \
+	  else echo "DOCTOR FAIL — rilancia: make android-sync WIN=1"; exit 1; fi'
+

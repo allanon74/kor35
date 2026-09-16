@@ -144,17 +144,21 @@ Volume esempio in `compose.prod.yml` (scommentare e riavviare backend):
 - /srv/kor35/secrets/firebase-fcm.json:/app/secrets/firebase-fcm.json:ro
 ```
 
-### Android Studio apre il parent e funziona, mentre `…\android` no
+### `…\android` senza run configuration (device selector assente)
 
-Causa tipica: un sync legacy ha lasciato `settings.gradle` / `app/` in
-`C:\dev\kor35-app\` (parent). Studio apre quello; `…\android` resta vuoto o
-incompleto → «no configuration» / niente device selector.
+La cartella è **incompleta**: mancano file che non stanno in git e che il mirror
+non portava (o cancellava).
 
-`make android-sync WIN=1` ora:
-1. copia il progetto completo in `C:\dev\kor35-app\android`
-2. **rimuove** i file Gradle dal parent (così non si può più aprire per sbaglio)
+| File | Serve per | Perché mancava |
+|---|---|---|
+| `local.properties` (`sdk.dir`) | Gradle trova l'SDK; senza → `SDK location not found`, nessuna run config | gitignored; `robocopy /MIR` lo cancellava dalla destinazione |
+| `.idea/` | run configurations di Studio | gitignored; cancellato da `/MIR` |
+| `capacitor-cordova-android-plugins/` | `settings.gradle` + `app/capacitor.build.gradle` la includono; se manca il sync Gradle fallisce | generata da `npx cap sync` |
 
-Poi: **File → Close Project** → **Open** → `C:\dev\kor35-app\android` → Trust → Sync.
+`make android-sync WIN=1` ora esclude `.idea/`, `.gradle/`, `build/` e
+`local.properties` dal mirror, crea `local.properties` con `sdk.dir` (riusando
+quello del progetto precedente se c'è) e verifica la cartella cordova.
+
 Verifica: `make android-doctor WIN=1`.
 
 ### Status bar: header sotto la barra notifiche
