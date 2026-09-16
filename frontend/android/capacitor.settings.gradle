@@ -1,5 +1,5 @@
 // Generato da scripts/vendor-capacitor-android-plugins.mjs (dopo cap sync).
-// NON punta a ../node_modules: il progetto Android è self-contained.
+// Path locali sotto ./capacitor-plugins/ (progetto Android self-contained).
 
 include ':capacitor-android'
 project(':capacitor-android').projectDir = new File('./capacitor-plugins/capacitor-android')

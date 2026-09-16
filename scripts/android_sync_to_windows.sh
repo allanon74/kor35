@@ -53,8 +53,25 @@ if [[ ! -d "${SRC_ANDROID}" ]]; then
   echo "ERRORE: manca ${SRC_ANDROID}. Esegui prima: make android-sync" >&2
   exit 1
 fi
+
+# Se cap sync ha riscritto i path, ri-esegui il vendor qui (idempotente).
+VENDOR_SCRIPT="${ROOT}/frontend/scripts/vendor-capacitor-android-plugins.mjs"
+need_vendor=0
 if [[ ! -f "${SRC_ANDROID}/capacitor-plugins/capacitor-status-bar/build.gradle" ]]; then
-  echo "ERRORE: plugin non vendored. Esegui: make android-sync" >&2
+  need_vendor=1
+fi
+if grep -Eq "projectDir[[:space:]]*=[[:space:]]*new File\(['\"].*node_modules" \
+  "${SRC_ANDROID}/capacitor.settings.gradle" 2>/dev/null
+then
+  need_vendor=1
+fi
+if [[ "${need_vendor}" -eq 1 ]]; then
+  echo "Re-vendor Capacitor Android plugins…"
+  (cd "${ROOT}/frontend" && node scripts/vendor-capacitor-android-plugins.mjs)
+fi
+
+if [[ ! -f "${SRC_ANDROID}/capacitor-plugins/capacitor-status-bar/build.gradle" ]]; then
+  echo "ERRORE: plugin non vendored dopo retry." >&2
   echo "Atteso: frontend/android/capacitor-plugins/capacitor-status-bar/build.gradle" >&2
   exit 1
 fi
@@ -150,9 +167,20 @@ if [[ -n "${linux_path}" ]]; then
     exit 1
   fi
 
-  if grep -q 'node_modules' "${linux_path}/capacitor.settings.gradle"; then
+  # Solo path reali verso node_modules (non commenti nel file vendored).
+  if grep -Eq "projectDir[[:space:]]*=[[:space:]]*new File\(['\"].*node_modules" \
+    "${linux_path}/capacitor.settings.gradle"
+  then
     echo "ERRORE: capacitor.settings.gradle punta ancora a node_modules." >&2
-    echo "Rilancia make android-sync (deve eseguire vendor-capacitor-android-plugins)." >&2
+    echo "Rilancia: cd frontend && npm run cap:vendor-plugins" >&2
+    echo "Poi: make android-sync WIN=1" >&2
+    exit 1
+  fi
+  if ! grep -q "capacitor-plugins/capacitor-status-bar" \
+    "${linux_path}/capacitor.settings.gradle"
+  then
+    echo "ERRORE: capacitor.settings.gradle non usa capacitor-plugins/ (vendor mancante)." >&2
+    echo "Rilancia: cd frontend && npm run cap:vendor-plugins" >&2
     exit 1
   fi
 

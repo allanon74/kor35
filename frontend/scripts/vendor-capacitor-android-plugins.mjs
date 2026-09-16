@@ -61,7 +61,7 @@ function main() {
 
   const lines = [
     '// Generato da scripts/vendor-capacitor-android-plugins.mjs (dopo cap sync).',
-    '// NON punta a ../node_modules: il progetto Android è self-contained.',
+    '// Path locali sotto ./capacitor-plugins/ (progetto Android self-contained).',
     '',
   ];
 
@@ -104,7 +104,7 @@ function main() {
     ].join('\n'),
   );
 
-  console.log('OK: capacitor.settings.gradle usa ./capacitor-plugins/ (no ../node_modules)');
+  console.log('OK: capacitor.settings.gradle usa ./capacitor-plugins/ (self-contained)');
 }
 
 main();
