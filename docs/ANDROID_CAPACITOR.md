@@ -144,6 +144,19 @@ Volume esempio in `compose.prod.yml` (scommentare e riavviare backend):
 - /srv/kor35/secrets/firebase-fcm.json:/app/secrets/firebase-fcm.json:ro
 ```
 
+### Android Studio apre il parent e funziona, mentre `…\android` no
+
+Causa tipica: un sync legacy ha lasciato `settings.gradle` / `app/` in
+`C:\dev\kor35-app\` (parent). Studio apre quello; `…\android` resta vuoto o
+incompleto → «no configuration» / niente device selector.
+
+`make android-sync WIN=1` ora:
+1. copia il progetto completo in `C:\dev\kor35-app\android`
+2. **rimuove** i file Gradle dal parent (così non si può più aprire per sbaglio)
+
+Poi: **File → Close Project** → **Open** → `C:\dev\kor35-app\android` → Trust → Sync.
+Verifica: `make android-doctor WIN=1`.
+
 ### Status bar: header sotto la barra notifiche
 
 Sintomo: UI / pulsanti in alto sotto la status bar Android (non tappabili).

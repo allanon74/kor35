@@ -8,23 +8,19 @@
 #   C:\dev\kor35-app\android
 #
 # Layout:
-#   C:/dev/kor35-app/          ← destinazione sync (contenitore)
-#   C:/dev/kor35-app/android/  ← root Gradle (settings.gradle, gradlew, …)
+#   C:/dev/kor35-app/          ← SOLO contenitore (niente settings.gradle qui)
+#   C:/dev/kor35-app/android/  ← root Gradle (settings.gradle, gradlew, app/, …)
 #
-# I plugin Capacitor sono dentro android/capacitor-plugins/ (niente node_modules).
+# Dopo ogni sync rimuoviamo eventuali file Gradle lasciati per errore nel parent
+# (sync “piatto” legacy): altrimenti Studio apre C:\dev\kor35-app e sembra
+# funzionare, mentre …\android risulta “senza configuration”.
 # =============================================================================
-#
-# Uso (WSL, root monorepo):
-#   make android-sync WIN=1
-#
-# NON usare C:/dev/kor35-android.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_ANDROID="${ROOT}/frontend/android"
 
-# Contenitore Windows (override solo se necessario). La cartella Studio è SEMPRE …/android
 CANONICAL_ROOT="C:/dev/kor35-app"
 CANONICAL_OPEN="${CANONICAL_ROOT}/android"
 RAW_ROOT="${WIN_ANDROID_DIR:-$CANONICAL_ROOT}"
@@ -35,7 +31,6 @@ case "${RAW_ROOT}" in
     RAW_ROOT="${CANONICAL_ROOT}"
     ;;
   */android|*/android/)
-    # Se qualcuno passa già …/android come WIN_ANDROID_DIR, usa il parent
     echo "WARN: WIN_ANDROID_DIR non deve includere /android. Uso parent → ${CANONICAL_ROOT}" >&2
     RAW_ROOT="${CANONICAL_ROOT}"
     ;;
@@ -54,8 +49,6 @@ if [[ ! -d "${SRC_ANDROID}" ]]; then
   exit 1
 fi
 
-# Se cap sync ha riscritto i path, ri-esegui il vendor qui (idempotente).
-VENDOR_SCRIPT="${ROOT}/frontend/scripts/vendor-capacitor-android-plugins.mjs"
 need_vendor=0
 if [[ ! -f "${SRC_ANDROID}/capacitor-plugins/capacitor-status-bar/build.gradle" ]]; then
   need_vendor=1
@@ -72,7 +65,6 @@ fi
 
 if [[ ! -f "${SRC_ANDROID}/capacitor-plugins/capacitor-status-bar/build.gradle" ]]; then
   echo "ERRORE: plugin non vendored dopo retry." >&2
-  echo "Atteso: frontend/android/capacitor-plugins/capacitor-status-bar/build.gradle" >&2
   exit 1
 fi
 if ! command -v wslpath >/dev/null 2>&1; then
@@ -95,6 +87,17 @@ if [[ -z "${ROBOCOPY}" ]]; then
   exit 1
 fi
 
+to_linux() {
+  local dest="$1"
+  if [[ "${dest}" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
+    local drive="${BASH_REMATCH[1],,}"
+    local rest="${BASH_REMATCH[2]//\\//}"
+    printf '%s' "/mnt/${drive}/${rest}"
+    return
+  fi
+  printf '%s' ""
+}
+
 to_win() {
   local dest="$1"
   if [[ "${dest}" == /mnt/* ]]; then
@@ -106,8 +109,7 @@ to_win() {
     dest="${dest//\//\\}"
   fi
   if [[ "${dest}" =~ ^[A-Za-z]:[^/\\] ]] && [[ "${dest}" != *\\* ]] && [[ "${dest}" != */* ]]; then
-    echo "ATTENZIONE: path sospetto '${dest}' (backslash mangiati dalla shell)." >&2
-    echo "Usa: WIN_ANDROID_DIR=C:/dev/kor35-app" >&2
+    echo "ATTENZIONE: path sospetto '${dest}'." >&2
     exit 2
   fi
   if [[ "${dest}" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
@@ -134,86 +136,186 @@ robo() {
   fi
 }
 
-OPEN_WIN="$(to_win "${OPEN_PATH}")"
-OPEN_WIN="${OPEN_WIN%\\}"
+# --- pulizia parent: togli progetto Gradle “piatto” legacy ---
+# Se settings.gradle sta in C:\dev\kor35-app\, Studio apre il parent e
+# …\android sembra “senza configuration”.
+cleanup_parent_gradle_root() {
+  local parent_linux="$1"
+  local open_linux="$2"
+  [[ -n "${parent_linux}" && -d "${parent_linux}" ]] || return 0
 
-# Copia progetto Android → C:/dev/kor35-app/android (self-contained)
-robo "${SRC_ANDROID}" "${OPEN_WIN}"
+  # Non toccare la destinazione corretta.
+  if [[ "${parent_linux}" == "${open_linux}" ]]; then
+    return 0
+  fi
 
-if [[ "${OPEN_PATH}" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
-  drive="${BASH_REMATCH[1],,}"
-  rest="${BASH_REMATCH[2]//\\//}"
-  linux_path="/mnt/${drive}/${rest}"
-else
-  linux_path=""
-fi
-
-if [[ -n "${linux_path}" ]]; then
-  fail=0
-  for f in \
-    "${linux_path}/settings.gradle" \
-    "${linux_path}/gradlew.bat" \
-    "${linux_path}/capacitor.settings.gradle" \
-    "${linux_path}/capacitor-plugins/capacitor-status-bar/build.gradle" \
-    "${linux_path}/capacitor-plugins/capacitor-android/build.gradle" \
-    "${linux_path}/app/build.gradle"
+  local removed=0
+  local name
+  for name in \
+    settings.gradle build.gradle gradle.properties variables.gradle \
+    gradlew gradlew.bat local.properties \
+    capacitor.settings.gradle \
+    app gradle .idea .gradle build \
+    capacitor-plugins capacitor-cordova-android-plugins \
+    APRI_IN_ANDROID_STUDIO.txt
   do
-    if [[ ! -f "${f}" ]]; then
-      echo "ERRORE: manca dopo sync: ${f}" >&2
-      fail=1
+    local p="${parent_linux}/${name}"
+    if [[ -e "${p}" ]]; then
+      echo "Cleanup parent legacy: rimuovo ${p}"
+      rm -rf "${p}"
+      removed=1
     fi
   done
-  if [[ "${fail}" -ne 0 ]]; then
-    exit 1
-  fi
 
-  # Solo path reali verso node_modules (non commenti nel file vendored).
-  if grep -Eq "projectDir[[:space:]]*=[[:space:]]*new File\(['\"].*node_modules" \
-    "${linux_path}/capacitor.settings.gradle"
-  then
-    echo "ERRORE: capacitor.settings.gradle punta ancora a node_modules." >&2
-    echo "Rilancia: cd frontend && npm run cap:vendor-plugins" >&2
-    echo "Poi: make android-sync WIN=1" >&2
-    exit 1
-  fi
-  if ! grep -q "capacitor-plugins/capacitor-status-bar" \
-    "${linux_path}/capacitor.settings.gradle"
-  then
-    echo "ERRORE: capacitor.settings.gradle non usa capacitor-plugins/ (vendor mancante)." >&2
-    echo "Rilancia: cd frontend && npm run cap:vendor-plugins" >&2
-    exit 1
-  fi
-
-  # Hint anche nel contenitore parent (se qualcuno apre la cartella sbagliata)
-  parent_linux="$(dirname "${linux_path}")"
   cat > "${parent_linux}/NON_APRIRE_QUI.txt" <<EOF
 NON aprire questa cartella in Android Studio.
 
+Questa è solo la cartella contenitore.
 Apri SOLO:
+
   ${OPEN_PATH}
 
 (equivalente: $(echo "${OPEN_PATH}" | sed 's|/|\\|g'))
+
+Se Android Studio riapre da solo questa cartella:
+  File → Close Project → Open → seleziona la cartella android sopra.
 EOF
 
-  cat > "${linux_path}/APRI_IN_ANDROID_STUDIO.txt" <<EOF
+  if [[ "${removed}" -eq 1 ]]; then
+    echo "OK: parent ripulito (niente più root Gradle in ${RAW_ROOT})."
+  fi
+}
+
+# Copia local.properties (sdk.dir) se esiste già altrove, così Studio riconosce l'SDK.
+seed_local_properties() {
+  local open_linux="$1"
+  local parent_linux="$2"
+  local dest="${open_linux}/local.properties"
+  if [[ -f "${dest}" ]]; then
+    return 0
+  fi
+
+  local candidate=""
+  if [[ -f "${parent_linux}/local.properties.bak_kor35" ]]; then
+    candidate="${parent_linux}/local.properties.bak_kor35"
+  fi
+  # SDK Windows tipico
+  local sdk_guess=""
+  if [[ -d "/mnt/c/Users" ]]; then
+    local u
+    for u in /mnt/c/Users/*; do
+      if [[ -d "${u}/AppData/Local/Android/Sdk" ]]; then
+        sdk_guess="${u}/AppData/Local/Android/Sdk"
+        break
+      fi
+    done
+  fi
+
+  if [[ -n "${candidate}" ]]; then
+    cp "${candidate}" "${dest}"
+    echo "Ripristinato local.properties da backup."
+    return 0
+  fi
+
+  if [[ -n "${sdk_guess}" ]]; then
+    local sdk_win
+    sdk_win="$(wslpath -w "${sdk_guess}" | sed 's/\\/\\\\/g')"
+    printf 'sdk.dir=%s\n' "${sdk_win}" > "${dest}"
+    echo "Creato local.properties → sdk.dir=${sdk_win}"
+  else
+    echo "WARN: nessun SDK Android trovato; al primo open Studio chiederà l'SDK." >&2
+  fi
+}
+
+OPEN_WIN="$(to_win "${OPEN_PATH}")"
+OPEN_WIN="${OPEN_WIN%\\}"
+PARENT_WIN="$(to_win "${RAW_ROOT}")"
+PARENT_WIN="${PARENT_WIN%\\}"
+
+linux_path="$(to_linux "${OPEN_PATH}")"
+parent_linux="$(to_linux "${RAW_ROOT}")"
+
+# Backup local.properties dal parent prima della pulizia (se c'era sync piatto)
+if [[ -n "${parent_linux}" && -f "${parent_linux}/local.properties" ]]; then
+  cp "${parent_linux}/local.properties" "${parent_linux}/local.properties.bak_kor35" || true
+fi
+
+# 1) pulisci parent PRIMA così non resta un secondo progetto
+cleanup_parent_gradle_root "${parent_linux}" "${linux_path}"
+
+# 2) copia progetto completo in …/android
+robo "${SRC_ANDROID}" "${OPEN_WIN}"
+
+if [[ -z "${linux_path}" || ! -d "${linux_path}" ]]; then
+  echo "ERRORE: destinazione Linux non raggiungibile: ${OPEN_PATH}" >&2
+  exit 1
+fi
+
+fail=0
+for f in \
+  "${linux_path}/settings.gradle" \
+  "${linux_path}/gradlew.bat" \
+  "${linux_path}/build.gradle" \
+  "${linux_path}/capacitor.settings.gradle" \
+  "${linux_path}/capacitor-plugins/capacitor-status-bar/build.gradle" \
+  "${linux_path}/capacitor-plugins/capacitor-android/build.gradle" \
+  "${linux_path}/app/build.gradle" \
+  "${linux_path}/app/src/main/AndroidManifest.xml"
+do
+  if [[ ! -f "${f}" ]]; then
+    echo "ERRORE: manca dopo sync: ${f}" >&2
+    fail=1
+  fi
+done
+if [[ "${fail}" -ne 0 ]]; then
+  exit 1
+fi
+
+if grep -Eq "projectDir[[:space:]]*=[[:space:]]*new File\(['\"].*node_modules" \
+  "${linux_path}/capacitor.settings.gradle"
+then
+  echo "ERRORE: capacitor.settings.gradle punta ancora a node_modules." >&2
+  exit 1
+fi
+if ! grep -q "capacitor-plugins/capacitor-status-bar" \
+  "${linux_path}/capacitor.settings.gradle"
+then
+  echo "ERRORE: capacitor.settings.gradle non usa capacitor-plugins/." >&2
+  exit 1
+fi
+
+seed_local_properties "${linux_path}" "${parent_linux}"
+
+# Ripeti cleanup: robocopy non deve aver ricreato nulla nel parent
+cleanup_parent_gradle_root "${parent_linux}" "${linux_path}"
+
+cat > "${linux_path}/APRI_IN_ANDROID_STUDIO.txt" <<EOF
 PATH BLOCCATO — unica cartella da aprire in Android Studio:
 
   ${OPEN_PATH}
 
 (equivalente: $(echo "${OPEN_PATH}" | sed 's|/|\\|g'))
 
-Deve contenere: settings.gradle, gradlew.bat, app/, capacitor-plugins/
+Checklist file (devono esserci TUTTI):
+  - settings.gradle
+  - gradlew.bat
+  - app\\build.gradle
+  - capacitor-plugins\\capacitor-status-bar\\build.gradle
 
 NON aprire:
+  - C:\\dev\\kor35-app          (parent — solo contenitore)
   - C:\\dev\\kor35-android
-  - C:\\dev\\kor35-app          (parent: niente Gradle root)
   - \\\\wsl.localhost\\...
+
+In Studio: File → Close Project → Open → questa cartella → Trust Project → Sync Gradle.
 EOF
-fi
 
 echo
 echo "=============================================="
-echo " OK — PATH UNICO (bloccato):"
+echo " OK — apri in Android Studio SOLO:"
 echo "   ${OPEN_WIN}"
-echo " Comando: make android-sync WIN=1"
+echo
+echo " Se Studio riapre C:\\dev\\kor35-app (parent):"
+echo "   File → Close Project, poi Open sulla cartella android."
+echo " Il parent è stato ripulito (niente più app lì)."
 echo "=============================================="
