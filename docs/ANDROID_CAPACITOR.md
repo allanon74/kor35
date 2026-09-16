@@ -172,6 +172,20 @@ Fix in repo: `capacitor-cordova-android-plugins/` è **versionata**,
 `app/src/main/assets/.gitkeep` esiste, e `cap:sync` crea la cartella assets prima
 del sync. `vendor-capacitor-android-plugins.mjs` verifica entrambe.
 
+### Gradle OK in WSL ma Studio resta su «Add Configuration…»
+
+Se `./gradlew projects` elenca `:app` ma Studio no, il problema è il **modello di
+progetto salvato da Studio**: dopo un import fallito resta un `.idea` non
+collegato a Gradle (senza `.idea/gradle.xml`) e riaprendo la cartella Studio
+**non ritenta** l'import.
+
+```bash
+make android-reset-studio WIN=1   # chiudi prima il progetto in Studio
+```
+
+Poi in Studio: **Open** → `C:\dev\kor35-app\android` → *Trust Project* → attendi il
+Gradle sync. `make android-sync WIN=1` rileva e rimuove da sé un `.idea` rotto.
+
 File per-macchina che il mirror **non** deve toccare:
 
 | File | Serve per |

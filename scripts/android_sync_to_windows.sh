@@ -233,6 +233,33 @@ if [[ ! -f "${linux_path}/app/google-services.json" ]]; then
   echo "NOTA: app/google-services.json assente → build OK ma push FCM non funzionano." >&2
 fi
 
+# Se un import precedente è fallito, Studio lascia un .idea NON collegato a Gradle
+# (senza .idea/gradle.xml) e al riapri NON ritenta: risultato "Add Configuration…"
+# e nessun device. In quel caso il .idea va buttato: Studio rifà l'import.
+reset_broken_idea() {
+  local proj="$1"
+  local idea="${proj}/.idea"
+  [[ -d "${idea}" ]] || return 0
+
+  if [[ -f "${idea}/gradle.xml" ]]; then
+    echo "OK: .idea collegato a Gradle (run configurations preservate)."
+    return 0
+  fi
+
+  echo "ATTENZIONE: ${OPEN_PATH}/.idea esiste ma non è un progetto Gradle."
+  echo "            (import precedente fallito) → lo rimuovo per forzare il re-import."
+  rm -rf "${idea}"
+  rm -rf "${proj}/.gradle"
+  echo "OK: .idea e .gradle rimossi. Alla prossima apertura Studio reimporta."
+}
+
+if [[ "${ANDROID_RESET_STUDIO:-0}" = "1" ]]; then
+  echo "ANDROID_RESET_STUDIO=1 → rimuovo .idea/.gradle/build dalla destinazione"
+  rm -rf "${linux_path}/.idea" "${linux_path}/.gradle" "${linux_path}/build"
+else
+  reset_broken_idea "${linux_path}"
+fi
+
 # Il parent resta com'è: non cancelliamo nulla di tuo. Solo un promemoria.
 if [[ -n "${parent_linux}" && -d "${parent_linux}" && "${parent_linux}" != "${linux_path}" ]]; then
   cat > "${parent_linux}/APRI_LA_CARTELLA_ANDROID.txt" <<EOF
@@ -252,5 +279,13 @@ echo "   ${OPEN_WIN}"
 echo
 echo " Presenti: settings.gradle, app/, capacitor-plugins/,"
 echo "           capacitor-cordova-android-plugins/, local.properties"
-echo " Preservati (non sovrascritti): .idea/, .gradle/, build/"
+echo
+echo " In Studio, se non vedi il device selector:"
+echo "   1) File → Close Project"
+echo "   2) Open → ${OPEN_WIN}  (seleziona la cartella, non un file)"
+echo "   3) Trust Project → attendi 'Gradle sync'"
+echo "   4) se serve: File → Sync Project with Gradle Files"
+echo
+echo " Reset totale progetto Studio (butta .idea/.gradle/build):"
+echo "   make android-reset-studio WIN=1"
 echo "=============================================="
