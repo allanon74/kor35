@@ -91,9 +91,15 @@ make android-apk              # debug
 make android-apk RELEASE=1    # release non firmata
 ```
 
-Cosa fa: installa l'SDK in `~/android-sdk` se manca, esegue `cap sync` + vendor
-plugin, poi `gradlew assembleDebug`. In WSL copia l'APK in `C:\dev\kor35-apk\`
-(override con `ANDROID_APK_WIN_DIR`).
+Cosa fa: verifica il JDK, installa l'SDK Android se manca (in `$ANDROID_SDK_ROOT`
+o `~/android-sdk`), esegue `cap sync` + vendor plugin, poi `gradlew assembleDebug`.
+In WSL copia l'APK in `C:\dev\kor35-apk\` (override con `ANDROID_APK_WIN_DIR`).
+
+**Serve un JDK, non il solo runtime.** Con il JRE Gradle fallisce con
+`Toolchain installation ... does not provide the required capabilities: [JAVA_COMPILER]`.
+Lo script cerca `javac` (`JAVA_HOME`, PATH, `/usr/lib/jvm/*`) e, se manca, prova
+`sudo apt install -y openjdk-21-jdk-headless` (disattivabile con
+`ANDROID_APK_NO_APT=1`).
 
 Installazione sul telefono (da PowerShell, telefono in USB debug):
 

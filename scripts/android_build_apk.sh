@@ -40,10 +40,72 @@ echo "Sorgente : ${ANDROID_DIR}"
 echo "SDK      : ${SDK_DIR}"
 echo "Task     : ${GRADLE_TASK}"
 
-if ! command -v java >/dev/null 2>&1; then
-  echo "ERRORE: serve un JDK 21 (sudo apt install -y openjdk-21-jdk)" >&2
-  exit 1
+# Serve un JDK completo: con il solo runtime (JRE) Gradle fallisce con
+# "Toolchain installation ... does not provide the required capabilities: [JAVA_COMPILER]".
+detect_jdk_home() {
+  if [[ -n "${JAVA_HOME:-}" && -x "${JAVA_HOME}/bin/javac" ]]; then
+    printf '%s' "${JAVA_HOME}"
+    return 0
+  fi
+
+  if command -v javac >/dev/null 2>&1; then
+    local javac_path
+    javac_path="$(readlink -f "$(command -v javac)")"
+    printf '%s' "$(dirname "$(dirname "${javac_path}")")"
+    return 0
+  fi
+
+  # Preferisci 25/21/17 (AGP 8.13 richiede JDK 17+).
+  local version dir
+  for version in 25 21 17; do
+    for dir in /usr/lib/jvm/*"${version}"*/; do
+      if [[ -x "${dir}bin/javac" ]]; then
+        printf '%s' "${dir%/}"
+        return 0
+      fi
+    done
+  done
+  for dir in /usr/lib/jvm/*/; do
+    if [[ -x "${dir}bin/javac" ]]; then
+      printf '%s' "${dir%/}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+APT_JDK_PACKAGE="openjdk-21-jdk-headless"
+
+install_jdk_with_apt() {
+  command -v apt-get >/dev/null 2>&1 || return 1
+  command -v sudo >/dev/null 2>&1 || return 1
+  echo "Installo ${APT_JDK_PACKAGE} (sudo può chiedere la password)…"
+  sudo apt-get update -qq || return 1
+  sudo apt-get install -y "${APT_JDK_PACKAGE}" || return 1
+  return 0
+}
+
+if ! JDK_HOME="$(detect_jdk_home)"; then
+  echo "Nessun JDK con compilatore (javac): serve il JDK, non il solo runtime."
+  if command -v java >/dev/null 2>&1; then
+    echo "Runtime presente: $(java -version 2>&1 | head -1)"
+  fi
+
+  if [[ "${ANDROID_APK_NO_APT:-0}" != "1" ]] && install_jdk_with_apt; then
+    JDK_HOME="$(detect_jdk_home)" || true
+  fi
+
+  if [[ -z "${JDK_HOME:-}" ]]; then
+    echo >&2
+    echo "ERRORE: installa un JDK e ripeti:" >&2
+    echo "  sudo apt update && sudo apt install -y ${APT_JDK_PACKAGE}" >&2
+    exit 1
+  fi
 fi
+
+export JAVA_HOME="${JDK_HOME}"
+export PATH="${JAVA_HOME}/bin:${PATH}"
+echo "JDK      : ${JAVA_HOME} ($("${JAVA_HOME}/bin/javac" -version 2>&1))"
 
 ensure_sdk() {
   local sdkmanager="${SDK_DIR}/cmdline-tools/latest/bin/sdkmanager"
@@ -86,7 +148,8 @@ echo
 echo "--- gradle ${GRADLE_TASK} ---"
 cd "${ANDROID_DIR}"
 chmod +x gradlew
-./gradlew "${GRADLE_TASK}"
+# -Dorg.gradle.java.home: evita che un JRE registrato come toolchain vinca sul JDK.
+./gradlew "${GRADLE_TASK}" "-Dorg.gradle.java.home=${JAVA_HOME}"
 
 APK_PATH="${ANDROID_DIR}/${APK_REL}"
 if [[ ! -f "${APK_PATH}" ]]; then
