@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: android-sync android-open android-path android-doctor android-reset-studio help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db prod-turn-prepare pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart timer-dispatch timer-dispatch-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run bootstrap-kor35-mse-template bootstrap-kor35-mse-template-dry-run
+.PHONY: android-apk android-sync android-open android-path android-doctor android-reset-studio help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db prod-turn-prepare pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart timer-dispatch timer-dispatch-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run bootstrap-kor35-mse-template bootstrap-kor35-mse-template-dry-run
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -34,6 +34,8 @@ help:
 	@echo "Target principali:"
 	@echo "  make env ENV=dev-home        # crea/attiva backend/.env.<env>"
 	@echo "  make setup                   # prepara runtime + build frontend"
+	@echo "  make android-apk             # APK completo in WSL, SENZA Android Studio (consigliato)"
+	@echo "  make android-apk RELEASE=1   # APK release non firmata"
 	@echo "  make android-sync            # build React + Capacitor sync Android"
 	@echo "  make android-sync WIN=1      # sync + copia; apri SOLO C:\\dev\\kor35-app\\android"
 	@echo "  make android-path            # stampa il path UNICO (bloccato) per Android Studio"
@@ -458,6 +460,13 @@ prod-turn-prepare:
 WIN ?= 0
 # Contenitore sync. La cartella Studio è sempre $(WIN_ANDROID_DIR)/android
 WIN_ANDROID_DIR ?= C:/dev/kor35-app
+
+# Percorso consigliato: un solo comando, una sola copia del progetto, nessuno Studio.
+# Installa l'SDK in ~/android-sdk se manca e copia l'APK in C:\dev\kor35-apk (WSL).
+RELEASE ?= 0
+
+android-apk:
+	RELEASE="$(RELEASE)" ./scripts/android_build_apk.sh
 
 android-sync:
 	cd frontend && (npm ci || npm install) && npm run cap:sync
