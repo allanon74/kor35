@@ -51,20 +51,14 @@ html, body, #root {
   padding-bottom: max(0.25rem, var(--kor-safe-bottom));
 }
 
-/* Header sotto status bar / notch (shell Capacitor e PWA standalone) */
+/*
+ * Header sotto notch (PWA / iOS): usa --kor-safe-top (default = env(safe-area-inset-top)).
+ * Shell Android: MainActivity applica già gli inset nativi → --kor-safe-top = 0px
+ * (vedi nativeChrome.js). Non aggiungere padding extra su html[data-kor35-native].
+ */
 .kor-app-header {
   padding-top: max(0.75rem, var(--kor-safe-top));
   min-height: calc(4rem + var(--kor-safe-top));
-}
-
-/*
- * Android 15+ forza edge-to-edge: env(safe-area-inset-top) spesso resta 0.
- * setupNativeChrome imposta --kor-safe-top da StatusBar.getInfo().height;
- * qui un fallback minimo se il JS non è ancora partito / non deployato.
- */
-html[data-kor35-native] .kor-app-header {
-  padding-top: max(2rem, var(--kor-safe-top));
-  min-height: calc(4rem + max(2rem, var(--kor-safe-top)));
 }
 
 /* Assicura che l'app React prenda tutto lo spazio */

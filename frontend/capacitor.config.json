@@ -33,6 +33,11 @@
       "overlaysWebView": false,
       "style": "DARK",
       "backgroundColor": "#111827"
+    },
+    "SystemBars": {
+      "insetsHandling": "disable",
+      "style": "DARK",
+      "hidden": false
     }
   }
 }

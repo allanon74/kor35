@@ -146,12 +146,21 @@ Volume esempio in `compose.prod.yml` (scommentare e riavviare backend):
 
 ### Status bar: header sotto la barra notifiche
 
-Sintomo: pulsanti in alto non tappabili (sotto la status bar Android).
+Sintomo: UI / pulsanti in alto sotto la status bar Android (non tappabili).
 
-Su **Android 15+** `StatusBar.setOverlaysWebView(false)` è **ignorato** (edge-to-edge forzato).
-Il fix reale è CSS/JS: `setupNativeChrome` legge `StatusBar.getInfo().height` e imposta `--kor-safe-top`.
+**Causa:** con `targetSdk` ≥ 35 Android forza edge-to-edge. `StatusBar.setOverlaysWebView(false)`
+è un no-op e `env(safe-area-inset-top)` nella WebView resta spesso 0.
 
-Serve **deploy frontend su www.kor35.it** (WebView remota). Nuovo APK utile per plugin StatusBar / tema, ma da solo non basta.
+**Fix (nativo, richiede nuovo APK):** `MainActivity` fa `EdgeToEdge.enable` e applica
+`WindowInsets` (systemBars + cutout) come **padding** sul layout bridge Capacitor.
+Così tutta la WebView (anche con `server.url` remoto) resta sotto la status bar,
+senza dipendere dal deploy del frontend.
+
+Dopo il fix: `make android-sync WIN=1` → rebuild/install APK → apri
+`C:\dev\kor35-app\android`.
+
+Il JS `setupNativeChrome` azzera `--kor-safe-top` su Android per non **raddoppiare**
+il padding già applicato nativamente.
 
 ### Tap notifica: non fa nulla
 
