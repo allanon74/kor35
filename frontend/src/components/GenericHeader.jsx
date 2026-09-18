@@ -8,7 +8,7 @@ const GenericHeader = ({
     rightSlot
 }) => {
     return (
-        <header className="h-16 bg-gray-950 border-b border-gray-800 flex items-center justify-between px-4 z-40 shadow-2xl shrink-0 w-full">
+        <header className="kor-safe-header h-16 bg-gray-950 border-b border-gray-800 flex items-center justify-between px-4 z-40 shadow-2xl shrink-0 w-full">
             {/* LEFT: Logo e Titoli (NESSUN MENU QUI) */}
             <div className="flex items-center gap-3">
                 <Link to="/app/start" className="flex items-center gap-2" title="Torna alla splash page">

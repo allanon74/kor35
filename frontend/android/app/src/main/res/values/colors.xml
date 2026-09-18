@@ -3,4 +3,6 @@
     <color name="colorPrimary">#111827</color>
     <color name="colorPrimaryDark">#111827</color>
     <color name="colorAccent">#4F46E5</color>
+    <!-- Fondo app (kor-surface del frontend): usato per window/layout background -->
+    <color name="colorSurface">#111827</color>
 </resources>

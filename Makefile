@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: android-sync android-open android-path help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db prod-turn-prepare pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart timer-dispatch timer-dispatch-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run bootstrap-kor35-mse-template bootstrap-kor35-mse-template-dry-run
+.PHONY: android-apk android-sync android-open android-path android-doctor android-reset-studio help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db prod-turn-prepare pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart timer-dispatch timer-dispatch-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run bootstrap-kor35-mse-template bootstrap-kor35-mse-template-dry-run
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -34,9 +34,13 @@ help:
 	@echo "Target principali:"
 	@echo "  make env ENV=dev-home        # crea/attiva backend/.env.<env>"
 	@echo "  make setup                   # prepara runtime + build frontend"
+	@echo "  make android-apk             # APK completo in WSL, SENZA Android Studio (consigliato)"
+	@echo "  make android-apk RELEASE=1   # APK release non firmata"
 	@echo "  make android-sync            # build React + Capacitor sync Android"
-	@echo "  make android-sync WIN=1      # sync + copia su C:/dev/kor35-app (apri C:\\dev\\kor35-app\\android)"
-	@echo "  make android-path            # stampa il path UNICO da aprire in Android Studio"
+	@echo "  make android-sync WIN=1      # sync + copia; apri SOLO C:\\dev\\kor35-app\\android"
+	@echo "  make android-path            # stampa il path UNICO (bloccato) per Android Studio"
+	@echo "  make android-doctor WIN=1    # verifica che C:\\dev\\kor35-app\\android sia la root Gradle"
+	@echo "  make android-reset-studio WIN=1 # butta .idea/.gradle/build e risincronizza (Studio reimporta)"
 	@echo "  make android-open WIN=1      # ricorda il path Windows da aprire"
 	@echo "  make up                      # avvia stack (con build + collectstatic)"
 	@echo "  make up-no-build             # avvio senza rebuild immagini (obbligatorio mirror offline/evento)"
@@ -448,19 +452,27 @@ prod-turn-prepare:
 # Richiede Node sul host (non nel container) e Android Studio per build APK.
 # CAPACITOR_SERVER_URL opzionale (default https://www.kor35.it).
 #
-# PATH WINDOWS UNICO (WSL → Android Studio):
+# PATH WINDOWS BLOCCATO (non cambiare senza richiesta esplicita utente):
 #   make android-sync WIN=1
-#   Apri SEMPRE: C:\dev\kor35-app\android
-# Non usare C:\dev\kor35-android (legacy/rotto).
+#   Apri SEMPRE e SOLO: C:\dev\kor35-app\android
+# Contiene root Gradle self-contained (capacitor-plugins vendored).
+# Non usare C:\dev\kor35-android né C:\dev\kor35-app (parent).
 WIN ?= 0
-# Override solo se necessario. Slash avanti obbligatori.
+# Contenitore sync. La cartella Studio è sempre $(WIN_ANDROID_DIR)/android
 WIN_ANDROID_DIR ?= C:/dev/kor35-app
+
+# Percorso consigliato: un solo comando, una sola copia del progetto, nessuno Studio.
+# Installa l'SDK in ~/android-sdk se manca e copia l'APK in C:\dev\kor35-apk (WSL).
+RELEASE ?= 0
+
+android-apk:
+	RELEASE="$(RELEASE)" ./scripts/android_build_apk.sh
 
 android-sync:
 	cd frontend && (npm ci || npm install) && npm run cap:sync
 	./scripts/pin_android_agp.sh
 	@if [ "$(WIN)" = "1" ]; then \
-		echo "WIN=1 → sync Windows su $(WIN_ANDROID_DIR) (apri $(WIN_ANDROID_DIR)/android)"; \
+		echo "WIN=1 → sync Windows; apri $(WIN_ANDROID_DIR)/android"; \
 		WIN_ANDROID_DIR="$(WIN_ANDROID_DIR)" ./scripts/android_sync_to_windows.sh; \
 	else \
 		echo "Da WSL + Android Studio Windows: make android-sync WIN=1"; \
@@ -471,14 +483,61 @@ android-open:
 	@if [ "$(WIN)" = "1" ]; then \
 		echo ""; \
 		echo "=============================================="; \
-		echo " Apri in Android Studio SOLO:"; \
+		echo " PATH UNICO (bloccato) — apri SOLO:"; \
 		echo "   C:\\dev\\kor35-app\\android"; \
-		echo " (equiv. $(WIN_ANDROID_DIR)/android)"; \
 		echo "=============================================="; \
-		echo "NON aprire C:\\dev\\kor35-android"; \
+		echo "NON aprire C:\\dev\\kor35-android né C:\\dev\\kor35-app (parent)"; \
 	else \
 		cd frontend && npx cap open android; \
 	fi
 
 android-path:
 	@echo "C:\\dev\\kor35-app\\android"
+
+# Studio non ritenta l'import se il precedente è fallito: butta .idea/.gradle/build.
+android-reset-studio:
+	@if [ "$(WIN)" != "1" ]; then \
+		echo "Usa: make android-reset-studio WIN=1"; exit 1; \
+	fi
+	@echo "Chiudi il progetto in Android Studio prima di procedere (File -> Close Project)."
+	ANDROID_RESET_STUDIO=1 WIN_ANDROID_DIR="$(WIN_ANDROID_DIR)" ./scripts/android_sync_to_windows.sh
+	@echo ""
+	@echo "Ora in Android Studio: Open -> C:\\dev\\kor35-app\\android -> Trust Project"
+
+# Verifica layout Windows: …/android completo (Gradle + SDK + cordova).
+android-doctor:
+	@WIN_ANDROID_DIR="$(WIN_ANDROID_DIR)" bash -c ' \
+	  root="$${WIN_ANDROID_DIR:-C:/dev/kor35-app}"; \
+	  open="$${root%/}/android"; \
+	  to_linux() { \
+	    case "$$1" in \
+	      [A-Za-z]:/*|[A-Za-z]:\\*) \
+	        d=$$(echo "$${1:0:1}" | tr A-Z a-z); \
+	        rest="$${1:2}"; rest="$${rest//\\//}"; \
+	        echo "/mnt/$$d/$$rest" ;; \
+	      *) echo "" ;; \
+	    esac; \
+	  }; \
+	  ol=$$(to_linux "$$open"); \
+	  echo "Progetto: $$open"; \
+	  ok=1; \
+	  for f in settings.gradle build.gradle gradlew.bat app/build.gradle \
+	           capacitor.settings.gradle \
+	           capacitor-plugins/capacitor-status-bar/build.gradle \
+	           capacitor-cordova-android-plugins/cordova.variables.gradle \
+	           local.properties; do \
+	    if [[ ! -f "$$ol/$$f" ]]; then echo "MANCA: $$f"; ok=0; else echo "OK: $$f"; fi; \
+	  done; \
+	  if [[ -f "$$ol/local.properties" ]] && ! grep -q "^sdk.dir=" "$$ol/local.properties"; then \
+	    echo "MANCA: sdk.dir in local.properties"; ok=0; \
+	  fi; \
+	  if [[ -f "$$ol/app/google-services.json" ]]; then echo "OK: google-services.json"; \
+	  else echo "NOTA: google-services.json assente (push FCM off)"; fi; \
+	  agp=$$(grep -hoE "com.android.tools.build:gradle:[0-9.]+" "$$ol/build.gradle" 2>/dev/null | sort -u); \
+	  agp_all=$$(grep -rhoE "com.android.tools.build:gradle:[0-9.]+" "$$ol" 2>/dev/null | sort -u | tr "\n" " "); \
+	  if [[ $$(echo "$$agp_all" | wc -w) -gt 1 ]]; then \
+	    echo "MANCA: AGP allineato (trovati: $$agp_all) -> No matching variant"; ok=0; \
+	  else echo "OK: AGP unico ($$agp)"; fi; \
+	  if [[ "$$ok" -eq 1 ]]; then echo "DOCTOR OK — Studio deve mostrare il device selector"; \
+	  else echo "DOCTOR FAIL — rilancia: make android-sync WIN=1"; exit 1; fi'
+

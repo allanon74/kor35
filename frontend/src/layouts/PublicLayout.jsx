@@ -337,7 +337,7 @@ export default function PublicLayout({ token }) {
       <div className="flex flex-col h-screen bg-[var(--wiki-paper-deep)] text-gray-900 font-sans overflow-hidden wiki-shell">
       
       {/* HEADER */}
-      <header className="bg-[var(--wiki-brand)] text-white shadow-md z-20 shrink-0">
+      <header className="kor-safe-shell bg-[var(--wiki-brand)] text-white shadow-md z-20 shrink-0">
         <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
           <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="md:hidden p-1 hover:bg-red-800 rounded focus:outline-none" aria-label="Apri menu wiki">

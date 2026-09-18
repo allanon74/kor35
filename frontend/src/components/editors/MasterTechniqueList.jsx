@@ -64,6 +64,7 @@ const MasterTechniqueList = ({
         header: 'QR',
         width: '44px',
         align: 'center',
+        mobileRole: 'badge',
         getSortValue: (item) => (item.has_qrcode ? 1 : 0),
         getFilterValue: (item) => (item.has_qrcode ? 'QR' : ''),
         render: (item) => <StaffQrBadge hasQr={item.has_qrcode} />,
@@ -73,6 +74,7 @@ const MasterTechniqueList = ({
         header: 'Lvl',
         width: '60px',
         align: 'center',
+        mobileRole: 'badge',
         getSortValue: (item) => item.livello || item.liv || 0,
         render: (item) => (
           <span className="font-mono font-bold text-gray-400">
@@ -85,6 +87,7 @@ const MasterTechniqueList = ({
         header: 'Au',
         width: '50px',
         align: 'center',
+        mobileRole: 'badge',
         getSortValue: (item) => {
           const auraId = item.aura_richiesta?.id || item.aura_richiesta;
           const aura = item.aura_richiesta?.id
@@ -119,9 +122,10 @@ const MasterTechniqueList = ({
       {
         key: 'nome',
         header: 'Nome',
+        mobileRole: 'title',
         getSortValue: (item) => item.nome || '',
         render: (item) => (
-          <div className="font-bold text-cyan-50 truncate max-w-[150px] md:max-w-xs">
+          <div className="font-bold text-cyan-50 break-words lg:truncate lg:max-w-xs">
             {item.nome}
           </div>
         ),
@@ -129,6 +133,8 @@ const MasterTechniqueList = ({
       {
         key: 'mattoni',
         header: 'Mattoni',
+        wrap: true,
+        mobileRole: 'detail',
         getSortValue: (item) => (Array.isArray(item.componenti) ? item.componenti.length : 0),
         getFilterValue: (item) => {
           const rows = Array.isArray(item.componenti) ? item.componenti : [];
@@ -138,7 +144,7 @@ const MasterTechniqueList = ({
           const rows = Array.isArray(item.componenti) ? item.componenti : [];
           if (!rows.length) return <span className="text-[10px] text-gray-600">—</span>;
           return (
-            <div className="text-[10px] text-gray-300 leading-tight max-w-[260px]">
+            <div className="text-[10px] text-gray-300 leading-tight whitespace-normal break-words lg:max-w-[260px]">
               {rows.map((row) => `${row.nome || '?'} x${row.valore ?? 1}`).join(' · ')}
             </div>
           );

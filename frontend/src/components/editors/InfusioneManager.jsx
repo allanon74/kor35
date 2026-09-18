@@ -47,22 +47,24 @@ const InfusioneManager = ({ onBack, onLogout }) => {
 
   return (
     <StaffToolShell maxWidth="6xl">
-      <div className="mb-6">
-        {view === 'edit' && (
-          <button onClick={handleEditorBack} className="text-amber-500 hover:text-amber-400 text-sm font-bold flex items-center gap-1 mb-2">
-            ← Torna alla lista
-          </button>
-        )}
-        {qrStatus.message && (
-          <div className={`mt-3 text-xs border rounded-md px-3 py-1 inline-block ${
-            qrStatus.type === 'error'
-              ? 'text-red-200 bg-red-900/20 border-red-700/40'
-              : 'text-emerald-300 bg-emerald-900/20 border-emerald-700/40'
-          }`}>
-            {qrStatus.message}
-          </div>
-        )}
-      </div>
+      {(view === 'edit' || qrStatus.message) && (
+        <div className="mb-4">
+          {view === 'edit' && (
+            <button onClick={handleEditorBack} className="text-amber-500 hover:text-amber-400 text-sm font-bold flex items-center gap-1 mb-2">
+              ← Torna alla lista
+            </button>
+          )}
+          {qrStatus.message && (
+            <div className={`mt-3 text-xs border rounded-md px-3 py-1 inline-block ${
+              qrStatus.type === 'error'
+                ? 'text-red-200 bg-red-900/20 border-red-700/40'
+                : 'text-emerald-300 bg-emerald-900/20 border-emerald-700/40'
+            }`}>
+              {qrStatus.message}
+            </div>
+          )}
+        </div>
+      )}
 
       {view === 'list' ? (
         <>

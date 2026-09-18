@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "preview": "vite preview",
     "patch-push": "npm version patch && git push --follow-tags",
-    "cap:sync": "node scripts/apply-capacitor-server-url.mjs && npm run build && npx cap sync android",
+    "cap:sync": "node scripts/apply-capacitor-server-url.mjs && npm run build && node -e \"require('node:fs').mkdirSync('android/app/src/main/assets',{recursive:true})\" && npx cap sync android && node scripts/vendor-capacitor-android-plugins.mjs",
+    "cap:vendor-plugins": "node scripts/vendor-capacitor-android-plugins.mjs",
     "cap:open": "npx cap open android",
     "android:sync": "npm run cap:sync"
   },

@@ -82,9 +82,52 @@ make android-sync
 make android-open
 ```
 
-### WSL + Android Studio su Windows (consigliato)
+### APK senza Android Studio (consigliato)
 
-**Path UNICO — non cambiarlo:**
+Un solo comando, una sola copia del progetto (`frontend/android` nel repo):
+
+```bash
+make android-apk              # debug
+make android-apk RELEASE=1    # release non firmata
+```
+
+Cosa fa: verifica il JDK, installa l'SDK Android se manca (in `$ANDROID_SDK_ROOT`
+o `~/android-sdk`), esegue `cap sync` + vendor plugin, poi `gradlew assembleDebug`.
+In WSL copia l'APK in `C:\dev\kor35-apk\` (override con `ANDROID_APK_WIN_DIR`).
+
+**Serve un JDK, non il solo runtime.** Con il JRE Gradle fallisce con
+`Toolchain installation ... does not provide the required capabilities: [JAVA_COMPILER]`.
+Lo script cerca `javac` (`JAVA_HOME`, PATH, `/usr/lib/jvm/*`) e, se manca, prova
+`sudo apt install -y openjdk-21-jdk-headless` (disattivabile con
+`ANDROID_APK_NO_APT=1`).
+
+Lo stesso errore **persiste anche con il JDK installato** se Gradle ha memorizzato
+le capability del JVM prima: la rilevazione resta nel demone e in
+`~/.gradle/caches/<ver>/jvms`. Lo script quindi:
+
+1. ferma i demoni (`gradlew --stop`);
+2. passa `-Dorg.gradle.java.home` e disattiva l'auto-detect delle toolchain, così
+   l'unico JVM candidato è il JDK trovato;
+3. se il messaggio `JAVA_COMPILER` compare comunque, svuota `…/caches/*/jvms` e
+   riprova una volta.
+
+Installazione sul telefono (da PowerShell, telefono in USB debug):
+
+```powershell
+adb install -r C:\dev\kor35-apk\kor35-debug.apk
+```
+
+Oppure copia l'APK sul telefono e aprilo.
+
+Questo evita il problema tipico del flusso con Studio: **due copie** su disco
+Windows (`C:\dev\kor35-app` e `C:\dev\kor35-app\android`) e Studio ancorato a
+quella sbagliata. Indizio nei log di Studio: il path in
+`file:///C:/dev/kor35-app/build/reports/...` (senza `/android/`) indica che sta
+compilando il parent, quindi **non** vede le modifiche sincronizzate.
+
+### WSL + Android Studio su Windows (alternativa)
+
+**PATH BLOCCATO — unica cartella, non cambiarla:**
 
 ```text
 C:\dev\kor35-app\android
@@ -95,11 +138,12 @@ make android-sync WIN=1
 make android-path   # stampa C:\dev\kor35-app\android
 ```
 
-- Default: `C:/dev/kor35-app` (root) + sottocartella `android/` da aprire in Studio.
-- Capacitor richiede anche `C:/dev/kor35-app/node_modules/@capacitor/...` (sibling).
-- **Non** usare `C:\dev\kor35-android` (legacy, layout rotto → errori Gradle `capacitor-status-bar`).
+- Sync verso `C:/dev/kor35-app/android` = **root Gradle** (`settings.gradle`, `gradlew.bat`, `app/`, `capacitor-plugins/`).
+- I plugin Capacitor sono **vendored** in `capacitor-plugins/` (niente sibling `node_modules`).
+- **Non** aprire `C:\dev\kor35-android`, né il parent `C:\dev\kor35-app` (Studio: «no configuration»).
 - **Non** aprire `\\wsl.localhost\...`.
-- Override solo se necessario: `WIN_ANDROID_DIR='D:/altro'` (slash avanti).
+- Override contenitore solo se necessario: `WIN_ANDROID_DIR='D:/altro'` → Studio resta `D:/altro/android`.
+- Se Studio dice «no configuration»: cartella sbagliata (manca `settings.gradle`).
 
 Questo clone **pinna AGP 8.10.1** (Android Studio Ladybug/Meerkat). Capacitor 8 a monte chiede 8.13.0 / Studio Otter: `make android-sync` riscrive i `build.gradle` in `node_modules/@capacitor` così Studio non rifiuta il sync.
 
@@ -145,14 +189,103 @@ Volume esempio in `compose.prod.yml` (scommentare e riavviare backend):
 - /srv/kor35/secrets/firebase-fcm.json:/app/secrets/firebase-fcm.json:ro
 ```
 
+### `No matching variant of project :capacitor-status-bar` / `No variants exist`
+
+Significa che il modulo plugin non ha prodotto varianti compatibili con `:app`.
+Causa tipica: **versioni AGP diverse** tra progetto root e moduli Capacitor
+(il messaggio riporta l'`AgpVersionAttr` atteso dal consumer, es. `8.10.1`).
+
+I moduli Capacitor 8 dichiarano AGP `8.13.0` nel loro `buildscript`; se
+`android/build.gradle` ne dichiara un'altra, Gradle/Studio non trova varianti.
+
+`vendor-capacitor-android-plugins.mjs` legge l'AGP dal root e **riscrive** la
+stessa versione nei moduli vendored (plugin + cordova). Per cambiare versione si
+edita solo `frontend/android/build.gradle`, poi `make android-sync WIN=1`.
+
+Verifica: `make android-doctor WIN=1` segnala se trova più di una versione AGP.
+Se Android Studio è più vecchio dell'AGP richiesto, abbassa la versione nel root:
+i moduli vengono riallineati automaticamente al prossimo sync.
+
+### Solo «Add Configuration…», nessun device selector
+
+Sintomo: la cartella si apre ma Studio non ha né modulo app né device.
+Non è un problema di cartella sbagliata: **il Gradle sync di `:app` fallisce**.
+
+Riproduzione fuori da Studio (mostra la vera causa):
+
+```bash
+cd frontend/android && ./gradlew projects
+```
+
+Deve elencare `:app` + i moduli `:capacitor-*`. Se invece dà:
+
+```text
+Could not read script '…/capacitor-cordova-android-plugins/cordova.variables.gradle'
+```
+
+manca la cartella Cordova, richiesta da `settings.gradle` e
+`app/capacitor.build.gradle`. Senza `:app`, Studio non crea la run configuration.
+
+**Catena del bug:** `app/src/main/assets/` non era in git → `npx cap sync` non
+riusciva a scrivere `capacitor.plugins.json` e abortiva →
+`capacitor-cordova-android-plugins/` non veniva generata (era anche gitignored).
+
+Fix in repo: `capacitor-cordova-android-plugins/` è **versionata**,
+`app/src/main/assets/.gitkeep` esiste, e `cap:sync` crea la cartella assets prima
+del sync. `vendor-capacitor-android-plugins.mjs` verifica entrambe.
+
+### Gradle OK in WSL ma Studio resta su «Add Configuration…»
+
+Se `./gradlew projects` elenca `:app` ma Studio no, il problema è il **modello di
+progetto salvato da Studio**: dopo un import fallito resta un `.idea` non
+collegato a Gradle (senza `.idea/gradle.xml`) e riaprendo la cartella Studio
+**non ritenta** l'import.
+
+```bash
+make android-reset-studio WIN=1   # chiudi prima il progetto in Studio
+```
+
+Poi in Studio: **Open** → `C:\dev\kor35-app\android` → *Trust Project* → attendi il
+Gradle sync. `make android-sync WIN=1` rileva e rimuove da sé un `.idea` rotto.
+
+File per-macchina che il mirror **non** deve toccare:
+
+| File | Serve per |
+|---|---|
+| `local.properties` (`sdk.dir`) | senza → `SDK location not found`, nessuna run config |
+| `.idea/` | run configurations di Studio |
+
+`make android-sync WIN=1` esclude `.idea/`, `.gradle/`, `build/` e
+`local.properties` dal mirror e crea `local.properties` con `sdk.dir`.
+
+Verifica: `make android-doctor WIN=1`.
+
 ### Status bar: header sotto la barra notifiche
 
-Sintomo: pulsanti in alto non tappabili (sotto la status bar Android).
+Sintomo: UI / pulsanti in alto sotto la status bar Android (non tappabili).
 
-Su **Android 15+** `StatusBar.setOverlaysWebView(false)` è **ignorato** (edge-to-edge forzato).
-Il fix reale è CSS/JS: `setupNativeChrome` legge `StatusBar.getInfo().height` e imposta `--kor-safe-top`.
+**Causa:** con `targetSdk` ≥ 35 Android forza edge-to-edge. `StatusBar.setOverlaysWebView(false)`
+è un no-op e `env(safe-area-inset-top)` nella WebView Android resta 0.
 
-Serve **deploy frontend su www.kor35.it** (WebView remota). Nuovo APK utile per plugin StatusBar / tema, ma da solo non basta.
+**Come lo risolviamo (senza strisce vuote):** l'inset sta **dentro la pagina**, non
+come padding nativo della WebView.
+
+1. `capacitor.config.json` → `SystemBars.insetsHandling: "css"`: il plugin core
+   inietta `--safe-area-inset-top/right/bottom/left` (px reali) nella pagina.
+2. `index.css` → `--kor-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px))`.
+3. La UI usa quel valore: `.kor-app-header` (header MainPage), `.kor-safe-header`
+   (header ad altezza fissa) e `.kor-safe-shell` (pagine senza header: Start, Login).
+
+Così l'area della status bar è coperta dallo **sfondo dell'header/shell**: niente
+banda vuota, niente contenuto sotto le icone di sistema.
+
+**Da non fare:** padding nativo (`WindowInsets` sul layout bridge) o
+`EdgeToEdge.enable` in `MainActivity`. Sposta l'intera WebView e lascia una
+striscia vuota che mostra il window background (con il tema di lancio, la splash
+**bianca**). `MainActivity` fa solo `setTheme(AppTheme.NoActionBar)`, colori barre
+e fondo scuro.
+
+Serve **deploy frontend** (CSS/JS) + **nuovo APK** (config Capacitor + tema).
 
 ### Tap notifica: non fa nulla
 
@@ -163,6 +296,17 @@ Cause tipiche:
 Fix: niente `click_action` custom in FCM v1 + handler che apre Messaggi per ogni tap + intent-filter compat `OPEN_KOR35_PUSH`.
 
 Serve **deploy backend** (payload FCM) + **deploy frontend** (handler) + **nuovo APK** (intent-filter).
+
+### Gradle: `No variants` / `:capacitor-status-bar` / «no configuration»
+
+Causa tipica: Android Studio apre una cartella senza `settings.gradle`/`gradlew`, oppure un sync
+vecchio che punta a `../node_modules` assente.
+
+1. Da WSL (repo aggiornato su questo branch): `make android-sync WIN=1`
+2. Chiudi tutti i progetti Android Studio vecchi.
+3. **File → Open** solo `C:\dev\kor35-app\android` (deve avere `gradlew.bat` + `capacitor-plugins\`).
+4. Non aprire `C:\dev\kor35-app` (parent) né `C:\dev\kor35-android`.
+5. Verifica file: `C:\dev\kor35-app\android\capacitor-plugins\capacitor-status-bar\build.gradle`
 
 ## Chiamate in arrivo (shell Android)
 

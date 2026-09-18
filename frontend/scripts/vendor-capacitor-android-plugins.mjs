@@ -1,0 +1,175 @@
+/**
+ * Dopo `npx cap sync`, Capacitor scrive path verso ../node_modules.
+ * Su Windows (copia in C:/dev/...) quel layout si rompe facilmente →
+ * "No matching variant of project :capacitor-status-bar" / "No variants exist".
+ *
+ * Questa script:
+ * 1. Copia i moduli Android dei plugin dentro android/capacitor-plugins/
+ * 2. Riscrive capacitor.settings.gradle con path locali (self-contained)
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const frontendRoot = path.resolve(__dirname, '..');
+const androidRoot = path.join(frontendRoot, 'android');
+const nmRoot = path.join(frontendRoot, 'node_modules');
+const vendorRoot = path.join(androidRoot, 'capacitor-plugins');
+
+/** @type {{ gradleName: string, from: string, to: string }[]} */
+const PLUGINS = [
+  {
+    gradleName: 'capacitor-android',
+    from: path.join(nmRoot, '@capacitor/android/capacitor'),
+    to: path.join(vendorRoot, 'capacitor-android'),
+  },
+  {
+    gradleName: 'capacitor-app',
+    from: path.join(nmRoot, '@capacitor/app/android'),
+    to: path.join(vendorRoot, 'capacitor-app'),
+  },
+  {
+    gradleName: 'capacitor-push-notifications',
+    from: path.join(nmRoot, '@capacitor/push-notifications/android'),
+    to: path.join(vendorRoot, 'capacitor-push-notifications'),
+  },
+  {
+    gradleName: 'capacitor-status-bar',
+    from: path.join(nmRoot, '@capacitor/status-bar/android'),
+    to: path.join(vendorRoot, 'capacitor-status-bar'),
+  },
+];
+
+const AGP_COORD_RE = /(classpath\s+['"]com\.android\.tools\.build:gradle:)([^'"]+)(['"])/g;
+
+function rmRf(dir) {
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+/** AGP dichiarato dal progetto root (android/build.gradle). */
+function readRootAgpVersion() {
+  const rootGradle = fs.readFileSync(path.join(androidRoot, 'build.gradle'), 'utf8');
+  const match = /classpath\s+['"]com\.android\.tools\.build:gradle:([^'"]+)['"]/.exec(rootGradle);
+  if (!match) {
+    console.error('ERRORE: AGP non trovato in android/build.gradle');
+    process.exit(1);
+  }
+  return match[1];
+}
+
+/**
+ * I moduli Capacitor dichiarano un proprio AGP nel buildscript. Se differisce da
+ * quello del root, Gradle/Studio non trova varianti compatibili
+ * ("No matching variant of project :capacitor-status-bar"): allineale.
+ */
+function alignAgpVersion(buildGradlePath, agpVersion) {
+  const original = fs.readFileSync(buildGradlePath, 'utf8');
+  const patched = original.replace(AGP_COORD_RE, `$1${agpVersion}$3`);
+  if (patched !== original) {
+    fs.writeFileSync(buildGradlePath, patched);
+    return true;
+  }
+  return false;
+}
+
+function copyDir(src, dest) {
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.cpSync(src, dest, { recursive: true });
+}
+
+/**
+ * `cap sync` scrive app/src/main/assets/capacitor.plugins.json: se la cartella
+ * non esiste il sync aborta e capacitor-cordova-android-plugins/ non viene
+ * generata → Gradle non configura :app → Studio senza run configuration.
+ */
+function ensureAssetsDir() {
+  const assets = path.join(androidRoot, 'app', 'src', 'main', 'assets');
+  fs.mkdirSync(assets, { recursive: true });
+}
+
+function checkCordovaPluginsDir(agpVersion) {
+  const cordovaRoot = path.join(androidRoot, 'capacitor-cordova-android-plugins');
+  const varsFile = path.join(cordovaRoot, 'cordova.variables.gradle');
+  if (fs.existsSync(varsFile)) {
+    const cordovaGradle = path.join(cordovaRoot, 'build.gradle');
+    if (fs.existsSync(cordovaGradle) && alignAgpVersion(cordovaGradle, agpVersion)) {
+      console.log(`  AGP allineato a ${agpVersion} in capacitor-cordova-android-plugins`);
+    }
+    return;
+  }
+
+  console.error('ERRORE: manca capacitor-cordova-android-plugins/cordova.variables.gradle');
+  console.error('Senza quel file Gradle non configura :app (Studio: solo "Add Configuration").');
+  console.error('Rigenera con: cd frontend && npx cap update android');
+  process.exit(1);
+}
+
+function main() {
+  if (!fs.existsSync(androidRoot)) {
+    console.error(`ERRORE: manca ${androidRoot}`);
+    process.exit(1);
+  }
+
+  ensureAssetsDir();
+
+  const agpVersion = readRootAgpVersion();
+  console.log(`AGP root: ${agpVersion}`);
+
+  rmRf(vendorRoot);
+  fs.mkdirSync(vendorRoot, { recursive: true });
+
+  const lines = [
+    '// Generato da scripts/vendor-capacitor-android-plugins.mjs (dopo cap sync).',
+    '// Path locali sotto ./capacitor-plugins/ (progetto Android self-contained).',
+    '',
+  ];
+
+  for (const plugin of PLUGINS) {
+    if (!fs.existsSync(path.join(plugin.from, 'build.gradle'))) {
+      console.error(`ERRORE: manca build.gradle in ${plugin.from}`);
+      console.error('Esegui: cd frontend && npm ci && npx cap sync android');
+      process.exit(1);
+    }
+    copyDir(plugin.from, plugin.to);
+    const buildGradle = path.join(plugin.to, 'build.gradle');
+    if (!fs.existsSync(buildGradle)) {
+      console.error(`ERRORE: copia fallita per ${plugin.gradleName}`);
+      process.exit(1);
+    }
+    if (alignAgpVersion(buildGradle, agpVersion)) {
+      console.log(`  AGP allineato a ${agpVersion} in ${plugin.gradleName}`);
+    }
+    lines.push(`include ':${plugin.gradleName}'`);
+    lines.push(
+      `project(':${plugin.gradleName}').projectDir = new File('./capacitor-plugins/${plugin.gradleName}')`,
+    );
+    lines.push('');
+    console.log(`vendored :${plugin.gradleName} → capacitor-plugins/${plugin.gradleName}`);
+  }
+
+  fs.writeFileSync(path.join(androidRoot, 'capacitor.settings.gradle'), `${lines.join('\n')}\n`);
+
+  fs.writeFileSync(
+    path.join(androidRoot, 'APRI_IN_ANDROID_STUDIO.txt'),
+    [
+      'PATH BLOCCATO — unica cartella da aprire in Android Studio:',
+      '',
+      '  C:\\dev\\kor35-app\\android',
+      '',
+      'Dopo: make android-sync WIN=1',
+      '',
+      'NON aprire:',
+      '  - C:\\dev\\kor35-android',
+      '  - C:\\dev\\kor35-app          (parent)',
+      '  - \\\\wsl.localhost\\...',
+      '',
+    ].join('\n'),
+  );
+
+  checkCordovaPluginsDir(agpVersion);
+
+  console.log('OK: capacitor.settings.gradle usa ./capacitor-plugins/ (self-contained)');
+}
+
+main();

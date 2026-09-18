@@ -1,0 +1,3 @@
+# Cartella richiesta da `npx cap sync/update`: se manca, la scrittura di
+# capacitor.plugins.json fallisce e capacitor-cordova-android-plugins/
+# non viene generata (→ Gradle non configura :app).
