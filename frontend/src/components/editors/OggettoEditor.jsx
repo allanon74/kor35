@@ -10,6 +10,7 @@ import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import SearchableSelect from './SearchableSelect';
 import SezioniCondizionaliEditor from './inlines/SezioniCondizionaliEditor';
+import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
 
 const TIPO_CHOICES = [
     {id:'FIS', nome:'Fisico'}, {id:'MAT', nome:'Materia'}, {id:'MOD', nome:'Mod'},
@@ -215,21 +216,24 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
   );
 
   return (
-    <div className="bg-gray-800 p-6 rounded-xl space-y-6 max-w-7xl mx-auto overflow-y-auto max-h-[92vh] border border-gray-700 shadow-2xl text-white">
-      <div className="flex justify-between items-center border-b border-gray-700 pb-4">
-        <h2 className="text-xl font-bold text-emerald-400 uppercase tracking-tighter">{formData.id ? `Edit: ${formData.nome}` : 'Nuovo Oggetto'}</h2>
-        <EditorSaveActions
-          onSave={() => handleSave('save_close')}
-          onSaveAndContinue={() => handleSave('save_continue')}
-          onSaveAsNew={formData.id ? () => handleSave('save_as_new') : null}
-          onSaveAndNew={() => handleSave('save_new_blank')}
-          onCancel={onBack}
-          saving={saving}
-          saveLabel="Salva"
-          statusMessage={status.message}
-          statusType={status.type}
-        />
-      </div>
+    <div className={`${staffEditorShellClass} max-w-7xl`}>
+      <StaffEditorHeader
+        title={formData.id ? `Edit: ${formData.nome}` : 'Nuovo Oggetto'}
+        titleClassName="text-emerald-400"
+        actions={(
+          <EditorSaveActions
+            onSave={() => handleSave('save_close')}
+            onSaveAndContinue={() => handleSave('save_continue')}
+            onSaveAsNew={formData.id ? () => handleSave('save_as_new') : null}
+            onSaveAndNew={() => handleSave('save_new_blank')}
+            onCancel={onBack}
+            saving={saving}
+            saveLabel="Salva"
+            statusMessage={status.message}
+            statusType={status.type}
+          />
+        )}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-gray-900/40 p-4 rounded-xl">
         <div className="md:col-span-2">

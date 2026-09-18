@@ -42,14 +42,15 @@ const EditorSaveActions = ({
   const currentStatusClass = statusClasses[statusType] || statusClasses.success;
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      <div className="flex flex-wrap gap-2 justify-end">
-        <div className="relative" ref={menuRef}>
-          <div className="inline-flex rounded-lg overflow-hidden shadow-lg">
+    <div className="flex w-full min-w-0 flex-col items-stretch gap-2 sm:items-end">
+      <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+        <div className="relative min-w-0 w-full sm:w-auto" ref={menuRef}>
+          <div className="inline-flex w-full overflow-hidden rounded-lg shadow-lg sm:w-auto">
             <button
+              type="button"
               onClick={onSave}
               disabled={saving}
-              className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:cursor-not-allowed px-6 py-2 font-black text-xs uppercase text-white"
+              className="min-h-11 flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:cursor-not-allowed px-4 sm:px-6 py-2.5 font-black text-xs uppercase text-white sm:flex-none"
             >
               {saving ? 'Salvataggio...' : saveLabel}
             </button>
@@ -58,7 +59,7 @@ const EditorSaveActions = ({
                 type="button"
                 onClick={() => setMenuOpen((prev) => !prev)}
                 disabled={saving}
-                className="bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 disabled:cursor-not-allowed px-3 py-2 border-l border-emerald-500/50 text-white"
+                className="min-h-11 shrink-0 bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 disabled:cursor-not-allowed px-3 py-2 border-l border-emerald-500/50 text-white"
                 title="Altre opzioni di salvataggio"
               >
                 <ChevronDown size={14} />
@@ -66,7 +67,7 @@ const EditorSaveActions = ({
             )}
           </div>
           {menuOpen && menuActions.length > 0 && (
-            <div className="absolute right-0 mt-1 w-56 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl overflow-hidden z-50">
+            <div className="absolute right-0 z-50 mt-1 w-full min-w-56 max-w-xs bg-gray-900 border border-gray-700 rounded-lg shadow-2xl overflow-hidden sm:w-56">
               {menuActions.map((item) => (
                 <button
                   key={item.key}
@@ -75,7 +76,7 @@ const EditorSaveActions = ({
                     setMenuOpen(false);
                     item.action();
                   }}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-gray-800 transition-colors"
+                  className="w-full min-h-11 text-left px-3 py-2.5 text-sm text-gray-200 hover:bg-gray-800 transition-colors"
                 >
                   {item.label}
                 </button>
@@ -85,9 +86,10 @@ const EditorSaveActions = ({
         </div>
         {onCancel && (
           <button
+            type="button"
             onClick={onCancel}
             disabled={saving}
-            className="bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-lg font-bold text-xs uppercase text-white"
+            className="min-h-11 w-full sm:w-auto bg-gray-700 hover:bg-gray-600 px-4 sm:px-6 py-2.5 rounded-lg font-bold text-xs uppercase text-white"
           >
             Annulla
           </button>

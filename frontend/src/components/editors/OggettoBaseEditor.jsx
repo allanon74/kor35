@@ -13,6 +13,7 @@ import EditorSaveActions from './EditorSaveActions';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import FormulaBuilderModal from './FormulaBuilderModal';
+import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
 import SearchableSelect from './SearchableSelect';
 
 const TIPO_CHOICES = [
@@ -226,25 +227,26 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
   );
 
   return (
-    <div className="bg-gray-800 p-6 rounded-xl space-y-6 max-w-7xl mx-auto border border-gray-700 shadow-2xl text-white overflow-y-auto max-h-[92vh]">
+    <div className={`${staffEditorShellClass} max-w-7xl`}>
       
       {/* Header */}
-      <div className="flex justify-between items-center border-b border-gray-700 pb-4">
-        <h2 className="text-xl font-bold text-blue-400 uppercase tracking-tighter">
-            {formData.id ? `Edit Template: ${formData.nome}` : 'Nuovo Oggetto Base'}
-        </h2>
-        <EditorSaveActions
-          onSave={() => handleSave('save_close')}
-          onSaveAndContinue={() => handleSave('save_continue')}
-          onSaveAsNew={formData.id ? () => handleSave('save_as_new') : null}
-          onSaveAndNew={() => handleSave('save_new_blank')}
-          onCancel={onBack}
-          saving={saving}
-          saveLabel="Salva"
-          statusMessage={status.message}
-          statusType={status.type}
-        />
-      </div>
+      <StaffEditorHeader
+        title={formData.id ? `Edit Template: ${formData.nome}` : 'Nuovo Oggetto Base'}
+        titleClassName="text-blue-400"
+        actions={(
+          <EditorSaveActions
+            onSave={() => handleSave('save_close')}
+            onSaveAndContinue={() => handleSave('save_continue')}
+            onSaveAsNew={formData.id ? () => handleSave('save_as_new') : null}
+            onSaveAndNew={() => handleSave('save_new_blank')}
+            onCancel={onBack}
+            saving={saving}
+            saveLabel="Salva"
+            statusMessage={status.message}
+            statusType={status.type}
+          />
+        )}
+      />
 
       {/* Dati Principali */}
       <div className="bg-gray-900/40 p-4 rounded-xl border border-gray-800 space-y-4">

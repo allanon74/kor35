@@ -58,8 +58,8 @@ const SezioniCondizionaliEditor = ({
 
   return (
     <div className="bg-indigo-950/20 p-4 rounded-lg border border-indigo-500/30 space-y-4">
-      <div className="flex justify-between items-center gap-3">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+        <div className="min-w-0">
           <h3 className="text-sm font-bold text-indigo-300 uppercase tracking-widest">
             Sezioni condizionali
           </h3>
@@ -71,7 +71,7 @@ const SezioniCondizionaliEditor = ({
         <button
           type="button"
           onClick={() => commit([...list, emptySezione(list.length)])}
-          className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1 rounded font-bold shrink-0"
+          className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-2 rounded font-bold shrink-0 min-h-11"
         >
           + Sezione
         </button>

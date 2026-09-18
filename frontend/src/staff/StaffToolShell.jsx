@@ -44,8 +44,39 @@ export function StaffToolShell({
   }
 
   return (
-    <div className={`p-4 md:p-6 text-gray-100 ${maxCls} ${className}`.trim()}>
+    <div className={`min-w-0 p-2 sm:p-4 md:p-6 text-gray-100 ${maxCls} ${className}`.trim()}>
       {children}
+    </div>
+  );
+}
+
+/** Pannello form staff: su telefono scorre la pagina, su desktop resta il max-height interno. */
+export const staffEditorShellClass =
+  'bg-gray-800 p-3 sm:p-5 lg:p-6 rounded-xl space-y-4 sm:space-y-6 mx-auto min-w-0 w-full text-white shadow-2xl border border-gray-700 lg:overflow-y-auto lg:max-h-[92vh]';
+
+/**
+ * Header editor: titolo e azioni si impilano sotto `lg` così Salva/Annulla
+ * non coprono «Nuova Infusione» / «Nuova Tessitura» / …
+ */
+export function StaffEditorHeader({
+  title,
+  titleClassName = 'text-indigo-400',
+  actions,
+  sticky = false,
+}) {
+  return (
+    <div
+      className={[
+        'flex min-w-0 flex-col gap-3 border-b border-gray-700 pb-4 lg:flex-row lg:items-start lg:justify-between',
+        sticky ? 'sticky top-0 z-10 bg-gray-800 pt-1' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <h2 className={`min-w-0 break-words text-lg font-bold uppercase tracking-tighter sm:text-xl ${titleClassName}`}>
+        {title}
+      </h2>
+      <div className="w-full min-w-0 lg:w-auto lg:shrink-0">{actions}</div>
     </div>
   );
 }

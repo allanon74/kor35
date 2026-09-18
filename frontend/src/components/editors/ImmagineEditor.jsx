@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createWikiImage, updateWikiImage, getMediaUrl } from '../../api';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
+import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
 
 const ALLINEAMENTO_CHOICES = [
     { id: 'left', nome: 'Sinistra' },
@@ -112,23 +113,24 @@ const ImmagineEditor = ({ onBack, onLogout, initialData = null }) => {
   );
 
   return (
-    <div className="bg-gray-800 p-6 rounded-xl space-y-6 max-w-7xl mx-auto overflow-y-auto max-h-[92vh] border border-gray-700 shadow-2xl text-white">
-      <div className="flex justify-between items-center border-b border-gray-700 pb-4">
-        <h2 className="text-xl font-bold text-emerald-400 uppercase tracking-tighter">
-          {currentId ? `Modifica: ${formData.titolo || 'Immagine'}` : 'Nuova Immagine Wiki'}
-        </h2>
-        <EditorSaveActions
-          onSave={() => handleSave('save_close')}
-          onSaveAndContinue={() => handleSave('save_continue')}
-          onSaveAsNew={currentId ? () => handleSave('save_as_new') : null}
-          onSaveAndNew={() => handleSave('save_new_blank')}
-          onCancel={onBack}
-          saving={saving}
-          saveLabel="Salva"
-          statusMessage={status.message}
-          statusType={status.type}
-        />
-      </div>
+    <div className={`${staffEditorShellClass} max-w-7xl`}>
+      <StaffEditorHeader
+        title={currentId ? `Modifica: ${formData.titolo || 'Immagine'}` : 'Nuova Immagine Wiki'}
+        titleClassName="text-emerald-400"
+        actions={(
+          <EditorSaveActions
+            onSave={() => handleSave('save_close')}
+            onSaveAndContinue={() => handleSave('save_continue')}
+            onSaveAsNew={currentId ? () => handleSave('save_as_new') : null}
+            onSaveAndNew={() => handleSave('save_new_blank')}
+            onCancel={onBack}
+            saving={saving}
+            saveLabel="Salva"
+            statusMessage={status.message}
+            statusType={status.type}
+          />
+        )}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Colonna sinistra: Form */}

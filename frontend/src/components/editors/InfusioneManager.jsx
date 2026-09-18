@@ -50,7 +50,7 @@ const InfusioneManager = ({ onBack, onLogout }) => {
       {(view === 'edit' || qrStatus.message) && (
         <div className="mb-4">
           {view === 'edit' && (
-            <button onClick={handleEditorBack} className="text-amber-500 hover:text-amber-400 text-sm font-bold flex items-center gap-1 mb-2">
+            <button onClick={handleEditorBack} className="text-amber-500 hover:text-amber-400 text-sm font-bold flex items-center gap-1 mb-2 min-h-11">
               ← Torna alla lista
             </button>
           )}

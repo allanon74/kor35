@@ -31,9 +31,9 @@ const GenericRelationInline = ({
 
     return (
         <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
-            <div className="flex justify-between items-center mb-3 border-b border-gray-700 pb-2">
-                <h4 className="font-bold text-gray-300 uppercase text-xs">{title}</h4>
-                <button onClick={handleAdd} className="text-emerald-500 hover:text-emerald-400">
+            <div className="flex flex-wrap justify-between items-center gap-2 mb-3 border-b border-gray-700 pb-2">
+                <h4 className="font-bold text-gray-300 uppercase text-xs min-w-0 break-words">{title}</h4>
+                <button type="button" onClick={handleAdd} className="text-emerald-500 hover:text-emerald-400 min-h-11 min-w-11 shrink-0">
                     <Plus size={16} />
                 </button>
             </div>
@@ -43,7 +43,7 @@ const GenericRelationInline = ({
                     <div key={idx} className="flex gap-2 items-center">
                         
                         {/* SOSTITUZIONE SELECT CON SEARCHABLE SELECT */}
-                        <div className="flex-1 min-w-[150px]">
+                        <div className="flex-1 min-w-0">
                             <SearchableSelect 
                                 options={options}
                                 value={item[targetKey]}

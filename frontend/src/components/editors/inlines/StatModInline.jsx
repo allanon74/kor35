@@ -87,17 +87,17 @@ const StatModInline = ({
   };
 
   return (
-    <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-sm font-bold text-emerald-400 uppercase tracking-widest">Modifica Generale alle statistiche</h3>
-        <button onClick={onAdd} className="text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded font-bold transition-all shadow-md">+ AGGIUNGI MODIFICATORE</button>
+    <div className="bg-gray-900/50 p-3 sm:p-4 rounded-lg border border-gray-700 min-w-0">
+      <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+        <h3 className="text-sm font-bold text-emerald-400 uppercase tracking-widest min-w-0 break-words">Modifica Generale alle statistiche</h3>
+        <button type="button" onClick={onAdd} className="shrink-0 text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-2 rounded font-bold transition-all shadow-md min-h-11">+ AGGIUNGI MODIFICATORE</button>
       </div>
       
       <div className="space-y-4">
         {items.map((item, i) => (
           <div key={i} className="bg-gray-800/80 p-4 rounded border border-gray-700 space-y-4 shadow-xl">
-            <div className="flex flex-wrap gap-3">
-              <div className="flex-1 min-w-[200px]">
+            <div className="flex flex-wrap gap-3 min-w-0">
+              <div className="w-full min-w-0 flex-1 sm:min-w-[12rem]">
                 <label className="text-[9px] uppercase text-gray-500 font-black block mb-1">Statistica</label>
                 <SearchableSelect
                   options={options.filter(o => {
@@ -237,7 +237,7 @@ const StatModInline = ({
                 <ConditionToggle label="Usa Limite Aura" checked={item.usa_limitazione_aura} onChange={v => onChange(i, 'usa_limitazione_aura', v)} color="indigo" />
                 {item.usa_limitazione_aura && <M2MSelector options={auraOptions} selected={item.limit_a_aure} onToggle={id => toggleM2M(i, 'limit_a_aure', id)} color="indigo" />}
               </div>
-              <div className="space-y-2 border-x border-gray-800/50 px-4">
+              <div className="space-y-2 md:border-x md:px-4 border-gray-800/50">
                 <ConditionToggle label="Usa Limite Elemento" checked={item.usa_limitazione_elemento} onChange={v => onChange(i, 'usa_limitazione_elemento', v)} color="emerald" />
                 {item.usa_limitazione_elemento && <M2MSelector options={elementOptions} selected={item.limit_a_elementi} onToggle={id => toggleM2M(i, 'limit_a_elementi', id)} color="emerald" />}
               </div>

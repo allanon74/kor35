@@ -6,6 +6,7 @@ import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
+import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
 
 const MATTONI_PER_LIVELLO_CERIMONIALE = 5;
 const livelloSuggeritoCerimoniale = (totaleMattoni) =>
@@ -93,23 +94,24 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
   };
 
   return (
-    <div className="bg-gray-800 p-6 rounded-xl space-y-6 max-w-7xl mx-auto overflow-y-auto max-h-[92vh] text-white border border-gray-700 shadow-2xl">
-      <div className="flex justify-between items-center border-b border-gray-700 pb-4">
-        <h2 className="text-xl font-bold text-amber-400 uppercase tracking-tighter">
-          {formData.id ? `Edit Cerimoniale: ${formData.nome}` : 'Nuovo Cerimoniale'}
-        </h2>
-        <EditorSaveActions
-          onSave={() => handleSave('save_close')}
-          onSaveAndContinue={onSave ? null : () => handleSave('save_continue')}
-          onSaveAsNew={onSave || !formData.id ? null : () => handleSave('save_as_new')}
-          onSaveAndNew={onSave ? null : () => handleSave('save_new_blank')}
-          onCancel={handleClose}
-          saving={saving}
-          saveLabel={onSave ? 'Approva e crea' : 'Salva'}
-          statusMessage={status.message}
-          statusType={status.type}
-        />
-      </div>
+    <div className={`${staffEditorShellClass} max-w-7xl`}>
+      <StaffEditorHeader
+        title={formData.id ? `Edit Cerimoniale: ${formData.nome}` : 'Nuovo Cerimoniale'}
+        titleClassName="text-amber-400"
+        actions={(
+          <EditorSaveActions
+            onSave={() => handleSave('save_close')}
+            onSaveAndContinue={onSave ? null : () => handleSave('save_continue')}
+            onSaveAsNew={onSave || !formData.id ? null : () => handleSave('save_as_new')}
+            onSaveAndNew={onSave ? null : () => handleSave('save_new_blank')}
+            onCancel={handleClose}
+            saving={saving}
+            saveLabel={onSave ? 'Approva e crea' : 'Salva'}
+            statusMessage={status.message}
+            statusType={status.type}
+          />
+        )}
+      />
 
       <div className="bg-gray-900/40 p-5 rounded-xl border border-gray-700/50 space-y-5">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

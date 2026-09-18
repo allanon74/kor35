@@ -13,6 +13,7 @@ import SearchableSelect from './SearchableSelect';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import ActivationCostInline from './inlines/ActivationCostInline';
 import SezioniCondizionaliEditor from './inlines/SezioniCondizionaliEditor';
+import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
 
 const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -202,28 +203,29 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
   };
 
   return (
-    <div className="bg-gray-800 p-6 rounded-xl space-y-6 max-w-7xl mx-auto overflow-y-auto max-h-[92vh] text-white shadow-2xl border border-gray-700">
+    <div className={`${staffEditorShellClass} max-w-7xl`}>
       
       {/* HEADER */}
-      <div className="flex justify-between items-center border-b border-gray-700 pb-4">
-        <h2 className="text-xl font-bold text-indigo-400 uppercase tracking-tighter">
-          {formData.id ? `Editing: ${formData.nome}` : 'Nuova Infusione'}
-        </h2>
-        <EditorSaveActions
-          onSave={() => handleSave('save_close')}
-          onSaveAndContinue={onSave ? null : () => handleSave('save_continue')}
-          onSaveAsNew={onSave || !formData.id ? null : () => handleSave('save_as_new')}
-          onSaveAndNew={onSave ? null : () => handleSave('save_new_blank')}
-          onCancel={handleClose}
-          saving={saving}
-          saveLabel={onSave ? 'Approva e crea' : 'Salva tecnica'}
-          statusMessage={status.message}
-          statusType={status.type}
-        />
-      </div>
+      <StaffEditorHeader
+        title={formData.id ? `Editing: ${formData.nome}` : 'Nuova Infusione'}
+        titleClassName="text-indigo-400"
+        actions={(
+          <EditorSaveActions
+            onSave={() => handleSave('save_close')}
+            onSaveAndContinue={onSave ? null : () => handleSave('save_continue')}
+            onSaveAsNew={onSave || !formData.id ? null : () => handleSave('save_as_new')}
+            onSaveAndNew={onSave ? null : () => handleSave('save_new_blank')}
+            onCancel={handleClose}
+            saving={saving}
+            saveLabel={onSave ? 'Approva e crea' : 'Salva tecnica'}
+            statusMessage={status.message}
+            statusType={status.type}
+          />
+        )}
+      />
 
       {/* 2. IDENTITÀ, AURE E FORMULA */}
-      <div className="bg-gray-900/40 p-5 rounded-xl border border-gray-700/50 shadow-inner space-y-5">
+      <div className="bg-gray-900/40 p-3 sm:p-5 rounded-xl border border-gray-700/50 shadow-inner space-y-5 min-w-0">
         
         {/* RIGA 1: AURE */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -263,13 +265,13 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
           <Select label="Tipo Risultato" value={formData.tipo_risultato} 
                   options={[{id: 'POT', nome: 'Potenziamento'}, {id: 'AUM', nome: 'Aumento Corporeo'}]} 
                   onChange={v => setFormData({...formData, tipo_risultato: v})} />
-          <div className="flex items-center gap-3 pt-6 justify-center bg-black/20 rounded-lg">
+          <div className="flex items-center gap-3 pt-6 justify-start sm:justify-center bg-black/20 rounded-lg px-3 min-h-11">
               <input type="checkbox" className="w-5 h-5 rounded accent-indigo-500 cursor-pointer" id="is_pesante" checked={formData.is_pesante} onChange={e => setFormData({...formData, is_pesante: e.target.checked})} />
               <label htmlFor="is_pesante" className="text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer">Oggetto Pesante</label>
           </div>
         </div>
         <div className="space-y-2">
-          <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer flex items-center gap-2 justify-end">
+          <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer flex items-center gap-2 justify-start sm:justify-end min-h-11">
             <input
               type="checkbox"
               className="w-4 h-4 rounded accent-indigo-500 cursor-pointer"

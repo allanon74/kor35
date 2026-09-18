@@ -395,7 +395,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                     }
                 />
 
-                <main className="flex-1 overflow-y-auto overflow-x-hidden relative p-0 custom-scrollbar">
+                <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden relative p-0 custom-scrollbar">
                     {activeTool === 'home' && (
                         <div className="min-h-full p-6 animate-fadeIn">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">

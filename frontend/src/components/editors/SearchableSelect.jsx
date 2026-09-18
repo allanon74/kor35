@@ -29,7 +29,7 @@ const NativeSelect = memo(({
 
     return (
         <select
-            className={`w-full bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-sm text-white outline-none focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+            className={`w-full min-h-11 bg-gray-950 border border-gray-700 rounded px-2 py-2 text-sm text-white outline-none focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
             value={value === null || value === undefined ? '' : String(value)}
             disabled={disabled}
             onChange={(e) => {
@@ -150,7 +150,7 @@ const SearchableDropdown = memo(({
                 ref={triggerRef}
                 onClick={() => !disabled && setIsOpen(!isOpen)}
                 className={`
-                    w-full bg-gray-950 border rounded px-2 py-1.5 text-sm text-white flex items-center justify-between cursor-pointer transition-colors
+                    w-full min-h-11 bg-gray-950 border rounded px-2 py-2 text-sm text-white flex items-center justify-between cursor-pointer transition-colors
                     ${disabled ? 'opacity-50 cursor-not-allowed border-gray-800' : 'border-gray-700 hover:border-gray-500 focus-within:border-indigo-500'}
                 `}
             >

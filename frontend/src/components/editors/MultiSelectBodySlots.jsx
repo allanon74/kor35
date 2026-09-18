@@ -21,7 +21,7 @@ const MultiSelectBodySlots = ({ value = "", allSlots, onChange }) => {
             key={slot.code}
             type="button"
             onClick={() => toggleSlot(slot.code)}
-            className={`px-3 py-1 rounded-md text-[10px] font-bold border uppercase transition-all shadow-sm ${
+            className={`px-3 py-2 rounded-md text-[10px] font-bold border uppercase transition-all shadow-sm min-h-11 ${
               selectedList.includes(slot.code) 
                 ? 'bg-indigo-600 border-indigo-400 text-white scale-105' 
                 : 'bg-gray-800 border-gray-700 text-gray-500 hover:border-gray-500'

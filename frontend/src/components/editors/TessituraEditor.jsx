@@ -9,6 +9,7 @@ import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import ActivationCostInline from './inlines/ActivationCostInline';
+import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
 
 /** Garantisce che l'abilità già salvata compaia nel select anche se fuori dalla prima pagina API. */
 const mergeAbilitaTemporaneaOption = (rows, selected) => {
@@ -228,23 +229,24 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
   };
 
   return (
-    <div className="bg-gray-800 p-6 rounded-xl space-y-6 max-w-7xl mx-auto overflow-y-auto max-h-[92vh] text-white border border-gray-700 shadow-2xl">
-      <div className="flex justify-between items-center border-b border-gray-700 pb-4">
-        <h2 className="text-xl font-bold text-cyan-400 uppercase tracking-tighter">
-          {formData.id ? `Edit: ${formData.nome}` : 'Nuova Tessitura'}
-        </h2>
-        <EditorSaveActions
-          onSave={() => handleSave('save_close')}
-          onSaveAndContinue={onSave ? null : () => handleSave('save_continue')}
-          onSaveAsNew={onSave || !formData.id ? null : () => handleSave('save_as_new')}
-          onSaveAndNew={onSave ? null : () => handleSave('save_new_blank')}
-          onCancel={handleClose}
-          saving={saving}
-          saveLabel={onSave ? 'Approva e crea' : 'Salva'}
-          statusMessage={status.message}
-          statusType={status.type}
-        />
-      </div>
+    <div className={`${staffEditorShellClass} max-w-7xl`}>
+      <StaffEditorHeader
+        title={formData.id ? `Edit: ${formData.nome}` : 'Nuova Tessitura'}
+        titleClassName="text-cyan-400"
+        actions={(
+          <EditorSaveActions
+            onSave={() => handleSave('save_close')}
+            onSaveAndContinue={onSave ? null : () => handleSave('save_continue')}
+            onSaveAsNew={onSave || !formData.id ? null : () => handleSave('save_as_new')}
+            onSaveAndNew={onSave ? null : () => handleSave('save_new_blank')}
+            onCancel={handleClose}
+            saving={saving}
+            saveLabel={onSave ? 'Approva e crea' : 'Salva'}
+            statusMessage={status.message}
+            statusType={status.type}
+          />
+        )}
+      />
 
       <div className="bg-gray-900/40 p-5 rounded-xl border border-gray-700/50 space-y-5 shadow-inner">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -518,11 +520,11 @@ const RuntimeObjectWizardModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-11000 bg-black/75 flex items-center justify-center p-4">
-      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto bg-gray-900 border border-purple-700/50 rounded-xl shadow-2xl">
-        <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-          <h3 className="text-lg font-bold text-white">Wizard Oggetto Runtime</h3>
-          <button onClick={onClose} className="px-3 py-1 rounded bg-gray-700 text-white text-sm">Chiudi</button>
+    <div className="fixed inset-0 z-[11000] bg-black/75 flex items-end sm:items-center justify-center p-2 sm:p-4">
+      <div className="w-full max-w-5xl max-h-[92vh] overflow-y-auto bg-gray-900 border border-purple-700/50 rounded-t-xl sm:rounded-xl shadow-2xl min-w-0">
+        <div className="p-4 border-b border-gray-700 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
+          <h3 className="text-lg font-bold text-white break-words min-w-0">Wizard Oggetto Runtime</h3>
+          <button type="button" onClick={onClose} className="px-3 py-2 rounded bg-gray-700 text-white text-sm min-h-11 shrink-0">Chiudi</button>
         </div>
         <div className="p-4 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

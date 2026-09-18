@@ -3,6 +3,7 @@ import { staffUpdateMostroTemplate, staffCreateMostroTemplate } from '../../api'
 import RichTextEditor from '../RichTextEditor';
 import { Trash, Plus, GripVertical } from 'lucide-react';
 import EditorSaveActions from './EditorSaveActions';
+import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
 
 const MostroEditor = ({ onBack, onLogout, initialData = null }) => {
   const [formData, setFormData] = useState(initialData || {
@@ -77,24 +78,25 @@ const MostroEditor = ({ onBack, onLogout, initialData = null }) => {
   };
 
   return (
-    <div className="bg-gray-800 p-6 rounded-xl space-y-6 max-w-5xl mx-auto overflow-y-auto max-h-[92vh] border border-gray-700 shadow-2xl text-white">
+    <div className={`${staffEditorShellClass} max-w-5xl`}>
       {/* Header */}
-      <div className="flex justify-between items-center border-b border-gray-700 pb-4">
-        <h2 className="text-xl font-bold text-red-400 uppercase tracking-tighter">
-            {formData.id ? `Edit: ${formData.nome}` : 'Nuovo Template Mostro'}
-        </h2>
-        <EditorSaveActions
-          onSave={() => handleSave('save_close')}
-          onSaveAndContinue={() => handleSave('save_continue')}
-          onSaveAsNew={formData.id ? () => handleSave('save_as_new') : null}
-          onSaveAndNew={() => handleSave('save_new_blank')}
-          onCancel={onBack}
-          saving={saving}
-          saveLabel="Salva"
-          statusMessage={status.message}
-          statusType={status.type}
-        />
-      </div>
+      <StaffEditorHeader
+        title={formData.id ? `Edit: ${formData.nome}` : 'Nuovo Template Mostro'}
+        titleClassName="text-red-400"
+        actions={(
+          <EditorSaveActions
+            onSave={() => handleSave('save_close')}
+            onSaveAndContinue={() => handleSave('save_continue')}
+            onSaveAsNew={formData.id ? () => handleSave('save_as_new') : null}
+            onSaveAndNew={() => handleSave('save_new_blank')}
+            onCancel={onBack}
+            saving={saving}
+            saveLabel="Salva"
+            statusMessage={status.message}
+            statusType={status.type}
+          />
+        )}
+      />
 
       {/* Dati Base */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-gray-900/40 p-4 rounded-xl border border-gray-700/50">

@@ -4,6 +4,7 @@ import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import ConfirmDialog from './ConfirmDialog';
+import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
 
 const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
   const [currentId, setCurrentId] = useState(initialData?.id || null);
@@ -142,23 +143,24 @@ const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
   };
 
   return (
-    <div className="bg-gray-800 p-6 rounded-xl space-y-6 max-w-7xl mx-auto overflow-y-auto max-h-[92vh] border border-gray-700 shadow-2xl text-white">
-      <div className="flex justify-between items-center border-b border-gray-700 pb-4">
-        <h2 className="text-xl font-bold text-emerald-400 uppercase tracking-tighter">
-          {currentId ? `Modifica: ${formData.nome || 'Inventario'}` : 'Nuovo Inventario'}
-        </h2>
-        <EditorSaveActions
-          onSave={() => handleSave('save_close')}
-          onSaveAndContinue={() => handleSave('save_continue')}
-          onSaveAsNew={currentId ? () => handleSave('save_as_new') : null}
-          onSaveAndNew={() => handleSave('save_new_blank')}
-          onCancel={onBack}
-          saving={saving}
-          saveLabel="Salva"
-          statusMessage={status.message}
-          statusType={status.type}
-        />
-      </div>
+    <div className={`${staffEditorShellClass} max-w-7xl`}>
+      <StaffEditorHeader
+        title={currentId ? `Modifica: ${formData.nome || 'Inventario'}` : 'Nuovo Inventario'}
+        titleClassName="text-emerald-400"
+        actions={(
+          <EditorSaveActions
+            onSave={() => handleSave('save_close')}
+            onSaveAndContinue={() => handleSave('save_continue')}
+            onSaveAsNew={currentId ? () => handleSave('save_as_new') : null}
+            onSaveAndNew={() => handleSave('save_new_blank')}
+            onCancel={onBack}
+            saving={saving}
+            saveLabel="Salva"
+            statusMessage={status.message}
+            statusType={status.type}
+          />
+        )}
+      />
 
       <div className="grid grid-cols-1 gap-4 bg-gray-900/40 p-4 rounded-xl">
         <div>
