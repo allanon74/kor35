@@ -9,6 +9,7 @@ from .models import (
     CreazioneGuidataFlusso, CreazioneGuidataPasso, CreazioneGuidataScelta,
     Missione, MissioneEvento, MissioneRisoluzione,
     StaffCompito, StaffCompitoAssegnazione, CalendarioFeedToken,
+    StaffCompitoAutomatico, StaffCompitoAutomaticoAssegnazione,
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 
@@ -546,3 +547,18 @@ class CalendarioFeedTokenAdmin(admin.ModelAdmin):
     list_display = ("user", "token", "updated_at")
     search_fields = ("user__username",)
     readonly_fields = ("sync_id", "updated_at", "created_at", "token")
+
+
+class StaffCompitoAutomaticoAssegnazioneInline(admin.TabularInline):
+    model = StaffCompitoAutomaticoAssegnazione
+    extra = 0
+    raw_id_fields = ("user",)
+
+
+@admin.register(StaffCompitoAutomatico)
+class StaffCompitoAutomaticoAdmin(admin.ModelAdmin):
+    list_display = ("codice", "campagna", "attivo", "updated_at")
+    list_filter = ("attivo", "codice", "campagna")
+    raw_id_fields = ("campagna",)
+    inlines = [StaffCompitoAutomaticoAssegnazioneInline]
+    readonly_fields = ("sync_id", "updated_at", "created_at")

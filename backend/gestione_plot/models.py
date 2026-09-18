@@ -1758,3 +1758,82 @@ class CalendarioFeedToken(SyncableModel, models.Model):
         self.token = uuid.uuid4()
         self.save(update_fields=["token", "updated_at"])
         return self.token
+
+
+# --- Compiti automatici (configurazione; le task in lista sono virtuali) ---
+
+COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES = "verifica_proposte_tessiture"
+COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_INF = "verifica_proposte_infusioni"
+COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_CER = "verifica_proposte_cerimoniali"
+
+COMPITO_AUTOMATICO_CODICE_CHOICES = [
+    (COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES, "Verifica proposte tessiture"),
+    (COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_INF, "Verifica proposte infusioni"),
+    (COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_CER, "Verifica proposte cerimoniali"),
+]
+
+COMPITO_AUTOMATICO_DEFAULT_CODICI = (
+    COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_TES,
+    COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_INF,
+    COMPITO_AUTOMATICO_VERIFICA_PROPOSTE_CER,
+)
+
+
+class StaffCompitoAutomatico(SyncableModel, models.Model):
+    """Configurazione per un compito generato automaticamente (assegnatari + codice)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    campagna = models.ForeignKey(
+        "personaggi.Campagna",
+        on_delete=models.CASCADE,
+        related_name="staff_compiti_automatici",
+        db_index=True,
+    )
+    codice = models.CharField(max_length=64, choices=COMPITO_AUTOMATICO_CODICE_CHOICES, db_index=True)
+    attivo = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Compito automatico staff"
+        verbose_name_plural = "Compiti automatici staff"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["campagna", "codice"],
+                name="uq_staff_compito_automatico_campagna_codice",
+            ),
+        ]
+        ordering = ["codice"]
+
+    def __str__(self):
+        return f"{self.campagna_id}:{self.codice}"
+
+
+class StaffCompitoAutomaticoAssegnazione(SyncableModel, models.Model):
+    """Master/staff a cui mostrare il compito automatico quando c'è lavoro pendente."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    config = models.ForeignKey(
+        StaffCompitoAutomatico,
+        on_delete=models.CASCADE,
+        related_name="assegnazioni",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="staff_compiti_automatici_assegnati",
+    )
+
+    class Meta:
+        verbose_name = "Assegnazione compito automatico"
+        verbose_name_plural = "Assegnazioni compiti automatici"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["config", "user"],
+                name="uq_staff_compito_automatico_assegnazione_user",
+            ),
+        ]
+        ordering = ["config_id", "user_id"]
+
+    def __str__(self):
+        return f"{self.config_id} → user {self.user_id}"

@@ -22,27 +22,54 @@ const SLOT_EQUIP_CONTEGGIO_OPTIONS = [
         value: 'TUTTI_OGGETTI',
         label: 'Tutti gli oggetti equipaggiati',
         hint: 'Ogni oggetto fisico negli slot selezionati, modificato o meno.',
+        needsSlots: true,
     },
     {
         value: 'OGNI_POTENZIAMENTO',
         label: 'Ogni Materia/Mod installata',
         hint: 'Conta ogni singola Materia o Mod montata su oggetti equipaggiati.',
+        needsSlots: true,
     },
     {
         value: 'OGGETTI_MODIFICATI',
         label: 'Oggetti modificati',
         hint: 'Solo oggetti equipaggiati con almeno una Materia/Mod (max 1 per oggetto).',
+        needsSlots: true,
+    },
+    {
+        value: 'COG_OCCUPATI',
+        label: 'Slot COG occupati',
+        hint: 'Usa la Capacità Oggetti occupata (oggetti speciali/modificati, runtime, consumabili).',
+        needsSlots: false,
+    },
+    {
+        value: 'COG_VUOTI',
+        label: 'Slot COG vuoti',
+        hint: 'COG max (scheda + bonus flat) meno COG usata. Ideale per forme razziali.',
+        needsSlots: false,
     },
 ];
 
 const EMPTY_SLOT_EQUIP_STAT = {
     usa_bonus_slot_equip: false,
     slot_equip_ammessi: [],
+    classi_oggetto_conteggio: [],
     modalita_conteggio_slot_equip: 'TUTTI_OGGETTI',
     valore_per_unita_slot_equip: 1,
 };
 
-const StatModInline = ({ items, options, auraOptions, elementOptions, onChange, onAdd, onRemove, showSlotEquipBonus = false, showSoloOggettoOspitante = false }) => {
+const StatModInline = ({
+    items,
+    options,
+    auraOptions,
+    elementOptions,
+    classeOptions = [],
+    onChange,
+    onAdd,
+    onRemove,
+    showSlotEquipBonus = false,
+    showSoloOggettoOspitante = false,
+}) => {
   const toggleM2M = (index, field, id) => {
     const currentList = items[index][field] || [];
     const newList = currentList.includes(id)
@@ -126,25 +153,6 @@ const StatModInline = ({ items, options, auraOptions, elementOptions, onChange, 
                 {item.usa_bonus_slot_equip && (
                   <>
                     <div>
-                      <label className="text-[9px] uppercase text-emerald-600 font-black block mb-2">Slot ammessi</label>
-                      <div className="flex flex-wrap gap-1">
-                        {PHYSICAL_EQUIP_SLOTS.map((slot) => (
-                          <button
-                            key={slot.key}
-                            type="button"
-                            onClick={() => toggleSlotEquip(i, slot.key)}
-                            className={`text-[9px] px-2 py-0.5 rounded border transition-all ${
-                              (item.slot_equip_ammessi || []).includes(slot.key)
-                                ? 'bg-emerald-600 border-emerald-400 text-white'
-                                : 'bg-gray-900 border-gray-700 text-gray-600'
-                            }`}
-                          >
-                            {slot.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
                       <label className="text-[9px] uppercase text-emerald-600 font-black block mb-2">Modalità conteggio</label>
                       <div className="space-y-2">
                         {SLOT_EQUIP_CONTEGGIO_OPTIONS.map((opt) => (
@@ -171,6 +179,45 @@ const StatModInline = ({ items, options, auraOptions, elementOptions, onChange, 
                         ))}
                       </div>
                     </div>
+                    {(SLOT_EQUIP_CONTEGGIO_OPTIONS.find(
+                      (o) => o.value === (item.modalita_conteggio_slot_equip || 'TUTTI_OGGETTI')
+                    )?.needsSlots !== false) && (
+                    <div>
+                      <label className="text-[9px] uppercase text-emerald-600 font-black block mb-2">Slot ammessi</label>
+                      <div className="flex flex-wrap gap-1">
+                        {PHYSICAL_EQUIP_SLOTS.map((slot) => (
+                          <button
+                            key={slot.key}
+                            type="button"
+                            onClick={() => toggleSlotEquip(i, slot.key)}
+                            className={`text-[9px] px-2 py-0.5 rounded border transition-all ${
+                              (item.slot_equip_ammessi || []).includes(slot.key)
+                                ? 'bg-emerald-600 border-emerald-400 text-white'
+                                : 'bg-gray-900 border-gray-700 text-gray-600'
+                            }`}
+                          >
+                            {slot.label}
+                          </button>
+                        ))}
+                      </div>
+                      {classeOptions.length > 0 && (
+                        <div className="mt-3">
+                          <label className="text-[9px] uppercase text-emerald-600 font-black block mb-2">
+                            Classi oggetto (opzionale)
+                          </label>
+                          <p className="text-[10px] text-gray-500 mb-2">
+                            Se selezionate, conta solo oggetti di queste classi (anche senza slot).
+                          </p>
+                          <M2MSelector
+                            options={classeOptions}
+                            selected={item.classi_oggetto_conteggio || []}
+                            onToggle={(id) => toggleM2M(i, 'classi_oggetto_conteggio', id)}
+                            color="emerald"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    )}
                     <div className="w-40">
                       <label className="text-[9px] uppercase text-gray-500 font-black block mb-1">Valore per unità</label>
                       <input

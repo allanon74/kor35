@@ -498,7 +498,11 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                         return (
                             <div className="h-full w-full flex flex-col animate-in slide-in-from-right-4 duration-300">
                                 <Suspense fallback={<LoadingSpinner />}>
-                                    <Component onLogout={onLogout} onBack={() => setActiveTool('home')} />
+                                    <Component
+                                        onLogout={onLogout}
+                                        onBack={() => setActiveTool('home')}
+                                        onOpenTool={(id) => setActiveTool(id)}
+                                    />
                                 </Suspense>
                             </div>
                         );

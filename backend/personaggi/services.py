@@ -353,10 +353,32 @@ class GestioneOggettiService:
         return True, "Competenza valida."
     
     @staticmethod
-    def verifica_compatibilita_hardware(host: Oggetto, componente: Oggetto):
+    def _host_ha_mod(host: Oggetto) -> bool:
+        return host.potenziamenti_installati.filter(
+            Q(tipo_oggetto=TIPO_OGGETTO_MOD)
+            | (Q(tipo_oggetto=TIPO_OGGETTO_POTENZIAMENTO) & Q(is_tecnologico=True))
+        ).exists()
+
+    @staticmethod
+    def _host_ha_materia(host: Oggetto) -> bool:
+        return host.potenziamenti_installati.filter(
+            Q(tipo_oggetto=TIPO_OGGETTO_MATERIA)
+            | (Q(tipo_oggetto=TIPO_OGGETTO_POTENZIAMENTO) & Q(is_tecnologico=False))
+        ).exists()
+
+    @staticmethod
+    def _pg_ha_mix_materia_mod(personaggio) -> bool:
+        if not personaggio:
+            return False
+        return personaggio.abilita_possedute.filter(permette_mix_materia_mod=True).exists()
+
+    @staticmethod
+    def verifica_compatibilita_hardware(host: Oggetto, componente: Oggetto, personaggio=None):
         """
         Verifica se l'oggetto host può fisicamente ospitare il componente.
         Gestisce FIS, MOD, MAT e POT.
+        Con Macchinista (`permette_mix_materia_mod`): permette Materia su host con Mod
+        (e viceversa) anche se la whitelist classe non lo contempla.
         """
         # 1. Controllo Tipi Base
         if host.tipo_oggetto != TIPO_OGGETTO_FISICO:
@@ -391,19 +413,28 @@ class GestioneOggettiService:
             (componente.tipo_oggetto == TIPO_OGGETTO_POTENZIAMENTO and componente.is_tecnologico)
         )
 
+        mix_ok = GestioneOggettiService._pg_ha_mix_materia_mod(personaggio)
+
         # 4. Verifica Whitelist per Tipo Logico
         if is_logic_materia:
             # Whitelist Materia
             permessi = list(classe.mattoni_materia_permessi.values_list('id', flat=True))
-            # Se la lista permessi non è vuota, deve matchare. Se è vuota, blocca?
-            # Solitamente whitelist vuota = niente permesso.
+            whitelist_ok = True
             if permessi:
                 for c_id in ids_caratteristiche:
                     if c_id not in permessi:
-                        return False, f"Questa classe oggetto non supporta Materia con questa caratteristica."
-            # Se permessi è vuoto, e stiamo provando a montare materia -> Errore
+                        whitelist_ok = False
+                        break
             elif ids_caratteristiche:
-                 return False, f"Questa classe oggetto non supporta alcuna Materia."
+                whitelist_ok = False
+
+            if not whitelist_ok:
+                if mix_ok and GestioneOggettiService._host_ha_mod(host):
+                    pass  # Macchinista: Materia su host già con Mod
+                elif not permessi and ids_caratteristiche:
+                    return False, "Questa classe oggetto non supporta alcuna Materia."
+                else:
+                    return False, "Questa classe oggetto non supporta Materia con questa caratteristica."
             
             # REGOLA: Una ed una sola materia può essere montata su un oggetto mondano
             materie_installate = host.potenziamenti_installati.filter(
@@ -417,13 +448,22 @@ class GestioneOggettiService:
         elif is_logic_mod:
             # Whitelist Mod
             permessi = list(classe.limitazioni_mod.values_list('id', flat=True))
-            
+            whitelist_ok = True
             if permessi:
                 for c_id in ids_caratteristiche:
                     if c_id not in permessi:
-                        return False, f"Questa classe oggetto non supporta Mod con questa caratteristica."
+                        whitelist_ok = False
+                        break
             elif ids_caratteristiche:
-                 return False, f"Questa classe oggetto non supporta alcuna Mod."
+                whitelist_ok = False
+
+            if not whitelist_ok:
+                if mix_ok and GestioneOggettiService._host_ha_materia(host):
+                    pass  # Macchinista: Mod su host già con Materia
+                elif not permessi and ids_caratteristiche:
+                    return False, "Questa classe oggetto non supporta alcuna Mod."
+                else:
+                    return False, "Questa classe oggetto non supporta Mod con questa caratteristica."
             
             # Controllo Max Mod Totali
             # Conta sia le MOD esplicite che i POT tecnologici già installati
@@ -473,7 +513,9 @@ class GestioneOggettiService:
         Verifica completa per l'INSTALLAZIONE: Hardware + Skill.
         """
         # 1. Hardware (Entra?)
-        ok_hw, msg_hw = GestioneOggettiService.verifica_compatibilita_hardware(host, componente)
+        ok_hw, msg_hw = GestioneOggettiService.verifica_compatibilita_hardware(
+            host, componente, personaggio=personaggio
+        )
         if not ok_hw:
             return False, f"Incompatibilità Hardware: {msg_hw}"
 
@@ -1053,9 +1095,16 @@ class GestioneCraftingService:
         if not aura_principale:
             return False, f"Aura richiesta non configurata nel sistema ({sigla_req})."
 
-        val_aura_principale = forgiatore.get_valore_aura_effettivo(aura_principale)
-        if val_aura_principale < livello:
-            return False, f"Requisito Aura insufficiente: {aura_principale.nome} ({val_aura_principale}/{livello})."
+        from personaggi.models import Abilita
+        ambito = {
+            "MATERIA": Abilita.AMBITO_CREAZIONE_MATERIA,
+            "MUTAZIONE": Abilita.AMBITO_CREAZIONE_MUTAZIONE,
+            "MOD": Abilita.AMBITO_CREAZIONE_MOD,
+            "INNESTO": Abilita.AMBITO_CREAZIONE_MOD,
+        }.get(risultato, Abilita.AMBITO_CREAZIONE_MATERIA)
+        max_liv = forgiatore.max_livello_creazione(ambito=ambito)
+        if max_liv < livello:
+            return False, f"Requisito Aura insufficiente: {aura_principale.nome} ({max_liv}/{livello})."
 
         # Materia: richiede anche aura secondaria dell'infusione.
         if risultato == 'MATERIA':
@@ -1377,7 +1426,10 @@ class CreazioneConsumabileService:
         aura_alc = Punteggio.objects.filter(tipo=AURA, sigla=cls.SIGLA_AURA_ALCHIMIA).first()
         if not aura_alc:
             return False, "Aura Alchimia (ALC) non configurata."
-        valore_alc = personaggio.get_valore_aura_effettivo(aura_alc)
+        from personaggi.models import Abilita
+        valore_alc = personaggio.max_livello_creazione(
+            ambito=Abilita.AMBITO_CREAZIONE_CONSUMABILE
+        )
         livello = max(1, tessitura.livello)
         if livello > valore_alc:
             return False, f"Livello tessitura ({livello}) superiore al valore Aura Alchimia ({valore_alc})."
@@ -1446,13 +1498,29 @@ class CreazioneConsumabileService:
 
         tessitura = creazione.tessitura
         aura_tessitura = tessitura.aura_richiesta
-        aura_alc = Punteggio.objects.filter(tipo=AURA, sigla=cls.SIGLA_AURA_ALCHIMIA).first()
-        valore_alc = personaggio.get_valore_aura_effettivo(aura_alc) if aura_alc else 0
+        from personaggi.models import Abilita, Statistica
+        valore_alc = personaggio.max_livello_creazione(
+            ambito=Abilita.AMBITO_CREAZIONE_CONSUMABILE
+        )
         livello = max(1, tessitura.livello)
         numero_base = cls._get_valore_consumabili(
             personaggio, aura_tessitura, 'stat_numero_consumabili', FALLBACK_STAT_NUMERO_CONSUMABILI
         )
-        utilizzi = max(1, int(numero_base) + 2 * max(0, valore_alc - livello))
+        # Bonus da abilità (es. Alchimia Avanzata Extra → AbilitaStatistica NCO +1).
+        # Si usa solo la parte ADD dei modificatori, non il valore_base di NCO.
+        nco = Statistica.objects.filter(sigla="NCO").only("parametro").first()
+        bonus_nco = 0
+        if nco and nco.parametro:
+            try:
+                bonus_nco = int(
+                    float(
+                        (personaggio.modificatori_calcolati.get(nco.parametro) or {}).get("add", 0)
+                        or 0
+                    )
+                )
+            except (TypeError, ValueError):
+                bonus_nco = 0
+        utilizzi = max(1, int(numero_base) + 2 * max(0, valore_alc - livello) + max(0, bonus_nco))
         giorni_durata = cls._get_valore_consumabili(
             personaggio, aura_tessitura, 'stat_durata_consumabili', FALLBACK_STAT_DURATA_CONSUMABILI
         )

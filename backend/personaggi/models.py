@@ -2617,18 +2617,29 @@ PHYSICAL_EQUIP_SLOT_KEYS = (
 SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI = 'TUTTI_OGGETTI'
 SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO = 'OGNI_POTENZIAMENTO'
 SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI = 'OGGETTI_MODIFICATI'
+SLOT_EQUIP_CONTEGGIO_COG_OCCUPATI = 'COG_OCCUPATI'
+SLOT_EQUIP_CONTEGGIO_COG_VUOTI = 'COG_VUOTI'
 
 SLOT_EQUIP_CONTEGGIO_CHOICES = (
     (SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI, 'Tutti gli oggetti equipaggiati'),
     (SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO, 'Ogni Materia/Mod installata'),
     (SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI, 'Oggetti modificati (almeno 1 MAT/MOD)'),
+    (SLOT_EQUIP_CONTEGGIO_COG_OCCUPATI, 'Slot COG occupati'),
+    (SLOT_EQUIP_CONTEGGIO_COG_VUOTI, 'Slot COG vuoti'),
 )
 
 SLOT_EQUIP_CONTEGGIO_LABELS = {
     SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI: 'oggetti equipaggiati',
     SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO: 'MAT/MOD installati',
     SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI: 'oggetti modificati',
+    SLOT_EQUIP_CONTEGGIO_COG_OCCUPATI: 'slot COG occupati',
+    SLOT_EQUIP_CONTEGGIO_COG_VUOTI: 'slot COG vuoti',
 }
+
+_SLOT_EQUIP_CONTEGGIO_COG_MODES = frozenset({
+    SLOT_EQUIP_CONTEGGIO_COG_OCCUPATI,
+    SLOT_EQUIP_CONTEGGIO_COG_VUOTI,
+})
 
 
 def parse_slot_equip_ammessi(raw):
@@ -2648,20 +2659,33 @@ def parse_slot_equip_ammessi(raw):
     return out
 
 
-def conta_equipaggiamento_nei_slot(personaggio, slot_keys):
+def conta_equipaggiamento_nei_slot(personaggio, slot_keys, classi_oggetto_ids=None):
     """
-    Conta oggetti fisici equipaggiati, potenziamenti MAT/MOD e host modificati,
-    limitatamente agli slot indicati.
+    Conta oggetti fisici equipaggiati, potenziamenti MAT/MOD e host modificati.
+
+    - Se `slot_keys` è valorizzato: filtra per slot_equip.
+    - Se `classi_oggetto_ids` è valorizzato: filtra per classe_oggetto.
+    - Serve almeno uno dei due filtri; altrimenti restituisce zeri.
     """
     slots = set(parse_slot_equip_ammessi(slot_keys))
-    if not slots:
+    classi_ids = set()
+    if classi_oggetto_ids:
+        for cid in classi_oggetto_ids:
+            try:
+                classi_ids.add(int(cid))
+            except (TypeError, ValueError):
+                continue
+    if not slots and not classi_ids:
         return {'oggetti': 0, 'potenziamenti': 0, 'oggetti_modificati': 0}
 
     oggetti_qs = personaggio.get_oggetti().filter(
         tipo_oggetto=TIPO_OGGETTO_FISICO,
         is_equipaggiato=True,
-        slot_equip__in=slots,
     ).prefetch_related('potenziamenti_installati')
+    if slots:
+        oggetti_qs = oggetti_qs.filter(slot_equip__in=slots)
+    if classi_ids:
+        oggetti_qs = oggetti_qs.filter(classe_oggetto_id__in=classi_ids)
 
     n_oggetti = 0
     n_potenziamenti = 0
@@ -2684,27 +2708,93 @@ def conta_equipaggiamento_nei_slot(personaggio, slot_keys):
     }
 
 
+def stima_cog_max_senza_bonus_cog_slot(personaggio):
+    """
+    Stima COG max senza bonus che dipendono da COG_OCCUPATI/COG_VUOTI.
+    Usata dentro calcola_bonus_abilita_slot_equip per evitare ricorsione su
+    modificatori_calcolati / get_valore_statistica.
+    """
+    st = Statistica.objects.filter(sigla='COG').first()
+    if not st:
+        return 0
+    base = int(personaggio.punteggi_base.get(st.nome, 0) or 0)
+    add = 0.0
+    mol = 1.0
+
+    def _accumula(link):
+        nonlocal add, mol
+        if link.usa_bonus_slot_equip:
+            mode = link.modalita_conteggio_slot_equip or SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI
+            if mode in _SLOT_EQUIP_CONTEGGIO_COG_MODES:
+                return
+            # Altri conteggi slot su COG: non includere qui (evita ricorsione).
+            return
+        valore = float(link.valore or 0)
+        if link.tipo_modificatore == MODIFICATORE_ADDITIVO:
+            add += valore
+        elif link.tipo_modificatore == MODIFICATORE_MOLTIPLICATIVO and valore:
+            mol *= valore
+
+    for link in AbilitaStatistica.objects.filter(
+        abilita__personaggioabilita__personaggio=personaggio,
+        statistica=st,
+    ):
+        _accumula(link)
+
+    forma_oggi = None
+    getter = getattr(personaggio, 'get_forma_camaleonte_del_giorno', None)
+    if callable(getter):
+        forma_oggi = getter()
+    if forma_oggi:
+        for link in AbilitaStatistica.objects.filter(abilita=forma_oggi, statistica=st):
+            _accumula(link)
+
+    return int(round((base + add) * mol))
+
+
 def calcola_bonus_abilita_slot_equip(personaggio, stat_link):
-    """Bonus dinamico da AbilitaStatistica legato agli slot equipaggiati."""
+    """Bonus dinamico da AbilitaStatistica legato agli slot equipaggiati o alla COG."""
     if not stat_link.usa_bonus_slot_equip:
         return 0.0, ''
 
-    slots = parse_slot_equip_ammessi(stat_link.slot_equip_ammessi)
-    counts = conta_equipaggiamento_nei_slot(personaggio, slots)
-    bonus = 0.0
-    parts = []
-
     modalita = stat_link.modalita_conteggio_slot_equip or SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI
     per_unita = int(stat_link.valore_per_unita_slot_equip or 0)
-    count_key = {
-        SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI: 'oggetti',
-        SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO: 'potenziamenti',
-        SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI: 'oggetti_modificati',
-    }.get(modalita, 'oggetti')
-    n_units = counts.get(count_key, 0)
+    bonus = 0.0
+    parts = []
+    detail_prefix = ''
+
+    if modalita in _SLOT_EQUIP_CONTEGGIO_COG_MODES:
+        from personaggi.services import GestioneOggettiService
+
+        cog_used = int(GestioneOggettiService.calcola_cog_utilizzata(personaggio) or 0)
+        if modalita == SLOT_EQUIP_CONTEGGIO_COG_OCCUPATI:
+            n_units = cog_used
+        else:
+            cog_max = stima_cog_max_senza_bonus_cog_slot(personaggio)
+            n_units = max(0, cog_max - cog_used)
+        detail_prefix = 'COG'
+    else:
+        slots = parse_slot_equip_ammessi(stat_link.slot_equip_ammessi)
+        classi_ids = []
+        if hasattr(stat_link, "classi_oggetto_conteggio"):
+            classi_ids = list(stat_link.classi_oggetto_conteggio.values_list("id", flat=True))
+        counts = conta_equipaggiamento_nei_slot(personaggio, slots, classi_oggetto_ids=classi_ids)
+        count_key = {
+            SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI: 'oggetti',
+            SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO: 'potenziamenti',
+            SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI: 'oggetti_modificati',
+        }.get(modalita, 'oggetti')
+        n_units = counts.get(count_key, 0)
+        if classi_ids and not slots:
+            detail_prefix = f"equip. classi [{', '.join(str(c) for c in classi_ids)}]"
+        elif classi_ids and slots:
+            detail_prefix = f"equip. slot [{', '.join(slots)}] ∩ classi"
+        else:
+            detail_prefix = f"equip. slot [{', '.join(slots) if slots else '—'}]"
+
     if per_unita and n_units:
         bonus += per_unita * n_units
-        label = SLOT_EQUIP_CONTEGGIO_LABELS.get(modalita, count_key)
+        label = SLOT_EQUIP_CONTEGGIO_LABELS.get(modalita, modalita)
         parts.append(f"{n_units} {label}")
 
     flat = float(stat_link.valore or 0)
@@ -2715,8 +2805,7 @@ def calcola_bonus_abilita_slot_equip(personaggio, stat_link):
     if not parts:
         return 0.0, ''
 
-    slot_label = ', '.join(slots) if slots else '—'
-    detail = f"equip. slot [{slot_label}]: " + ', '.join(parts)
+    detail = f"{detail_prefix}: " + ', '.join(parts)
     return bonus, detail
 
 
@@ -2746,6 +2835,14 @@ class AbilitaStatistica(CondizioneStatisticaMixin):
         default=1,
         verbose_name="Valore per unità",
         help_text="Moltiplicatore applicato alla modalità di conteggio scelta.",
+    )
+    classi_oggetto_conteggio = models.ManyToManyField(
+        "ClasseOggetto",
+        blank=True,
+        related_name="abilita_statistiche_conteggio",
+        verbose_name="Classi oggetto (conteggio)",
+        help_text="Se valorizzato, conta solo oggetti equipaggiati di queste classi "
+        "(es. Spada/Bastone per Gladiatore). Combinabile con gli slot.",
     )
 
     class Meta: unique_together = ('abilita', 'statistica')
@@ -2787,6 +2884,66 @@ class Abilita(A_modello):
     camaleontica = models.BooleanField(
         default=False,
         help_text="Se attiva, questa forma AIN usa una forma del giorno randomica (deterministica).",
+    )
+    # Sblocco creazione/utilizzo oltre il valore aura (es. professioni T3 Lv5/Lv6).
+    AMBITO_CREAZIONE_TES_AURA = "TES_AURA"
+    AMBITO_CREAZIONE_MATERIA = "MATERIA"
+    AMBITO_CREAZIONE_MUTAZIONE = "MUTAZIONE"
+    AMBITO_CREAZIONE_MOD = "MOD"
+    AMBITO_CREAZIONE_CONSUMABILE = "CONSUMABILE"
+    AMBITO_CREAZIONE_CHOICES = (
+        ("", "—"),
+        (AMBITO_CREAZIONE_TES_AURA, "Tecniche (tessiture/proposte per aura)"),
+        (AMBITO_CREAZIONE_MATERIA, "Materie (forgiatura)"),
+        (AMBITO_CREAZIONE_MUTAZIONE, "Mutazioni (forgiatura)"),
+        (AMBITO_CREAZIONE_MOD, "MOD / Innesti (forgiatura)"),
+        (AMBITO_CREAZIONE_CONSUMABILE, "Consumabili / Alchimia"),
+    )
+    sblocca_creazione_livello = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Sblocca creazione fino a livello",
+        help_text="Se valorizzato, il PG con questa abilità può creare/usare fino a questo livello "
+        "nell'ambito indicato (max con il valore aura).",
+    )
+    ambito_creazione = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        choices=AMBITO_CREAZIONE_CHOICES,
+        verbose_name="Ambito sblocco creazione",
+    )
+    aura_creazione = models.ForeignKey(
+        Punteggio,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        limit_choices_to={"tipo": AURA},
+        related_name="abilita_sblocco_creazione",
+        verbose_name="Aura sblocco creazione",
+        help_text="Obbligatoria per ambito Tecniche: quale aura (es. Magica, Sacra) viene sbloccata.",
+    )
+    raddoppia_pa_da_equip = models.BooleanField(
+        default=False,
+        verbose_name="Raddoppia PA da equipaggiamento",
+        help_text="Se attivo, ogni +PA proveniente da oggetti/potenziamenti attivi viene aggiunto di nuovo "
+        "(es. Uso Armatura Avanzata Extra).",
+    )
+    immunita_scarica_chakra_esterna = models.BooleanField(
+        default=False,
+        verbose_name="Immunità scarica chakra esterna",
+        help_text="Se attivo, variazione staff/QR negativa su CHA non può ridurre il pool "
+        "(es. Chakra Avanzato Extra). Il consumo volontario del PG resta possibile.",
+    )
+    consente_pesanti_una_mano = models.BooleanField(
+        default=False,
+        verbose_name="Consente oggetti pesanti a una mano",
+        help_text="Es. Forza Straordinaria Avanzata II. Abilita regole dipendenti che richiedono questa capacità.",
+    )
+    permette_mix_materia_mod = models.BooleanField(
+        default=False,
+        verbose_name="Permette mix Materia+Mod",
+        help_text="Es. Macchinista 1: montare una Materia su host con Mod (e viceversa) anche oltre whitelist classe.",
     )
     effetto_uso_risorsa = models.JSONField(
         null=True,
@@ -2956,6 +3113,12 @@ class abilita_punteggio_dipendente(A_modello):
     )
     incremento = models.IntegerField(default=1)
     ogni_x = models.IntegerField(default=1)
+    richiede_pesanti_una_mano = models.BooleanField(
+        default=False,
+        verbose_name="Richiede pesanti a una mano",
+        help_text="Se attivo, la regola vale solo se il PG ha un'abilità con consente_pesanti_una_mano "
+        "(es. Cavaliere 1 → DaM da Robustezza solo con Forza Straordinaria II).",
+    )
 
     class Meta:
         unique_together = [["abilita", "punteggio_target", "punteggio_sorgente"]]
@@ -6410,35 +6573,47 @@ class Personaggio(Inventario):
             raise ValueError('Variazione non valida.')
         if delta == 0:
             raise ValueError('La variazione non può essere zero.')
-        stat = Statistica.objects.filter(sigla=sigla, is_risorsa_pool=True).first()
+        sigla_norm = (sigla or '').strip().upper()
+        if sigla_norm == 'CHK':
+            sigla_norm = 'CHA'
+        if delta < 0 and sigla_norm == 'CHA':
+            if self.abilita_possedute.filter(immunita_scarica_chakra_esterna=True).exists():
+                raise ValueError(
+                    'I chakra di questo personaggio non possono essere scaricati da fonti esterne '
+                    '(Chakra Avanzato Extra).'
+                )
+        stat = Statistica.objects.filter(sigla=sigla_norm, is_risorsa_pool=True).first()
+        if not stat:
+            # retry original sigla for non-CHK cases already normalized
+            stat = Statistica.objects.filter(sigla=sigla, is_risorsa_pool=True).first()
         if not stat:
             raise ValueError('Statistica non configurata come risorsa a pool.')
-        max_v = self.get_valore_massimo_risorsa_runtime(sigla)
+        max_v = self.get_valore_massimo_risorsa_runtime(stat.sigla)
         if max_v <= 0:
             raise ValueError('Pool non disponibile (massimo 0).')
-        cur = self.get_risorsa_corrente(sigla)
+        cur = self.get_risorsa_corrente(stat.sigla)
         nuovo = max(0, min(max_v, cur + delta))
         if nuovo == cur:
             raise ValueError(
                 'Impossibile applicare la variazione: il totale è già al minimo (0) o al massimo previsto da scheda.'
             )
         diff = nuovo - cur
-        self._set_risorsa_corrente(sigla, nuovo)
+        self._set_risorsa_corrente(stat.sigla, nuovo)
         self.save(update_fields=['risorse_consumabili'])
         who = getattr(staff_user, 'username', None) or getattr(staff_user, 'email', None) or 'staff'
         segno = f'+{diff}' if diff > 0 else str(diff)
-        desc = f'Regolazione staff {segno} pt. {stat.nome} ({sigla})'
+        desc = f'Regolazione staff {segno} pt. {stat.nome} ({stat.sigla})'
         if motivo:
             desc = f'{desc} — {motivo}'
         RisorsaStatisticaMovimento.objects.create(
             personaggio=self,
-            statistica_sigla=sigla,
+            statistica_sigla=stat.sigla,
             importo=diff,
             descrizione=desc[:240],
             tipo_movimento=RISORSA_MOV_STAFF,
         )
         self.aggiungi_log(f'{desc}. Totale: {nuovo}/{max_v} (operatore: {who}).')
-        self.sync_recuperi_automatici(only_sigla=sigla)
+        self.sync_recuperi_automatici(only_sigla=stat.sigla)
         if hasattr(self, '_modificatori_calcolati_cache'):
             delattr(self, '_modificatori_calcolati_cache')
         return nuovo
@@ -6576,9 +6751,15 @@ class Personaggio(Inventario):
             abilita_id__in=abilita_ids
         ).select_related("punteggio_target", "punteggio_sorgente")
 
+        ha_pesanti_una_mano = Abilita.objects.filter(
+            id__in=abilita_ids, consente_pesanti_una_mano=True
+        ).exists()
+
         regole = []
         for regola in regole_qs:
             if regola.ogni_x <= 0:
+                continue
+            if regola.richiede_pesanti_una_mano and not ha_pesanti_una_mano:
                 continue
             regole.append({
                 "id": regola.id,
@@ -6919,12 +7100,59 @@ class Personaggio(Inventario):
         if not aura:
             return 0
         return self.get_valore_aura_effettivo(aura)
+
+    def max_livello_creazione(self, *, ambito, aura=None):
+        """
+        Livello massimo di creazione/utilizzo: max(valore aura di base, sblocchi da abilità).
+
+        ambiti:
+        - TES_AURA: richiede `aura` (proposta/tecnica)
+        - MATERIA / MUTAZIONE / MOD: aure AMS / AIN / ATE
+        - CONSUMABILE: aura ALC
+        """
+        base = 0
+        if ambito == Abilita.AMBITO_CREAZIONE_TES_AURA:
+            if aura is None:
+                return 0
+            base = int(self.get_valore_aura_effettivo(aura) or 0)
+        elif ambito == Abilita.AMBITO_CREAZIONE_MATERIA:
+            base = int(self.get_valore_aura_per_sigla("AMS") or 0)
+        elif ambito == Abilita.AMBITO_CREAZIONE_MUTAZIONE:
+            base = int(self.get_valore_aura_per_sigla("AIN") or 0)
+        elif ambito == Abilita.AMBITO_CREAZIONE_MOD:
+            base = int(self.get_valore_aura_per_sigla("ATE") or 0)
+        elif ambito == Abilita.AMBITO_CREAZIONE_CONSUMABILE:
+            base = int(self.get_valore_aura_per_sigla("ALC") or 0)
+        else:
+            return 0
+
+        bonus = 0
+        qs = Abilita.objects.filter(
+            personaggioabilita__personaggio=self,
+            sblocca_creazione_livello__isnull=False,
+            ambito_creazione=ambito,
+        )
+        if ambito == Abilita.AMBITO_CREAZIONE_TES_AURA:
+            # aura_creazione è obbligatoria per TES_AURA: niente match su NULL
+            # (altrimenti uno sblocco senza aura varrebbe per tutte le aure).
+            if aura is None:
+                return base
+            qs = qs.filter(aura_creazione_id=aura.id)
+        for liv in qs.values_list("sblocca_creazione_livello", flat=True):
+            try:
+                bonus = max(bonus, int(liv or 0))
+            except (TypeError, ValueError):
+                continue
+        return max(base, bonus)
     
     def valida_acquisto_tecnica(self, t):
         if not t.aura_richiesta: return False, "Aura mancante."
         
         # 1. Controllo Livello Aura (sempre sull'aura richiesta della scheda tecnica)
-        if t.livello > self.get_valore_aura_effettivo(t.aura_richiesta): 
+        max_liv = self.max_livello_creazione(
+            ambito=Abilita.AMBITO_CREAZIONE_TES_AURA, aura=t.aura_richiesta
+        )
+        if t.livello > max_liv:
             return False, "Livello tecnica superiore al valore Aura."
         
         # 2. Cerimoniali: coralità, senza vincoli sui mattoni / caratteristiche dei componenti
@@ -7124,13 +7352,17 @@ class Personaggio(Inventario):
                 _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
 
         # 1. Abilità
-        for l in AbilitaStatistica.objects.filter(abilita__personaggioabilita__personaggio=self).select_related('statistica'): 
+        for l in AbilitaStatistica.objects.filter(
+            abilita__personaggioabilita__personaggio=self
+        ).select_related('statistica').prefetch_related('classi_oggetto_conteggio'):
             _apply_abilita_stat_link(l)
 
         # 1b. Forma camaleonte del giorno: stessi modificatori di una forma reale.
         forma_oggi = self.get_forma_camaleonte_del_giorno()
         if forma_oggi:
-            for l in AbilitaStatistica.objects.filter(abilita=forma_oggi).select_related('statistica'):
+            for l in AbilitaStatistica.objects.filter(abilita=forma_oggi).select_related(
+                'statistica'
+            ).prefetch_related('classi_oggetto_conteggio'):
                 _apply_abilita_stat_link(l)
         
         # 2. Oggetti e Innesti (CON CHECK TIMER)
@@ -7167,13 +7399,31 @@ class Personaggio(Inventario):
                 if mod.statistica and mod.statistica.parametro:
                     _add(mod.statistica.parametro, mod.tipo_modificatore, mod.valore)
 
+        equip_pa_add = 0.0
+
+        def _add_equip_track(parametro, tipo_mod, valore):
+            nonlocal equip_pa_add
+            _add(parametro, tipo_mod, valore)
+            if (
+                parametro == "armat"
+                and tipo_mod == MODIFICATORE_ADDITIVO
+            ):
+                try:
+                    equip_pa_add += float(valore or 0)
+                except (TypeError, ValueError):
+                    pass
+
         for oggetto in oggetti_inventario:
             # USIAMO LA FONTE DI VERITÀ UNICA: is_active()
             # Questo controlla: Equipaggiamento, Timer, Cariche (spegne_a_zero) e Gerarchia
             if oggetto.is_active():
                 for stat_link in oggetto.oggettostatistica_set.all(): 
                     if _is_global(stat_link):
-                        _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
+                        _add_equip_track(
+                            stat_link.statistica.parametro,
+                            stat_link.tipo_modificatore,
+                            stat_link.valore,
+                        )
                 _apply_sezioni_oggetto(oggetto)
                 
                 # Potenziamenti (Mod/Materia)
@@ -7183,8 +7433,16 @@ class Personaggio(Inventario):
                     if potenziamento.is_active():
                         for stat_link_pot in potenziamento.oggettostatistica_set.all(): 
                             if _is_global(stat_link_pot):
-                                _add(stat_link_pot.statistica.parametro, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
+                                _add_equip_track(
+                                    stat_link_pot.statistica.parametro,
+                                    stat_link_pot.tipo_modificatore,
+                                    stat_link_pot.valore,
+                                )
                         _apply_sezioni_oggetto(potenziamento)
+
+        # Uso Armatura Avanzata Extra: raddoppia i +PA provenienti da equip attivo.
+        if equip_pa_add and self.abilita_possedute.filter(raddoppia_pa_da_equip=True).exists():
+            _add("armat", MODIFICATORE_ADDITIVO, equip_pa_add)
 
         # 3. Caratteristiche Base
         cb = self.caratteristiche_base

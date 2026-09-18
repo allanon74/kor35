@@ -19,9 +19,17 @@ const EMPTY_ABILITA_FORM = {
     costo_pc: 0,
     costo_crediti: 0,
     is_tratto_aura: false,
+    camaleontica: false,
+    sblocca_creazione_livello: '',
+    ambito_creazione: '',
+    aura_creazione: null,
     nascondi_in_scheda_abilita: false,
     escluso_negozio_ufficiale: false,
     non_vendibile: false,
+    raddoppia_pa_da_equip: false,
+    immunita_scarica_chakra_esterna: false,
+    consente_pesanti_una_mano: false,
+    permette_mix_materia_mod: false,
     aura_riferimento: null,
     livello_riferimento: 0,
     tiers: [],
@@ -45,6 +53,12 @@ const EMPTY_RECUPERO_WIZARD = {
     rigenerazioni: [{ stat_sigla: 'PV', ogni_minuti: 5, step: 1 }],
 };
 
+function pkOrNull(value) {
+    if (value == null || value === '') return null;
+    if (typeof value === 'object') return value.id ?? null;
+    return value;
+}
+
 /** La lista staff restituisce righe senza relazioni annidate: senza merge, .map sugli inline va in errore. */
 function mergeAbilitaFormState(initialData) {
     if (!initialData) {
@@ -53,12 +67,25 @@ function mergeAbilitaFormState(initialData) {
     return {
         ...EMPTY_ABILITA_FORM,
         ...initialData,
+        aura_riferimento: pkOrNull(initialData.aura_riferimento),
+        aura_creazione: pkOrNull(initialData.aura_creazione),
+        sblocca_creazione_livello:
+            initialData.sblocca_creazione_livello == null ? '' : initialData.sblocca_creazione_livello,
+        ambito_creazione: initialData.ambito_creazione || '',
         tiers: Array.isArray(initialData.tiers) ? initialData.tiers : [],
         requisiti: Array.isArray(initialData.requisiti) ? initialData.requisiti : [],
         punteggi_assegnati: Array.isArray(initialData.punteggi_assegnati) ? initialData.punteggi_assegnati : [],
         punteggi_dipendenti: Array.isArray(initialData.punteggi_dipendenti) ? initialData.punteggi_dipendenti : [],
         prerequisiti: Array.isArray(initialData.prerequisiti) ? initialData.prerequisiti : [],
-        statistiche: Array.isArray(initialData.statistiche) ? initialData.statistiche : [],
+        statistiche: Array.isArray(initialData.statistiche)
+            ? initialData.statistiche.map((s) => ({
+                ...s,
+                classi_oggetto_conteggio: Array.isArray(s.classi_oggetto_conteggio)
+                    ? s.classi_oggetto_conteggio.map((c) => (typeof c === 'object' ? c.id : c))
+                    : [],
+                slot_equip_ammessi: Array.isArray(s.slot_equip_ammessi) ? s.slot_equip_ammessi : [],
+            }))
+            : [],
         formula_rules: Array.isArray(initialData.formula_rules) ? initialData.formula_rules : [],
         effetto_uso_risorsa_str:
             initialData.effetto_uso_risorsa != null
@@ -75,6 +102,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
     const [punteggi, setPunteggi] = useState([]); 
     const [abilitaList, setAbilitaList] = useState([]); 
     const [tiersList, setTiersList] = useState([]); 
+    const [classiOggetto, setClassiOggetto] = useState([]);
     const [semanticMattoniOptions, setSemanticMattoniOptions] = useState([]);
     const [effettoWizard, setEffettoWizard] = useState(EMPTY_EFFETTO_WIZARD);
     const [recuperoWizard, setRecuperoWizard] = useState(EMPTY_RECUPERO_WIZARD);
@@ -118,6 +146,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                 setPunteggi(resources?.punteggi || []);
                 setAbilitaList(resources?.abilita || []);
                 setTiersList(resources?.tiers || []);
+                setClassiOggetto(resources?.classiOggetto || []);
                 const semantic = await staffGetFormulaSemanticOptions(onLogout);
                 setSemanticMattoniOptions((semantic?.elementi_mattoni || []).map((m) => ({ ...m, nome: m.label || m.nome })));
             } catch (err) {
@@ -170,6 +199,14 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                 caratteristica_2: formData.caratteristica_2 ? parseInt(formData.caratteristica_2) : null,
                 caratteristica_3: formData.caratteristica_3 ? parseInt(formData.caratteristica_3) : null,
                 aura_riferimento: formData.aura_riferimento ? parseInt(formData.aura_riferimento) : null,
+                aura_creazione: formData.aura_creazione ? parseInt(formData.aura_creazione, 10) : null,
+                sblocca_creazione_livello: (() => {
+                    const raw = formData.sblocca_creazione_livello;
+                    if (raw === '' || raw === null || raw === undefined) return null;
+                    const n = parseInt(raw, 10);
+                    return Number.isFinite(n) ? n : null;
+                })(),
+                ambito_creazione: formData.ambito_creazione || '',
                 tiers: tiers.map(t => ({...t, tabella: parseInt(t.tabella)})),
                 requisiti: requisiti.map(r => ({...r, requisito: parseInt(r.requisito)})),
                 punteggi_assegnati: punteggiAssegnati.map(p => ({...p, punteggio: parseInt(p.punteggio)})),
@@ -179,6 +216,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                     punteggio_sorgente: parseInt(p.punteggio_sorgente),
                     incremento: parseInt(p.incremento || 0),
                     ogni_x: Math.max(1, parseInt(p.ogni_x || 1)),
+                    richiede_pesanti_una_mano: !!p.richiede_pesanti_una_mano,
                 })),
                 prerequisiti: prerequisiti.map(p => ({...p, prerequisito: parseInt(p.prerequisito)})),
                 formula_rules: formulaRules.map((r) => ({
@@ -389,11 +427,143 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                                         onChange={e => setFormData({...formData, livello_riferimento: parseInt(e.target.value)})}
                                     />
                                 </div>
+                                {Number(formData.livello_riferimento) === 2 && (
+                                    <label className="flex items-center gap-2 cursor-pointer pt-1">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!formData.camaleontica}
+                                            onChange={(e) =>
+                                                setFormData({ ...formData, camaleontica: e.target.checked })
+                                            }
+                                        />
+                                        <span className="text-xs font-bold text-purple-300 uppercase">
+                                            Forma camaleontica
+                                        </span>
+                                    </label>
+                                )}
+                                {Number(formData.livello_riferimento) === 2 && (
+                                    <p className="text-[11px] text-gray-500">
+                                        Se attiva, ogni giorno usa gli effetti di un&apos;altra forma AIN (non camaleontica)
+                                        scelta in modo deterministico.
+                                    </p>
+                                )}
                             </div>
                         )}
                     </div>
 
+                    <div className="bg-gray-900/30 p-3 rounded border border-amber-900/30 space-y-2">
+                        <p className="text-xs font-bold text-amber-400 uppercase">Sblocco creazione (T3)</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div>
+                                <label className="text-[10px] text-gray-500 uppercase font-bold">Livello max</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-white"
+                                    value={formData.sblocca_creazione_livello ?? ''}
+                                    onChange={(e) =>
+                                        setFormData({ ...formData, sblocca_creazione_livello: e.target.value })
+                                    }
+                                    placeholder="es. 5"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-gray-500 uppercase font-bold">Ambito</label>
+                                <select
+                                    className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-white text-sm"
+                                    value={formData.ambito_creazione || ''}
+                                    onChange={(e) =>
+                                        setFormData({ ...formData, ambito_creazione: e.target.value })
+                                    }
+                                >
+                                    <option value="">—</option>
+                                    <option value="TES_AURA">Tecniche (per aura)</option>
+                                    <option value="MATERIA">Materie</option>
+                                    <option value="MUTAZIONE">Mutazioni</option>
+                                    <option value="MOD">MOD / Innesti</option>
+                                    <option value="CONSUMABILE">Consumabili / Alchimia</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-gray-500 uppercase font-bold">Aura (se Tecniche)</label>
+                                <SearchableSelect
+                                    options={aure}
+                                    value={formData.aura_creazione || ''}
+                                    onChange={(val) =>
+                                        setFormData({ ...formData, aura_creazione: val || null })
+                                    }
+                                    placeholder="- Aura -"
+                                />
+                            </div>
+                        </div>
+                        <p className="text-[11px] text-gray-500">
+                            Consente creare/usare fino a questo livello anche se l&apos;aura del PG è più bassa
+                            (es. professioni Tier 3 Lv.5/6).
+                        </p>
+                    </div>
+
                     <div className="bg-gray-900/30 p-3 rounded border border-indigo-900/30 space-y-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={!!formData.raddoppia_pa_da_equip}
+                                onChange={(e) =>
+                                    setFormData({ ...formData, raddoppia_pa_da_equip: e.target.checked })
+                                }
+                            />
+                            <span className="text-xs font-bold text-emerald-300 uppercase">
+                                Raddoppia PA da equipaggiamento
+                            </span>
+                        </label>
+                        <p className="text-[11px] text-gray-400">
+                            Ogni +PA da oggetti/potenziamenti attivi viene aggiunto di nuovo
+                            (es. Uso Armatura Avanzata Extra).
+                        </p>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={!!formData.immunita_scarica_chakra_esterna}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        immunita_scarica_chakra_esterna: e.target.checked,
+                                    })
+                                }
+                            />
+                            <span className="text-xs font-bold text-emerald-300 uppercase">
+                                Immunità scarica chakra esterna
+                            </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={!!formData.consente_pesanti_una_mano}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        consente_pesanti_una_mano: e.target.checked,
+                                    })
+                                }
+                            />
+                            <span className="text-xs font-bold text-emerald-300 uppercase">
+                                Consente pesanti a una mano
+                            </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={!!formData.permette_mix_materia_mod}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        permette_mix_materia_mod: e.target.checked,
+                                    })
+                                }
+                            />
+                            <span className="text-xs font-bold text-emerald-300 uppercase">
+                                Mix Materia + Mod (Macchinista)
+                            </span>
+                        </label>
                         <label className="flex items-center gap-2 cursor-pointer">
                             <input
                                 type="checkbox"
@@ -727,6 +897,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                                             incremento: 1,
                                             ogni_x: 1,
                                             punteggio_sorgente: null,
+                                            richiede_pesanti_una_mano: false,
                                         },
                                     ],
                                 })
@@ -807,6 +978,25 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                                     X
                                 </button>
                             </div>
+                            <div className="md:col-span-12">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={!!row.richiede_pesanti_una_mano}
+                                        onChange={(e) => {
+                                            const next = [...(formData.punteggi_dipendenti || [])];
+                                            next[idx] = {
+                                                ...next[idx],
+                                                richiede_pesanti_una_mano: e.target.checked,
+                                            };
+                                            setFormData({ ...formData, punteggi_dipendenti: next });
+                                        }}
+                                    />
+                                    <span className="text-[10px] uppercase text-amber-300 font-bold">
+                                        Solo se pesanti a una mano (Forza II / flag)
+                                    </span>
+                                </label>
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -824,6 +1014,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                         options={statsOptions}        
                         auraOptions={auraOptions}
                         elementOptions={elementOptions}
+                        classeOptions={classiOggetto}
                         
                         // Gestione Aggiunta
                         onAdd={() => setFormData({
