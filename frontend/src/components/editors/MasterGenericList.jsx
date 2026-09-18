@@ -170,10 +170,10 @@ const MasterGenericList = ({
         <button
           type="button"
           onClick={() => onScanQr(item.id)}
-          className="p-2 bg-blue-600/20 text-blue-500 hover:bg-blue-600 hover:text-white rounded-lg transition-all"
+          className="p-2.5 lg:p-2 bg-blue-600/20 text-blue-500 hover:bg-blue-600 hover:text-white rounded-lg transition-all"
           title="Associa QR"
         >
-          <QrCode size={14} />
+          <QrCode size={16} />
         </button>
       )}
       {onMinigioco && (
@@ -181,40 +181,40 @@ const MasterGenericList = ({
           type="button"
           onClick={() => onMinigioco(item)}
           disabled={!item.qrcode_id}
-          className="p-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-2.5 lg:p-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
           title={item.qrcode_id ? 'Configura minigioco QR' : 'Associa prima un QR'}
         >
-          <Puzzle size={14} />
+          <Puzzle size={16} />
         </button>
       )}
       {onEdit && (
         <button
           type="button"
           onClick={() => onEdit(item)}
-          className="p-2 bg-amber-600/20 text-amber-500 hover:bg-amber-600 hover:text-white rounded-lg transition-all"
+          className="p-2.5 lg:p-2 bg-amber-600/20 text-amber-500 hover:bg-amber-600 hover:text-white rounded-lg transition-all"
           title="Modifica"
         >
-          <Pencil size={14} />
+          <Pencil size={16} />
         </button>
       )}
       {onDelete && (
         <button
           type="button"
           onClick={() => setPendingDeleteItem(item)}
-          className="p-2 bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white rounded-lg transition-all"
+          className="p-2.5 lg:p-2 bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white rounded-lg transition-all"
           title="Elimina"
         >
-          <Trash2 size={14} />
+          <Trash2 size={16} />
         </button>
       )}
     </>
   ), [extraRowActions, onScanQr, onMinigioco, onEdit, onDelete]);
 
   return (
-    <div className={`flex flex-col space-y-4 ${fill ? 'h-full' : 'min-h-[360px] max-h-[75vh]'}`}>
-      <div className="flex-none bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg space-y-4">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <h2 className="text-xl font-bold text-white uppercase tracking-tighter">{title}</h2>
+    <div className={`flex flex-col space-y-3 lg:space-y-4 min-w-0 ${fill ? 'lg:h-full' : 'min-h-[360px] lg:max-h-[75vh]'}`}>
+      <div className="flex-none bg-gray-800 p-3 lg:p-4 rounded-xl border border-gray-700 shadow-lg space-y-3 lg:space-y-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 lg:gap-4">
+          <h2 className="text-lg lg:text-xl font-bold text-white uppercase tracking-tighter">{title}</h2>
 
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
             {toolbarExtra}
@@ -243,7 +243,7 @@ const MasterGenericList = ({
               <button
                 type="button"
                 onClick={onAdd}
-                className="bg-cyan-600 hover:bg-cyan-500 px-4 py-2 rounded-lg font-black text-xs transition-all flex items-center gap-2 uppercase text-white shadow-lg active:scale-95 whitespace-nowrap"
+                className="bg-cyan-600 hover:bg-cyan-500 px-4 py-2.5 lg:py-2 rounded-lg font-black text-xs transition-all flex items-center justify-center gap-2 uppercase text-white shadow-lg active:scale-95 whitespace-nowrap w-full sm:w-auto"
               >
                 <Plus size={16} /> {addLabel}
               </button>
@@ -351,7 +351,7 @@ const MasterGenericList = ({
         )}
       </div>
 
-      <div className="flex-1 bg-gray-800 rounded-xl border border-gray-700 shadow-xl overflow-hidden flex flex-col min-h-0">
+      <div className={`${fill ? 'lg:flex-1 lg:min-h-0' : ''} bg-gray-800 rounded-xl border border-gray-700 shadow-xl overflow-hidden flex flex-col min-w-0`}>
         <StaffDataTable
           columns={columns}
           items={visibleItems}
@@ -363,6 +363,7 @@ const MasterGenericList = ({
           onColumnFilterChange={setColumnFilter}
           renderActions={hasActions ? renderActions : undefined}
           onRowClick={onRowClick}
+          mobileOnRowClick={onRowClick || onEdit}
           loading={loading}
         />
 

@@ -175,6 +175,31 @@ export function isColumnHideable(col) {
   return col?.hideable !== false;
 }
 
+function parseColumnWidthPx(width) {
+  if (width == null) return null;
+  const raw = String(width).trim();
+  if (!raw || raw.endsWith('%')) return null;
+  if (!raw.endsWith('px') && !/^\d+(\.\d+)?$/.test(raw)) return null;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Ruolo della colonna nel layout a card (smartphone).
+ * `mobileRole` esplicito: 'badge' | 'title' | 'detail' | 'hidden'.
+ */
+export function columnMobileRole(col, { titleAssigned = false } = {}) {
+  if (col?.mobileRole) return col.mobileRole;
+  const widthPx = parseColumnWidthPx(col?.width);
+  if (col?.align === 'center' && widthPx != null && widthPx <= 80) {
+    return 'badge';
+  }
+  if (!titleAssigned && col?.align !== 'center' && col?.align !== 'right') {
+    return 'title';
+  }
+  return 'detail';
+}
+
 export function defaultVisibleColumnKeys(columns) {
   return (columns || []).map((col, idx) => columnKey(col, idx));
 }
