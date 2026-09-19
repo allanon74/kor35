@@ -206,7 +206,7 @@ const RichTextToolbar = ({
     const activeEmojiGroup = EMOJI_GROUPS.find((group) => group.id === emojiGroupId) || EMOJI_GROUPS[0];
 
     return (
-        <div ref={rootRef} className="relative bg-gray-700 border-b border-gray-600 rounded-t-lg">
+        <div ref={rootRef} className="relative min-w-0 max-w-full bg-gray-700 border-b border-gray-600 rounded-t-lg">
             <div
                 className="flex items-center gap-0.5 p-1.5 flex-nowrap overflow-x-auto lg:flex-wrap lg:overflow-visible kor-rich-toolbar-scroll"
                 role="toolbar"

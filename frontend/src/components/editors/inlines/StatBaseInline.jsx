@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 const statMatchesFilter = (stat, query) => {
   const q = query.trim().toLowerCase();
@@ -49,6 +49,16 @@ const sortByName = (a, b) => String(a.nome || '').localeCompare(String(b.nome ||
 
 const StatBaseInline = ({ items, options, onChange }) => {
   const [filterText, setFilterText] = useState('');
+  const [listOpen, setListOpen] = useState(() =>
+    typeof window === 'undefined' ? true : !window.matchMedia('(max-width: 1023px)').matches,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const apply = () => setListOpen(!mq.matches);
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
 
   const { overridden, standard, overriddenTotal } = useMemo(() => {
     const filtered = options.filter((stat) => statMatchesFilter(stat, filterText));
@@ -140,7 +150,7 @@ const StatBaseInline = ({ items, options, onChange }) => {
           value={filterText}
           onChange={(e) => setFilterText(e.target.value)}
           placeholder="Filtra per nome, parametro o sigla…"
-          className="flex-1 min-w-[200px] bg-gray-950 p-2 rounded text-sm border border-gray-700 text-white placeholder:text-gray-600 focus:border-indigo-500 outline-none"
+          className="flex-1 min-w-0 w-full sm:min-w-48 bg-gray-950 p-2 rounded text-sm border border-gray-700 text-white placeholder:text-gray-600 focus:border-indigo-500 outline-none"
         />
         {filterText.trim() && (
           <button
@@ -159,9 +169,17 @@ const StatBaseInline = ({ items, options, onChange }) => {
             {overriddenTotal} personalizzat{overriddenTotal === 1 ? 'a' : 'e'}
           </span>
         )}
+        <button
+          type="button"
+          onClick={() => setListOpen((v) => !v)}
+          className="lg:hidden w-full min-h-11 rounded-lg border border-gray-600 bg-gray-800 px-3 text-xs font-bold uppercase tracking-wide text-gray-200"
+        >
+          {listOpen ? 'Nascondi elenco statistiche' : `Mostra elenco statistiche (${options.length})`}
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+      {listOpen && (
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-2 max-h-[min(500px,50vh)] overflow-y-auto pr-2 custom-scrollbar">
         {!hasResults ? (
           <p className="col-span-full text-sm text-gray-500 italic py-4 text-center">
             Nessuna statistica corrisponde al filtro.
@@ -196,6 +214,7 @@ const StatBaseInline = ({ items, options, onChange }) => {
           </>
         )}
       </div>
+      )}
     </div>
   );
 };

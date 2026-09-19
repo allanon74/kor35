@@ -96,7 +96,7 @@ const StatModInline = ({
       <div className="space-y-4">
         {items.map((item, i) => (
           <div key={i} className="bg-gray-800/80 p-4 rounded border border-gray-700 space-y-4 shadow-xl">
-            <div className="flex flex-wrap gap-3 min-w-0">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 min-w-0">
               <div className="w-full min-w-0 flex-1 sm:min-w-[12rem]">
                 <label className="text-[9px] uppercase text-gray-500 font-black block mb-1">Statistica</label>
                 <SearchableSelect
@@ -110,22 +110,24 @@ const StatModInline = ({
                   placeholder="Seleziona..."
                 />
               </div>
-              <div className="w-32">
-                <label className="text-[9px] uppercase text-gray-500 font-black block mb-1">Tipo</label>
-                <select className="w-full bg-gray-900 p-2 rounded text-sm border border-gray-600 text-white"
-                  value={item.tipo_modificatore} onChange={e => onChange(i, 'tipo_modificatore', e.target.value)}>
-                  <option value="ADD">Additivo (+)</option>
-                  <option value="MOL">Moltiplicatore (x)</option>
-                </select>
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3 min-w-0">
+                <div className="min-w-0 sm:w-32">
+                  <label className="text-[9px] uppercase text-gray-500 font-black block mb-1">Tipo</label>
+                  <select className="w-full min-h-11 bg-gray-900 p-2 rounded text-sm border border-gray-600 text-white"
+                    value={item.tipo_modificatore} onChange={e => onChange(i, 'tipo_modificatore', e.target.value)}>
+                    <option value="ADD">Additivo (+)</option>
+                    <option value="MOL">Moltiplicatore (x)</option>
+                  </select>
+                </div>
+                <div className="min-w-0 sm:w-24">
+                  <label className="text-[9px] uppercase text-gray-500 font-black block mb-1">
+                    {item.usa_bonus_slot_equip ? 'Bonus fisso' : 'Valore'}
+                  </label>
+                  <input type="number" step="any" className="w-full min-h-11 bg-gray-900 p-2 rounded text-sm text-center border border-gray-600 text-white"
+                    value={item.valore} onChange={e => onChange(i, 'valore', e.target.value)} />
+                </div>
+                <button type="button" onClick={() => onRemove(i)} className="col-span-2 sm:col-auto sm:self-end mb-1 text-red-500 hover:bg-red-500/10 p-2 rounded transition-colors text-xl min-h-11 min-w-11">✕</button>
               </div>
-              <div className="w-24">
-                <label className="text-[9px] uppercase text-gray-500 font-black block mb-1">
-                  {item.usa_bonus_slot_equip ? 'Bonus fisso' : 'Valore'}
-                </label>
-                <input type="number" step="any" className="w-full bg-gray-900 p-2 rounded text-sm text-center border border-gray-600 text-white"
-                  value={item.valore} onChange={e => onChange(i, 'valore', e.target.value)} />
-              </div>
-              <button onClick={() => onRemove(i)} className="self-end mb-1 text-red-500 hover:bg-red-500/10 p-2 rounded transition-colors text-xl">✕</button>
             </div>
 
             {showSoloOggettoOspitante && (

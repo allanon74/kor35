@@ -67,7 +67,7 @@ const EditorSaveActions = ({
             )}
           </div>
           {menuOpen && menuActions.length > 0 && (
-            <div className="absolute right-0 z-50 mt-1 w-full min-w-56 max-w-xs bg-gray-900 border border-gray-700 rounded-lg shadow-2xl overflow-hidden sm:w-56">
+            <div className="absolute right-0 bottom-full z-50 mb-1 w-full min-w-56 max-w-xs bg-gray-900 border border-gray-700 rounded-lg shadow-2xl overflow-hidden sm:w-56 lg:bottom-auto lg:top-full lg:mt-1 lg:mb-0">
               {menuActions.map((item) => (
                 <button
                   key={item.key}

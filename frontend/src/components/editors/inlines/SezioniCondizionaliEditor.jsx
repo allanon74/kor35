@@ -136,8 +136,8 @@ const SezioniCondizionaliEditor = ({
                 </button>
               </div>
               {(sezione.statistiche_base || []).map((row, rIdx) => (
-                <div key={rIdx} className="flex gap-2 items-center">
-                  <div className="flex-1">
+                <div key={rIdx} className="flex gap-2 items-center min-w-0">
+                  <div className="flex-1 min-w-0">
                     <SearchableSelect
                       options={statsOptions}
                       value={row.statistica?.id || row.statistica || ''}
@@ -182,7 +182,7 @@ const SezioniCondizionaliEditor = ({
               {(sezione.modificatori || []).map((row, rIdx) => (
                 <div key={rIdx} className="bg-gray-800/60 border border-gray-700 rounded p-2 space-y-2">
                   <div className="flex flex-wrap gap-2 items-center">
-                    <div className="flex-1 min-w-[160px]">
+                    <div className="flex-1 min-w-0 w-full sm:min-w-[12rem]">
                       <SearchableSelect
                         options={statsOptions}
                         value={row.statistica?.id || row.statistica || ''}

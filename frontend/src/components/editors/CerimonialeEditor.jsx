@@ -113,7 +113,7 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
         )}
       />
 
-      <div className="bg-gray-900/40 p-5 rounded-xl border border-gray-700/50 space-y-5">
+      <div className="bg-gray-900/40 p-3 sm:p-5 rounded-xl border border-gray-700/50 space-y-5 min-w-0">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Select label="Aura" value={formData.aura_richiesta?.id || formData.aura_richiesta} 
                     options={punteggiList.filter(p => p.tipo === 'AU')} 
@@ -187,7 +187,7 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
 const Input = ({ label, value, onChange, type="text" }) => (
     <div className="w-full text-left">
       <label className="text-[10px] text-gray-500 uppercase font-black block mb-1 tracking-tighter">{label}</label>
-      <input type={type} className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white focus:border-amber-500 outline-none shadow-inner" value={value || ""} onChange={e => onChange(e.target.value)} />
+      <input type={type} className="w-full min-h-11 bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white focus:border-amber-500 outline-none shadow-inner" value={value || ""} onChange={e => onChange(e.target.value)} />
     </div>
 );
 

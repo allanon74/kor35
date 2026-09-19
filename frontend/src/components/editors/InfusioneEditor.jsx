@@ -246,11 +246,11 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         {/* RIGA 2: Formula Attacco */}
         <div className="bg-indigo-500/5 p-3 rounded-lg border border-indigo-500/20">
             <Input label="Formula Attacco (Parametri e Dadi)" placeholder="es. @for + 1d10 + @potenza_materia" value={formData.formula_attacco} onChange={v => setFormData({...formData, formula_attacco: v})} />
-            <div className="mt-2 flex justify-end">
+            <div className="mt-2 flex justify-stretch sm:justify-end">
               <button
                 type="button"
                 onClick={() => setIsFormulaBuilderOpen(true)}
-                className="px-3 py-1 rounded bg-indigo-700 hover:bg-indigo-600 text-xs font-bold uppercase tracking-wide"
+                className="w-full sm:w-auto min-h-11 px-3 py-2 rounded bg-indigo-700 hover:bg-indigo-600 text-xs font-bold uppercase tracking-wide"
               >
                 Costruisci formula
               </button>
@@ -295,13 +295,13 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
       )}
 
       {/* 5. SEZIONE CARICHE */}
-      <div className="border border-indigo-500/20 rounded-xl overflow-hidden shadow-lg">
-        <button onClick={() => setIsChargesOpen(!isChargesOpen)} className="w-full flex justify-between items-center p-4 bg-indigo-900/20 hover:bg-indigo-900/30 transition-colors">
-          <h3 className="text-xs font-black uppercase tracking-widest text-indigo-300">{isChargesOpen ? '▼' : '▶'} Gestione Cariche e Ricarica</h3>
-          <span className="text-[9px] text-indigo-500 uppercase">{isChargesOpen ? 'Chiudi' : 'Espandi'}</span>
+      <div className="border border-indigo-500/20 rounded-xl min-w-0 shadow-lg">
+        <button type="button" onClick={() => setIsChargesOpen(!isChargesOpen)} className="w-full flex justify-between items-center gap-2 p-3 sm:p-4 bg-indigo-900/20 hover:bg-indigo-900/30 transition-colors min-h-11">
+          <h3 className="text-xs font-black uppercase tracking-widest text-indigo-300 text-left break-words">{isChargesOpen ? '▼' : '▶'} Gestione Cariche e Ricarica</h3>
+          <span className="text-[9px] text-indigo-500 uppercase shrink-0">{isChargesOpen ? 'Chiudi' : 'Espandi'}</span>
         </button>
         {isChargesOpen && (
-          <div className="p-5 bg-indigo-900/5 space-y-4 border-t border-indigo-500/10 animate-in slide-in-from-top-2 duration-200">
+          <div className="p-3 sm:p-5 bg-indigo-900/5 space-y-4 border-t border-indigo-500/10 animate-in slide-in-from-top-2 duration-200 min-w-0">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Select label="Statistica Cariche" value={currentCaricheId} options={statsOptions} onChange={v => setFormData({...formData, statistica_cariche: v ? parseInt(v, 10) : null})} />
                 <Input label="Costo Ricarica (Crediti)" type="number" value={formData.costo_ricarica_crediti} onChange={v => setFormData({...formData, costo_ricarica_crediti: v})} />
@@ -386,7 +386,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
 const Input = ({ label, value, onChange, type="text", placeholder="" }) => (
   <div className="w-full text-left">
     <label className="text-[10px] text-gray-500 uppercase font-black block mb-1 tracking-tighter">{label}</label>
-    <input type={type} placeholder={placeholder} className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white focus:border-indigo-500 outline-none shadow-inner" value={value || ""} onChange={e => onChange(e.target.value)} />
+    <input type={type} placeholder={placeholder} className="w-full min-h-11 bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white focus:border-indigo-500 outline-none shadow-inner" value={value || ""} onChange={e => onChange(e.target.value)} />
   </div>
 );
 

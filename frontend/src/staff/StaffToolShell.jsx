@@ -50,13 +50,13 @@ export function StaffToolShell({
   );
 }
 
-/** Pannello form staff: su telefono scorre la pagina, su desktop resta il max-height interno. */
+/** Pannello form staff: niente max-height interno (su telefono combatte con lo scroll della dashboard). */
 export const staffEditorShellClass =
-  'bg-gray-800 p-3 sm:p-5 lg:p-6 rounded-xl space-y-4 sm:space-y-6 mx-auto min-w-0 w-full text-white shadow-2xl border border-gray-700 lg:overflow-y-auto lg:max-h-[92vh]';
+  'bg-gray-800 p-3 sm:p-5 lg:p-6 rounded-xl space-y-4 sm:space-y-6 mx-auto min-w-0 w-full max-w-full overflow-x-hidden text-white shadow-2xl border border-gray-700 pb-36 lg:pb-6';
 
 /**
- * Header editor: titolo e azioni si impilano sotto `lg` così Salva/Annulla
- * non coprono «Nuova Infusione» / «Nuova Tessitura» / …
+ * Header editor: su telefono solo il titolo; Salva/Annulla restano in barra fissa in basso.
+ * Su desktop titolo e azioni restano sulla stessa riga.
  */
 export function StaffEditorHeader({
   title,
@@ -65,19 +65,26 @@ export function StaffEditorHeader({
   sticky = false,
 }) {
   return (
-    <div
-      className={[
-        'flex min-w-0 flex-col gap-3 border-b border-gray-700 pb-4 lg:flex-row lg:items-start lg:justify-between',
-        sticky ? 'sticky top-0 z-10 bg-gray-800 pt-1' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-    >
-      <h2 className={`min-w-0 break-words text-lg font-bold uppercase tracking-tighter sm:text-xl ${titleClassName}`}>
-        {title}
-      </h2>
-      <div className="w-full min-w-0 lg:w-auto lg:shrink-0">{actions}</div>
-    </div>
+    <>
+      <div
+        className={[
+          'flex min-w-0 flex-col gap-3 border-b border-gray-700 pb-4 lg:flex-row lg:items-start lg:justify-between',
+          sticky ? 'sticky top-0 z-10 bg-gray-800 pt-1' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <h2 className={`min-w-0 break-words text-lg font-bold uppercase tracking-tighter sm:text-xl ${titleClassName}`}>
+          {title}
+        </h2>
+        <div className="hidden min-w-0 lg:block lg:w-auto lg:shrink-0">{actions}</div>
+      </div>
+      {actions ? (
+        <div className="lg:hidden fixed inset-x-0 bottom-0 z-50 border-t border-gray-700 bg-gray-950/95 px-3 pt-2 backdrop-blur-sm pb-[max(0.75rem,var(--kor-safe-bottom))]">
+          {actions}
+        </div>
+      ) : null}
+    </>
   );
 }
 

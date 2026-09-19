@@ -333,9 +333,9 @@ const FormulaBuilderModal = ({
   return (
     <div className="fixed inset-0 z-[10000] bg-black/70 flex items-end sm:items-center justify-center p-2 sm:p-4">
       <div className="w-full max-w-5xl max-h-[92vh] overflow-y-auto bg-gray-900 border border-gray-700 rounded-t-xl sm:rounded-xl shadow-2xl min-w-0">
-        <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-          <h3 className="text-lg font-bold text-white">Costruisci formula</h3>
-          <button onClick={onClose} className="px-3 py-1 rounded bg-gray-700 text-white text-sm">Chiudi</button>
+        <div className="p-3 sm:p-4 border-b border-gray-700 flex justify-between items-center gap-2 min-w-0">
+          <h3 className="text-lg font-bold text-white min-w-0 break-words">Costruisci formula</h3>
+          <button onClick={onClose} className="px-3 py-2 min-h-11 rounded bg-gray-700 text-white text-sm shrink-0">Chiudi</button>
         </div>
         <div className="p-4 space-y-4">
           <div className="border border-gray-700 rounded-lg p-3">

@@ -48,7 +48,7 @@ const ActivationCostInline = ({ items = [], options = [], onChange, onAdd, onRem
               className="flex flex-wrap items-center gap-2 bg-gray-800/30 p-2 rounded border border-gray-700/50"
             >
               <select
-                className="flex-1 min-w-[180px] bg-gray-950 p-2 rounded text-xs border border-gray-700 text-white"
+                className="flex-1 min-w-0 w-full sm:min-w-[12rem] min-h-11 bg-gray-950 p-2 rounded text-xs border border-gray-700 text-white"
                 value={statId || ''}
                 onChange={(e) => onChange(idx, 'statistica', e.target.value ? parseInt(e.target.value, 10) : null)}
               >

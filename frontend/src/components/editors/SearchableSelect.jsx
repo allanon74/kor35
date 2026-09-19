@@ -145,7 +145,7 @@ const SearchableDropdown = memo(({
     };
 
     return (
-        <div className="relative w-full" ref={wrapperRef}>
+        <div className="relative w-full min-w-0" ref={wrapperRef}>
             <div
                 ref={triggerRef}
                 onClick={() => !disabled && setIsOpen(!isOpen)}

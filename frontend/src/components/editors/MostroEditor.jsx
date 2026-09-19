@@ -144,9 +144,9 @@ const MostroEditor = ({ onBack, onLogout, initialData = null }) => {
 
       {/* Sezione Attacchi */}
       <div className="bg-gray-900/40 p-4 rounded-xl border border-gray-700/50">
-        <div className="flex justify-between items-center mb-4">
-            <h3 className="text-sm font-black uppercase text-amber-500">Attacchi & Capacità Offensive</h3>
-            <button onClick={addAttacco} className="flex items-center gap-1 bg-amber-600/20 text-amber-500 px-3 py-1 rounded text-xs font-bold hover:bg-amber-600 hover:text-white transition-colors">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+            <h3 className="text-sm font-black uppercase text-amber-500 min-w-0 break-words">Attacchi & Capacità Offensive</h3>
+            <button type="button" onClick={addAttacco} className="flex items-center gap-1 bg-amber-600/20 text-amber-500 px-3 py-2 rounded text-xs font-bold hover:bg-amber-600 hover:text-white transition-colors min-h-11 shrink-0">
                 <Plus size={14} /> AGGIUNGI ATTACCO
             </button>
         </div>

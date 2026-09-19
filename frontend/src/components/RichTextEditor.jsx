@@ -415,7 +415,7 @@ const RichTextEditor = forwardRef(function RichTextEditor({
     const shellClassName = isFullscreen
         ? 'fixed inset-0 z-[60] flex flex-col bg-gray-900 border-0'
         : [
-            'relative flex flex-col rounded-lg border border-gray-600 bg-gray-800',
+            'relative flex flex-col min-w-0 max-w-full overflow-hidden rounded-lg border border-gray-600 bg-gray-800',
             'focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent transition-shadow',
             fillHeight ? 'flex-1 min-h-0' : '',
         ].filter(Boolean).join(' ');
@@ -438,7 +438,7 @@ const RichTextEditor = forwardRef(function RichTextEditor({
     }, [editorHeightClass, fillHeight, isFullscreen, maxHeight, minHeight]);
 
     return (
-        <div className={`flex flex-col gap-1 w-full ${fillHeight ? 'min-h-0 flex-1' : ''}`}>
+        <div className={`flex flex-col gap-1 w-full min-w-0 ${fillHeight ? 'min-h-0 flex-1' : ''}`}>
             {label && !isFullscreen ? (
                 <label className="text-sm font-medium text-gray-300 ml-1">{label}</label>
             ) : null}

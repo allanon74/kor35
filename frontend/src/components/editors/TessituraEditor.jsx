@@ -248,7 +248,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         )}
       />
 
-      <div className="bg-gray-900/40 p-5 rounded-xl border border-gray-700/50 space-y-5 shadow-inner">
+      <div className="bg-gray-900/40 p-3 sm:p-5 rounded-xl border border-gray-700/50 space-y-5 shadow-inner min-w-0">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <SearchableSelect label="Aura Richiesta" value={formData.aura_richiesta?.id || formData.aura_richiesta} 
                   options={punteggiList.filter(p => p.tipo === 'AU')} 
@@ -287,7 +287,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
                 <button
                   type="button"
                   onClick={() => setIsRuntimeWizardOpen(true)}
-                  className="px-3 py-1 rounded bg-purple-700 hover:bg-purple-600 text-xs font-bold uppercase tracking-wide"
+                  className="w-full sm:w-auto min-h-11 px-3 py-2 rounded bg-purple-700 hover:bg-purple-600 text-xs font-bold uppercase tracking-wide"
                 >
                   Configura oggetto runtime (wizard)
                 </button>
@@ -323,11 +323,11 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         </div>
         <div>
           <Input label="Formula Tessitura (es. {caratt} + 1d10)" value={formData.formula} onChange={v => setFormData({...formData, formula: v})} />
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex justify-stretch sm:justify-end">
             <button
               type="button"
               onClick={() => setIsFormulaBuilderOpen(true)}
-              className="px-3 py-1 rounded bg-cyan-700 hover:bg-cyan-600 text-xs font-bold uppercase tracking-wide"
+              className="w-full sm:w-auto min-h-11 px-3 py-2 rounded bg-cyan-700 hover:bg-cyan-600 text-xs font-bold uppercase tracking-wide"
             >
               Costruisci formula
             </button>
