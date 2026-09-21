@@ -160,8 +160,15 @@ def assegna_risoluzione(
     note: str = "",
     auto_claim: bool = True,
 ) -> MissioneRisoluzione:
-    if not MissioneEvento.objects.filter(missione=missione, evento=evento).exists():
+    link = MissioneEvento.objects.filter(missione=missione, evento=evento).first()
+    if not link:
         raise ValueError("La task non è associata a questo evento.")
+    if not missione.attiva:
+        raise ValueError("La task è disattivata nel catalogo.")
+    if not link.attiva:
+        raise ValueError("La task è disattivata per questo evento.")
+    if not evento.partecipanti.filter(pk=personaggio.pk).exists():
+        raise ValueError("Il personaggio non è iscritto a questo evento.")
     if not personaggio_puo_svolgere(missione, personaggio):
         raise ValueError("Task esclusiva: il personaggio non appartiene alla KORP richiesta.")
     if MissioneRisoluzione.objects.filter(
@@ -201,7 +208,13 @@ def riepilogo_premi_evento(evento: Evento) -> list[dict]:
     - non di Korp = generiche + altre KORP non esclusive (senza fattore)
     """
     missioni = list(
-        Missione.objects.filter(eventi=evento, attiva=True).select_related("korp")
+        Missione.objects.filter(
+            attiva=True,
+            evento_links__evento=evento,
+            evento_links__attiva=True,
+        )
+        .select_related("korp")
+        .distinct()
     )
     korps = list(Carriera.objects.filter(tipo_carriera__codice="korp").order_by("nome"))
     out = []
@@ -239,21 +252,49 @@ def eventi_attivi_ids():
     )
 
 
+def eventi_attivi_per_personaggio(personaggio: Personaggio) -> list[int]:
+    """Eventi in corso in cui il PG è iscritto come partecipante."""
+    attivi = eventi_attivi_ids()
+    if not attivi or not personaggio:
+        return []
+    return list(
+        Evento.objects.filter(id__in=attivi, partecipanti=personaggio)
+        .values_list("id", flat=True)
+    )
+
+
+def set_missione_attiva_evento(missione: Missione, evento: Evento, attiva: bool) -> MissioneEvento:
+    """Attiva/disattiva una task per un evento (stato live, default True)."""
+    link = MissioneEvento.objects.filter(missione=missione, evento=evento).first()
+    if not link:
+        raise ValueError("La task non è associata a questo evento.")
+    wanted = bool(attiva)
+    if link.attiva != wanted:
+        link.attiva = wanted
+        link.save(update_fields=["attiva", "updated_at"])
+    return link
+
+
 def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
     """
-    Visibili al giocatore solo le task legate a eventi ATTIVI,
+    Visibili al giocatore solo le task legate a eventi ATTIVI in cui il PG
+    è iscritto, con link MissioneEvento.attiva e catalogo Missione.attiva,
     non esclusive (oppure esclusive della propria KORP).
     Il payload giocatore non include il mittente KORP: evidenza solo
     le task sovrapagate (fattore > 1) della propria KORP.
     """
-    attivi = set(eventi_attivi_ids())
+    attivi = set(eventi_attivi_per_personaggio(personaggio))
     if not attivi:
         return []
 
     missioni = list(
-        Missione.objects.filter(attiva=True, eventi__id__in=attivi)
+        Missione.objects.filter(
+            attiva=True,
+            evento_links__evento_id__in=attivi,
+            evento_links__attiva=True,
+        )
         .select_related("korp")
-        .prefetch_related("eventi")
+        .prefetch_related("evento_links")
         .distinct()
         .order_by("ordine", "titolo")
     )
@@ -289,8 +330,12 @@ def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
     for m in missioni:
         if not personaggio_puo_svolgere(m, personaggio):
             continue
-        # Solo eventi attivi per questa task
-        eventi_ids = [eid for eid in m.eventi.values_list("id", flat=True) if eid in attivi]
+        # Solo eventi in corso, con PG iscritto e link attivo
+        eventi_ids = [
+            link.evento_id
+            for link in m.evento_links.all()
+            if link.evento_id in attivi and link.attiva
+        ]
         if not eventi_ids:
             continue
         miei_r = [r for r in rmap.get(str(m.id), []) if r["evento_id"] in attivi]

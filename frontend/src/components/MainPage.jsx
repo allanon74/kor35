@@ -371,9 +371,13 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       setTasksEventoAttivo(false);
       return undefined;
     }
+    if (!selectedCharacterId) {
+      setTasksEventoAttivo(false);
+      return undefined;
+    }
     const load = async () => {
       try {
-        const data = await getMissioniEventoAttivo(onLogout);
+        const data = await getMissioniEventoAttivo(selectedCharacterId, onLogout);
         if (!cancelled) setTasksEventoAttivo(!!data?.attivo);
       } catch {
         if (!cancelled) setTasksEventoAttivo(false);
@@ -385,7 +389,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [tasksModuloOk, onLogout, activeCampaign]);
+  }, [tasksModuloOk, onLogout, activeCampaign, selectedCharacterId]);
 
   const isMainTabVisible = useCallback(
     (tab) => {

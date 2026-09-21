@@ -7,6 +7,7 @@ from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.serializers import (
+    BooleanField,
     CharField,
     IntegerField,
     ListField,
@@ -26,19 +27,28 @@ from .missioni_service import (
     eventi_attivi_ids,
     lista_missioni_per_personaggio,
     riepilogo_premi_evento,
+    set_missione_attiva_evento,
 )
 from .views import IsMasterOrReadOnly, _is_campaign_staff_plus
 
 
-class IsStaffOrMasterWrite(permissions.BasePermission):
-    """Lettura autenticata; scrittura Master/Staffer (campagna)."""
+class IsCampaignStaffPlus(permissions.BasePermission):
+    """Lettura/scrittura operativa: Master e Staffer di campagna."""
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
-        if request.method in permissions.SAFE_METHODS:
-            return True
         return _is_campaign_staff_plus(request)
+
+
+class MissioneEventoLinkWriteSerializer(Serializer):
+    evento_id = IntegerField()
+    attiva = BooleanField(required=False, default=True)
+
+
+class SetAttivaEventoSerializer(Serializer):
+    evento_id = IntegerField()
+    attiva = BooleanField()
 
 
 class MissioneListSerializer(ModelSerializer):
@@ -71,6 +81,7 @@ class MissioneSerializer(ModelSerializer):
 
     korp_nome = CharField(source="korp.nome", read_only=True, allow_null=True)
     eventi_ids = ListField(child=IntegerField(), write_only=True, required=False)
+    eventi_links = MissioneEventoLinkWriteSerializer(many=True, write_only=True, required=False)
     eventi = SerializerMethodField()
 
     class Meta:
@@ -83,13 +94,19 @@ class MissioneSerializer(ModelSerializer):
             "premio_solo_primo",
             "malus_non_primo_crediti", "malus_non_primo_prestigio",
             "bonus_successive_crediti", "bonus_successive_prestigio",
-            "attiva", "ordine", "eventi", "eventi_ids",
+            "attiva", "ordine", "eventi", "eventi_ids", "eventi_links",
         )
         read_only_fields = ("id", "sync_id", "updated_at", "created_at", "korp_nome")
 
     def get_eventi(self, obj):
-        # Prefetch ordinato in get_queryset (retrieve/write).
-        return [{"id": e.id, "titolo": e.titolo} for e in obj.eventi.all()]
+        return [
+            {
+                "id": link.evento_id,
+                "titolo": link.evento.titolo if link.evento_id else "",
+                "attiva": bool(link.attiva),
+            }
+            for link in obj.evento_links.all()
+        ]
 
     def validate(self, attrs):
         esclusiva = attrs.get("esclusiva", getattr(self.instance, "esclusiva", False))
@@ -100,7 +117,30 @@ class MissioneSerializer(ModelSerializer):
             raise ValidationError({"korp": "La carriera selezionata non è una KORP."})
         return attrs
 
-    def _sync_eventi(self, missione, eventi_ids):
+    def _sync_eventi(self, missione, eventi_ids, eventi_links=None):
+        if eventi_links is not None:
+            target = {}
+            for row in eventi_links:
+                eid = int(row["evento_id"])
+                target[eid] = bool(row.get("attiva", True))
+            esistenti = {
+                link.evento_id: link
+                for link in MissioneEvento.objects.filter(missione=missione)
+            }
+            for eid in set(esistenti) - set(target):
+                esistenti[eid].delete()
+            for eid, attiva in target.items():
+                if not Evento.objects.filter(pk=eid).exists():
+                    continue
+                link = esistenti.get(eid)
+                if link is None:
+                    MissioneEvento.objects.create(
+                        missione=missione, evento_id=eid, attiva=attiva,
+                    )
+                elif link.attiva != attiva:
+                    link.attiva = attiva
+                    link.save(update_fields=["attiva", "updated_at"])
+            return
         if eventi_ids is None:
             return
         ids = [int(x) for x in eventi_ids]
@@ -112,20 +152,26 @@ class MissioneSerializer(ModelSerializer):
             MissioneEvento.objects.filter(missione=missione, evento_id=eid).delete()
         for eid in target - esistenti:
             if Evento.objects.filter(pk=eid).exists():
-                MissioneEvento.objects.get_or_create(missione=missione, evento_id=eid)
+                MissioneEvento.objects.get_or_create(
+                    missione=missione,
+                    evento_id=eid,
+                    defaults={"attiva": True},
+                )
 
     def create(self, validated_data):
         eventi_ids = validated_data.pop("eventi_ids", None)
+        eventi_links = validated_data.pop("eventi_links", None)
         missione = Missione.objects.create(**validated_data)
-        self._sync_eventi(missione, eventi_ids)
+        self._sync_eventi(missione, eventi_ids, eventi_links)
         return missione
 
     def update(self, instance, validated_data):
         eventi_ids = validated_data.pop("eventi_ids", None)
+        eventi_links = validated_data.pop("eventi_links", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-        self._sync_eventi(instance, eventi_ids)
+        self._sync_eventi(instance, eventi_ids, eventi_links)
         return instance
 
 
@@ -169,18 +215,34 @@ class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
         return MissioneSerializer
 
     def get_permissions(self):
-        if self.action in ("list", "retrieve", "mie", "riepilogo_evento", "evento_attivo"):
+        if self.action in ("mie", "evento_attivo"):
             return [permissions.IsAuthenticated()]
-        if self.action == "assegna":
-            return [permissions.IsAuthenticated(), IsStaffOrMasterWrite()]
+        if self.action in ("assegna", "set_attiva_evento", "evento_tasks", "list", "retrieve", "riepilogo_evento"):
+            return [permissions.IsAuthenticated(), IsCampaignStaffPlus()]
         # CRUD definizione: Master (IsMasterOrReadOnly già richiede staff+ e write=master)
         return [permissions.IsAuthenticated(), IsMasterOrReadOnly()]
 
     def get_queryset(self):
         qs = super().get_queryset()
         evento_id = self.request.query_params.get("evento")
+        attiva = self.request.query_params.get("attiva")
         if evento_id:
             qs = qs.filter(eventi__id=evento_id)
+            if attiva in ("1", "true", "True"):
+                qs = qs.filter(
+                    attiva=True,
+                    evento_links__evento_id=evento_id,
+                    evento_links__attiva=True,
+                )
+            elif attiva in ("0", "false", "False"):
+                qs = qs.filter(
+                    evento_links__evento_id=evento_id,
+                    evento_links__attiva=False,
+                )
+        elif attiva in ("1", "true", "True"):
+            qs = qs.filter(attiva=True)
+        elif attiva in ("0", "false", "False"):
+            qs = qs.filter(attiva=False)
         tipo = self.request.query_params.get("tipo_risoluzione")
         if tipo:
             qs = qs.filter(tipo_risoluzione=tipo)
@@ -189,24 +251,26 @@ class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
             qs = qs.filter(korp__isnull=True)
         elif korp:
             qs = qs.filter(korp_id=korp)
-        attiva = self.request.query_params.get("attiva")
-        if attiva in ("1", "true", "True"):
-            qs = qs.filter(attiva=True)
-        elif attiva in ("0", "false", "False"):
-            qs = qs.filter(attiva=False)
         if getattr(self, "action", None) == "list":
             return qs.annotate(eventi_count=Count("eventi", distinct=True)).distinct()
-        # retrieve / write: prefetch eventi per MissioneSerializer.get_eventi
         return qs.distinct().prefetch_related(
-            Prefetch("eventi", queryset=Evento.objects.order_by("-data_inizio")),
+            Prefetch(
+                "evento_links",
+                queryset=MissioneEvento.objects.select_related("evento").order_by(
+                    "-evento__data_inizio"
+                ),
+            ),
         )
 
     @action(detail=False, methods=["get"], url_path="evento-attivo")
     def evento_attivo(self, request):
-        """True se esiste un evento ufficialmente in corso (Inizia senza Termina)."""
+        """True se esiste un evento ufficialmente in corso (Inizia senza Termina).
+
+        Con ``?personaggio=`` è True solo se quel PG è iscritto all'evento in corso.
+        """
         ids = eventi_attivi_ids()
         if not ids:
-            return Response({"attivo": False})
+            return Response({"attivo": False, "iscritto": False})
         ev = (
             Evento.objects.filter(id__in=ids)
             .order_by("started_at")
@@ -214,12 +278,90 @@ class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
             .first()
         )
         if not ev:
-            return Response({"attivo": False})
+            return Response({"attivo": False, "iscritto": False})
+        pg_id = request.query_params.get("personaggio")
+        if not pg_id:
+            return Response({
+                "attivo": True,
+                "id": ev["id"],
+                "titolo": ev["titolo"],
+                "started_at": ev["started_at"],
+                "iscritto": None,
+            })
+        pg = get_object_or_404(Personaggio, pk=pg_id)
+        user = request.user
+        is_staff = _is_campaign_staff_plus(request)
+        if not is_staff and pg.proprietario_id != user.id:
+            return Response({"detail": "Non autorizzato."}, status=403)
+        iscritto = Evento.objects.filter(id=ev["id"], partecipanti=pg).exists()
+        if not iscritto:
+            return Response({
+                "attivo": False,
+                "id": ev["id"],
+                "titolo": ev["titolo"],
+                "started_at": ev["started_at"],
+                "iscritto": False,
+            })
         return Response({
             "attivo": True,
             "id": ev["id"],
             "titolo": ev["titolo"],
             "started_at": ev["started_at"],
+            "iscritto": True,
+        })
+
+    @action(detail=False, methods=["get"], url_path="evento-tasks")
+    def evento_tasks(self, request):
+        """Elenco task collegate a un evento, con stato live attiva/disattiva."""
+        evento_id = request.query_params.get("evento")
+        if not evento_id:
+            return Response({"detail": "Parametro evento obbligatorio."}, status=400)
+        evento = get_object_or_404(Evento, pk=evento_id)
+        links = (
+            MissioneEvento.objects.filter(evento=evento)
+            .select_related("missione", "missione__korp")
+            .order_by("missione__ordine", "missione__titolo")
+        )
+        in_corso = bool(evento.started_at) and evento.ended_at is None
+        rows = []
+        for link in links:
+            m = link.missione
+            rows.append({
+                "id": str(m.id),
+                "titolo": m.titolo,
+                "korp_nome": m.korp.nome if m.korp_id else None,
+                "esclusiva": m.esclusiva,
+                "tipo_risoluzione": m.tipo_risoluzione,
+                "allineamento": m.allineamento,
+                "attiva_catalogo": m.attiva,
+                "attiva": bool(link.attiva),
+                "ordine": m.ordine,
+            })
+        return Response({
+            "evento_id": evento.id,
+            "evento_titolo": evento.titolo,
+            "in_corso": in_corso,
+            "started_at": evento.started_at,
+            "tasks": rows,
+        })
+
+    @action(detail=True, methods=["post"], url_path="set-attiva-evento")
+    def set_attiva_evento(self, request, pk=None):
+        """Attiva o disattiva la task per un evento (staff/master, anche a evento in corso)."""
+        ser = SetAttivaEventoSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        missione = self.get_object()
+        evento = get_object_or_404(Evento, pk=ser.validated_data["evento_id"])
+        try:
+            link = set_missione_attiva_evento(
+                missione, evento, ser.validated_data["attiva"]
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response({
+            "id": str(missione.id),
+            "evento_id": evento.id,
+            "attiva": bool(link.attiva),
         })
 
     @action(detail=False, methods=["get"], url_path="mie")
@@ -293,4 +435,6 @@ class MissioneRisoluzioneViewSet(viewsets.ReadOnlyModelViewSet):
             val = self.request.query_params.get(key)
             if val:
                 qs = qs.filter(**{f"{key}_id": val})
+        if not _is_campaign_staff_plus(self.request):
+            qs = qs.filter(personaggio__proprietario=self.request.user)
         return qs

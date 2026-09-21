@@ -23,8 +23,13 @@
 2. Cr/Pr non di Korp = Σ task generiche + task di altre KORP **non esclusive** (senza fattore)
 
 ## Visibilità giocatore
-- Tab dedicata **Tasks** nel menu app (modulo campagna `tasks` in TEST/OPEN), **solo mentre un evento è ufficialmente in corso** (`started_at` valorizzato e `ended_at` nullo).
-- Contenuto: tutte le task dell'evento **non esclusive**, più le **esclusive della propria KORP**.
+- Tab dedicata **Tasks** nel menu app (modulo campagna `tasks` in TEST/OPEN), **solo mentre un evento è ufficialmente in corso** (`started_at` valorizzato e `ended_at` nullo) **e il personaggio è iscritto** (`Evento.partecipanti`).
+- Contenuto: task dell'evento **attive** (`MissioneEvento.attiva`, default True all'inizio), **non esclusive**, più le **esclusive della propria KORP**.
+- Task disattiva per l'evento: invisibile ai PG e **non** segnabile come risolta.
+
+## Attivazione per evento
+- In creazione/modifica, per ogni evento collegato: opzione **Attiva all'inizio** (default sì).
+- Durante l'evento (e prima): staff/master possono accendere/spegnere dal pannello Tasks o da Plot → Evento.
 
 ## Premio avvio evento
 - Oltre a PC e Crediti base: **`prestigio_base_inizio_evento`** (Integer, può essere negativo).

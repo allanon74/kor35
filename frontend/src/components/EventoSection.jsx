@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { RichTextViewer } from './RichTextDisplay';
 import EventoPortateSection from './EventoPortateSection';
+import EventoTasksLivePanel from './EventoTasksLivePanel';
 
 const normalizeStaffIds = (list) => (
     (list || [])
@@ -17,7 +18,7 @@ const staffLabel = (user) => {
     return full || user.username || `Utente #${user.id}`;
 };
 
-const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRiallineaIscrizioni, onRefresh, onRefreshRisorse, risorseLoading = false, onLogout }) => {
+const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRiallineaIscrizioni, onRefresh, onRefreshRisorse, risorseLoading = false, onLogout }) => {
     const [showPartecipanti, setShowPartecipanti] = useState(false);
     const [showRicompense, setShowRicompense] = useState(false);
     const [reportLoading, setReportLoading] = useState(false);
@@ -271,6 +272,10 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
                     </div>
                 )}
             </div>
+
+            {(isMaster || canToggleTasks) && evento?.id && onLogout ? (
+                <EventoTasksLivePanel onLogout={onLogout} eventoId={evento.id} compact />
+            ) : null}
 
             {isMaster && (
                 <div className="rounded-lg border border-indigo-900/50 bg-gray-950/40 p-3 space-y-2">

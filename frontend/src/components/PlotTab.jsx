@@ -1189,7 +1189,8 @@ const PlotTab = ({ onLogout }) => {
                         {selectedEvento && (
                             <EventoSection 
                                 evento={selectedEvento} 
-                                    isMaster={canManagePlot} 
+                                    isMaster={canManagePlot}
+                                    canToggleTasks={canResolveTasks}
                                 risorse={risorse}
                                 onEdit={startEdit} 
                                 onDelete={handleDeleteEvento}

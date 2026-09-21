@@ -1381,8 +1381,23 @@ export const getMissioniMie = (personaggioId, onLogout) =>
     onLogout,
   );
 /** Stato evento ufficialmente in corso (Inizia senza Termina) — per visibilità tab Tasks. */
-export const getMissioniEventoAttivo = (onLogout) =>
-  fetchAuthenticated('/api/plot/api/missioni/evento-attivo/', { method: 'GET' }, onLogout);
+export const getMissioniEventoAttivo = (personaggioId, onLogout) => {
+  const qs = personaggioId
+    ? `?personaggio=${encodeURIComponent(personaggioId)}`
+    : '';
+  return fetchAuthenticated(`/api/plot/api/missioni/evento-attivo/${qs}`, { method: 'GET' }, onLogout);
+};
+export const getMissioniEventoTasks = (eventoId, onLogout) =>
+  fetchAuthenticated(
+    `/api/plot/api/missioni/evento-tasks/?evento=${encodeURIComponent(eventoId)}`,
+    { method: 'GET' },
+    onLogout,
+  );
+export const setMissioneAttivaEvento = (missioneId, eventoId, attiva, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/missioni/${missioneId}/set-attiva-evento/`, {
+    method: 'POST',
+    body: JSON.stringify({ evento_id: Number(eventoId), attiva: !!attiva }),
+  }, onLogout);
 export const assegnaMissioneRisoluzione = (data, onLogout) =>
   fetchAuthenticated('/api/plot/api/missioni/assegna-risoluzione/', {
     method: 'POST',

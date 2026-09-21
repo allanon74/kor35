@@ -515,7 +515,8 @@ class MissioneAdmin(admin.ModelAdmin):
 
 @admin.register(MissioneEvento)
 class MissioneEventoAdmin(admin.ModelAdmin):
-    list_display = ("missione", "evento", "created_at")
+    list_display = ("missione", "evento", "attiva", "created_at")
+    list_filter = ("attiva",)
     readonly_fields = ("sync_id", "updated_at", "created_at")
 
 

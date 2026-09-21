@@ -1569,6 +1569,15 @@ class MissioneEvento(SyncableModel, models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     missione = models.ForeignKey(Missione, on_delete=models.CASCADE, related_name="evento_links")
     evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name="missione_links")
+    attiva = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name="Attiva per l'evento",
+        help_text=(
+            "Default: attiva all'inizio dell'evento. Se disattiva, la task è "
+            "invisibile ai personaggi e non può essere segnata come risolta."
+        ),
+    )
 
     class Meta:
         verbose_name = "Task–Evento"
@@ -1578,7 +1587,8 @@ class MissioneEvento(SyncableModel, models.Model):
         ]
 
     def __str__(self):
-        return f"{self.missione_id} ↔ {self.evento_id}"
+        stato = "attiva" if self.attiva else "disattiva"
+        return f"{self.missione_id} ↔ {self.evento_id} ({stato})"
 
 
 class MissioneRisoluzione(SyncableModel, models.Model):

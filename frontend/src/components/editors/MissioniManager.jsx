@@ -8,6 +8,7 @@ import {
   staffGetKorps,
   updateMissione,
 } from '../../api';
+import EventoTasksLivePanel from '../EventoTasksLivePanel';
 import {
   LabeledField,
   StaffFieldGrid,
@@ -55,6 +56,7 @@ const emptyForm = () => ({
   attiva: true,
   ordine: 0,
   eventi_ids: [],
+  eventi_attiva: {},
 });
 
 const formFromMissione = (row) => ({
@@ -76,6 +78,9 @@ const formFromMissione = (row) => ({
   attiva: row.attiva !== false,
   ordine: row.ordine ?? 0,
   eventi_ids: (row.eventi || []).map((ev) => ev.id),
+  eventi_attiva: Object.fromEntries(
+    (row.eventi || []).map((ev) => [String(ev.id), ev.attiva !== false]),
+  ),
 });
 
 export default function MissioniManager({ onLogout }) {
@@ -167,10 +172,24 @@ export default function MissioniManager({ onLogout }) {
     const id = Number(eid);
     setForm((f) => {
       const set = new Set((f.eventi_ids || []).map(Number));
-      if (set.has(id)) set.delete(id);
-      else set.add(id);
-      return { ...f, eventi_ids: [...set] };
+      const attivaMap = { ...(f.eventi_attiva || {}) };
+      if (set.has(id)) {
+        set.delete(id);
+        delete attivaMap[String(id)];
+      } else {
+        set.add(id);
+        attivaMap[String(id)] = true;
+      }
+      return { ...f, eventi_ids: [...set], eventi_attiva: attivaMap };
     });
+  };
+
+  const setEventoAttivaInizio = (eid, checked) => {
+    const id = String(eid);
+    setForm((f) => ({
+      ...f,
+      eventi_attiva: { ...(f.eventi_attiva || {}), [id]: !!checked },
+    }));
   };
 
   const save = async () => {
@@ -202,6 +221,10 @@ export default function MissioniManager({ onLogout }) {
         attiva: !!form.attiva,
         ordine: parseInt(form.ordine, 10) || 0,
         eventi_ids: (form.eventi_ids || []).map(Number),
+        eventi_links: (form.eventi_ids || []).map((eid) => ({
+          evento_id: Number(eid),
+          attiva: form.eventi_attiva?.[String(eid)] !== false,
+        })),
       };
       if (form.id) await updateMissione(form.id, payload, onLogout);
       else await createMissione(payload, onLogout);
@@ -276,6 +299,18 @@ export default function MissioniManager({ onLogout }) {
         width: 80,
       },
       {
+        key: 'attiva',
+        header: 'Catalogo',
+        getSortValue: (x) => (x.attiva === false ? 0 : 1),
+        render: (x) => (
+          <span className={x.attiva === false ? 'text-gray-500' : 'text-lime-400'}>
+            {x.attiva === false ? 'Spenta' : 'On'}
+          </span>
+        ),
+        align: 'center',
+        width: 90,
+      },
+      {
         key: 'ordine',
         header: 'Ordine',
         getSortValue: (x) => x.ordine ?? 0,
@@ -316,8 +351,10 @@ export default function MissioniManager({ onLogout }) {
   return (
     <StaffToolShell fill>
       {error ? <p className="mb-3 px-4 pt-3 text-sm text-red-400">{error}</p> : null}
-      <div className="h-full min-h-0 p-4">
-        <MasterGenericList
+      <div className="flex h-full min-h-0 flex-col p-4">
+        <EventoTasksLivePanel onLogout={onLogout} className="mb-4 shrink-0" />
+        <div className="min-h-0 flex-1">
+          <MasterGenericList
           title="Tasks (missioni)"
           items={items}
           columns={missioneColumns}
@@ -333,6 +370,7 @@ export default function MissioniManager({ onLogout }) {
           onEdit={openEdit}
           onDelete={remove}
         />
+        </div>
       </div>
 
       <StaffModal open={modalOpen} title={form.id ? 'Modifica task' : 'Nuova task'} onClose={() => setModalOpen(false)} onSave={save} saving={saving} wide>
@@ -384,7 +422,9 @@ export default function MissioniManager({ onLogout }) {
           </LabeledField>
           <div className="mt-3 flex flex-wrap gap-4 text-sm">
             <label className="inline-flex items-center gap-2"><input type="checkbox" checked={!!form.esclusiva} onChange={(e) => setForm({ ...form, esclusiva: e.target.checked })} /> Esclusiva KORP</label>
-            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={!!form.attiva} onChange={(e) => setForm({ ...form, attiva: e.target.checked })} /> Attiva</label>
+            <label className="inline-flex items-center gap-2" title="Se spento, la task non è usabile in nessun evento.">
+              <input type="checkbox" checked={!!form.attiva} onChange={(e) => setForm({ ...form, attiva: e.target.checked })} /> Nel catalogo
+            </label>
             <label className="inline-flex items-center gap-2"><input type="checkbox" checked={!!form.premio_solo_primo} onChange={(e) => setForm({ ...form, premio_solo_primo: e.target.checked })} /> Premio solo al primo</label>
           </div>
         </StaffSection>
@@ -400,20 +440,39 @@ export default function MissioniManager({ onLogout }) {
           </StaffFieldGrid>
         </StaffSection>
 
-        <StaffSection title="Eventi collegati">
-          <div className="max-h-48 space-y-1 overflow-y-auto rounded border border-gray-800 p-2">
+        <StaffSection
+          title="Eventi collegati"
+          hint="Per ogni evento puoi decidere se la task parte attiva (default: sì). Durante l'evento lo staff può accenderla o spegnerla dal pannello in alto."
+        >
+          <div className="max-h-56 space-y-1 overflow-y-auto rounded border border-gray-800 p-2">
             {eventi.length === 0 ? (
               <p className="text-xs text-gray-500">{metaLoading ? 'Caricamento…' : 'Nessun evento'}</p>
-            ) : eventi.map((ev) => (
-              <label key={ev.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={(form.eventi_ids || []).map(Number).includes(Number(ev.id))}
-                  onChange={() => toggleEvento(ev.id)}
-                />
-                <span>{ev.titolo}</span>
-              </label>
-            ))}
+            ) : eventi.map((ev) => {
+              const checked = (form.eventi_ids || []).map(Number).includes(Number(ev.id));
+              const attivaInizio = form.eventi_attiva?.[String(ev.id)] !== false;
+              return (
+                <div key={ev.id} className="flex flex-wrap items-center gap-3 rounded px-1 py-1 text-sm hover:bg-gray-900/60">
+                  <label className="flex min-w-0 flex-1 items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleEvento(ev.id)}
+                    />
+                    <span className="truncate">{ev.titolo}</span>
+                  </label>
+                  {checked ? (
+                    <label className="inline-flex items-center gap-1.5 text-[11px] text-lime-200">
+                      <input
+                        type="checkbox"
+                        checked={attivaInizio}
+                        onChange={(e) => setEventoAttivaInizio(ev.id, e.target.checked)}
+                      />
+                      Attiva all&apos;inizio
+                    </label>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         </StaffSection>
       </StaffModal>
