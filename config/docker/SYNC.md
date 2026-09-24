@@ -19,6 +19,15 @@ make check-media ENV=mirror CHECK_MEDIA_ALL=1 CHECK_MEDIA_PREFIX=
 
 Importante: i path media **non** devono essere riscritti col PK locale al `save()` dopo sync (fix in `normalize_media_field_path`).
 
+Se il DB punta già a path errati (file presenti ma con UUID master diverso):
+
+```bash
+make sync-media
+make repair-rubriche-media ENV=mirror DRY_RUN=1
+make repair-rubriche-media ENV=mirror
+make check-media ENV=mirror
+```
+
 ## Ruoli per profilo Compose
 
 | Profilo Compose | `KOR35_SYNC_NODE_ROLE` | `EDGE_SYNC_URL` in `.env.*` | Note |
