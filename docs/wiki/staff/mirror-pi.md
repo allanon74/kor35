@@ -218,8 +218,14 @@ make logs ENV=mirror
 
 ```bash
 journalctl -u kor35-mirror-db-sync.service -n 80 --no-pager
+journalctl -u kor35-mirror-media-sync.service -n 80 --no-pager
+systemctl list-timers | grep -E 'kor35-mirror-(db-sync|media-sync)'
 make sync-db ENV=mirror
+make sync-media          # path da .env.sync-media → master
+make check-media ENV=mirror   # path rubriche mancanti su disco
 ```
+
+Le **immagini rubriche** (e altri media) non viaggiano nel sync DB: solo path nel JSON + file via rsync. Timer media orario (`*:15`). Dopo upload sul master, se il Pi ha articoli senza foto: `make sync-media` subito. Se i path DB sono già corrotti (PK locale ≠ path file): `make repair-rubriche-media ENV=mirror`.
 
 **Omada / WLAN `kor35-larp`**
 

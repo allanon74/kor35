@@ -2,6 +2,32 @@
 
 KOR35 replica dati tra **master** (produzione) e **replica** (dev-office, mirror/Pi) con Last-Write-Wins su `sync_id` + `updated_at`. I file media non passano nel JSON: solo `rsync` (`make sync-media`).
 
+### Rubriche / immagini social
+
+Nel payload sync restano solo i **path relativi** (`hero_immagine`, galleria, logo, …). Sul mirror:
+
+1. Sync DB (~2 min) aggiorna i record.
+2. Sync media (`kor35-mirror-media-sync.timer`, ogni ora al minuto `:15`) copia i file sotto `media_data/`.
+
+Dopo upload di immagini rubriche sul master, se il Pi mostra 404: `make sync-media` sul Pi (o attendere il timer). Diagnostica:
+
+```bash
+make check-media ENV=mirror
+# oppure tutti i FileField social:
+make check-media ENV=mirror CHECK_MEDIA_ALL=1 CHECK_MEDIA_PREFIX=
+```
+
+Importante: i path media **non** devono essere riscritti col PK locale al `save()` dopo sync (fix in `normalize_media_field_path`).
+
+Se il DB punta già a path errati (file presenti ma con UUID master diverso):
+
+```bash
+make sync-media
+make repair-rubriche-media ENV=mirror DRY_RUN=1
+make repair-rubriche-media ENV=mirror
+make check-media ENV=mirror
+```
+
 ## Ruoli per profilo Compose
 
 | Profilo Compose | `KOR35_SYNC_NODE_ROLE` | `EDGE_SYNC_URL` in `.env.*` | Note |

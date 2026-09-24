@@ -74,6 +74,8 @@ Master = `ENV=prod`. Replica = `dev-office`, `mirror`.
 | `make sync-db-full-diagnose ENV=<profilo>` | Full pull + diagnostica |
 | `make sync-media` | Pull media via rsync (`.env.sync-media`) |
 | `make sync-media-push` | Push media verso master |
+| `make check-media ENV=<profilo>` | Path media mancanti (default prefix `social/rubriche`) |
+| `make repair-rubriche-media ENV=<profilo>` | Ripara path rubriche cercando basename su disco (`DRY_RUN=1`) |
 | `make mirror-resync-after-event ENV=mirror` | Post-evento: full DB diagnose + media push + pull |
 
 ---

@@ -1,11 +1,12 @@
 [Unit]
-Description=KOR35 Mirror - Scheduler sync media serale
+Description=KOR35 Mirror - Scheduler sync media (orario)
 
 [Timer]
-# Ogni sera alle 22:30 (ora locale del server)
-OnCalendar=*-*-* 22:30:00
+# Ogni ora: i path media arrivano col sync DB (~2 min) ma i file solo via rsync.
+# Senza pull frequente (rubriche, post, wiki) il mirror mostra immagini rotte.
+OnCalendar=*-*-* *:15:00
 Persistent=true
-RandomizedDelaySec=10m
+RandomizedDelaySec=5m
 
 [Install]
 WantedBy=timers.target
