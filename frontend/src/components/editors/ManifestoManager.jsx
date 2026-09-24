@@ -114,15 +114,45 @@ const ManifestoManager = ({ onBack, onLogout }) => {
     }
   }, [tab, loadSerieTrappole]);
 
-  const manifestoPayload = (editingRow) => ({
-    nome: editingRow.nome,
-    testo: editingRow.testo || '',
-    requisiti_lettura: Array.isArray(editingRow.requisiti_lettura)
-      ? editingRow.requisiti_lettura
-      : [],
-    testo_condizionato: editingRow.testo_condizionato || '',
-    condizioni_testo: editingRow.condizioni_testo || emptyCondizioni(),
-  });
+  const manifestoPayload = (editingRow) => {
+    const hasNewAudio = editingRow.audio_file instanceof File;
+    const hasNewVideo = editingRow.video_file instanceof File;
+    const clearAudio = Boolean(editingRow.clear_audio_file);
+    const clearVideo = Boolean(editingRow.clear_video_file);
+    const useMultipart = hasNewAudio || hasNewVideo || clearAudio || clearVideo;
+
+    if (!useMultipart) {
+      return {
+        nome: editingRow.nome,
+        testo: editingRow.testo || '',
+        requisiti_lettura: Array.isArray(editingRow.requisiti_lettura)
+          ? editingRow.requisiti_lettura
+          : [],
+        testo_condizionato: editingRow.testo_condizionato || '',
+        condizioni_testo: editingRow.condizioni_testo || emptyCondizioni(),
+      };
+    }
+
+    const fd = new FormData();
+    fd.append('nome', editingRow.nome || '');
+    fd.append('testo', editingRow.testo || '');
+    fd.append(
+      'requisiti_lettura',
+      JSON.stringify(
+        Array.isArray(editingRow.requisiti_lettura) ? editingRow.requisiti_lettura : [],
+      ),
+    );
+    fd.append('testo_condizionato', editingRow.testo_condizionato || '');
+    fd.append(
+      'condizioni_testo',
+      JSON.stringify(editingRow.condizioni_testo || emptyCondizioni()),
+    );
+    if (hasNewAudio) fd.append('audio_file', editingRow.audio_file);
+    if (hasNewVideo) fd.append('video_file', editingRow.video_file);
+    if (clearAudio) fd.append('clear_audio_file', 'true');
+    if (clearVideo) fd.append('clear_video_file', 'true');
+    return fd;
+  };
 
   const save = async () => {
     if (!editing?.nome?.trim()) {
@@ -174,6 +204,12 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                   requisiti_lettura: [],
                   testo_condizionato: '',
                   condizioni_testo: emptyCondizioni(),
+                  audio_url: null,
+                  video_url: null,
+                  audio_file: null,
+                  video_file: null,
+                  clear_audio_file: false,
+                  clear_video_file: false,
                 });
               }}
             >
@@ -226,6 +262,10 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                             m.condizioni_testo && typeof m.condizioni_testo === 'object'
                               ? m.condizioni_testo
                               : emptyCondizioni(),
+                          audio_file: null,
+                          video_file: null,
+                          clear_audio_file: false,
+                          clear_video_file: false,
                         });
                       }}
                     >
@@ -288,6 +328,94 @@ const ManifestoManager = ({ onBack, onLogout }) => {
             onChange={(testo) => setEditing({ ...editing, testo })}
             minHeight={160}
           />
+          <div className="border border-amber-900/40 rounded-lg p-3 space-y-3 bg-amber-950/20">
+            <div className="text-xs uppercase text-amber-300 font-semibold">
+              Media alla scansione (opzionale)
+            </div>
+            <p className="text-xs text-gray-400">
+              Audio e/o video riprodotti sul telefono dopo la scansione (oltre o al posto del testo).
+              Formati consigliati: mp3/m4a e mp4 compresso. I file viaggiano con{' '}
+              <code className="text-amber-200/80">make sync-media</code>, non nel JSON di sync.
+            </p>
+            <label className="block text-sm">
+              Audio
+              <input
+                type="file"
+                accept="audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/wav,audio/opus,.mp3,.m4a,.aac,.ogg,.wav,.opus"
+                className="mt-1 block w-full text-sm text-gray-300 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-amber-800 file:text-amber-50"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setEditing({
+                    ...editing,
+                    audio_file: file,
+                    clear_audio_file: false,
+                  });
+                }}
+              />
+            </label>
+            {(editing.audio_url || editing.audio_file instanceof File) && !editing.clear_audio_file && (
+              <div className="flex items-center justify-between gap-2 text-xs text-amber-100/90 bg-black/20 rounded px-2 py-1.5">
+                <span className="truncate">
+                  {editing.audio_file instanceof File
+                    ? editing.audio_file.name
+                    : 'Audio già caricato'}
+                </span>
+                <button
+                  type="button"
+                  className="shrink-0 text-red-300 hover:text-red-200"
+                  onClick={() =>
+                    setEditing({
+                      ...editing,
+                      audio_file: null,
+                      clear_audio_file: true,
+                      audio_url: null,
+                    })
+                  }
+                >
+                  Rimuovi
+                </button>
+              </div>
+            )}
+            <label className="block text-sm">
+              Video
+              <input
+                type="file"
+                accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
+                className="mt-1 block w-full text-sm text-gray-300 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-amber-800 file:text-amber-50"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setEditing({
+                    ...editing,
+                    video_file: file,
+                    clear_video_file: false,
+                  });
+                }}
+              />
+            </label>
+            {(editing.video_url || editing.video_file instanceof File) && !editing.clear_video_file && (
+              <div className="flex items-center justify-between gap-2 text-xs text-amber-100/90 bg-black/20 rounded px-2 py-1.5">
+                <span className="truncate">
+                  {editing.video_file instanceof File
+                    ? editing.video_file.name
+                    : 'Video già caricato'}
+                </span>
+                <button
+                  type="button"
+                  className="shrink-0 text-red-300 hover:text-red-200"
+                  onClick={() =>
+                    setEditing({
+                      ...editing,
+                      video_file: null,
+                      clear_video_file: true,
+                      video_url: null,
+                    })
+                  }
+                >
+                  Rimuovi
+                </button>
+              </div>
+            )}
+          </div>
           <div className="space-y-2">
             <div className="text-xs uppercase text-gray-400 font-semibold">
               Requisiti lettura (gate: senza = tutti leggono)

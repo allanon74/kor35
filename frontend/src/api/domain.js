@@ -1774,9 +1774,17 @@ export const staffGetInventarioOggetti = (inventarioId, onLogout) =>
 export const staffGetManifesti = (onLogout) =>
   fetchAuthenticated('/api/personaggi/api/staff/manifesti/', { method: 'GET' }, onLogout);
 export const staffCreateManifesto = (data, onLogout) =>
-  fetchAuthenticated('/api/personaggi/api/staff/manifesti/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/manifesti/',
+    { method: 'POST', body: data instanceof FormData ? data : JSON.stringify(data) },
+    onLogout,
+  );
 export const staffUpdateManifesto = (id, data, onLogout) =>
-  fetchAuthenticated(`/api/personaggi/api/staff/manifesti/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/manifesti/${id}/`,
+    { method: 'PATCH', body: data instanceof FormData ? data : JSON.stringify(data) },
+    onLogout,
+  );
 export const staffDeleteManifesto = (id, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/manifesti/${id}/`, { method: 'DELETE' }, onLogout);
 

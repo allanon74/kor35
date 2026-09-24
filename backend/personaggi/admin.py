@@ -827,10 +827,29 @@ admin.site.register(abilita_prerequisito)
 
 @admin.register(Manifesto)
 class ManifestoAdmin(SModelAdmin):
-    list_display = ('id', 'data_creazione', 'nome')
+    list_display = ('id', 'data_creazione', 'nome', 'has_audio', 'has_video')
     readonly_fields = ('id', 'data_creazione')
     summernote_fields = ['testo', 'testo_condizionato']
     search_fields = ('nome', 'testo', 'testo_condizionato')
+    fields = (
+        'id',
+        'data_creazione',
+        'nome',
+        'testo',
+        'requisiti_lettura',
+        'testo_condizionato',
+        'condizioni_testo',
+        'audio_file',
+        'video_file',
+    )
+
+    @admin.display(boolean=True, description='Audio')
+    def has_audio(self, obj):
+        return bool(obj.audio_file)
+
+    @admin.display(boolean=True, description='Video')
+    def has_video(self, obj):
+        return bool(obj.video_file)
 
 
 @admin.register(Nodo)
