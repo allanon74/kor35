@@ -374,3 +374,36 @@ class EdgeSyncMtiChildLwwTests(TestCase):
             tess.oggetto_runtime_config,
             {"nome": "Runtime", "slot_key": "melee", "modificatori": []},
         )
+
+
+class EdgeSyncMissioneEventoAttivaTests(TestCase):
+    """Campo attiva (live per evento) deve viaggiare nel payload sync."""
+
+    def test_serialize_includes_attiva(self):
+        from gestione_plot.models import Evento, Missione, MissioneEvento
+
+        registry = get_sync_model_registry()
+        self.assertIn("gestione_plot.missioneevento", registry)
+
+        now = timezone.now()
+        evento = Evento.objects.create(
+            titolo=f"Evt sync attiva {uuid.uuid4().hex[:8]}",
+            data_inizio=now,
+            data_fine=now + timedelta(days=2),
+        )
+        missione = Missione.objects.create(titolo="Task sync attiva")
+        link = MissioneEvento.objects.create(missione=missione, evento=evento, attiva=False)
+        row = serialize_for_sync(link)
+        self.assertIn("attiva", row)
+        self.assertFalse(row["attiva"])
+
+
+class EdgeSyncRubricheRegistryTests(TestCase):
+    def test_rubriche_models_in_registry(self):
+        registry = get_sync_model_registry()
+        for label in (
+            "social.rubrica",
+            "social.rubricaarticolo",
+            "social.rubricaarticoloimmagine",
+        ):
+            self.assertIn(label, registry)
