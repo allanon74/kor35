@@ -1193,7 +1193,7 @@ class SelezionaEffettoCasualeView(APIView):
 
 
 class ManifestoStaffViewSet(viewsets.ModelViewSet):
-    """CRUD manifesti (contenuto in `testo`, requisiti JSON opzionali).
+    """CRUD manifesti (contenuto in `testo`, requisiti JSON opzionali, audio/video).
 
     Di default esclude i Manifesto usati come gancio QR di un SottosistemaNave
     (creati da Pilotaggio → associa-qr). Passare ``?include_pilot=1`` per
@@ -1202,6 +1202,7 @@ class ManifestoStaffViewSet(viewsets.ModelViewSet):
 
     serializer_class = ManifestoStaffSerializer
     permission_classes = [IsStaffOrMaster]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
         qs = Manifesto.objects.all().order_by("-id")

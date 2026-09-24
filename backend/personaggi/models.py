@@ -13,7 +13,7 @@ from django.db.models import Q
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.conf import settings
@@ -3625,6 +3625,10 @@ class Manifesto(A_vista):
     `testo_condizionato` + `condizioni_testo`: secondo testo mostrato in aggiunta al
     testo base solo se lo scanner soddisfa il gruppo AND/OR di requisiti, es.:
     {"operator": "AND", "requisiti": [{"tipo": "statistica", "sigla": "INT", "min": 3}]}
+
+    Opzionale: `audio_file` / `video_file` riprodotti sul telefono alla scansione
+    (oltre o al posto del testo). Nel DB resta solo il path relativo; i file fisici
+    viaggiano con rsync (`make sync-media`). Il gate minigioco resta su QrCode.
     """
 
     requisiti_lettura = models.JSONField(
@@ -3641,6 +3645,24 @@ class Manifesto(A_vista):
         default=dict,
         blank=True,
         help_text='Gruppo requisiti AND/OR: {"operator":"AND"|"OR","requisiti":[...]}. Vuoto = nessun testo condizionale.',
+    )
+    audio_file = models.FileField(
+        upload_to="manifesti/audio/%Y/%m/",
+        null=True,
+        blank=True,
+        validators=[
+            FileExtensionValidator(allowed_extensions=["mp3", "m4a", "aac", "ogg", "wav", "opus"]),
+        ],
+        help_text="Audio opzionale (mp3/m4a/ogg…). Riprodotto alla scansione se il PG può leggere.",
+    )
+    video_file = models.FileField(
+        upload_to="manifesti/video/%Y/%m/",
+        null=True,
+        blank=True,
+        validators=[
+            FileExtensionValidator(allowed_extensions=["mp4", "webm", "mov", "m4v"]),
+        ],
+        help_text="Video opzionale (mp4/webm…). Preferire file compressi: sync via rsync.",
     )
 
     def __str__(self):

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft, Wrench, CheckCircle2, AlertTriangle, Zap, BatteryCharging, Package } from 'lucide-react';
-import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvanzata } from '../api'; 
+import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft, Wrench, CheckCircle2, AlertTriangle, Zap, BatteryCharging, Package, Volume2 } from 'lucide-react';
+import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvanzata, resolveMediaUrl } from '../api'; 
 import { useCharacter } from './CharacterContext';
 import { useTimers } from '../hooks/useTimers';
 import PropostaEditorModal from './PropostaEditorModal';
@@ -89,13 +89,112 @@ const getOggettiVisibili = (oggettiDaFiltrare, personaggioAttivo) => {
 //##################################################################
 // ## VISTE QR: TIPO MANIFESTO / A_VISTA (3a, 3e) - MODIFICATO ##
 //##################################################################
+
+/** Gate volume: i browser non permettono di alzare il volume di sistema; serve un tap + reminder. */
+const ManifestoMediaPlayer = ({ audioUrl, videoUrl }) => {
+  const audioSrc = resolveMediaUrl(audioUrl);
+  const videoSrc = resolveMediaUrl(videoUrl);
+  const [unlocked, setUnlocked] = useState(false);
+  const audioRef = useRef(null);
+  const videoRef = useRef(null);
+
+  if (!audioSrc && !videoSrc) return null;
+
+  const startPlayback = () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([40, 60, 40]);
+      }
+    } catch (_e) {
+      /* ignore */
+    }
+    setUnlocked(true);
+    const playSafe = (el) => {
+      if (!el) return;
+      try {
+        el.currentTime = 0;
+      } catch (_err) {
+        /* ignore */
+      }
+      const p = el.play();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    };
+    // Media già in DOM sotto l'overlay: play nello stesso gesto utente (iOS/Android)
+    playSafe(videoRef.current);
+    playSafe(audioRef.current);
+  };
+
+  return (
+    <div className="mb-4 relative rounded-lg overflow-hidden border border-amber-900/40 bg-stone-950">
+      <div className="space-y-2 p-2">
+        {videoSrc && (
+          <video
+            ref={videoRef}
+            src={videoSrc}
+            controls={unlocked}
+            playsInline
+            preload="metadata"
+            className="w-full max-h-[50vh] rounded-md bg-black"
+          />
+        )}
+        {audioSrc && (
+          <audio
+            ref={audioRef}
+            src={audioSrc}
+            controls={unlocked}
+            preload="metadata"
+            className="w-full"
+          />
+        )}
+      </div>
+      {!unlocked && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-gradient-to-b from-amber-950/95 to-stone-950/95 p-4 text-center">
+          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/20 text-amber-200 animate-pulse">
+            <Volume2 className="h-8 w-8" aria-hidden />
+          </div>
+          <p className="text-amber-100 font-semibold text-base">
+            Alza il volume del telefono
+          </p>
+          <p className="mt-1 text-sm text-amber-100/75 max-w-xs">
+            Poi tocca il pulsante per ascoltare o vedere il contenuto.
+          </p>
+          <button
+            type="button"
+            onClick={startPlayback}
+            className="mt-4 w-full max-w-sm rounded-md bg-amber-600 px-4 py-3 text-sm font-bold text-stone-950 hover:bg-amber-500 active:scale-[0.99] transition"
+          >
+            Ho alzato il volume — Riproduci
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const manifestoHasVisibleText = (html) => {
+  if (!html) return false;
+  const plain = String(html)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return plain.length > 0;
+};
+
 const ManifestoView = ({ data }) => {
   const canRead = data.puo_leggere !== false;
   const blockMsg = data.messaggio_accesso;
   const showCond = canRead && data.mostra_testo_condizionato && data.testo_condizionato;
+  const hasMedia = canRead && Boolean(data.audio_url || data.video_url);
+  const hasBaseText = canRead && manifestoHasVisibleText(data.testo);
+  const showParchment = canRead && (hasBaseText || showCond || !hasMedia);
   const bodyHtml = canRead
     ? [
-        data.testo || '<i>Nessun testo per questo manifesto.</i>',
+        hasBaseText
+          ? data.testo
+          : hasMedia
+            ? ''
+            : '<i>Nessun testo per questo manifesto.</i>',
         showCond
           ? `<hr style="border:none;border-top:1px solid #d6d3d1;margin:1.25rem 0;" /><div style="opacity:0.95">${data.testo_condizionato}</div>`
           : '',
@@ -155,24 +254,30 @@ const ManifestoView = ({ data }) => {
           {blockMsg}
         </p>
       )}
+
+      {canRead && hasMedia && (
+        <ManifestoMediaPlayer audioUrl={data.audio_url} videoUrl={data.video_url} />
+      )}
       
       {/* Usiamo un iframe per isolare completamente lo stile 
         dell'HTML del manifesto dal resto dell'app.
       */}
       {canRead ? (
+        showParchment && bodyHtml.trim() ? (
       <iframe
         srcDoc={htmlContent}
         title={data.nome || 'Manifesto'}
         // Applichiamo bordo e ombra all'iframe stesso
         className="w-full rounded-md shadow-inner"
         style={{
-          height: '60vh', // Altezza fissa per l'area di scroll
+          height: hasMedia ? '40vh' : '60vh',
           border: '4px solid rgba(120, 53, 15, 0.3)', // Bordo pergamena (amber-900/30)
           backgroundColor: '#FFFBEB' // Sfondo se l'iframe è lento
         }}
         // Sandbox per sicurezza
         sandbox="allow-same-origin" 
       />
+        ) : null
       ) : (
         <p className="text-center text-gray-400 py-12">Manifesto non leggibile con questo personaggio.</p>
       )}
