@@ -595,11 +595,16 @@ def normalize_media_field_path(field_file, upload_prefix: str) -> None:
     Sui file non ancora commitati (nuovo upload) lascia solo il basename: sarà
     ``upload_to`` a costruire il path. Se qui si scrive già il path completo,
     al save successivo Django lo raddoppia e può superare ``max_length``.
+
+    Path già strutturati provenienti da edge sync (UUID/PK di un altro nodo) non
+    vanno riscritti col PK locale: altrimenti il DB punta a un path diverso da
+    quello rsync-ato dal master (es. immagini rubriche su mirror Pi).
     """
     if not field_file or not field_file.name:
         return
     prefix = upload_prefix.rstrip("/")
-    basename = os.path.basename(field_file.name.replace("\\", "/"))
+    name = field_file.name.replace("\\", "/")
+    basename = os.path.basename(name)
     if not basename:
         return
     # Nuovo upload in memoria: non anticipare il path di destinazione.
@@ -608,8 +613,16 @@ def normalize_media_field_path(field_file, upload_prefix: str) -> None:
             field_file.name = basename
         return
     normalized = f"{prefix}/{basename}"
-    if field_file.name == normalized:
+    if name == normalized:
         return
+
+    # Ripara solo upload_to raddoppiato (prefix/prefix/file). Qualsiasi altro path
+    # relativo già completo (sync da master, upload precedente) resta invariato.
+    nested_double = f"{prefix}/{prefix}/"
+    if nested_double not in name and not name.startswith(f"{prefix}/{prefix}"):
+        if "/" in name:
+            return
+
     storage = field_file.storage
     old_name = field_file.name
     if storage.exists(old_name):

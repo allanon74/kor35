@@ -6,7 +6,7 @@ set -euo pipefail
 # Uso:
 #   ./scripts/install_mirror_sync_services.sh
 #   ./scripts/install_mirror_sync_services.sh --repo-path /home/pi/kor35-replica --user pi --group pi
-#   ./scripts/install_mirror_sync_services.sh --db-interval 1m --media-calendar "*-*-* 23:00:00"
+#   ./scripts/install_mirror_sync_services.sh --db-interval 1m --media-calendar "*-*-* *:15:00"
 #   ./scripts/install_mirror_sync_services.sh --backup-calendar "*-*-* 05:00:00" --backup-retention-days 15
 #   ./scripts/install_mirror_sync_services.sh --no-enable
 
@@ -17,7 +17,7 @@ REPO_PATH="/home/pi/kor35-replica"
 RUN_USER="pi"
 RUN_GROUP="pi"
 DB_INTERVAL="2m"
-MEDIA_CALENDAR="*-*-* 22:30:00"
+MEDIA_CALENDAR="*-*-* *:15:00"
 BACKUP_CALENDAR="*-*-* 05:00:00"
 BACKUP_RETENTION_DAYS="15"
 BACKUP_DIR="/home/pi/backups/kor35/db"
