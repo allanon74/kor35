@@ -39,8 +39,8 @@ fi
 echo "[1/3] Sync DB full con diagnostica..."
 make -C "$ROOT_DIR" sync-db-full-diagnose ENV="$ENV_PROFILE"
 
-echo "[2/3] Push media locale -> master..."
-make -C "$ROOT_DIR" sync-media-push
+echo "[2/3] Push media locale -> master (best-effort)..."
+make -C "$ROOT_DIR" sync-media-push || echo "WARN: sync-media-push fallito, continuo con pull" >&2
 
 echo "[3/3] Pull media master -> locale..."
 make -C "$ROOT_DIR" sync-media

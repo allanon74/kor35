@@ -9,6 +9,8 @@ Nel payload sync restano solo i **path relativi** (`hero_immagine`, galleria, lo
 1. Sync DB (~2 min) aggiorna i record.
 2. Sync media (`kor35-mirror-media-sync.timer`, ogni ora al minuto `:15`) copia i file sotto `media_data/`.
 
+Il timer esegue `scripts/mirror_media_sync.sh`: **push best-effort** poi **pull obbligatorio**. Se il push verso master fallisce (es. `Permission denied` su directory legacy di proprietà root), il pull da master continua comunque — non usare più `make sync-media-push && make sync-media` nelle unit. Gli script `sync_media_*_wsl_pi_like.sh` trattano rsync exit **23** (trasferimento parziale) come warning, non come fallimento fatale.
+
 Dopo upload di immagini rubriche sul master, se il Pi mostra 404: `make sync-media` sul Pi (o attendere il timer). Diagnostica:
 
 ```bash

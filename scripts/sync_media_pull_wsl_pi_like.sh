@@ -79,9 +79,24 @@ if [ -n "${WSL_PI_REMOTE_SSH_IDENTITY:-}" ]; then
   echo "  identity: ${WSL_PI_REMOTE_SSH_IDENTITY/#\~/$HOME}"
 fi
 
-rsync -avz --delete \
+# --no-group/--no-owner: evita exit 23 da chgrp/chown falliti su file
+# già presenti con ownership diversa (tipico su Pi/WSL senza root).
+set +e
+rsync -avz --delete --no-group --no-owner \
   -e "$RSYNC_SSH" \
   "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_MEDIA_DIR}" \
   "${LOCAL_MEDIA_DIR}"
+rsync_rc=$?
+set -e
 
-echo "Sync media completata."
+if [ "$rsync_rc" -eq 0 ]; then
+  echo "Sync media completata."
+  exit 0
+fi
+if [ "$rsync_rc" -eq 23 ]; then
+  echo "WARN: rsync exit 23 (alcuni file/attr non trasferiti). Pull considerato OK." >&2
+  echo "Sync media completata (parziale)."
+  exit 0
+fi
+echo "Sync media fallita (rsync exit ${rsync_rc})." >&2
+exit "$rsync_rc"
