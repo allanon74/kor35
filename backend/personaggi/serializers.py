@@ -2461,15 +2461,58 @@ class ManifestoSerializer(serializers.ModelSerializer):
             "requisiti_lettura",
             "testo_condizionato",
             "condizioni_testo",
+            "audio_file",
+            "video_file",
         )
 
 
 class ManifestoStaffSerializer(serializers.ModelSerializer):
-    """CRUD staff manifesti (contenuto HTML in `testo`, requisiti opzionali)."""
+    """CRUD staff manifesti (HTML, requisiti, audio/video opzionali)."""
 
     has_qrcode = serializers.BooleanField(read_only=True)
     qrcode_id = serializers.CharField(read_only=True, allow_null=True)
     minigioco_usa_default = serializers.BooleanField(read_only=True, default=False)
+    audio_url = serializers.SerializerMethodField()
+    video_url = serializers.SerializerMethodField()
+    clear_audio_file = serializers.BooleanField(required=False, write_only=True, default=False)
+    clear_video_file = serializers.BooleanField(required=False, write_only=True, default=False)
+
+    def get_audio_url(self, obj):
+        if not getattr(obj, "audio_file", None):
+            return None
+        req = self.context.get("request")
+        try:
+            return req.build_absolute_uri(obj.audio_file.url) if req else obj.audio_file.url
+        except Exception:
+            return None
+
+    def get_video_url(self, obj):
+        if not getattr(obj, "video_file", None):
+            return None
+        req = self.context.get("request")
+        try:
+            return req.build_absolute_uri(obj.video_file.url) if req else obj.video_file.url
+        except Exception:
+            return None
+
+    def _truthy_clear(self, value):
+        if isinstance(value, bool):
+            return value
+        return str(value or "").lower() in ("1", "true", "yes", "on")
+
+    def create(self, validated_data):
+        validated_data.pop("clear_audio_file", None)
+        validated_data.pop("clear_video_file", None)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        clear_audio = self._truthy_clear(validated_data.pop("clear_audio_file", False))
+        clear_video = self._truthy_clear(validated_data.pop("clear_video_file", False))
+        if clear_audio and "audio_file" not in validated_data:
+            validated_data["audio_file"] = None
+        if clear_video and "video_file" not in validated_data:
+            validated_data["video_file"] = None
+        return super().update(instance, validated_data)
 
     class Meta:
         model = Manifesto
@@ -2480,10 +2523,20 @@ class ManifestoStaffSerializer(serializers.ModelSerializer):
             "requisiti_lettura",
             "testo_condizionato",
             "condizioni_testo",
+            "audio_file",
+            "video_file",
+            "audio_url",
+            "video_url",
+            "clear_audio_file",
+            "clear_video_file",
             "has_qrcode",
             "qrcode_id",
             "minigioco_usa_default",
         )
+        extra_kwargs = {
+            "audio_file": {"required": False, "allow_null": True},
+            "video_file": {"required": False, "allow_null": True},
+        }
 
 
 class NodoSerializer(serializers.ModelSerializer):

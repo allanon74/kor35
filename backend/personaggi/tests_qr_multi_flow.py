@@ -39,6 +39,43 @@ class QrManifestoInventarioTests(TestCase):
         self.assertEqual(r.data["tipo_modello"], "manifesto")
         self.assertTrue(r.data["dati"].get("puo_leggere", True))
         self.assertIsNotNone(r.data["dati"].get("testo"))
+        self.assertIsNone(r.data["dati"].get("audio_url"))
+        self.assertIsNone(r.data["dati"].get("video_url"))
+
+    def test_manifesto_media_visibile_solo_se_puo_leggere(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        audio = SimpleUploadedFile("voce.mp3", b"ID3fakeaudio", content_type="audio/mpeg")
+        video = SimpleUploadedFile("clip.mp4", b"\x00\x00\x00\x18ftypmp42", content_type="video/mp4")
+        m = Manifesto.objects.create(
+            nome="M media",
+            testo="",
+            requisiti_lettura=[{"tipo": "statistica", "sigla": "CCO", "min": 99}],
+            audio_file=audio,
+            video_file=video,
+        )
+        qr = QrCode.objects.create(vista=m)
+
+        r_deny = self.client.get(
+            f"/api/personaggi/api/qrcode/{qr.id}/", {"personaggio_id": self.pg.id}
+        )
+        self.assertEqual(r_deny.status_code, 200)
+        self.assertEqual(r_deny.data["tipo_modello"], "manifesto")
+        self.assertFalse(r_deny.data["dati"].get("puo_leggere"))
+        self.assertIsNone(r_deny.data["dati"].get("audio_url"))
+        self.assertIsNone(r_deny.data["dati"].get("video_url"))
+
+        m.requisiti_lettura = []
+        m.save(update_fields=["requisiti_lettura", "updated_at"])
+        r_ok = self.client.get(
+            f"/api/personaggi/api/qrcode/{qr.id}/", {"personaggio_id": self.pg.id}
+        )
+        self.assertEqual(r_ok.status_code, 200)
+        self.assertTrue(r_ok.data["dati"].get("puo_leggere"))
+        self.assertTrue(r_ok.data["dati"].get("audio_url"))
+        self.assertTrue(r_ok.data["dati"].get("video_url"))
+        self.assertIn("manifesti/audio", r_ok.data["dati"]["audio_url"])
+        self.assertIn("manifesti/video", r_ok.data["dati"]["video_url"])
 
     def test_inventario_doppia_scansione(self):
         inv = Inventario.objects.create(nome="Inv QR", testo="")

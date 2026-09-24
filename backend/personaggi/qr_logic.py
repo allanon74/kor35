@@ -77,12 +77,24 @@ def personaggio_soddisfa_requisiti_manifesto(personaggio, manifesto) -> Tuple[bo
     return personaggio_soddisfa_requisiti(personaggio, manifesto.requisiti_lettura or [])
 
 
+def _manifesto_media_url(field_file):
+    """Path relativo (/media/…) per il client; None se assente."""
+    if not field_file:
+        return None
+    try:
+        url = field_file.url
+    except (ValueError, AttributeError):
+        return None
+    return url or None
+
+
 def risolvi_payload_manifesto(manifesto, personaggio=None) -> Dict[str, Any]:
     """
     Costruisce il payload scan di un manifesto (lettura + testo condizionale AND/OR).
 
-    - `requisiti_lettura`: gate hard (lista AND flat). Se fallisce → testo nascosto.
+    - `requisiti_lettura`: gate hard (lista AND flat). Se fallisce → testo/media nascosti.
     - `condizioni_testo` + `testo_condizionato`: testo aggiuntivo se il gruppo è soddisfatto.
+    - `audio_url` / `video_url`: path relativi se `puo_leggere` (file sync via rsync).
     """
     from .requisiti_accesso import personaggio_soddisfa_requisiti_gruppo
 
@@ -96,6 +108,8 @@ def risolvi_payload_manifesto(manifesto, personaggio=None) -> Dict[str, Any]:
         "condizioni_testo": manifesto.condizioni_testo or {},
         "puo_leggere": True,
         "messaggio_accesso": None,
+        "audio_url": None,
+        "video_url": None,
     }
 
     if personaggio is None:
@@ -106,6 +120,9 @@ def risolvi_payload_manifesto(manifesto, personaggio=None) -> Dict[str, Any]:
                 "Accedi e indica personaggio_id per verificare i requisiti."
             )
             payload["testo"] = None
+        else:
+            payload["audio_url"] = _manifesto_media_url(getattr(manifesto, "audio_file", None))
+            payload["video_url"] = _manifesto_media_url(getattr(manifesto, "video_file", None))
         return payload
 
     ok_r, msg_r = personaggio_soddisfa_requisiti_manifesto(personaggio, manifesto)
@@ -114,6 +131,9 @@ def risolvi_payload_manifesto(manifesto, personaggio=None) -> Dict[str, Any]:
     if not ok_r:
         payload["testo"] = None
         return payload
+
+    payload["audio_url"] = _manifesto_media_url(getattr(manifesto, "audio_file", None))
+    payload["video_url"] = _manifesto_media_url(getattr(manifesto, "video_file", None))
 
     testo_cond = (getattr(manifesto, "testo_condizionato", None) or "").strip()
     condizioni = getattr(manifesto, "condizioni_testo", None) or {}
