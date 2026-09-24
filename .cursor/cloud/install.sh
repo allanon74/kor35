@@ -26,15 +26,22 @@ mkdir -p \
 
 # 4) Build del frontend React (Vite) e della console pilota, copia in react_build
 #    (servito da Nginx). Non-root: qui l'utente è "ubuntu".
+#    La dir di staging viene ricreata con sudo per neutralizzare eventuali file
+#    residui di proprietà root (es. lasciati da un checkout precedente o dai
+#    bind-mount dei container) che bloccherebbero la copia.
+stage_build() {
+  local src_dir="$1" dst_dir="$2"
+  ( cd "$src_dir" && (npm ci || npm install) && npm run build )
+  sudo rm -rf "$dst_dir"
+  mkdir -p "$dst_dir"
+  cp -R "$src_dir/dist/." "$dst_dir/"
+}
+
 if [ -d frontend ]; then
-  ( cd frontend && (npm ci || npm install) && npm run build )
-  find config/docker/nginx-docker/react_build -mindepth 1 -delete 2>/dev/null || true
-  cp -R frontend/dist/. config/docker/nginx-docker/react_build/
+  stage_build frontend config/docker/nginx-docker/react_build
 fi
 if [ -d frontend-pilot ] && [ -f frontend-pilot/package.json ]; then
-  ( cd frontend-pilot && (npm ci || npm install) && npm run build )
-  find config/docker/nginx-docker/react_build_pilot -mindepth 1 -delete 2>/dev/null || true
-  cp -R frontend-pilot/dist/. config/docker/nginx-docker/react_build_pilot/
+  stage_build frontend-pilot config/docker/nginx-docker/react_build_pilot
 fi
 
 # 5) Build dell'immagine backend (Postgres/Redis/Nginx/coturn sono immagini
