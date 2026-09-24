@@ -1,5 +1,5 @@
 [Unit]
-Description=KOR35 Mirror - Sync media serale (push+pull)
+Description=KOR35 Mirror - Sync media (push best-effort + pull)
 After=network.target docker.service kor35-mirror-stack.service
 
 [Service]
@@ -11,7 +11,9 @@ Group=pi
 WorkingDirectory=/home/pi/kor35-replica
 
 # Richiede .env.sync-media configurato con credenziali/host/path master.
-ExecStart=/bin/bash -lc 'make sync-media-push && make sync-media'
+# Push può fallire (permessi su master); il pull deve comunque girare.
+# Vedi scripts/mirror_media_sync.sh
+ExecStart=/bin/bash -lc './scripts/mirror_media_sync.sh'
 
 NoNewPrivileges=true
 PrivateTmp=true
