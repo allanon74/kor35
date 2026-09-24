@@ -75,9 +75,23 @@ if [ -n "${WSL_PI_REMOTE_SSH_IDENTITY:-}" ]; then
   echo "  identity: ${WSL_PI_REMOTE_SSH_IDENTITY/#\~/$HOME}"
 fi
 
+# Exit 23 = trasferimento parziale (path non scrivibili sul remoto, es. root:root).
+set +e
 rsync -avz \
   -e "$RSYNC_SSH" \
   "${LOCAL_MEDIA_DIR}" \
   "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_MEDIA_DIR}"
+rsync_rc=$?
+set -e
 
-echo "Sync media push completata."
+if [ "$rsync_rc" -eq 0 ]; then
+  echo "Sync media push completata."
+  exit 0
+fi
+if [ "$rsync_rc" -eq 23 ]; then
+  echo "WARN: rsync push exit 23 (alcuni path non scrivibili sul remoto)." >&2
+  echo "Sync media push completata (parziale)."
+  exit 0
+fi
+echo "Sync media push fallita (rsync exit ${rsync_rc})." >&2
+exit "$rsync_rc"
