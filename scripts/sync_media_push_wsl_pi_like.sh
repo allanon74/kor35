@@ -75,9 +75,10 @@ if [ -n "${WSL_PI_REMOTE_SSH_IDENTITY:-}" ]; then
   echo "  identity: ${WSL_PI_REMOTE_SSH_IDENTITY/#\~/$HOME}"
 fi
 
-# Exit 23 = trasferimento parziale (path non scrivibili sul remoto, es. root:root).
+# --no-group/--no-owner: non forzare ownership sul master (spesso root/docker).
+# Exit 23 = trasferimento parziale (path non scrivibili sul remoto).
 set +e
-rsync -avz \
+rsync -avz --no-group --no-owner \
   -e "$RSYNC_SSH" \
   "${LOCAL_MEDIA_DIR}" \
   "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_MEDIA_DIR}"

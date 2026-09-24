@@ -12,8 +12,8 @@ WorkingDirectory=/home/pi/kor35-replica
 
 # Richiede .env.sync-media configurato con credenziali/host/path master.
 # Push può fallire (permessi su master); il pull deve comunque girare.
-# Vedi scripts/mirror_media_sync.sh
-ExecStart=/bin/bash -lc './scripts/mirror_media_sync.sh'
+# Preferisci lo script repo; fallback inline se manca (pre-merge / reset hard).
+ExecStart=/bin/bash -lc 'if [ -x ./scripts/mirror_media_sync.sh ]; then ./scripts/mirror_media_sync.sh; else make sync-media-push || echo "WARN: sync-media-push failed, continuing with pull" >&2; make sync-media; fi'
 
 NoNewPrivileges=true
 PrivateTmp=true

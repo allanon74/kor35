@@ -79,11 +79,10 @@ if [ -n "${WSL_PI_REMOTE_SSH_IDENTITY:-}" ]; then
   echo "  identity: ${WSL_PI_REMOTE_SSH_IDENTITY/#\~/$HOME}"
 fi
 
-# Exit 23 = trasferimento parziale (file/attr saltati, tipicamente permessi).
-# Non trattarlo come fallimento fatale: i media utili (es. rubriche) spesso
-# arrivano comunque; il timer mirror altrimenti resta sempre in errore.
+# --no-group/--no-owner: evita exit 23 da chgrp/chown falliti su file
+# già presenti con ownership diversa (tipico su Pi/WSL senza root).
 set +e
-rsync -avz --delete \
+rsync -avz --delete --no-group --no-owner \
   -e "$RSYNC_SSH" \
   "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_MEDIA_DIR}" \
   "${LOCAL_MEDIA_DIR}"
