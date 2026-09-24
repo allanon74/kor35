@@ -36,7 +36,22 @@ if [ ! -f /etc/docker/daemon.json ] || ! grep -q '"storage-driver"[[:space:]]*:[
 fi
 
 if ! docker info >/dev/null 2>&1 && ! sudo docker info >/dev/null 2>&1; then
-  sudo bash -c 'nohup dockerd >/var/log/dockerd.log 2>&1 &'
+  # Rimuovi pidfile stantii: uno snapshot preso con il daemon attivo li cattura
+  # e impedirebbe l'avvio di dockerd al boot ("process with PID ... is still
+  # running" / "delete /var/run/docker.pid"). Rimuovi solo se il PID non è vivo.
+  for pidfile in /var/run/docker.pid /run/docker/containerd/containerd.pid; do
+    if [ -f "$pidfile" ]; then
+      pid="$(sudo cat "$pidfile" 2>/dev/null || true)"
+      if [ -z "$pid" ] || ! sudo kill -0 "$pid" 2>/dev/null; then
+        sudo rm -f "$pidfile"
+      fi
+    fi
+  done
+
+  # setsid: stacca dockerd in una nuova sessione così che sopravviva alla fine
+  # del comando `start` del Cloud Agent (altrimenti verrebbe terminato con il
+  # process group dello script di avvio, lasciando il daemon giù al boot).
+  sudo bash -c 'setsid dockerd >/var/log/dockerd.log 2>&1 </dev/null &'
   for _ in $(seq 1 60); do
     sudo docker info >/dev/null 2>&1 && break
     sleep 1
