@@ -27,7 +27,7 @@ Creare una proposta richiede in più slot liberi (sotto). Un cliente fuori dalle
 
 ## Slot di contratto
 
-Uno **slot di contratto** è la capacità del proponente di tenere aperta una proposta o un contratto stipulato. Il cliente non consuma slot: è limitato a **un contratto stipulato per tipologia** (Talento, Creatore, …), su tutto il personaggio, non per Korp e non per singolo modello.
+Uno **slot di contratto** è la capacità del proponente di tenere aperta una proposta o un contratto stipulato. Il cliente non consuma slot. Il tetto «uno per tipologia» è una **chiave di esclusività** scritta dallo staff sul modello (sotto): i sei esempi ne hanno una ciascuno, un modello futuro può riusare una chiave esistente, inventarne una, oppure non averne.
 
 ### Perché statistica + dati su Korp/Carica
 
@@ -68,13 +68,23 @@ IN_ATTESA → STIPULATO → SCADUTO
 3. Nasce un `QrCode` collegato (stesso canale di negozi e scontri carte). Lo scanner esistente (`QrCodeDetailView`) risponde `tipo_modello: contratto`.
 4. Il cliente vede il testo e, in fondo, **Sottoscrivi fino al {data}** oppure **Rifiuta**. La data è quella fissata alla creazione della proposta (`adesso + durata`, oppure `data_fine` dell'evento se la durata è «fine evento»). Non si ricalcola al momento della firma.
 5. Se la proposta è già oltre la scadenza, il QR non è più firmabile e lo slot si libera.
-6. Alla firma si controlla: modulo attivo, cliente diverso dal proponente, cliente senza un altro `STIPULATO` della stessa tipologia, proposta ancora `IN_ATTESA`. Poi partono i compensi con momento `ALLA_STIPULA`.
+6. Alla firma si controlla: modulo attivo, cliente diverso dal proponente, proposta ancora `IN_ATTESA`, e — se il modello ha una chiave di esclusività — il cliente non ha già un `STIPULATO` con la stessa chiave. Poi partono gli effetti con innesco `ALLA_STIPULA`.
 
 La scadenza è pigra: ogni lettura e ogni hook che eroga un bonus marca `SCADUTO` se `now > scadenza`. Gli hook economici agiscono solo su `STIPULATO` ancora nel termine. Funziona anche sul nodo edge offline, senza un cron.
 
-## Catalogo (dashboard staff)
+## Catalogo staff: composizione, non tipologie fisse
 
-Tool staff **Contratti**. Il catalogo è dati, non codice: una tipologia è un motore; un modello è un'offerta concreta della Korp.
+Tool staff **Contratti**. Le sei idee (Talento, Creatore, Pubblicitario, Protettore, Mercenario, Agente) sono **ricette di partenza**, non la forma del dato e non la forma della schermata. Lo staff crea un modello vuoto e lo compone. Un settimo contratto che riusa effetti già presenti non richiede una modifica al codice né una nuova maschera.
+
+Tre livelli, dal più stabile al più estensibile:
+
+| Livello | Chi lo cambia | Cosa contiene |
+|---------|----------------|---------------|
+| Modello | Staff, a runtime | Nome, Korp, testo, durata, parametri, esclusività, effetti agganciati, clausole, compensi |
+| Effetto | Registry in codice | Un comportamento riutilizzabile (es. «percentuale sulla task del cliente») con i suoi campi |
+| Innesco | Punto nel codice di gioco | Il momento in cui gli effetti di quel tipo vengono valutati (firma, task, costo, fine evento, …) |
+
+La UI dello staff è generata dal registry: elenco effetti, e per ciascuno i campi dichiarati. Aggiungere un effetto nuovo al registry lo fa comparire nel menu «Aggiungi effetto» senza un’altra pagina.
 
 ### ModelloContratto
 
@@ -82,67 +92,93 @@ Tool staff **Contratti**. Il catalogo è dati, non codice: una tipologia è un m
 |-------|--------|
 | `campagna`, `korp` | Offerta di quella Korp, in quella campagna. |
 | `nome`, `attivo` | Voce nel wizard del proponente. |
-| `tipologia` | Motore: `TALENTO`, `CREATORE`, `PUBBLICITARIO`, `PROTETTORE`, `MERCENARIO`, `AGENTE`, `GENERICO`. |
+| `chiave_esclusivita` | Testo libero, opzionale. Due modelli con la stessa chiave non possono essere entrambi stipulati dallo stesso cliente. Vuota = nessun tetto di questo tipo. I preset usano `talento`, `creatore`, `pubblicitario`, `protettore`, `mercenario`, `agente`. |
 | `durata_modo` | `GIORNI` (N giorni reali) oppure `FINE_EVENTO` (scadenza = `data_fine` dell'evento scelto in proposta; deve esistere un evento). |
 | `durata_giorni` | Usato se `GIORNI`. |
 | `testo` | Testo mostrato alla firma, con segnaposto. |
-| `permette_clausole`, `permette_compensi` | Abilitano i due elenchi nel wizard. |
 
-Segnaposto nel testo: `{{proponente}}`, `{{cliente}}`, `{{korp}}`, `{{scadenza}}`, `{{parametri}}`, `{{clausole}}`, `{{compensi}}`. In proposta il cliente è ancora «il sottoscrittore». Lo snapshot sostituisce i valori noti e lascia il nome del cliente vuoto finché non firma; alla firma si rigenera solo il nome, non i numeri.
+Non c’è un campo tipologia obbligatorio. Un’etichetta visibile al giocatore, se serve, è il `nome` del modello.
 
-I parametri numerici non sono un JSON libero inventato in UI. Ogni tipologia ha uno **schema in codice** (chiave, etichetta, tipo, min/max). Sul modello lo staff imposta, per ogni chiave:
+### Parametri del modello
 
-- valore fisso, oppure intervallo che il proponente sceglie in proposta;
-- se la chiave è testo (il tema pubblicitario, il nome dell'erede), la compila il proponente.
+Lo staff aggiunge righe, senza schema precompilato dalla tipologia:
 
-`GENERICO` non ha motore: solo testo, clausole e compensi. Serve per contratti futuri prima che esista un automatismo.
+| Campo riga | Ruolo |
+|------------|--------|
+| `chiave` | Slug stabile (`pct_cliente`, `tema`, `somma`). |
+| `etichetta` | Ciò che vede il proponente. |
+| `tipo` | `INTERO`, `DECIMALE`, `PERCENTUALE`, `TESTO`, `SCELTA`, `PERSONAGGIO`. |
+| `chi_compila` | `STAFF` (valore fisso sul modello) oppure `PROPONENTE` (in proposta). |
+| `min`, `max`, `default`, `scelte` | Vincoli. Per `PERSONAGGIO` il proponente sceglie un PG (l’erede, per esempio). |
 
-### ClausolaAccessoria e CompensoAccessorio
+Un numero dentro un effetto può essere una costante oppure il riferimento `{{param:chiave}}`. Così lo stesso effetto «percentuale sulla task» serve un Talento 10/20 fisso e un Talento in cui il proponente sceglie la percentuale tra 5 e 25.
 
-Collegate a un modello (o, se serve riuso, a una Korp e selezionabili dai modelli di quella Korp).
+### Effetti agganciati
 
-- Clausola: `nome`, `testo`, `obbligatoria`, `selezionabile`. Effetto strutturato opzionale (importo penale, tetto ore, tetto quest, ricompensa di attivazione). Il testo entra nello snapshot; l'effetto lo legge il motore della tipologia.
-- Compenso: `nome`, `testo`, `importo`, `beneficiario` (`PROPONENTE`, `CLIENTE`, `ENTRAMBI`), `momento` (`ALLA_STIPULA`, `A_INIZIO_EVENTO`, `A_FINE_EVENTO`, `AD_ATTIVAZIONE`, `A_SCADENZA`, `MANUALE`).
+Sul modello, «Aggiungi effetto» elenca il registry. Ogni riga salva `codice_effetto` + `config` (costanti e riferimenti a parametri). Le righe hanno un ordine. Lo snapshot della proposta copia le righe già risolte (niente `{{param:…}}` vivo).
 
-`ALLA_STIPULA`, `A_INIZIO_EVENTO`, `A_FINE_EVENTO` e `A_SCADENZA` sono automatici. `AD_ATTIVAZIONE` scatta con l'azione di attivazione. `MANUALE` resta un pulsante staff.
+Clausole e compensi sono lo stesso meccanismo, in due elenchi che il giocatore riconosce:
 
-## Le sei tipologie
+- **Clausola accessoria:** nome, testo, obbligatoria o a scelta del proponente, più zero o più effetti che valgono solo se la clausola è nel contratto firmato.
+- **Compenso accessorio:** nome, testo, e di norma un effetto `credito_creato` o `trasferimento`. È una clausola con presentazione da compenso, così lo staff non ha un terzo editor.
 
-Gli importi dei motori sono crediti. Il conto di accredito dei bonus **creati** dal sistema è il **deposito**, come le task (`reclama_ricompensa`). I versamenti tra contraenti sono trasferimenti (addebito su un PG, accredito sull'altro) e usano lo stesso conto.
+Gli effetti del modello valgono sempre. Quelli di una clausola o di un compenso valgono se quella voce è stata scelta. Tutto finisce nello snapshot.
 
-Ogni erogazione scrive una riga `ContrattoAdempimento` con chiave unica `(contratto, tipo, fonte)`. Il movimento crediti nasce una sola volta; la riga viaggia nel sync edge. Un secondo nodo che rivede la stessa task o lo stesso post non ripaga.
+### Registry effetti (prima dotazione)
+
+Gli importi sono crediti. Il credito **creato** va sul deposito, come le task. Il versamento tra contraenti è un trasferimento sullo stesso conto. Ogni erogazione scrive `ContrattoAdempimento` con chiave unica `(contratto, codice_effetto, fonte)`. Il movimento nasce una volta e viaggia nel sync; l’altro nodo non lo ricalcola.
+
+| Codice | Innesco | Config che lo staff compila | Cosa fa |
+|--------|---------|-----------------------------|---------|
+| `credito_creato` | stipula, inizio evento, fine evento, scadenza, attivazione, manuale | beneficiario `CLIENTE` / `PROPONENTE` / `ENTRAMBI`, importo | Accredita credito nuovo. |
+| `trasferimento` | gli stessi | da, a, importo, se scoperto `BLOCCA` (solo in firma) o `DEBITO` | Sposta crediti. Il saldo non va sotto zero: il resto resta debito sull’adempimento. |
+| `percentuale_task` | il cliente reclama una task | `pct_cliente`, `pct_proponente` | Sulla cifra crediti già accreditata (dopo fattore Korp): bonus a entrambi. Il prestigio non entra. Le task del proponente non contano. |
+| `sconto_costo` | addebito di un costo | ambiti spuntabili (`creazione_infusione`, `creazione_cerimoniale`, `creazione_tessitura`, `forgiatura`, `consumabile`), `pct_sconto_cliente`, `pct_bonus_proponente` | Base = costo pieno, prima di RCT. Il cliente paga `max(0, pieno − RCT − sconto contratto)`. Il proponente riceve la percentuale sul pieno. |
+| `post_tetto_evento` | fine evento | `massimo_post`, `crediti_per_post` | Vedi la ricetta Pubblicitario. Il giocatore associa i post perché l’effetto è presente, non perché il modello si chiama Pubblicitario. |
+| `contatore_servizi` | registrazione manuale | unità `ORE` o `QUEST`, `massimo_per_evento` | Conta prestazioni. Non paga da solo. |
+| `penale_confermata` | ferita segnalata, oppure `data_morte` | evento `FERITA` o `MORTE`, da, a, importo, conferma `CONTROPARTE` o `STAFF`, a morte paga `CLIENTE` o `EREDE` | Nasce un adempimento in attesa. Dopo la conferma parte il trasferimento, con debito se il saldo non basta. La morte non paga al solo salvataggio di `data_morte`. |
+| `attivazione` | azione del proponente | `richiede_staff`, `risolvi_contratto` | Sblocca gli effetti con innesco attivazione, una volta. Opzionalmente porta il contratto a `RISOLTO`. |
+
+Un contratto solo testuale è un modello con zero effetti: testo, ed eventualmente clausole senza effetti. Non serve una tipologia `GENERICO`.
+
+Un contratto futuro si fa in tre modi:
+
+1. **Solo staff.** Nuova combinazione di effetti già in elenco, parametri nuovi, testo nuovo. Esempio: un «Patrono» che è `trasferimento` alla stipula più `percentuale_task` più `penale_confermata` in morte.
+2. **Una riga di registry.** Serve un innesco che il gioco non ha ancora (vittoria a un duello di carte, acquisto in negozio, …). Si aggiunge un codice effetto e la chiamata nel punto giusto del codice. La maschera staff è la stessa.
+3. **Mai** una settima maschera «tipo di contratto» con i campi cuciti dentro il componente.
+
+I hook di gioco non guardano il nome del modello. Cercano i contratti `STIPULATO` del personaggio e eseguono le righe snapshot il cui codice corrisponde all’innesco.
+
+```text
+reclama_ricompensa(cliente, crediti)
+  → effetti snapshot con codice percentuale_task
+
+addebito costo(cliente, ambito, pieno, fonte)
+  → effetti snapshot con codice sconto_costo e ambito incluso
+
+termina evento
+  → effetti snapshot con codice post_tetto_evento, credito_creato/trasferimento a fine evento
+```
+
+## Ricette iniziali
+
+Sono preset opzionali («Crea da esempio» nello staff), espressi solo con il registry. Lo staff può duplicarli e cambiarli.
 
 ### Talento
 
-Parametri: `pct_cliente`, `pct_proponente` (es. 10 e 20).
-
-Quando il **cliente** reclama la ricompensa di una task (`reclama_ricompensa` in `gestione_plot/missioni_service.py`), sulla cifra crediti effettivamente accreditata (già dopo fattore Korp):
-
-- il cliente riceve un ulteriore `importo * pct_cliente / 100`;
-- il proponente riceve `importo * pct_proponente / 100`.
-
-Esempio: task da 100 crediti → cliente +10, proponente +20, oltre i 100 già presi dal cliente. Il prestigio della task non entra nel contratto. Le task completate dal proponente non attivano il suo contratto come cliente.
+Effetto `percentuale_task` con `pct_cliente` e `pct_proponente`. Chiave `talento`. Esempio 10 e 20 su una task da 100: il cliente prende altri 10, il proponente 20, oltre i 100 già suoi.
 
 ### Creatore
 
-Parametri: `pct_sconto_cliente`, `pct_bonus_proponente`, e gli ambiti spuntabili `creazione_infusione`, `creazione_cerimoniale`, `creazione_tessitura`, `forgiatura`, `consumabile`.
-
-Base = costo teorico pieno, prima di RCT e prima dello sconto di contratto.
-
-- Il cliente paga `max(0, pieno − sconto RCT − pieno * pct_sconto_cliente / 100)`.
-- Il proponente riceve `pieno * pct_bonus_proponente / 100`, anche se gli sconti portano il pagamento a zero.
-
-Esempio: forgiatura con pieno 600 e 10% / 10% → il cliente paga 60 in meno, il proponente riceve 60. Se c'è anche RCT, lo sconto RCT si somma e il pagamento non scende sotto zero; il bonus del proponente resta calcolato sul pieno.
-
-Un'unica funzione `applica_effetto_creatore(cliente, ambito, costo_pieno, fonte_id)` va chiamata nei punti che già addebitano creazione tecnica, forgiatura da infusione e consumabili da tessitura.
+Effetto `sconto_costo` sugli ambiti scelti. Chiave `creatore`. Forgiatura con pieno 600 e 10% / 10%: il cliente paga 60 in meno, il proponente riceve 60. Con RCT lo sconto si somma e il pagamento resta ≥ 0; il bonus del proponente resta sul pieno.
 
 ### Pubblicitario
 
-Parametri di modello: `massimo_post_per_evento`, `crediti_per_post` (stessa cifra per entrambi; due campi distinti solo se più avanti serviranno importi diversi). In proposta il proponente scrive il **tema** (testo concordato, es. «la salvezza dell'imperatore»).
+Parametro `tema` compilato dal proponente. Effetto `post_tetto_evento`. Chiave `pubblicitario`.
 
-Il proponente, dall'app, associa un proprio `SocialPost` dell'evento al contratto. Un post conta per un solo contratto pubblicitario. Lo staff può scollegarlo. Non c'è match automatico sul testo: a un evento dal vivo il tema è una frase, non una keyword affidabile.
+Il proponente associa un proprio `SocialPost` dell’evento. Un post conta per un solo contratto che ha questo effetto. Lo staff può scollegarlo. Nessun match sul testo del post.
 
-A **Termina evento**, per ogni contratto ancora valido in quell'intervallo (`data_inizio`/`data_fine` dell'evento dentro la vita del contratto):
+A Termina evento, per ogni contratto ancora valido (`data_inizio`/`data_fine` dell’evento dentro la vita del contratto):
 
 ```text
 n        = min(post associati validi, massimo)
@@ -155,55 +191,40 @@ se mancanti > 0:
     trasferimento proponente → cliente di mancanti * importo
 ```
 
-Esempio con massimo 3 e 30 crediti a post:
-
-- 2 post: ciascuno riceve 60 creati; il proponente versa 30 al cliente. Netto cliente 90, netto proponente 30.
-- 5 post: ciascuno riceve 90. I post oltre il massimo non contano.
-- 0 post: nessun credito creato; il proponente versa 90 al cliente.
-
-La tab mostra l'anteprima dell'evento in corso prima della chiusura. La chiusura è idempotente per `(contratto, evento)`.
-
-Se il saldo del proponente non copre l'indennizzo, il trasferimento è parziale e il resto resta un **debito** sull'adempimento (`dovuto`, `versato`). Lo staff lo salda quando il PG ha crediti; il debito non porta il saldo sotto zero.
+Con massimo 3 e 30 a post: 2 post → netto cliente 90, netto proponente 30; 5 post → entrambi 90; 0 post → il proponente versa 90 e non si crea credito. La tab mostra l’anteprima prima della chiusura. Idempotente per `(contratto, evento)`.
 
 ### Protettore
 
-Il cliente compra protezione.
+- `trasferimento` cliente → proponente alla stipula (`se_scoperto = BLOCCA`).
+- `contatore_servizi` ore o quest per evento.
+- `penale_confermata` ferita: rimborso proponente → cliente, conferma della controparte o dello staff.
+- `penale_confermata` morte: penale, conferma staff.
 
-- Alla stipula: trasferimento cliente → proponente della `somma` concordata (parametro fisso o scelto nel range del modello). Se il cliente non ha il saldo, la firma è rifiutata.
-- Per ogni evento nella durata: tetto di servizi `max_servizi` in unità `ORE` o `QUEST` (clausola o parametro). Il proponente registra le prestazioni; il tetto è solo un contatore, non un pagamento.
-- Ferita grave: azione «Segnala ferita grave» (proponente, cliente o staff). La controparte conferma, oppure conferma lo staff. Poi rimborso automatico della somma pattuita (o dell'importo/percentuale scritto in clausola), proponente → cliente, con la stessa regola del debito se il saldo non basta.
-- Morte del cliente (`data_morte` valorizzata mentre il contratto è stipulato): nasce un adempimento di penale in stato da confermare. Lo staff conferma e scatta il trasferimento della penale prevista. Non parte da sola al click su `data_morte`, perché quella data si imposta anche per errore.
-
-Non esiste oggi un modello di ferite. La segnalazione vive sul contratto, non sulla scheda personaggio.
+Chiave `protettore`. La ferita è un’azione sul contratto: non esiste un modello ferite in scheda.
 
 ### Mercenario
 
-Il cliente offre i propri servigi al proponente. È il simmetrico del protettore, con i versi dei soldi invertiti.
-
-- Compenso: trasferimento proponente → cliente.
-- Momento, scelto sul modello: `ALLA_STIPULA` oppure `A_INIZIO_EVENTO` (una volta per evento, finché il contratto copre quell'evento). Alla stipula, se il proponente non copre la somma, la firma è rifiutata. A inizio evento, se non copre, nasce un debito.
-- Clausole di impiego: tetto `ORE` o `QUEST` per evento, registrate come i servizi del protettore.
-- Ferita grave del cliente (il mercenario): rimborso proponente → cliente, con conferma come sopra.
-- Morte del cliente: rimborso agli eredi. In proposta si indica un personaggio erede (opzionale). Se c'è, dopo conferma staff il rimborso va all'erede; se non c'è, il movimento resta sul personaggio morto e lo staff lo gira a mano. Niente sistema successorio.
+Stessi mattoni, versi invertiti. `trasferimento` proponente → cliente alla stipula oppure a ogni inizio evento (`BLOCCA` in firma, `DEBITO` a inizio evento). `contatore_servizi` come clausola di impiego. Ferita e morte del cliente con `penale_confermata`; in morte il beneficiario può essere l’erede (`parametro` di tipo `PERSONAGGIO`). Senza erede il movimento resta sul PG morto. Chiave `mercenario`.
 
 ### Agente
 
-- Alla stipula: credito creato per entrambi (`compenso_iniziale_cliente`, `compenso_iniziale_proponente`).
-- Il contratto resta dormiente. Clausole accessorie descrivono attivazione, ricompense e condizioni.
-- Azione **Attiva agente** del proponente. Se il modello ha `attivazione_richiede_staff`, parte solo dopo conferma staff. All'attivazione si erogano le ricompense delle clausole con momento `AD_ATTIVAZIONE` (una volta sola).
-- Il contratto può restare stipulato fino a scadenza anche dopo l'attivazione, oppure chiudersi: flag di modello `risolvi_ad_attivazione`.
+- `credito_creato` per entrambi alla stipula.
+- `attivazione` (con o senza conferma staff, con o senza risoluzione).
+- Clausole con effetti `credito_creato` / `trasferimento` a innesco attivazione: sono le ricompense e le condizioni economiche. Il testo della clausola porta il resto.
+
+Chiave `agente`.
+
+Segnaposto nel testo del modello: `{{proponente}}`, `{{cliente}}`, `{{korp}}`, `{{scadenza}}`, `{{parametri}}`, `{{clausole}}`, `{{compensi}}`. Lo snapshot risolve i valori noti; il nome del cliente entra solo alla firma.
 
 ## UI giocatore
 
 Tab `contratti` in `MainPage`, accanto alle altre tab a modulo.
 
-- Elenco attivi e in attesa: controparte, ruolo (Proponente / Cliente), nome modello, tipologia, scadenza (data reale).
-- Slot usati / slot totali. Con slot liberi, wizard «Nuova proposta».
+- Elenco attivi e in attesa: controparte, ruolo (Proponente / Cliente), nome modello, scadenza (data reale).
+- Slot usati / slot totali. Con slot liberi, wizard «Nuova proposta» (modelli della Korp, parametri lasciati al proponente, clausole e compensi ammessi).
 - Proposta in attesa: QR, testo, annulla.
-- Dal QR: testo completo, poi i due pulsanti. Se il cliente ha già quella tipologia, il pulsante di firma è disabilitato e compare il motivo.
-- Pubblicitario: elenco post dell'evento associabili.
-- Protettore / Mercenario: registra servizio, segnala ferita.
-- Agente (proponente): attiva.
+- Dal QR: testo completo, poi i due pulsanti. Se la chiave di esclusività è già occupata, la firma è disabilitata e compare il motivo.
+- Le azioni extra dipendono dagli effetti nello snapshot, non dal nome del modello: associa post se c’è `post_tetto_evento`, registra servizio se c’è `contatore_servizi`, segnala ferita se c’è `penale_confermata` su `FERITA`, attiva se c’è `attivazione`.
 
 ## Sync ed edge
 
@@ -213,11 +234,9 @@ Le erogazioni non si ricalcolano in apply. Si sincronizza l'adempimento già scr
 
 ## Fasi di implementazione
 
-1. **Fondamenta giocabili.** Modulo, modelli, sync, flag Korp, bonus carica, statistica SCT, tool staff per i modelli delle sei tipologie, tab, wizard, QR, firma/rifiuto, scadenza, adempimenti, pagamenti `ALLA_STIPULA` (protettore, agente, mercenario se previsto alla firma).
-2. **Motori economici continui.** Talento sul reclamo task. Creatore sui tre ambiti di costo. Pubblicitario con associazione post e chiusura evento, debiti inclusi.
-3. **Clausole vive.** Servizi ore/quest, ferita con conferma, morte con conferma staff, attivazione agente, compensi a inizio/fine evento e a scadenza.
-
-`GENERICO` è usabile già in fase 1 per un contratto solo testuale con compenso alla stipula.
+1. **Editor e ciclo di firma.** Modulo, sync, flag Korp, bonus carica, statistica SCT, editor staff a composizione (parametri, effetti, clausole, compensi, preset delle sei ricette), tab, wizard, QR, firma/rifiuto, scadenza. Effetti di fase 1: `credito_creato` e `trasferimento` agli inneschi di stipula. Un modello con zero effetti è già un contratto solo testuale.
+2. **Inneschi continui.** `percentuale_task` sul reclamo, `sconto_costo` sugli addebiti, `post_tetto_evento` a fine evento, debiti inclusi.
+3. **Azioni dei contraenti.** `contatore_servizi`, `penale_confermata` (ferita e morte), `attivazione`, inneschi a inizio/fine evento e a scadenza.
 
 ## Decisioni aperte
 
