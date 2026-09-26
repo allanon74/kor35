@@ -1161,9 +1161,17 @@ class GestioneCraftingService:
             costo_totale = costo_materiali
             descrizione = f"Materiali Forgiatura: {infusione.nome}"
 
-        # Verifica Crediti
-        if personaggio.crediti < costo_totale:
-            raise ValidationError(f"Crediti insufficienti. Richiesti: {costo_totale}")
+        from uuid import uuid4
+
+        from personaggi.contratti_service import costo_con_sconto_contratto
+
+        pagatore = destinatario_finale if destinatario_finale else personaggio
+        fonte_contratto = f"forgiatura:{uuid4()}"
+        costo_da_pagare = costo_con_sconto_contratto(
+            pagatore, "forgiatura", costo_totale, costo_totale, fonte_contratto, eroga=False
+        )
+        if personaggio.crediti < costo_da_pagare:
+            raise ValidationError(f"Crediti insufficienti. Richiesti: {costo_da_pagare}")
 
         # Gestione Coda (identica a prima)
         now = timezone.now()
@@ -1177,8 +1185,10 @@ class GestioneCraftingService:
         with transaction.atomic():
             # Per forgiatura collaborativa, paga il committente (destinatario_finale)
             # altrimenti paga il personaggio stesso
-            pagatore = destinatario_finale if destinatario_finale else personaggio
-            pagatore.modifica_crediti(-costo_totale, descrizione)
+            costo_da_pagare = costo_con_sconto_contratto(
+                pagatore, "forgiatura", costo_totale, costo_totale, fonte_contratto, eroga=True
+            )
+            pagatore.modifica_crediti(-costo_da_pagare, descrizione)
             forgiatura = ForgiaturaInCorso.objects.create(
                 personaggio=personaggio, 
                 infusione=infusione, 
@@ -1446,13 +1456,21 @@ class CreazioneConsumabileService:
             personaggio, aura_tessitura, 'stat_costo_consumabili', FALLBACK_STAT_COSTO_CONSUMABILI
         )
         costo_totale = costo_unit * livello
+        from uuid import uuid4
+
+        from personaggi.contratti_service import costo_con_sconto_contratto
+
+        fonte_contratto = f"consumabile:{tessitura.pk}:{uuid4()}"
+        costo_da_pagare = costo_con_sconto_contratto(
+            personaggio, "consumabile", costo_totale, costo_totale, fonte_contratto, eroga=False
+        )
         crediti_attuali = personaggio.crediti
         if crediti_attuali is None:
             crediti_attuali = 0
         else:
             crediti_attuali = int(crediti_attuali)
-        if crediti_attuali < costo_totale:
-            return False, f"Crediti insufficienti (serve {costo_totale}, hai {crediti_attuali})."
+        if crediti_attuali < costo_da_pagare:
+            return False, f"Crediti insufficienti (serve {costo_da_pagare}, hai {crediti_attuali})."
 
         tempo_sec = cls._get_valore_consumabili(
             personaggio, aura_tessitura, 'stat_tempo_creazione_consumabili', FALLBACK_STAT_TEMPO_CREAZIONE_CONSUMABILI
@@ -1460,7 +1478,10 @@ class CreazioneConsumabileService:
         tempo_sec = max(1, int(tempo_sec))
 
         with db_transaction.atomic():
-            personaggio.modifica_crediti(-costo_totale, f"Creazione consumabile da tessitura: {tessitura.nome}")
+            costo_da_pagare = costo_con_sconto_contratto(
+                personaggio, "consumabile", costo_totale, costo_totale, fonte_contratto, eroga=True
+            )
+            personaggio.modifica_crediti(-costo_da_pagare, f"Creazione consumabile da tessitura: {tessitura.nome}")
             data_fine = timezone.now() + timedelta(seconds=tempo_sec)
             cc = CreazioneConsumabileInCorso.objects.create(
                 personaggio=personaggio,

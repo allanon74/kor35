@@ -4185,6 +4185,57 @@ export const postTelegramUnlink = (onLogout) =>
         body: JSON.stringify({}),
     }, onLogout);
 
+const CONTRATTI_API = '/api/personaggi/api/contratti';
+const STAFF_CONTRATTI = '/api/personaggi/api/staff/contratti';
+
+export const contrattiGetAccesso = (charId, onLogout) =>
+    fetchAuthenticated(`${CONTRATTI_API}/accesso/?personaggio_id=${encodeURIComponent(charId)}`, { method: 'GET' }, onLogout);
+
+export const contrattiGetScheda = (charId, onLogout) =>
+    fetchAuthenticated(`${CONTRATTI_API}/scheda/?personaggio_id=${encodeURIComponent(charId)}`, { method: 'GET' }, onLogout);
+
+export const contrattiCreaProposta = (charId, data, onLogout) =>
+    fetchAuthenticated(`${CONTRATTI_API}/proposte/`, {
+        method: 'POST',
+        body: JSON.stringify({ personaggio_id: charId, ...data }),
+    }, onLogout);
+
+export const contrattiAzione = (charId, contrattoId, azione, data, onLogout) =>
+    fetchAuthenticated(`${CONTRATTI_API}/${contrattoId}/${azione}/`, {
+        method: 'POST',
+        body: JSON.stringify({ personaggio_id: charId, ...(data || {}) }),
+    }, onLogout);
+
+export const contrattiGetQr = (charId, contrattoId, onLogout) =>
+    fetchAuthenticated(`${CONTRATTI_API}/${contrattoId}/qr/?personaggio_id=${encodeURIComponent(charId)}`, { method: 'GET' }, onLogout);
+
+export const staffContrattiGetModelli = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CONTRATTI}/modelli/`, { method: 'GET' }, onLogout);
+
+export const staffContrattiCreaModello = (data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CONTRATTI}/modelli/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffContrattiSalvaModello = (id, data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CONTRATTI}/modelli/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffContrattiEliminaModello = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_CONTRATTI}/modelli/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffContrattiGetRuntime = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CONTRATTI}/runtime/`, { method: 'GET' }, onLogout);
+
+export const staffContrattiRuntimeAzione = (data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CONTRATTI}/runtime/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
 export const getCalendarioFeedToken = (onLogout) =>
     fetchAuthenticated('/api/personaggi/api/calendario/feed-token/', { method: 'GET' }, onLogout);
 

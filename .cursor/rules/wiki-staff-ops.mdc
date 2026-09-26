@@ -19,6 +19,7 @@ Pagine Wiki **solo staff** generate da sorgenti versionate in `docs/wiki/staff/`
 | `test-offline-omada.md` | Pagina «Test offline — mesh Omada» (`staff-test-offline-omada`) |
 | `componenti-nave-riparazione.md` | Pagina «Componenti nave — stiva e riparazione» (`staff-componenti-nave-riparazione`) |
 | `card-studio-sette-elegie.md` | Pagina «Card Studio — carta Sette Elegie» (`staff-card-studio-sette-elegie`) |
+| `contratti.md` | Pagina «Contratti — impostare modelli e slot» (`staff-contratti`) |
 
 Parent menu: slug `staff-operativita-tecnica`, titolo **Operatività tecnica**.
 

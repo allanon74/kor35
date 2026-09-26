@@ -608,11 +608,33 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
             from decimal import Decimal
             from personaggi.acquisto_costi import calcola_costo_creazione_proposta
 
-            _, costo = calcola_costo_creazione_proposta(obj.personaggio, obj)
-            costo_pagato = Decimal(costo)
-            if costo > 0:
-                obj.personaggio.modifica_crediti(-costo_pagato, f"Approvazione e creazione tecnica: {tecnica_creata.nome}")
-                obj.personaggio.aggiungi_log(f"Ha speso {costo} CR per la creazione della tecnica '{tecnica_creata.nome}'.")
+            pieno, costo = calcola_costo_creazione_proposta(obj.personaggio, obj)
+            ambito_contratto = {
+                "infusione": "creazione_infusione",
+                "tessitura": "creazione_tessitura",
+                "cerimoniale": "creazione_cerimoniale",
+            }.get(tipo_tecnica, "")
+            from django.db import transaction as db_transaction
+            from personaggi.contratti_service import costo_con_sconto_contratto
+
+            with db_transaction.atomic():
+                if ambito_contratto:
+                    costo = costo_con_sconto_contratto(
+                        obj.personaggio,
+                        ambito_contratto,
+                        pieno,
+                        costo,
+                        f"proposta:{obj.pk}",
+                        eroga=True,
+                    )
+                costo_pagato = Decimal(costo)
+                if costo_pagato > 0:
+                    obj.personaggio.modifica_crediti(
+                        -costo_pagato, f"Approvazione e creazione tecnica: {tecnica_creata.nome}"
+                    )
+                    obj.personaggio.aggiungi_log(
+                        f"Ha speso {costo_pagato} CR per la creazione della tecnica '{tecnica_creata.nome}'."
+                    )
             
             # --- ASSEGNAZIONE AL PERSONAGGIO ---
             pg = obj.personaggio

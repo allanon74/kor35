@@ -49,6 +49,7 @@ KNOWN_STAFF_TOOL_IDS = frozenset({
     "negozi-mercante",
     "carte-collezionabili",
     "tasks",
+    "contratti",
     "personaggi-eliminati",
     "personaggi",
     "regole-transazioni",
@@ -82,6 +83,7 @@ DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
                 "negozi-mercante",
                 "carte-collezionabili",
                 "tasks",
+                "contratti",
             ],
         },
         {

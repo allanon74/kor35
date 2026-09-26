@@ -1344,6 +1344,12 @@ class QrCodeDetailView(APIView):
         except QrCode.DoesNotExist:
             return Response({"error": "QrCode non trovato."}, status=status.HTTP_404_NOT_FOUND)
 
+        from personaggi.contratti_service import risposta_qr_contratto
+
+        risposta_contratto = risposta_qr_contratto(qr_code, request)
+        if risposta_contratto is not None:
+            return risposta_contratto
+
         from personaggi.negozio_mercante_avista import negozio_da_vista_pk
         from personaggi.negozio_mercante_models import NegozioMercante
         from personaggi.negozio_mercante_service import build_listino

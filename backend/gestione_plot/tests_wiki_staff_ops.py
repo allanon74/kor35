@@ -35,6 +35,7 @@ class WikiStaffOpsSyncTests(TestCase):
         self.assertIn("staff-mirror-pi", slugs)
         self.assertIn("staff-test-offline-omada", slugs)
         self.assertIn("staff-card-studio-sette-elegie", slugs)
+        self.assertIn("staff-contratti", slugs)
 
         parent = PaginaRegolamento.objects.get(slug="staff-operativita-tecnica")
         self.assertTrue(parent.visibile_solo_staff)
@@ -65,6 +66,13 @@ class WikiStaffOpsSyncTests(TestCase):
         mirror_page = PaginaRegolamento.objects.get(slug="staff-mirror-pi")
         self.assertEqual(mirror_page.parent_id, parent.id)
         self.assertIn("192.168.100.1", mirror_page.contenuto)
+
+        contratti_page = PaginaRegolamento.objects.get(slug="staff-contratti")
+        self.assertEqual(contratti_page.parent_id, parent.id)
+        self.assertTrue(contratti_page.visibile_solo_staff)
+        self.assertIn("slot_contratto_base", contratti_page.contenuto)
+        self.assertIn("post_tetto_evento", contratti_page.contenuto)
+        self.assertIn("conto deposito", contratti_page.contenuto)
 
     def test_pilot_eventi_condition_uses_sottosistema_nome(self):
         from types import SimpleNamespace

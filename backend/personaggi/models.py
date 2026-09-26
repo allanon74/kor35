@@ -1966,6 +1966,16 @@ class Carriera(Tier):
             "per i membri attivi (es. 2.00 = doppie). Rilevante se tipo = korp."
         ),
     )
+    sottoscrive_contratti = models.BooleanField(
+        default=False,
+        verbose_name="Sottoscrive contratti",
+        help_text="Se attivo, i membri possono proporre i modelli di contratto di questa Korp.",
+    )
+    slot_contratto_base = models.IntegerField(
+        default=3,
+        verbose_name="Slot contratto di base",
+        help_text="Slot del proponente all'ingresso, prima del bonus carica e della statistica SCT. Vale solo se la Korp sottoscrive.",
+    )
     abilita = models.ManyToManyField(
         "Abilita",
         through="CarrieraAbilita",
@@ -2051,6 +2061,11 @@ class Carica(A_modello):
         default=0,
         verbose_name="Bonus Prestigio",
         help_text="Bonus al Prestigio (ex peso social) per i membri con questa carica.",
+    )
+    bonus_slot_contratto = models.IntegerField(
+        default=0,
+        verbose_name="Bonus slot di contratto",
+        help_text="Si somma agli slot di base della Korp. 0 sul grado d'ingresso: nessun +1 automatico. Può essere negativo.",
     )
     ordine = models.PositiveIntegerField(default=0)
     attiva = models.BooleanField(default=True)
@@ -9524,6 +9539,20 @@ from personaggi.carte_platform_models import (  # noqa: E402, F401
     CartePlatformGiocatore,
     CartePlatformExchangeJob,
     CarteMsePackageImport,
+)
+
+# ============================================================================
+# CONTRATTI
+# ============================================================================
+from personaggi.contratti_models import (  # noqa: E402, F401
+    Contratto,
+    ContrattoAdempimento,
+    ContrattoPost,
+    ContrattoServizio,
+    EffettoModello,
+    ModelloContratto,
+    ParametroModello,
+    VoceModello,
 )
 
 # ============================================================================
