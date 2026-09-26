@@ -200,7 +200,7 @@ export default function ContrattiManager({ onLogout }) {
           <div>
             <h1 className="text-xl font-black">Contratti</h1>
             <p className="text-xs text-gray-400">
-              I sei nomi sono preset. Un modello è nome, testo, parametri ed effetti. Gli slot si impostano in Carriere e KORP (base Korp, bonus carica). La statistica SCT conta solo se esiste con un parametro.
+              I sei nomi sono preset. Un modello è nome, testo, parametri ed effetti. Gli slot si impostano in Carriere e KORP (base Korp, bonus carica). La statistica SCT (parametro SCT) è già in tabella: un’abilità o un oggetto la aumentano.
             </p>
           </div>
         </div>

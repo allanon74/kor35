@@ -41,7 +41,7 @@ slot = base della Korp
 | Korp | `sottoscrive_contratti` | Se spento, quella Korp non offre contratti e i suoi membri hanno 0 slot. |
 | Korp | `slot_contratto_base` | Intero libero, **diverso per ogni Korp**. Il 3 è solo il valore suggerito all’inizio, non un obbligo. |
 | Carica | `bonus_slot_contratto` | Intero libero, **diverso per ogni carica**. Il valore iniziale è 0: il grado d’ingresso non aggiunge slot da solo. Può essere +1, +2, oppure negativo. |
-| Scheda / abilità | statistica **SCT** | Addizionale da abilità o oggetti. Parte da 0. Conta solo se la Korp sottoscrive. |
+| Scheda / abilità | statistica **SCT** | Creata dalla migrazione, parametro `SCT`, valore di partenza 0. Un’abilità di default della Korp, un’abilità acquistata o un oggetto la aumentano. Conta solo se la Korp sottoscrive. |
 
 Senza carica il bonus carica è 0. Occupano uno slot le proposte in attesa e i contratti stipulati. Rifiuto, annullamento, scadenza e scioglimento liberano lo slot.
 

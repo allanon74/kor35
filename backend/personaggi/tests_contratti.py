@@ -33,6 +33,7 @@ from personaggi.models import (
     Carriera,
     Personaggio,
     PersonaggioCarrieraMembership,
+    Statistica,
     TipologiaPersonaggio,
     TipoCarriera,
 )
@@ -223,6 +224,12 @@ class ContrattiMotoreTests(TestCase):
         self.assertFalse(tab_visibile(self.proponente, self.user_a))
         on_task_reclamata(SimpleNamespace(pk=uuid.uuid4(), personaggio=self.cliente, reward_crediti=Decimal("100")))
         self.assertEqual(saldo_conto(self.cliente, CONTO_CORRENTE), Decimal("0.00"))
+
+    def test_statistica_sct_creata_dalla_migrazione(self):
+        stat = Statistica.objects.filter(sigla__iexact="SCT").first()
+        self.assertIsNotNone(stat)
+        self.assertEqual(stat.parametro, "SCT")
+        self.assertEqual(stat.tipo, "ST")
 
     def test_qr_risponde_contratto(self):
         proposta = self._proposta("talento")
