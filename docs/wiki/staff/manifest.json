@@ -47,6 +47,12 @@
       "titolo": "Card Studio — carta Sette Elegie",
       "source": "card-studio-sette-elegie.md",
       "ordine": 35
+    },
+    {
+      "slug": "staff-contratti",
+      "titolo": "Contratti — impostare modelli e slot",
+      "source": "contratti.md",
+      "ordine": 40
     }
   ]
 }

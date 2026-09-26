@@ -2,7 +2,7 @@
 
 Feature opzionale di gioco: un personaggio **proponente** (soggetto attivo) offre un contratto; un **cliente** (soggetto passivo) lo sottoscrive scansionando un QR. Entrambi sono i **contraenti**.
 
-Il documento fissa il modello, gli automatismi e le decisioni già chiuse. Le voci ancora aperte sono in fondo, ciascuna con un default da usare se non arriva una correzione.
+Il documento fissa il modello e gli automatismi. Le decisioni di gioco sono chiuse in fondo. Il testo operativo per lo staff, con gli esempi di impostazione, è la wiki solo staff `docs/wiki/staff/contratti.md`.
 
 ## Gate
 
@@ -36,21 +36,19 @@ La statistica dà alle abilità, agli oggetti e allo staff lo stesso canale già
 Formula effettiva, ricalcolata a ogni lettura (niente valore derivato salvato sul personaggio):
 
 ```text
-slot = slot_contratto_base della Korp
-     + somma dei bonus_slot_contratto delle cariche attive su quella membership
+slot = slot_contratto_base della Korp attiva
+     + bonus_slot_contratto della carica su quella membership
      + get_valore_statistica("SCT")
 ```
 
-- `Carriera.sottoscrive_contratti` (bool, default falso). Se falso, quella membership vale 0 e i modelli di quella Korp non sono offrili.
-- `Carriera.slot_contratto_base` (intero, default 3). Vale solo se la Korp sottoscrive.
-- `Carica.bonus_slot_contratto` (intero, default 0). Lo staff mette +1 sui gradi che devono aggiungerlo.
-- Statistica **SCT** «Slot di contratto», `is_numero`, valore base 0. È il solo addendo che abilità e oggetti modificano.
+Un personaggio ha una sola Korp. Non esiste una somma tra Korp.
 
-Più membership Korp attive che sottoscrivono **si sommano**. SCT si somma solo se esiste almeno una membership abilitata: fuori da quelle Korp la statistica non apre la possibilità di proporre.
+- `Carriera.sottoscrive_contratti` (bool, default falso). Se falso, gli slot di quella Korp sono 0 e i suoi modelli non sono offrili.
+- `Carriera.slot_contratto_base` (intero). Lo staff lo imposta **per Korp**. Il valore iniziale suggerito in scheda è 3, ed è solo un punto di partenza.
+- `Carica.bonus_slot_contratto` (intero). Lo staff lo imposta **per carica**. Il valore iniziale è 0: il grado d’ingresso non aggiunge slot da solo. Una carica può valere +1, +2 o anche un malus.
+- Statistica **SCT** «Slot di contratto», `is_numero`, valore base 0. È il solo addendo che abilità e oggetti modificano. Si somma solo se la Korp attiva sottoscrive.
 
-Occupano uno slot gli stati `IN_ATTESA` e `STIPULATO`. Rifiuto, scadenza, risoluzione e annullamento lo liberano. Il proponente non firma la propria proposta.
-
-Default sul grado d'ingresso: la base 3 è già il pacchetto di ingresso; il +1 non è automatico su ogni carica, così il grado iniziale non diventa 4 per sbaglio. Se un grado deve contare, `bonus_slot_contratto = 1`.
+Senza carica, il bonus carica è 0. Occupano uno slot gli stati `IN_ATTESA` e `STIPULATO`. Rifiuto, scadenza, risoluzione e annullamento lo liberano. Il proponente non firma la propria proposta.
 
 ## Ciclo di vita
 
@@ -238,15 +236,14 @@ Le erogazioni non si ricalcolano in apply. Si sincronizza l'adempimento già scr
 2. **Inneschi continui.** `percentuale_task` sul reclamo, `sconto_costo` sugli addebiti, `post_tetto_evento` a fine evento, debiti inclusi.
 3. **Azioni dei contraenti.** `contatore_servizi`, `penale_confermata` (ferita e morte), `attivazione`, inneschi a inizio/fine evento e a scadenza.
 
-## Decisioni aperte
+## Decisioni chiuse
 
-Se restano senza risposta, si implementa il default indicato nel resto del documento.
+1. **Slot.** Impostati dallo staff, diversi per Korp (`slot_contratto_base`) e per carica (`bonus_slot_contratto`). Nessun +1 automatico sul grado d’ingresso. Un personaggio non può essere in due Korp: conta la sola membership attiva, più la statistica SCT.
+2. **Pubblicitario.** Il cliente chiude sempre a `massimo × crediti_per_post`. Il proponente chiude a `post nel tetto × cifra − post mancanti × cifra`. L’indennizzo è un trasferimento del proponente verso il cliente. Se il saldo non copre, il resto è debito e il saldo non va sotto zero.
+3. **Mercenario.** Paga il proponente. Il modello sceglie se alla stipula o a ogni inizio evento. L’erede è un personaggio opzionale indicato in proposta; senza erede il rimborso di morte resta sul PG morto.
+4. **Ferita grave.** Azione sul contratto, con conferma. Non è uno stato di salute in scheda.
+5. **Conto.** Tutti i bonus (crediti creati dal sistema) vanno sul conto deposito: sono guadagni extra. Anche i trasferimenti tra contraenti (prezzo, indennizzo, penale, rimborso) usano il deposito.
 
-1. **Grado d'ingresso.** Base 3 indipendente dalla carica; `bonus_slot_contratto` default 0, da mettere a 1 sui gradi che aggiungono uno slot.
-2. **Pubblicitario.** Il cliente chiude a `massimo × crediti_per_post`. Il proponente chiude a `post_validi_nel_tetto × cifra − mancanti × cifra`. L'indennizzo è un trasferimento, non credito creato.
-3. **Saldo insufficiente.** Indennizzi e penali diventano debito, saldo non negativo. Il prezzo alla stipula, se scoperto, blocca la firma.
-4. **Mercenario.** Paga il proponente al cliente. Il modello sceglie se alla stipula o a ogni inizio evento.
-5. **Erede.** Personaggio opzionale indicato in proposta. Senza erede, il rimborso di morte resta sul PG morto.
-6. **Ferita grave.** Azione sul contratto con conferma, non un nuovo stato di salute globale.
-7. **Due Korp abilitate.** Gli slot si sommano.
-8. **Conto.** I crediti creati vanno sul deposito. I trasferimenti tra PG usano il deposito.
+## Istruzioni staff
+
+Pagina wiki solo staff, sezione Operatività tecnica: `docs/wiki/staff/contratti.md` (slug `staff-contratti`). Spiega modulo, slot per Korp e carica, ogni effetto con i campi, e le ricette con i numeri (Talento 10/20, Creatore su 600, Pubblicitario 3×30, Protettore, Mercenario, Agente, più un contratto nuovo composto senza codice).
