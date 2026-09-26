@@ -41,6 +41,7 @@ MODULO_CREAZIONE_GUIDATA = "creazione_guidata"
 MODULO_CONTO_DEPOSITO = "conto_deposito"
 MODULO_RUBRICHE = "rubriche"
 MODULO_CHIAMATE = "chiamate"
+MODULO_CONTRATTI = "contratti"
 
 # tool staff id → chiave modulo (None = non gated)
 STAFF_TOOL_TO_MODULO = {
@@ -54,6 +55,7 @@ STAFF_TOOL_TO_MODULO = {
     "economia-crediti": MODULO_CONTO_DEPOSITO,
     "rubriche": MODULO_RUBRICHE,
     "chiamate": MODULO_CHIAMATE,
+    "contratti": MODULO_CONTRATTI,
 }
 
 # tab player id → chiave modulo
@@ -65,6 +67,7 @@ PLAYER_TAB_TO_MODULO = {
     "tasks": MODULO_TASKS,
     "economia": MODULO_CONTO_DEPOSITO,
     "rubriche": MODULO_RUBRICHE,
+    "contratti": MODULO_CONTRATTI,
 }
 
 CAMPAGNA_MODULI_REGISTRY: list[dict[str, Any]] = [
@@ -131,6 +134,12 @@ CAMPAGNA_MODULI_REGISTRY: list[dict[str, Any]] = [
         "label": "Chiamate vocali",
         "descrizione": "Chiamate in-app personaggio↔personaggio e verso lo staff (centralino).",
         "default": MODULO_ACCESSO_OPEN,
+    },
+    {
+        "key": MODULO_CONTRATTI,
+        "label": "Contratti",
+        "descrizione": "Tab Contratti e tool staff. Spento di default: slot Korp, modelli ed effetti.",
+        "default": MODULO_ACCESSO_OFF,
     },
 ]
 

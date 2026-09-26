@@ -1,7 +1,7 @@
 from django.urls import path, include
 # from rest_framework.authtoken.views import obtain_auth_token
 
-from . import views, views_staff, views_scommesse, views_carte, views_carte_platform, watch_views, views_economia, views_notifiche, chiamate_views
+from . import views, views_staff, views_scommesse, views_carte, views_carte_platform, watch_views, views_economia, views_notifiche, chiamate_views, views_contratti
 from rest_framework import routers
 
 from rest_framework.routers import DefaultRouter
@@ -421,6 +421,15 @@ urlpatterns = [
         name='staff-carte-scambi',
     ),
     
+    path('api/contratti/accesso/', views_contratti.ContrattiAccessoView.as_view(), name='contratti-accesso'),
+    path('api/contratti/scheda/', views_contratti.ContrattiSchedaView.as_view(), name='contratti-scheda'),
+    path('api/contratti/proposte/', views_contratti.ContrattoPropostaView.as_view(), name='contratti-proposte'),
+    path('api/contratti/<uuid:contratto_id>/qr/', views_contratti.ContrattoQrImmagineView.as_view(), name='contratti-qr'),
+    path('api/contratti/<uuid:contratto_id>/<str:azione>/', views_contratti.ContrattoAzioneView.as_view(), name='contratti-azione'),
+    path('api/staff/contratti/modelli/', views_contratti.ContrattiStaffListaView.as_view(), name='staff-contratti-modelli'),
+    path('api/staff/contratti/modelli/<uuid:modello_id>/', views_contratti.ContrattiStaffDettaglioView.as_view(), name='staff-contratti-modello'),
+    path('api/staff/contratti/runtime/', views_contratti.ContrattiStaffRuntimeView.as_view(), name='staff-contratti-runtime'),
+
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
     path('api/chiamate/ice-servers/', chiamate_views.ChiamataIceServersView.as_view(), name='chiamate-ice-servers'),
     path('api/chiamate/coda/', chiamate_views.ChiamataVocaleCodaStaffView.as_view(), name='chiamate-coda-staff'),

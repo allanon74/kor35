@@ -155,6 +155,21 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
             value={form.fattore_task ?? 1}
             onChange={(e) => setForm({ ...form, fattore_task: e.target.value })}
           />
+          <label className="flex items-center gap-2 text-sm text-gray-300">
+            <input
+              type="checkbox"
+              checked={!!form.sottoscrive_contratti}
+              onChange={(e) => setForm({ ...form, sottoscrive_contratti: e.target.checked })}
+            />
+            Sottoscrive contratti
+          </label>
+          <input
+            type="number"
+            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
+            placeholder="Slot contratto di base (prima di carica e SCT)"
+            value={form.slot_contratto_base ?? 3}
+            onChange={(e) => setForm({ ...form, slot_contratto_base: e.target.value })}
+          />
           <div>
             <div className="text-xs text-gray-400 mb-2">Tier abilità sbloccabili per i membri</div>
             <SearchableSelect
@@ -371,6 +386,13 @@ function CaricaModal({ isOpen, onClose, onSave, value, carriereOptions, statusMe
             placeholder="Bonus Prestigio"
             value={form.bonus_peso_influencer ?? 0}
             onChange={(e) => setForm({ ...form, bonus_peso_influencer: e.target.value })}
+          />
+          <input
+            type="number"
+            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
+            placeholder="Bonus slot di contratto (0 sul grado d'ingresso, può essere negativo)"
+            value={form.bonus_slot_contratto ?? 0}
+            onChange={(e) => setForm({ ...form, bonus_slot_contratto: e.target.value })}
           />
           <input
             type="number"
@@ -867,6 +889,8 @@ export default function CarriereKorpsManager({ onLogout }) {
         tipo_carriera: form.tipo_carriera || form.tipo_carriera_id,
         bonus_crediti_evento: form.bonus_crediti_evento ?? 0,
         fattore_task: form.fattore_task ?? 1,
+        sottoscrive_contratti: !!form.sottoscrive_contratti,
+        slot_contratto_base: form.slot_contratto_base ?? 3,
         tiers_sblocco_ids: form.tiers_sblocco_ids || [],
         abilita_default_ids: form.abilita_default_ids || [],
       };
@@ -897,6 +921,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         bonus_stipendio_evento: form.bonus_stipendio_evento ?? 0,
         bonus_crediti_evento: form.bonus_crediti_evento ?? 0,
         bonus_peso_influencer: form.bonus_peso_influencer ?? 0,
+        bonus_slot_contratto: form.bonus_slot_contratto ?? 0,
         ordine: form.ordine ?? 0,
         attiva: form.attiva !== false,
       };

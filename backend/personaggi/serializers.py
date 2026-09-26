@@ -288,6 +288,8 @@ class KorpSerializer(serializers.ModelSerializer):
             "foto",
             "tipo_carriera",
             "fattore_task",
+            "sottoscrive_contratti",
+            "slot_contratto_base",
             "sync_id",
             "updated_at",
         )
@@ -339,6 +341,7 @@ class CaricaSerializer(serializers.ModelSerializer):
             "bonus_stipendio_evento",
             "bonus_crediti_evento",
             "bonus_peso_influencer",
+            "bonus_slot_contratto",
             "ordine",
             "attiva",
         )
@@ -396,6 +399,8 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
             "tipo_carriera",
             "bonus_crediti_evento",
             "fattore_task",
+            "sottoscrive_contratti",
+            "slot_contratto_base",
             "tipo_carriera_nome",
             "tipo_carriera_codice",
             "tiers_sblocco_ids",
@@ -510,6 +515,7 @@ class CaricaStaffSerializer(serializers.ModelSerializer):
             "bonus_stipendio_evento",
             "bonus_crediti_evento",
             "bonus_peso_influencer",
+            "bonus_slot_contratto",
             "ordine",
             "attiva",
         )

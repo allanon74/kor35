@@ -60,6 +60,7 @@ const modoBadgeClass = (modo) => {
 
 const STAFF_TOOL_LABELS = {
   tasks: 'Tasks',
+  contratti: 'Contratti',
   pilotaggio: 'Pilotaggio',
   'carte-collezionabili': 'Carte collezionabili',
   scommesse: 'Scommesse',
@@ -76,6 +77,7 @@ const PLAYER_TAB_LABELS = {
   negozi: 'Negozi',
   social: 'Social',
   tasks: 'Tasks (solo evento aperto)',
+  contratti: 'Contratti',
   rubriche: 'Rubriche (sezione InstaFame)',
 };
 

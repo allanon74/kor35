@@ -144,6 +144,9 @@ def reclama_ricompensa(risoluzione: MissioneRisoluzione, *, notifica: bool = Tru
     risoluzione.save(update_fields=["ricompensa_reclamata", "reclamata_at", "updated_at"])
     if notifica:
         _notifica_ricompensa(risoluzione)
+    from personaggi.contratti_service import on_task_reclamata
+
+    on_task_reclamata(risoluzione)
     return risoluzione
 
 

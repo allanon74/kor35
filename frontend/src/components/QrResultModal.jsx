@@ -1077,6 +1077,15 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
         );
       }
 
+      case 'contratto': {
+        const ContrattoQrView = React.lazy(() => import('./ContrattoQrView'));
+        return (
+          <React.Suspense fallback={<Loader className="animate-spin mx-auto" />}>
+            <ContrattoQrView data={data.dati} onClose={onClose} onLogout={onLogout} />
+          </React.Suspense>
+        );
+      }
+
       case 'scontro_carte': {
         const ScontroCarteQrView = React.lazy(() => import('./ScontroCarteQrView'));
         return (

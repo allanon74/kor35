@@ -27,6 +27,7 @@ export const CAMPAGNA_MODULI_REGISTRY = [
   { key: 'creazione_guidata', label: 'Creazione guidata PG', descrizione: 'Wizard creazione personaggio (staff).', default: 'OPEN' },
   { key: 'conto_deposito', label: 'Conto di deposito', descrizione: 'Economia duale: corrente (stipendio) e deposito; trasferimento per evento.', default: 'OFF' },
   { key: 'chiamate', label: 'Chiamate vocali', descrizione: 'Chiamate in-app personaggio↔personaggio e verso lo staff (centralino).', default: 'OPEN' },
+  { key: 'contratti', label: 'Contratti', descrizione: 'Tab Contratti e tool staff. Spento di default.', default: 'OFF' },
 ];
 
 export const STAFF_TOOL_TO_MODULO = {
@@ -40,6 +41,7 @@ export const STAFF_TOOL_TO_MODULO = {
   'economia-crediti': 'conto_deposito',
   rubriche: 'rubriche',
   chiamate: 'chiamate',
+  contratti: 'contratti',
 };
 
 export const PLAYER_TAB_TO_MODULO = {
@@ -50,6 +52,7 @@ export const PLAYER_TAB_TO_MODULO = {
   tasks: 'tasks',
   economia: 'conto_deposito',
   rubriche: 'rubriche',
+  contratti: 'contratti',
 };
 
 export function getModuloAccesso(moduliMap, key, registry = CAMPAGNA_MODULI_REGISTRY) {

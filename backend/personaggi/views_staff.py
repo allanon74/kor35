@@ -669,9 +669,23 @@ class ApprovaPropostaView(APIView):
             except (TypeError, ValueError):
                 pass
 
-        _, costo_totale = calcola_costo_creazione_proposta(
+        costo_pieno, costo_effettivo = calcola_costo_creazione_proposta(
             personaggio, proposta, livello_finale=livello_finale
         )
+        from personaggi.contratti_service import AMBITO_DA_TIPO_PROPOSTA, costo_con_sconto_contratto
+
+        ambito_contratto = AMBITO_DA_TIPO_PROPOSTA.get(tipo, "")
+        fonte_contratto = f"proposta:{proposta.pk}"
+        costo_totale = costo_effettivo
+        if ambito_contratto:
+            costo_totale = costo_con_sconto_contratto(
+                personaggio,
+                ambito_contratto,
+                costo_pieno,
+                costo_effettivo,
+                fonte_contratto,
+                eroga=False,
+            )
 
         # Verifica Crediti
         if personaggio.crediti < costo_totale:
@@ -715,8 +729,20 @@ class ApprovaPropostaView(APIView):
                 # B. Salva la Tecnica
                 # I FullEditorSerializer gestiscono automaticamente anche il salvataggio dei componenti
                 nuova_tecnica = serializer.save()
-                
-                costo_pagato = Decimal(costo_totale)
+
+                if ambito_contratto:
+                    costo_pagato = Decimal(
+                        costo_con_sconto_contratto(
+                            personaggio,
+                            ambito_contratto,
+                            costo_pieno,
+                            costo_effettivo,
+                            fonte_contratto,
+                            eroga=True,
+                        )
+                    )
+                else:
+                    costo_pagato = Decimal(costo_effettivo)
 
                 # C. Assegna al Personaggio con costo pagato (per eventuale revoca)
                 if tipo == TIPO_PROPOSTA_INFUSIONE:
@@ -739,7 +765,7 @@ class ApprovaPropostaView(APIView):
                     )
 
                 # D. Paga i crediti
-                if costo_totale > 0:
+                if costo_pagato > 0:
                     personaggio.modifica_crediti(-costo_pagato, f"Creazione {proposta.get_tipo_display()}: {nuova_tecnica.nome}")
 
                 # E. Aggiorna Proposta
@@ -755,7 +781,7 @@ class ApprovaPropostaView(APIView):
                     titolo=f"Approvazione: {nuova_tecnica.nome}",
                     testo=(
                         f"La tua tecnica '{nuova_tecnica.nome}' è stata approvata e creata.\n"
-                        f"Costo sostenuto: {costo_totale} crediti.\n\n"
+                        f"Costo sostenuto: {costo_pagato} crediti.\n\n"
                         f"NOTE STAFF:\n{proposta.note_staff}"
                     )
                 )

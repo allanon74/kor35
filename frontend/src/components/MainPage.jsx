@@ -8,7 +8,7 @@ import { useCharacter } from './CharacterContext';
 import { useMieiStaffCompiti } from './StaffCompitiWidget';
 import { campagnaRuoloLabel } from '../lib/campagnaRuoli';
 import { TimerOverlay } from './TimerOverlay';
-import { getPilotNavigationConfig, fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota, carteGetStato, getMissioniEventoAttivo } from '../api';
+import { getPilotNavigationConfig, fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota, carteGetStato, getMissioniEventoAttivo, contrattiGetAccesso } from '../api';
 import packageInfo from '../../package.json';
 import { isWebPushEnabled } from '../lib/webpush';
 import { ensureAppServiceWorker } from '../lib/appServiceWorker';
@@ -20,7 +20,7 @@ Home, QrCode, Zap, TestTube2, Scroll, LogOut, Mail, Backpack,
     Menu, X, UserCog, RefreshCw, Filter, DownloadCloud, ScrollText, 
     ArrowRightLeft, Gamepad2, Loader2, ExternalLink, Tag, Users, Sparkles,
     Pin, PinOff, Briefcase, ClipboardCheck, Globe, ChevronRight, Package, Star,
-    Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard, ListTodo, Wallet
+    Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard, ListTodo, Wallet, FileSignature
 } from 'lucide-react';
 
 // GameTab resta eager: first paint su /app/play (tab di default).
@@ -65,6 +65,7 @@ const TAB_LOADERS = {
   tasks: () => import('./TasksTab.jsx'),
   scommesse: () => import('./ScommesseTab.jsx'),
   carte: () => import('./CarteCollezionabiliTab.jsx'),
+  contratti: () => import('./ContrattiTab.jsx'),
 };
 
 const lazyTab = (id) => lazy(TAB_LOADERS[id]);
@@ -102,6 +103,7 @@ const AVAILABLE_TABS = [
     { id: 'tasks', label: 'Tasks', icon: ListTodo, component: lazyTab('tasks'), requiresModulo: 'tasks', requiresEventoAttivo: true },
     { id: 'scommesse', label: 'Scommesse', icon: Trophy, component: lazyTab('scommesse'), requiresModulo: 'scommesse' },
     { id: 'carte', label: 'Carte', icon: CreditCard, component: lazyTab('carte'), requiresCarteAccess: true, requiresModulo: 'carte' },
+    { id: 'contratti', label: 'Contratti', icon: FileSignature, component: lazyTab('contratti'), requiresContrattiAccess: true, requiresModulo: 'contratti' },
 ];
 
 const DEFAULT_SHORTCUTS = ['inventario', 'abilita', 'messaggi', 'qr'];
@@ -173,6 +175,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const [pilotSaboting, setPilotSaboting] = useState(false);
   const [stivaAccessSigla, setStivaAccessSigla] = useState(DEFAULT_STIVA_ACCESS_STAT_SIGLA);
   const [carteTabEnabled, setCarteTabEnabled] = useState(false);
+  const [contrattiTabEnabled, setContrattiTabEnabled] = useState(false);
   const [tasksEventoAttivo, setTasksEventoAttivo] = useState(false);
   const minigiocoIntentRef = useRef(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -363,6 +366,26 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     return () => { cancelled = true; };
   }, [selectedCharacterId, onLogout]);
 
+  const contrattiModuloOk = canAccessModulo('contratti');
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadContrattiAccesso = async () => {
+      if (!contrattiModuloOk || !selectedCharacterId) {
+        setContrattiTabEnabled(false);
+        return;
+      }
+      try {
+        const stato = await contrattiGetAccesso(selectedCharacterId, onLogout);
+        if (!cancelled) setContrattiTabEnabled(!!stato?.visibile);
+      } catch {
+        if (!cancelled) setContrattiTabEnabled(false);
+      }
+    };
+    loadContrattiAccesso();
+    return () => { cancelled = true; };
+  }, [contrattiModuloOk, selectedCharacterId, onLogout]);
+
   const tasksModuloOk = canAccessModulo('tasks');
 
   useEffect(() => {
@@ -397,9 +420,10 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       if (tab.requiresEventoAttivo && !tasksEventoAttivo) return false;
       if (tab.requiresStivaAccess) return stivaTabEnabled;
       if (tab.requiresCarteAccess) return carteTabEnabled;
+      if (tab.requiresContrattiAccess) return contrattiTabEnabled;
       return true;
     },
-    [stivaTabEnabled, carteTabEnabled, tasksEventoAttivo, canAccessModulo],
+    [stivaTabEnabled, carteTabEnabled, contrattiTabEnabled, tasksEventoAttivo, canAccessModulo],
   );
 
   const [razzaModalOpen, setRazzaModalOpen] = useState(false);

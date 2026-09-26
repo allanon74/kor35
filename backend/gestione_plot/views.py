@@ -274,6 +274,9 @@ class EventoViewSet(viewsets.ModelViewSet):
             for pg in evento.partecipanti.all():
                 if applica_premio_presenza_personaggio(evento, pg, when=now):
                     premi_applicati += 1
+            from personaggi.contratti_service import on_evento_iniziato
+
+            on_evento_iniziato(evento)
         return Response(
             {
                 "ok": True,
@@ -300,8 +303,12 @@ class EventoViewSet(viewsets.ModelViewSet):
         if not evento.started_at or evento.ended_at:
             return Response({"detail": "Evento non in corso."}, status=status.HTTP_400_BAD_REQUEST)
         now = timezone.now()
-        evento.ended_at = now
-        evento.save(update_fields=["ended_at", "updated_at"])
+        with transaction.atomic():
+            evento.ended_at = now
+            evento.save(update_fields=["ended_at", "updated_at"])
+            from personaggi.contratti_service import on_evento_terminato
+
+            on_evento_terminato(evento)
         return Response(
             {
                 "ok": True,
