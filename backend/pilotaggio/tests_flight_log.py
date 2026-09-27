@@ -52,7 +52,7 @@ class FlightLogTests(TestCase):
         self.assertEqual(voce.defcon_post, 2)
 
     def test_log_volo_iniziato(self):
-        log_volo_iniziato(self.sessione, partenza="Alpha", arrivo="Beta")
+        log_volo_iniziato(self.sessione, percorso="Alpha → Beta")
         self.assertTrue(
             VoceDiarioVolo.objects.filter(sessione=self.sessione, categoria="volo_iniziato").exists()
         )

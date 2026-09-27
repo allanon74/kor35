@@ -2118,6 +2118,27 @@ def durata_viaggio_secondi(prefettura_partenza, prefettura_arrivo, defcon_inizia
 CRUISE_VELOCITY_PER_TICK = 36.0
 
 
+def estrai_distanza_percorso(percorso, tick_secondi: float = 5.0) -> tuple[int, int]:
+    """
+    Distanza del viaggio: intero casuale tra minimo e massimo del percorso (inclusi).
+
+    La durata pianificata resta coerente con la crociera nominale
+    (CRUISE_VELOCITY_PER_TICK unità per tick).
+
+    Ritorna (distanza_target, durata_pianificata_secondi).
+    """
+    lo = int(getattr(percorso, "distanza_minima", 1) or 1)
+    hi = int(getattr(percorso, "distanza_massima", lo) or lo)
+    if hi < lo:
+        lo, hi = hi, lo
+    lo = max(1, lo)
+    hi = max(lo, hi)
+    distanza = int(random.randint(lo, hi))
+    interval = max(0.5, float(tick_secondi or 5.0))
+    durata = max(1, int(round(distanza / CRUISE_VELOCITY_PER_TICK * interval)))
+    return distanza, durata
+
+
 def calcola_distanza_target(
     prefettura_partenza,
     prefettura_arrivo,
@@ -2125,8 +2146,9 @@ def calcola_distanza_target(
     tick_secondi: float = 5.0,
 ) -> tuple[int, int]:
     """
-    Distanza obiettivo da durata geografica e velocità di crociera di riferimento.
+    Distanza da geografia delle prefetture (legacy, non usata all'avvio missione).
 
+    L'avvio usa estrai_distanza_percorso sul catalogo PercorsoVolo.
     Ritorna (distanza_target, durata_pianificata_secondi).
     """
     durata_sec = durata_viaggio_secondi(

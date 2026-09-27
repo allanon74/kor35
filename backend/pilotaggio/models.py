@@ -559,6 +559,46 @@ SESSIONE_STATO_CHOICES = [
 DEFCON_MAX = 5
 
 
+class PercorsoVolo(SyncableModel, models.Model):
+    """
+    Tratta configurabile dallo staff.
+
+    All'avvio missione la distanza del volo è un intero casuale
+    compreso tra distanza_minima e distanza_massima (estremi inclusi).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=120)
+    distanza_minima = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        help_text="Distanza minima del viaggio (inclusa).",
+    )
+    distanza_massima = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        help_text="Distanza massima del viaggio (inclusa).",
+    )
+    ordine = models.PositiveIntegerField(default=0)
+    attivo = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Percorso di volo"
+        verbose_name_plural = "Percorsi di volo"
+        ordering = ["ordine", "nome"]
+
+    def clean(self):
+        super().clean()
+        if int(self.distanza_massima or 0) < int(self.distanza_minima or 0):
+            from django.core.exceptions import ValidationError
+
+            raise ValidationError(
+                {"distanza_massima": "Deve essere almeno uguale alla distanza minima."}
+            )
+
+    def __str__(self):
+        return f"{self.nome} ({self.distanza_minima}–{self.distanza_massima})"
+
+
 class SessioneVolo(SyncableModel, models.Model):
     """
     Sessione di volo della nave (singleton operativo: idle/volo condiviso tra i piloti).
@@ -589,6 +629,14 @@ class SessioneVolo(SyncableModel, models.Model):
         related_name="voli_in_arrivo",
         null=True,
         blank=True,
+    )
+    percorso = models.ForeignKey(
+        "pilotaggio.PercorsoVolo",
+        on_delete=models.SET_NULL,
+        related_name="sessioni",
+        null=True,
+        blank=True,
+        help_text="Tratta scelta all'avvio. La distanza è estratta dal suo intervallo.",
     )
     stato = models.CharField(
         max_length=16,

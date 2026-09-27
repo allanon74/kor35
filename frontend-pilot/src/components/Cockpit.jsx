@@ -13,6 +13,15 @@ function defconClass(defcon, defconMax) {
   return `defcon-${Math.min(5, Math.max(0, defcon))}`;
 }
 
+function etichettaRotta(sessione) {
+  if (!sessione) return '—';
+  if (sessione.percorso_nome) return sessione.percorso_nome;
+  const partenza = sessione.partenza_nome;
+  const arrivo = sessione.arrivo_nome;
+  if (partenza && arrivo) return `${partenza} → ${arrivo}`;
+  return partenza || arrivo || '—';
+}
+
 function CountdownBox({ deadlineISO }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -600,7 +609,7 @@ export default function Cockpit({
                   <div style={{ textAlign: 'right' }}>
                     <div className="label">Volo</div>
                     <div>
-                      {sessione.partenza_nome || '—'} {' → '} {sessione.arrivo_nome || '—'}
+                      {etichettaRotta(sessione)}
                     </div>
                   </div>
                   <div className="lcars-corner right" />
@@ -827,7 +836,7 @@ export default function Cockpit({
         <div style={{ textAlign: 'right' }}>
           <div className="label">Volo</div>
           <div>
-            {sessione.partenza_nome || '—'} {' → '} {sessione.arrivo_nome || '—'}
+            {etichettaRotta(sessione)}
           </div>
         </div>
         <div className="lcars-corner right" />

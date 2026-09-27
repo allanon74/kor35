@@ -16,6 +16,7 @@ from unittest.mock import patch
 from pilotaggio.engine import (
     CRUISE_VELOCITY_PER_TICK,
     calcola_distanza_target,
+    estrai_distanza_percorso,
     codice_valido_3char,
     durata_viaggio_secondi,
     genera_evento_se_dovuto,
@@ -175,6 +176,33 @@ class DistanzaTargetTests(TestCase):
         self.assertEqual(dur3, 960)
         self.assertGreater(dist3, dist0)
         self.assertEqual(dist3, self._expected_distanza(960))
+
+
+class EstraiDistanzaPercorsoTests(TestCase):
+    def test_estrae_un_intero_nel_range(self):
+        from pilotaggio.models import PercorsoVolo
+
+        percorso = PercorsoVolo.objects.create(
+            nome="Bosco",
+            distanza_minima=100,
+            distanza_massima=250,
+        )
+        with patch("pilotaggio.engine.random.randint", return_value=180) as rnd:
+            distanza, durata = estrai_distanza_percorso(percorso, tick_secondi=5)
+        rnd.assert_called_once_with(100, 250)
+        self.assertEqual(distanza, 180)
+        self.assertEqual(durata, max(1, int(round(180 / CRUISE_VELOCITY_PER_TICK * 5.0))))
+
+    def test_estremi_uguali(self):
+        from pilotaggio.models import PercorsoVolo
+
+        percorso = PercorsoVolo.objects.create(
+            nome="Corta",
+            distanza_minima=42,
+            distanza_massima=42,
+        )
+        distanza, _durata = estrai_distanza_percorso(percorso)
+        self.assertEqual(distanza, 42)
 
 
 class CountdownTests(TestCase):

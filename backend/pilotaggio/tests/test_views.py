@@ -24,6 +24,7 @@ from personaggi.models import (
 )
 from pilotaggio.models import (
     EventoNave,
+    PercorsoVolo,
     PilotConsoleToken,
     SequenzaVolo,
     SessioneVolo,
@@ -98,6 +99,11 @@ class SessioneEndToEndTests(TestCase):
         era = Era.objects.create(nome="E1", abbreviazione="E1")
         self.partenza = Prefettura.objects.create(era=era, nome="P1")
         self.arrivo = Prefettura.objects.create(era=era, nome="P2")
+        self.percorso = PercorsoVolo.objects.create(
+            nome="Tratta test",
+            distanza_minima=400,
+            distanza_massima=400,
+        )
 
         SequenzaVolo.objects.create(
             tipo=SEQUENZA_DECOLLO, codici=["A12"], attiva=True
@@ -178,7 +184,7 @@ class SessioneEndToEndTests(TestCase):
     def test_start_passa_a_volo_pre_decollo(self):
         res = self.client_api.post(
             "/api/pilot/session/start/",
-            {"prefettura_partenza_id": self.partenza.pk, "prefettura_arrivo_id": self.arrivo.pk},
+            {"percorso_id": str(self.percorso.pk)},
             format="json",
         )
         self.assertEqual(res.status_code, 200, res.content)
@@ -189,7 +195,7 @@ class SessioneEndToEndTests(TestCase):
     def test_command_esegue_sequenza_decollo(self):
         self.client_api.post(
             "/api/pilot/session/start/",
-            {"prefettura_partenza_id": self.partenza.pk, "prefettura_arrivo_id": self.arrivo.pk},
+            {"percorso_id": str(self.percorso.pk)},
             format="json",
         )
         res = self.client_api.post(
@@ -210,7 +216,7 @@ class SessioneEndToEndTests(TestCase):
 
         res_a = self.client_api.post(
             "/api/pilot/session/start/",
-            {"prefettura_partenza_id": self.partenza.pk, "prefettura_arrivo_id": self.arrivo.pk},
+            {"percorso_id": str(self.percorso.pk)},
             format="json",
         )
         self.assertEqual(res_a.status_code, 200, res_a.content)
@@ -237,7 +243,7 @@ class SessioneEndToEndTests(TestCase):
         )
         res = self.client_api.post(
             "/api/pilot/session/start/",
-            {"prefettura_partenza_id": self.partenza.pk, "prefettura_arrivo_id": self.arrivo.pk},
+            {"percorso_id": str(self.percorso.pk)},
             format="json",
         )
         self.assertEqual(res.status_code, 200, res.content)
@@ -245,6 +251,44 @@ class SessioneEndToEndTests(TestCase):
         self.assertEqual(body["energia"]["carburante_attuale"], 120.0)
         self.assertEqual(body["energia"]["storage_attuale"], 80.0)
         self.assertNotEqual(body["sessione"]["id"], str(sessione.pk))
+
+    def test_start_senza_percorso(self):
+        res = self.client_api.post("/api/pilot/session/start/", {}, format="json")
+        self.assertEqual(res.status_code, 400, res.content)
+
+    def test_start_percorso_spento_rifiutato(self):
+        spento = PercorsoVolo.objects.create(
+            nome="Spento",
+            distanza_minima=10,
+            distanza_massima=20,
+            attivo=False,
+        )
+        res = self.client_api.post(
+            "/api/pilot/session/start/",
+            {"percorso_id": str(spento.pk)},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400, res.content)
+
+    def test_start_estrae_distanza_nel_range(self):
+        from unittest.mock import patch
+
+        variabile = PercorsoVolo.objects.create(
+            nome="Variabile",
+            distanza_minima=10,
+            distanza_massima=20,
+        )
+        with patch("pilotaggio.engine.random.randint", return_value=17):
+            res = self.client_api.post(
+                "/api/pilot/session/start/",
+                {"percorso_id": str(variabile.pk)},
+                format="json",
+            )
+        self.assertEqual(res.status_code, 200, res.content)
+        sessione = res.json()["sessione"]
+        self.assertEqual(sessione["distanza_target"], 17.0)
+        self.assertEqual(sessione["percorso_nome"], "Variabile")
+        self.assertEqual(sessione["percorso"], str(variabile.pk))
 
 
 @override_settings(PILOT_CONSOLE_ENABLED=True)

@@ -2109,6 +2109,15 @@ export const staffUpdatePilotComandoCritico = (id, data, onLogout) =>
 export const staffDeletePilotComandoCritico = (id, onLogout) =>
   fetchAuthenticated(`/api/pilot/staff/comandi-critici/${id}/`, { method: 'DELETE' }, onLogout);
 
+export const staffGetPilotPercorsi = (onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/percorsi/', { method: 'GET' }, onLogout);
+export const staffCreatePilotPercorso = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/percorsi/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdatePilotPercorso = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/percorsi/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeletePilotPercorso = (id, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/percorsi/${id}/`, { method: 'DELETE' }, onLogout);
+
 export const staffGetPilotIntensita = (onLogout) =>
   fetchAuthenticated('/api/pilot/staff/intensita/', { method: 'GET' }, onLogout);
 export const staffGetPilotIntensitaById = (id, onLogout) =>

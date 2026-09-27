@@ -32,7 +32,8 @@ Tutti relativi (`/api/pilot/...`):
 - `POST /api/pilot/auth/qr-login/` body `{qr_id}` -> endpoint legacy diretto (compatibilita').
 - `POST /api/pilot/auth/logout/` (header `Authorization: PilotToken <t>`).
 - `GET  /api/pilot/session/state/` -> stato runtime (sessione, evento attivo, sottosistemi, sequenze).
-- `POST /api/pilot/session/start/` body `{prefettura_partenza_id, prefettura_arrivo_id}`.
+- `GET  /api/pilot/percorsi/` -> percorsi attivi (nome, distanza minima/massima).
+- `POST /api/pilot/session/start/` body `{percorso_id}`. La distanza è un intero casuale tra minimo e massimo del percorso.
 - `POST /api/pilot/session/command/` body `{codice}` (3 char, ultimo numerico).
 - `POST /api/pilot/session/abort/`.
 - `GET  /api/pilot/session/history/`.
@@ -61,7 +62,7 @@ Staff (richiede `is_staff`):
 - Sottosistema offline (QR `0SA`): codici col primo carattere relativo falliscono.
 - Ripristino sottosistema (QR `0RI`): online dopo `durata_ripristino_secondi` (default 60s).
 - Sequenze decollo/atterraggio obbligatorie e configurabili.
-- Durata viaggio: 10 min stessa prefettura, 30 min stessa regione, 60 min altrimenti, +20% per livello DEFCON di partenza.
+- Distanza viaggio: catalogo staff **Pilotaggio → Percorsi** (nome, distanza minima, distanza massima). All'avvio si estrae un valore casuale nell'intervallo. La durata pianificata segue la crociera nominale.
 
 ## Comandi operativi (Docker-first)
 

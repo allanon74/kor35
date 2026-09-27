@@ -81,10 +81,10 @@ export const api = {
     return request(path);
   },
   catalog: () => request('/api/pilot/catalog/'),
-  prefetture: () => request('/api/pilot/prefetture/'),
-  startSession: (partenzaId, arrivoId) => request('/api/pilot/session/start/', {
+  percorsi: () => request('/api/pilot/percorsi/'),
+  startSession: (percorsoId) => request('/api/pilot/session/start/', {
     method: 'POST',
-    body: { prefettura_partenza_id: partenzaId, prefettura_arrivo_id: arrivoId },
+    body: { percorso_id: percorsoId },
   }),
   command: (codice) => request('/api/pilot/session/command/', {
     method: 'POST', body: { codice },

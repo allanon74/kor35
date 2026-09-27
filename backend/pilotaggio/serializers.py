@@ -15,6 +15,7 @@ from .models import (
     EventoAttivoSessione,
     EventoNave,
     IntensitaComando,
+    PercorsoVolo,
     PilotConsoleToken,
     PilotRuntimeConfig,
     SequenzaVolo,
@@ -152,6 +153,45 @@ class ComandoNaveSerializer(serializers.ModelSerializer):
         model = ComandoNave
         fields = ["id", "codice", "nome", "descrizione", "attivo"]
         read_only_fields = ["id"]
+
+
+class PercorsoVoloSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PercorsoVolo
+        fields = [
+            "id",
+            "nome",
+            "distanza_minima",
+            "distanza_massima",
+            "ordine",
+            "attivo",
+        ]
+        read_only_fields = ["id"]
+
+    def validate(self, attrs):
+        minima = attrs.get(
+            "distanza_minima",
+            getattr(self.instance, "distanza_minima", None),
+        )
+        massima = attrs.get(
+            "distanza_massima",
+            getattr(self.instance, "distanza_massima", None),
+        )
+        nome = attrs.get("nome", getattr(self.instance, "nome", ""))
+        if not str(nome or "").strip():
+            raise serializers.ValidationError({"nome": "Il nome del percorso è obbligatorio."})
+        if minima is None or massima is None:
+            raise serializers.ValidationError("Distanza minima e massima sono obbligatorie.")
+        if int(minima) < 1:
+            raise serializers.ValidationError(
+                {"distanza_minima": "La distanza minima deve essere almeno 1."}
+            )
+        if int(massima) < int(minima):
+            raise serializers.ValidationError(
+                {"distanza_massima": "Deve essere almeno uguale alla distanza minima."}
+            )
+        attrs["nome"] = str(nome).strip()
+        return attrs
 
 
 class IntensitaComandoSerializer(serializers.ModelSerializer):
@@ -423,6 +463,12 @@ class SessioneVoloSerializer(serializers.ModelSerializer):
     arrivo_nome = serializers.CharField(
         source="prefettura_arrivo.nome", read_only=True, default=None
     )
+    percorso_nome = serializers.SerializerMethodField()
+
+    def get_percorso_nome(self, obj):
+        from .flight_log import etichetta_rotta
+
+        return etichetta_rotta(obj)
 
     class Meta:
         model = SessioneVolo
@@ -442,8 +488,10 @@ class SessioneVoloSerializer(serializers.ModelSerializer):
             "pilota_nome",
             "prefettura_partenza",
             "prefettura_arrivo",
+            "percorso",
             "partenza_nome",
             "arrivo_nome",
+            "percorso_nome",
             "tick_secondi",
             "carburante_massimo",
             "carburante_attuale",

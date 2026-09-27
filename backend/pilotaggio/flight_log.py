@@ -92,12 +92,25 @@ def registra_voce_diario(
         logger.exception("Impossibile registrare voce diario volo sessione=%s", sessione.pk)
 
 
-def log_volo_iniziato(sessione, *, partenza: str, arrivo: str) -> None:
+def etichetta_rotta(sessione) -> str | None:
+    """Nome percorso, oppure partenza → arrivo per i voli ancora legati alle prefetture."""
+    percorso = getattr(sessione, "percorso", None)
+    nome = getattr(percorso, "nome", None) if percorso is not None else None
+    if nome:
+        return str(nome)
+    partenza = getattr(getattr(sessione, "prefettura_partenza", None), "nome", None)
+    arrivo = getattr(getattr(sessione, "prefettura_arrivo", None), "nome", None)
+    if partenza and arrivo:
+        return f"{partenza} → {arrivo}"
+    return partenza or arrivo or None
+
+
+def log_volo_iniziato(sessione, *, percorso: str) -> None:
     registra_voce_diario(
         sessione,
         "volo_iniziato",
-        f"Nuovo volo pianificato: {partenza} → {arrivo}. DEFCON iniziale 0.",
-        dati={"partenza": partenza, "arrivo": arrivo},
+        f"Nuovo volo pianificato: {percorso}. DEFCON iniziale 0.",
+        dati={"percorso": percorso},
         defcon_pre=0,
         defcon_post=0,
     )
@@ -285,6 +298,7 @@ def riepilogo_sessione_per_pilota(sessione) -> dict:
         else "",
         "partenza_nome": getattr(sessione.prefettura_partenza, "nome", None),
         "arrivo_nome": getattr(sessione.prefettura_arrivo, "nome", None),
+        "percorso_nome": etichetta_rotta(sessione),
         "started_at": sessione.started_at.isoformat() if sessione.started_at else None,
         "ended_at": sessione.ended_at.isoformat() if sessione.ended_at else None,
         "durata_secondi": durata,
