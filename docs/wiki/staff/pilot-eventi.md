@@ -59,3 +59,7 @@ Paralleli alle regole JSON, ancora supportati:
 | Peso random | Frequenza relativa nel sorteggio |
 
 ---
+
+## Vedi anche
+
+La **Console Scientifica** legge il fenomeno in corso e può allungare i tick, sopprimere una valutazione CA o abbassare il DEFCON senza chiudere l'evento. Istruzioni: pagina **Console Scientifica — utilizzo**.

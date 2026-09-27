@@ -113,3 +113,5 @@ Aggiungi `&tab=stiva` o `&tab=matrice` per aprire una scheda.
 ## Non confondere
 
 La plancia di **navigazione** (doppio HDMI, status + control) resta `deploy/raspberry-pilot-kiosk/`. Questo Pi non la sostituisce.
+
+Come si gioca la **Console Scientifica** (spettro, scan, matrice, interventi) è nella pagina **Console Scientifica — utilizzo**.

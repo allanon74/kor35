@@ -8,6 +8,7 @@ Pagine **solo staff** nella Wiki KOR, sincronizzate nel DB (`PaginaRegolamento`)
 |------|--------|
 | `manifest.json` | Slug, titoli, ordine menu, elenco pagine |
 | `make-comandi.md` | Tutti i comandi `make` |
+| `console-scientifica.md` | Utilizzo Console Scientifica (spettro, scan, matrice, interventi) |
 | `mirror-pi.md` | Procedure mirror Raspberry Pi |
 | `card-studio-sette-elegie.md` | Card Studio — creare carta Sette Elegie |
 
