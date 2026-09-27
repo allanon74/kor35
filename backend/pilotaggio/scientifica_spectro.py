@@ -338,6 +338,38 @@ def _valida_consumo_scan(cfg, componenti_scelti: list) -> Tuple[bool, str, List[
     return valida_selezione_componenti(_FakeSS(), componenti_scelti)
 
 
+def _indizi_sistemi(
+    regole: dict,
+    stati_by_key: dict,
+    direzione_evento: str,
+    *,
+    max_sistemi: int = 2,
+) -> List[dict]:
+    """Uno o due sottosistemi ancora da regolare, senza livello né operatore."""
+    from .engine import _eval_soluzione_totale
+
+    if _eval_soluzione_totale(regole, stati_by_key, direzione_evento):
+        return []
+    visti: List[dict] = []
+    seen = set()
+    for sezione in ("st", "sp"):
+        for cond in _conditions_from_regole(regole or {}, sezione):
+            if not _hint_condizione(cond, stati_by_key, direzione_evento):
+                continue
+            ss = str(cond.get("sottosistema") or "").strip().upper()[:1]
+            if not ss or ss in seen:
+                continue
+            seen.add(ss)
+            stato = stati_by_key.get(ss)
+            nome = (
+                getattr(getattr(stato, "sottosistema", None), "nome", ss) if stato else ss
+            )
+            visti.append({"codice": ss, "nome": nome})
+            if len(visti) >= max_sistemi:
+                return visti
+    return visti
+
+
 def _soluzione_rivelabile(
     regole: dict,
     stati_by_key: dict,
@@ -377,6 +409,7 @@ def build_spectrografia_evento(sessione, istanza) -> dict:
         ),
         "direzione_evento": direzione,
         "firma_spettrale": _firma_spettrale(regole),
+        "indizi_sistemi": _indizi_sistemi(regole, stati_by_key, direzione),
         "stato_soluzione": _stato_sp_st(regole, stati_by_key, direzione),
         "rischio_ca": _stato_rischio_ca(istanza, regole, stati_by_key, direzione),
         "cronometro": _cronometro_evento(sessione, istanza),
