@@ -90,12 +90,65 @@ class ScientificaSpectroTests(TestCase):
             direzione_evento="destra",
         )
 
-    def test_spectrografia_delta_e_firma(self):
+    def test_spectrografia_non_rivela_la_soluzione(self):
         payload = build_spectrografia_evento(self.sessione, self.istanza)
         self.assertEqual(payload["evento_nome"], "Shear test")
         self.assertTrue(payload["firma_spettrale"])
-        self.assertTrue(any("G" in d for d in payload["delta_navigazione"]))
+        self.assertNotIn("delta_navigazione", payload)
         self.assertEqual(payload["stato_soluzione"]["codice"], "sp_ok")
+        self.assertNotIn("G", payload["stato_soluzione"]["descrizione"])
+
+    def test_scan_profondo_rivela_la_soluzione(self):
+        from personaggi.models import Mattone
+        from pilotaggio.componenti_nave_constants import AURA_COMPONENTI_SIGLA
+
+        mattone = Mattone.objects.filter(aura__sigla=AURA_COMPONENTI_SIGLA).first()
+        staff_modifica_stiva(mattone_id=str(mattone.pk), delta=2)
+        res = esegui_scan_profondo(
+            componenti_scelti=[{"mattone_id": str(mattone.pk), "quantita": 1}],
+        )
+        voci = res["scan_eseguito"]["voci"]
+        self.assertTrue(any("G" in voce for voce in voci))
+        self.istanza.refresh_from_db()
+        self.assertEqual(self.istanza.scan_profondo_hint_json["voci"], voci)
+
+    def test_due_eventi_scan_su_quello_scelto(self):
+        from personaggi.models import Mattone
+        from pilotaggio.componenti_nave_constants import AURA_COMPONENTI_SIGLA
+
+        altro = EventoNave.objects.create(
+            nome="Secondo fenomeno",
+            descrizione="Secondo fenomeno di prova",
+            codice_soluzione_esatta="ZZ9",
+            regole_json=self.evento.regole_json,
+            attivo=True,
+        )
+        secondo = EventoAttivoSessione.objects.create(
+            sessione=self.sessione,
+            evento=altro,
+            deadline_at=timezone.now(),
+            ticks_rimanenti=3,
+            esito=EVENTO_ESITO_PENDING,
+        )
+        stato = build_scientifica_state_payload()
+        self.assertEqual(len(stato["fenomeni"]), 2)
+        self.assertEqual(stato["evento_selezionato"], str(secondo.pk))
+        mirato = build_scientifica_state_payload(evento_id=str(self.istanza.pk))
+        self.assertEqual(mirato["spettrografia"]["evento_nome"], "Shear test")
+
+        with self.assertRaisesMessage(ValueError, "scansionare"):
+            esegui_scan_profondo(componenti_scelti=[])
+
+        mattone = Mattone.objects.filter(aura__sigla=AURA_COMPONENTI_SIGLA).first()
+        staff_modifica_stiva(mattone_id=str(mattone.pk), delta=2)
+        esegui_scan_profondo(
+            componenti_scelti=[{"mattone_id": str(mattone.pk), "quantita": 1}],
+            evento_id=str(self.istanza.pk),
+        )
+        self.istanza.refresh_from_db()
+        secondo.refresh_from_db()
+        self.assertTrue(self.istanza.scan_profondo_eseguito)
+        self.assertFalse(secondo.scan_profondo_eseguito)
 
     def test_scan_profondo_consuma_componente(self):
         from personaggi.models import Mattone
