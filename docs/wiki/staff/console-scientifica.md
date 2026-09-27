@@ -60,9 +60,9 @@ A fine volo coerenza, fasi della matrice e carica si azzerano.
 
 ## Spettro
 
-La scheda **Spettro** è utile solo con un evento in corso (`pending`). Mostra nome del fenomeno, firma spettrale (quali gruppi di bordo sono coinvolti, senza la ricetta), se ST o SP risultano già soddisfatti, il rischio CA e il countdown a tick.
+La scheda **Spettro** è utile solo con un evento in corso (`pending`). Mostra nome del fenomeno, firma spettrale (quali gruppi di bordo sono coinvolti), **uno o due sistemi** ancora da regolare (sigla e nome, senza il livello), se ST o SP risultano già soddisfatti, il rischio CA e il countdown a tick.
 
-Non elenca i livelli da impostare. Quella ricetta esce solo dallo **Scan profondo**.
+Non dice di quanto alzare o abbassare. Quella ricetta esce solo dallo **Scan profondo**.
 
 Se ci sono due o più fenomeni insieme, sulla scheda si sceglie quale leggere. Lo scienziato comunica al pilota il nome e la firma, non la soluzione (vedi **Pilotaggio — eventi ST/SP/CA**).
 

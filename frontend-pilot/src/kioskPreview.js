@@ -67,6 +67,10 @@ export const PREVIEW_SCIENTIFICA = {
       { gruppo: 'Termico', intensita: 41, colore: '#ff8a65' },
       { gruppo: 'Esotico', intensita: 18, colore: '#ce93d8' },
     ],
+    indizi_sistemi: [
+      { codice: 'V', nome: 'Sensori prodieri' },
+      { codice: 'E', nome: 'Deflettori' },
+    ],
     rischio_ca: {
       livello: 'elevato',
       etichetta: 'Rischio elevato',

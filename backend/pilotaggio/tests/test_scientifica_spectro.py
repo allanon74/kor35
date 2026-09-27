@@ -95,8 +95,43 @@ class ScientificaSpectroTests(TestCase):
         self.assertEqual(payload["evento_nome"], "Shear test")
         self.assertTrue(payload["firma_spettrale"])
         self.assertNotIn("delta_navigazione", payload)
+        self.assertEqual([row["codice"] for row in payload["indizi_sistemi"]], ["G"])
+        self.assertEqual(payload["indizi_sistemi"][0]["nome"], "Point Defense")
+        self.assertNotIn("livello", str(payload["indizi_sistemi"]).lower())
         self.assertEqual(payload["stato_soluzione"]["codice"], "sp_ok")
         self.assertNotIn("G", payload["stato_soluzione"]["descrizione"])
+
+    def test_spettro_indica_al_massimo_due_sistemi(self):
+        ss_h, _ = SottosistemaNave.objects.update_or_create(
+            codice="H",
+            defaults={"nome": "Scafo", "gruppo": "Difesa", "attivo": True},
+        )
+        ss_k, _ = SottosistemaNave.objects.update_or_create(
+            codice="K",
+            defaults={"nome": "Chiglia", "gruppo": "Propulsione e Manovra", "attivo": True},
+        )
+        for ss in (ss_h, ss_k):
+            StatoSottosistemaSessione.objects.create(
+                sessione=self.sessione,
+                sottosistema=ss,
+                online=True,
+                livello_attuale=1,
+                livello_target=1,
+            )
+        self.evento.regole_json = {
+            "st": {
+                "_conditions": [
+                    {"sottosistema": "G", "op": ">=", "value": 8},
+                    {"sottosistema": "H", "op": ">=", "value": 7},
+                    {"sottosistema": "K", "op": ">=", "value": 6},
+                ],
+            },
+        }
+        self.evento.save(update_fields=["regole_json", "updated_at"])
+        payload = build_spectrografia_evento(self.sessione, self.istanza)
+        codici = [row["codice"] for row in payload["indizi_sistemi"]]
+        self.assertEqual(codici, ["G", "H"])
+        self.assertNotIn("8", str(payload["indizi_sistemi"]))
 
     def test_scan_profondo_rivela_la_soluzione(self):
         from personaggi.models import Mattone
