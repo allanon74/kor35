@@ -2462,18 +2462,182 @@ class PilotCompattatoreEnergizzaMinimoView(APIView):
         return Response(payload)
 
 
+def _pilot_console_feature_enabled() -> bool:
+    return bool(getattr(settings, "PILOT_CONSOLE_ENABLED", False))
+
+
+def _create_role_login_ticket(request, ruolo: str):
+    durata_secondi = int(request.data.get("durata_secondi") or 120)
+    durata_secondi = max(30, min(durata_secondi, 300))
+    ticket = PilotConsoleLoginTicket.objects.create(
+        codice=PilotConsoleLoginTicket.genera_codice(),
+        expires_at=timezone.now() + timedelta(seconds=durata_secondi),
+        ruolo=ruolo,
+    )
+    claim_path = reverse("pilot-ticket-claim", kwargs={"ticket_id": ticket.pk})
+    claim_url = request.build_absolute_uri(f"{claim_path}?c={ticket.codice}")
+    return Response(
+        {
+            "ticket_id": str(ticket.pk),
+            "codice": ticket.codice,
+            "ruolo": ruolo,
+            "expires_at": ticket.expires_at.isoformat(),
+            "claim_url": claim_url,
+            "stat_sigla": _stat_accesso_per_ruolo_ticket(ruolo),
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+def _auto_login_per_sigla(sigla: str):
+    """Token console per il primo personaggio con la statistica richiesta > 0."""
+    pilota = None
+    for pg in Personaggio.objects.all().order_by("nome"):
+        if int(pg.get_valore_statistica(sigla) or 0) > 0:
+            pilota = pg
+            break
+    if pilota is None:
+        pilota = Personaggio.objects.order_by("nome").first()
+    if pilota is None:
+        return None
+    with transaction.atomic():
+        existing = (
+            PilotConsoleToken.objects.select_for_update()
+            .filter(pilota=pilota, revocato_at__isnull=True)
+            .order_by("-created_at")
+            .first()
+        )
+        if existing:
+            return existing, "auto_reuse", pilota
+        token_obj = PilotConsoleToken.objects.create(
+            pilota=pilota, token=PilotConsoleToken.genera_token()
+        )
+        return token_obj, "auto", pilota
+
+
+class CompattatoreConsoleEnabledView(APIView):
+    """GET /api/pilot/compattatore/console-enabled/ — flag e sigla ingegneria dai settaggi."""
+
+    authentication_classes: list = []
+    permission_classes: list = [permissions.AllowAny]
+
+    def get(self, request):
+        cfg = PilotRuntimeConfig.get_solo()
+        sigla = ingegneria_stat_sigla(cfg)
+        return Response(
+            {
+                "enabled": bool(cfg.compattatore_console_abilitata) and _pilot_console_feature_enabled(),
+                "login_required": _login_required_compattatore(),
+                "compattatore_stat_accesso_sigla": sigla,
+                "requisito": f"{sigla} > 0",
+            }
+        )
+
+
+class CompattatoreConsoleAutoLoginView(APIView):
+    authentication_classes: list = []
+    permission_classes: list = [permissions.AllowAny]
+
+    def post(self, request):
+        if _login_required_compattatore():
+            return Response(
+                {"error": "Login obbligatorio: auto-login disabilitato."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        cfg = PilotRuntimeConfig.get_solo()
+        if not cfg.compattatore_console_abilitata:
+            return Response({"error": "Console ingegneria disabilitata."}, status=status.HTTP_403_FORBIDDEN)
+        issued = _auto_login_per_sigla(ingegneria_stat_sigla(cfg))
+        if issued is None:
+            return Response(
+                {"error": "Nessun personaggio disponibile per auto-login."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        token_obj, mode, pilota = issued
+        return Response(
+            {
+                "token": token_obj.token,
+                "operatore": {"id": pilota.pk, "nome": getattr(pilota, "nome", str(pilota))},
+                "mode": mode,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class CompattatoreConsoleTicketCreateView(APIView):
+    """QR login Console Ingegneria: il claim verifica la sigla impostata nello staff (default 0IN)."""
+
+    authentication_classes: list = []
+    permission_classes: list = [permissions.AllowAny]
+
+    def post(self, request):
+        cfg = PilotRuntimeConfig.get_solo()
+        if not cfg.compattatore_console_abilitata:
+            return Response({"error": "Console ingegneria disabilitata."}, status=status.HTTP_403_FORBIDDEN)
+        if not _login_required_compattatore():
+            return Response(
+                {"error": "Login ticket disattivato (console senza login)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not _pilot_console_feature_enabled():
+            return Response(
+                {"error": "Console pilota disabilitata su questo ambiente."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return _create_role_login_ticket(request, "ingegneria")
+
+
+class StationConsolesView(APIView):
+    """
+    GET /api/pilot/station/consoles/
+    Scelta kiosk singolo schermo: ingegneria e scientifica, con sigla dai settaggi.
+    """
+
+    authentication_classes: list = []
+    permission_classes: list = [permissions.AllowAny]
+
+    def get(self, request):
+        cfg = PilotRuntimeConfig.get_solo()
+        pilot_on = _pilot_console_feature_enabled()
+        ing_sigla = ingegneria_stat_sigla(cfg)
+        sci_sigla = scientifica_stat_sigla(cfg)
+        return Response(
+            {
+                "ingegneria": {
+                    "id": "ingegneria",
+                    "nome": "Console Ingegneria",
+                    "enabled": pilot_on and bool(cfg.compattatore_console_abilitata),
+                    "login_required": _login_required_compattatore(),
+                    "sigla": ing_sigla,
+                    "requisito": f"{ing_sigla} > 0",
+                    "screen": "compattatore",
+                },
+                "scientifica": {
+                    "id": "scientifica",
+                    "nome": "Console Scientifica",
+                    "enabled": pilot_on and bool(cfg.scientifica_console_abilitata),
+                    "login_required": _login_required_scientifica(),
+                    "sigla": sci_sigla,
+                    "requisito": f"{sci_sigla} > 0",
+                    "screen": "scientifica",
+                },
+            }
+        )
+
+
 class ScientificaConsoleEnabledView(APIView):
     authentication_classes: list = []
     permission_classes: list = [permissions.AllowAny]
 
     def get(self, request):
         cfg = PilotRuntimeConfig.get_solo()
+        sigla = scientifica_stat_sigla(cfg)
         return Response(
             {
-                "enabled": bool(cfg.scientifica_console_abilitata)
-                and bool(getattr(settings, "PILOT_CONSOLE_ENABLED", False)),
+                "enabled": bool(cfg.scientifica_console_abilitata) and _pilot_console_feature_enabled(),
                 "login_required": _login_required_scientifica(),
-                "scientifica_stat_accesso_sigla": scientifica_stat_sigla(cfg),
+                "scientifica_stat_accesso_sigla": sigla,
+                "requisito": f"{sigla} > 0",
             }
         )
 

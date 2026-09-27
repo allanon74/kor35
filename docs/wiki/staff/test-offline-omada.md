@@ -185,6 +185,8 @@ Default: `https://www.kor35.it` — schermo grande = `status`, piccolo = `contro
 
 Verifica: `systemctl status kiosk-master.service`
 
+Il pannello touch 7" (ingegneria o scientifica) usa `deploy/raspberry-station-kiosk/` e `systemctl status kiosk-station.service`. Vedi la pagina «Console stazione — kiosk 800×480».
+
 ### Passo 10 — Checklist finale offline
 
 | # | Verifica | OK? |

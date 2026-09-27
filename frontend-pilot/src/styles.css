@@ -3991,6 +3991,7 @@ select, input[type=text], input[type=number] {
   background: linear-gradient(90deg, #66bb6a, #43a047);
 }
 
+.sci-risonanza-badge {
   display: inline-block;
   margin-top: 0.5rem;
   font-size: 0.72rem;
@@ -4075,5 +4076,378 @@ select, input[type=text], input[type=number] {
   grid-column: 1 / -1;
   font-size: 0.72rem;
   color: #78909c;
+}
+
+/* --- Login QR e stazione kiosk 800×480 --- */
+.qr-box {
+  display: flex;
+  justify-content: center;
+  padding: 0.4rem;
+}
+
+.login-qr-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 0.6rem;
+}
+
+.login-qr-req {
+  margin-top: 0.45rem;
+}
+
+.station-picker {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.7rem 0.75rem 0.45rem;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0, 229, 255, 0.08), transparent 55%),
+    #04070d;
+}
+
+.station-picker-head h1 {
+  margin: 0.15rem 0 0;
+  color: #ffe066;
+  font-size: 1.35rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.station-picker-kicker {
+  color: #5fa8d4;
+  font-size: 0.68rem;
+  letter-spacing: 0.22em;
+}
+
+.station-picker-note,
+.station-picker-error {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.station-picker-error { color: #ff9d9d; }
+
+.station-picker-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
+.station-choice {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 0.3rem;
+  padding: 0.8rem;
+  text-align: left;
+  border: 1px solid rgba(95, 168, 212, 0.45);
+  background: linear-gradient(165deg, rgba(12, 32, 52, 0.95), rgba(6, 12, 22, 0.98));
+  color: #d4f0ff;
+  min-height: 8rem;
+}
+
+.station-choice:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.station-choice-kicker {
+  font-size: 0.62rem;
+  letter-spacing: 0.2em;
+  color: #5fa8d4;
+}
+
+.station-choice-title {
+  font-size: 1.25rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffe066;
+  font-weight: 700;
+}
+
+.station-choice-detail {
+  font-size: 0.78rem;
+  color: #9ec9e6;
+}
+
+.station-picker-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  color: #6a8aa8;
+  font-size: 0.68rem;
+}
+
+.station-retry {
+  border: 1px solid rgba(95, 168, 212, 0.45);
+  background: transparent;
+  color: #d4f0ff;
+  padding: 0.35rem 0.6rem;
+  min-height: 2rem;
+}
+
+.compattatore-panel[hidden],
+.compattatore-stiva-deck[hidden],
+.sci-panel[hidden] {
+  display: none !important;
+}
+
+.kiosk800-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.25rem;
+  flex: 0 0 auto;
+}
+
+.kiosk800-tab {
+  min-height: 2.1rem;
+  border: 1px solid rgba(95, 168, 212, 0.4);
+  background: #0c1828;
+  color: #9ec9e6;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.kiosk800-tab.is-active {
+  background: #14324d;
+  color: #ffe066;
+  border-color: #ffe066;
+}
+
+.kiosk800-back {
+  padding: 0.3rem 0.45rem;
+  font-size: 0.62rem;
+}
+
+html.viewport-800,
+html.viewport-800 body,
+html.viewport-800 #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+html.viewport-800-frame {
+  background: #000;
+}
+
+html.viewport-800-frame body {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+html.viewport-800-frame #root {
+  width: 800px;
+  height: 480px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px #222;
+}
+
+html.viewport-800 .app-shell,
+html.viewport-800 .app-shell-station,
+html.viewport-800 .app-shell-compattatore,
+html.viewport-800 .app-shell-scientifica {
+  height: 100%;
+  min-height: 0;
+}
+
+html.viewport-800 .app-shell-compattatore > main,
+html.viewport-800 .app-shell-scientifica > main,
+html.viewport-800 .app-shell > main {
+  min-height: 0;
+  overflow: hidden;
+}
+
+html.viewport-800 .app-shell-scientifica main {
+  min-height: 0;
+}
+
+html.viewport-800 .banner {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+}
+
+html.viewport-800 .login-qr-screen {
+  padding: 0.25rem 0.4rem;
+  justify-content: flex-start;
+}
+
+html.viewport-800 .login-qr-screen h1 {
+  font-size: 0.92rem;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.15rem;
+}
+
+html.viewport-800 .login-qr-screen > p {
+  margin-bottom: 0.25rem;
+  font-size: 0.72rem;
+}
+
+html.viewport-800 .login-qr-card {
+  padding: 0.35rem 0.45rem;
+}
+
+html.viewport-800 .qr-box svg {
+  width: 168px !important;
+  height: 168px !important;
+}
+
+html.viewport-800 .login-qr-screen .note {
+  margin-bottom: 0.15rem;
+  font-size: 0.68rem;
+}
+
+html.viewport-800 .login-qr-actions {
+  margin-top: 0.3rem;
+}
+
+html.viewport-800 .login-qr-actions .btn {
+  min-height: 2.1rem;
+  padding: 0.35rem 0.7rem;
+}
+
+html.viewport-800 .compattatore-console.is-kiosk800,
+html.viewport-800 .scientifica-console.is-kiosk800 {
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0.2rem 0.3rem 0.15rem;
+  gap: 0.25rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+html.viewport-800 .compattatore-hud,
+html.viewport-800 .scientifica-hud {
+  padding: 0.2rem 0.35rem;
+  margin: 0;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+html.viewport-800 .compattatore-hud-kicker,
+html.viewport-800 .scientifica-hud-kicker {
+  display: none;
+}
+
+html.viewport-800 .compattatore-hud-title,
+html.viewport-800 .scientifica-hud-title {
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+}
+
+html.viewport-800 .comp-energy-meter { min-width: 72px; }
+
+html.viewport-800 .kiosk800-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+html.viewport-800 .compattatore-columns {
+  display: block;
+}
+
+html.viewport-800 .compattatore-panel,
+html.viewport-800 .sci-panel {
+  min-height: 0;
+  padding: 0.4rem 0.45rem;
+  gap: 0.4rem;
+}
+
+html.viewport-800 .compattatore-panel--fuel { margin: 0; }
+
+html.viewport-800 .compattatore-panel-title,
+html.viewport-800 .sci-panel h2 {
+  font-size: 0.78rem;
+  margin-bottom: 0.25rem;
+}
+
+html.viewport-800 .compattatore-panel-sub,
+html.viewport-800 .sci-muted,
+html.viewport-800 .sci-event-desc {
+  font-size: 0.68rem;
+  line-height: 1.3;
+}
+
+html.viewport-800 .comp-op-row { gap: 0.3rem; }
+
+html.viewport-800 .comp-btn--op,
+html.viewport-800 .sci-btn,
+html.viewport-800 .sci-fase-btn {
+  min-height: 2.15rem;
+}
+
+html.viewport-800 .comp-fuel-gauges {
+  gap: 0.35rem;
+  margin: 0.2rem 0;
+}
+
+html.viewport-800 .comp-fuel-gauges strong { font-size: 0.85rem; }
+
+html.viewport-800 .stiva-color-box { min-height: 52px; padding: 0.25rem; }
+
+html.viewport-800 .stiva-color-box-qty { font-size: 1.15rem; }
+
+html.viewport-800 .stiva-color-box-name { font-size: 0.58rem; }
+
+html.viewport-800 .compattatore-stiva-deck .stiva-pairs-grid {
+  grid-template-columns: 1fr;
+}
+
+html.viewport-800 .scientifica-grid { display: block; }
+
+html.viewport-800 .sci-band-row {
+  grid-template-columns: 4.2rem 1fr 2rem;
+  font-size: 0.68rem;
+}
+
+html.viewport-800 .sci-matrice-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+
+html.viewport-800 .sci-nucleo-card { padding: 0.35rem; }
+
+html.viewport-800 .sci-nucleo-name { display: none; }
+
+html.viewport-800 .sci-coerenza-slim {
+  margin: 0;
+  padding: 0.25rem 0.4rem;
+}
+
+html.viewport-800 .sci-coerenza-slim .sci-muted,
+html.viewport-800 .sci-coerenza-slim .sci-risonanza-badge {
+  display: none;
+}
+
+html.viewport-800 .sci-coerenza-head { font-size: 0.68rem; margin-bottom: 0.15rem; }
+
+html.viewport-800 .compattatore-footer,
+html.viewport-800 .scientifica-footer {
+  margin: 0;
+  padding: 0.15rem 0;
+  border: 0;
+}
+
+html.viewport-800 .scientifica-footer .sci-muted { display: none; }
+
+html.viewport-800 .compattatore-footer .comp-btn,
+html.viewport-800 .scientifica-footer .sci-btn {
+  min-height: 1.8rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.62rem;
 }
 

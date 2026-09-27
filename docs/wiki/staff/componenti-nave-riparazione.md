@@ -170,7 +170,7 @@ Usa **Anteprima** (`dry_run: true`) per verificare i codici senza salvare.
 
 ### Console
 
-URL kiosk: `/pilot/?screen=compattatore`
+URL kiosk: `/pilot/?screen=compattatore` (sul Pi 7" 800×480 passa dalla scelta `/pilot/?screen=station&viewport=800x480`; il QR chiede la sigla ingegneria impostata nello staff)
 
 - **Energia**: a ogni tick pilota, `accumulatore += livello_Z` (max operativo a soglia **9**)
 - **Compressione 2:1**: consuma 2 unità del componente selezionato → 1 unità dell’indice successivo (anello 0↔9)

@@ -95,6 +95,22 @@ urlpatterns = [
         name="pilot-staff-eventi-aggiorna-codici",
     ),
     path("stiva/", views.PilotStivaView.as_view(), name="pilot-stiva"),
+    path(
+        "compattatore/console-enabled/",
+        views.CompattatoreConsoleEnabledView.as_view(),
+        name="compattatore-console-enabled",
+    ),
+    path(
+        "compattatore/auth/auto-login/",
+        views.CompattatoreConsoleAutoLoginView.as_view(),
+        name="compattatore-auto-login",
+    ),
+    path(
+        "compattatore/auth/console-ticket/",
+        views.CompattatoreConsoleTicketCreateView.as_view(),
+        name="compattatore-ticket-create",
+    ),
+    path("station/consoles/", views.StationConsolesView.as_view(), name="pilot-station-consoles"),
     path("compattatore/state/", views.PilotCompattatoreStateView.as_view(), name="pilot-compattatore-state"),
     path(
         "compattatore/compressione/",

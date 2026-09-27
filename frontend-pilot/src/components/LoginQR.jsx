@@ -10,7 +10,18 @@ const POLL_MS = 2000;
  * - il telefono del giocatore loggato conferma;
  * - la console polla lo stato e riceve il token finale.
  */
-export default function LoginQR({ createTicket, pollTicket, onAuthorized, error, navigazioneStatSigla = '0PI' }) {
+export default function LoginQR({
+  createTicket,
+  pollTicket,
+  onAuthorized,
+  error,
+  navigazioneStatSigla = '0PI',
+  title = 'KOR-35 // CONSOLE PILOTA',
+  lead = 'Scannerizza questo QR con lo smartphone del giocatore.',
+  requisito = null,
+  onBack = null,
+  previewClaimUrl = '',
+}) {
   const [ticket, setTicket] = useState(null);
   const [statusText, setStatusText] = useState('Inizializzazione...');
   const [localError, setLocalError] = useState('');
@@ -70,32 +81,45 @@ export default function LoginQR({ createTicket, pollTicket, onAuthorized, error,
   }, [createTicket, onAuthorized, pollTicket, stopTimers]);
 
   useEffect(() => {
+    if (previewClaimUrl) {
+      setTicket({ claim_url: previewClaimUrl, expires_at: new Date(Date.now() + 120000).toISOString() });
+      setRemainingSec(120);
+      setStatusText('Anteprima layout: QR dimostrativo.');
+      return undefined;
+    }
     startFlow();
     return () => stopTimers();
-  }, [startFlow, stopTimers]);
+  }, [previewClaimUrl, startFlow, stopTimers]);
+
+  const requisitoTesto = requisito || `Requisito pilota: statistica ${navigazioneStatSigla} >= 1.`;
 
   return (
-    <div className="center-screen">
-      <h1>KOR-35 // CONSOLE PILOTA</h1>
-      <p>Scannerizza questo QR con lo smartphone del pilota.</p>
-      <div className="card">
-        <div className="qr-box" style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}>
+    <div className="center-screen login-qr-screen">
+      <h1>{title}</h1>
+      <p>{lead}</p>
+      <div className="card login-qr-card">
+        <div className="qr-box">
           {ticket?.claim_url ? (
-            <QRCodeSVG value={ticket.claim_url} size={260} bgColor="#ffffff" fgColor="#000000" />
+            <QRCodeSVG value={ticket.claim_url} size={220} bgColor="#ffffff" fgColor="#000000" />
           ) : (
             <p className="note">Preparazione QR...</p>
           )}
         </div>
         <p className="note">{statusText}</p>
         <p className="note">Scadenza ticket: {remainingSec}s</p>
-        <div className="row" style={{ marginTop: '1rem' }}>
-          <button type="button" className="btn primary" onClick={startFlow}>
+        <div className="login-qr-actions">
+          {onBack ? (
+            <button type="button" className="btn" onClick={onBack}>
+              Console
+            </button>
+          ) : null}
+          <button type="button" className="btn primary" onClick={previewClaimUrl ? undefined : startFlow}>
             Rigenera QR
           </button>
         </div>
         {localError && <div className="error">{localError}</div>}
         {error && <div className="error">{error}</div>}
-        <p className="note">Requisito pilota: statistica {navigazioneStatSigla} &gt;= 1.</p>
+        <p className="note login-qr-req">{requisitoTesto}</p>
       </div>
     </div>
   );

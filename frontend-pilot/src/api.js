@@ -14,12 +14,20 @@ const API_BASE = '';
 
 const TOKEN_KEY = 'kor35_pilot_token';
 
+function tokenStorageKey() {
+  const screen = new URLSearchParams(window.location.search).get('screen') || '';
+  if (screen === 'compattatore') return 'kor35_pilot_token_ingegneria';
+  if (screen === 'scientifica') return 'kor35_pilot_token_scientifica';
+  return TOKEN_KEY;
+}
+
 export function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || '';
+  return localStorage.getItem(tokenStorageKey()) || '';
 }
 export function setToken(token) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+  const key = tokenStorageKey();
+  if (token) localStorage.setItem(key, token);
+  else localStorage.removeItem(key);
 }
 
 async function request(path, { method = 'GET', body = null, auth = true } = {}) {
@@ -103,6 +111,12 @@ export const api = {
   tickControl: (action) => request('/api/pilot/runtime/tick-control/', {
     method: 'POST',
     body: { action },
+  }),
+  stationConsoles: () => request('/api/pilot/station/consoles/', { auth: false }),
+  compattatoreConsoleEnabled: () => request('/api/pilot/compattatore/console-enabled/', { auth: false }),
+  compattatoreAutoLogin: () => request('/api/pilot/compattatore/auth/auto-login/', { method: 'POST', body: {}, auth: false }),
+  createCompattatoreConsoleTicket: () => request('/api/pilot/compattatore/auth/console-ticket/', {
+    method: 'POST', body: {}, auth: false,
   }),
   compattatoreState: () => request('/api/pilot/compattatore/state/'),
   compattatoreCompressione: (mattoneId) => request('/api/pilot/compattatore/compressione/', {

@@ -1,5 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
+import { PREVIEW_SCIENTIFICA } from '../kioskPreview.js';
+import { initialTab } from '../viewport.js';
+
+const KIOSK_TABS = [
+  ['spettro', 'Spettro'],
+  ['scan', 'Scan'],
+  ['matrice', 'Matrice'],
+  ['interventi', 'Interventi'],
+];
 
 function SpectralBands({ bands }) {
   if (!bands?.length) {
@@ -232,13 +241,25 @@ function InterventiPanel({
   );
 }
 
-export default function ScientificaScreen({ onLogout, navigazioneStatSigla = '0SC' }) {
+export default function ScientificaScreen({
+  onLogout,
+  onBack = null,
+  navigazioneStatSigla = '0SC',
+  compact = false,
+  preview = false,
+}) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [selectedMattone, setSelectedMattone] = useState('');
+  const [tab, setTab] = useState(() => initialTab(KIOSK_TABS.map(([id]) => id), 'spettro'));
 
   const refresh = useCallback(async () => {
+    if (preview) {
+      setData(PREVIEW_SCIENTIFICA);
+      setError('');
+      return;
+    }
     try {
       const res = await api.scientificaState();
       setData(res);
@@ -246,13 +267,14 @@ export default function ScientificaScreen({ onLogout, navigazioneStatSigla = '0S
     } catch (e) {
       setError(e.message || 'Errore caricamento console scientifica.');
     }
-  }, []);
+  }, [preview]);
 
   useEffect(() => {
     refresh();
+    if (preview) return undefined;
     const id = setInterval(refresh, 4000);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [preview, refresh]);
 
   const spettro = data?.spettrografia;
   const scan = data?.scan_profondo || {};
@@ -266,6 +288,10 @@ export default function ScientificaScreen({ onLogout, navigazioneStatSigla = '0S
   );
 
   const runScan = async () => {
+    if (preview) {
+      setError('Anteprima layout: scan non inviato.');
+      return;
+    }
     if (!selectedMattone) {
       setError('Seleziona un componente dalla stiva.');
       return;
@@ -286,6 +312,7 @@ export default function ScientificaScreen({ onLogout, navigazioneStatSigla = '0S
   };
 
   const setFase = async (codice, fase) => {
+    if (preview) return;
     setBusy(true);
     setError('');
     try {
@@ -299,6 +326,10 @@ export default function ScientificaScreen({ onLogout, navigazioneStatSigla = '0S
   };
 
   const runIntervento = async (tipo, componenti) => {
+    if (preview) {
+      setError('Anteprima layout: intervento non inviato.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -311,8 +342,10 @@ export default function ScientificaScreen({ onLogout, navigazioneStatSigla = '0S
     }
   };
 
+  const show = (id) => !compact || tab === id;
+
   return (
-    <div className="scientifica-console">
+    <div className={`scientifica-console${compact ? ' is-kiosk800' : ''}`}>
       <header className="scientifica-hud">
         <div className="scientifica-hud-brand">
           <span className="scientifica-hud-kicker">KOR-35 // LAB CAMPO</span>
@@ -332,25 +365,53 @@ export default function ScientificaScreen({ onLogout, navigazioneStatSigla = '0S
             <span className="sci-defcon">DEFCON {data.defcon ?? '—'}</span>
           ) : null}
         </div>
+        {compact && onBack ? (
+          <button type="button" className="sci-btn sci-btn--ghost kiosk800-back" onClick={onBack}>
+            Scelta
+          </button>
+        ) : null}
       </header>
 
+      {compact ? (
+        <nav className="kiosk800-tabs" aria-label="Sezioni scientifica">
+          {KIOSK_TABS.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={`kiosk800-tab${tab === id ? ' is-active' : ''}`}
+              onClick={() => setTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      ) : null}
+
       {error ? <div className="scientifica-alert error">{error}</div> : null}
+
+      {compact && data?.abilitato && matrice ? (
+        <section className="sci-panel sci-panel--coerenza sci-coerenza-slim">
+          <CoerenzaMeter matrice={matrice} />
+        </section>
+      ) : null}
+
+      <div className={compact ? 'kiosk800-scroll' : undefined}>
 
       {!data?.abilitato ? (
         <p className="sci-muted sci-panel">Abilita la console in staff → Console di bordo.</p>
       ) : null}
 
-      {data?.abilitato && matrice ? (
+      {!compact && data?.abilitato && matrice ? (
         <section className="sci-panel sci-panel--coerenza">
           <CoerenzaMeter matrice={matrice} />
         </section>
       ) : null}
 
-      {data?.abilitato && data?.sessione_attiva ? (
+      {data?.abilitato && data?.sessione_attiva && show('matrice') ? (
         <MatricePanel matrice={matrice} busy={busy} onFase={setFase} />
       ) : null}
 
-      {data?.abilitato && !data?.sessione_attiva ? (
+      {data?.abilitato && !data?.sessione_attiva && show('spettro') ? (
         <section className="sci-panel">
           <h2>Spettrografia</h2>
           <p className="sci-muted">
@@ -359,7 +420,7 @@ export default function ScientificaScreen({ onLogout, navigazioneStatSigla = '0S
         </section>
       ) : null}
 
-      {data?.abilitato && data?.sessione_attiva && !spettro ? (
+      {data?.abilitato && data?.sessione_attiva && !spettro && show('spettro') ? (
         <section className="sci-panel">
           <h2>Spettrografia</h2>
           <p className="sci-muted">
@@ -368,9 +429,9 @@ export default function ScientificaScreen({ onLogout, navigazioneStatSigla = '0S
         </section>
       ) : null}
 
-      {spettro ? (
+      {spettro && (show('spettro') || show('scan')) ? (
         <div className="scientifica-grid">
-          <section className="sci-panel">
+          <section className="sci-panel" hidden={!show('spettro')}>
             <h2>Spettrografia — {spettro.evento_nome}</h2>
             {spettro.evento_descrizione ? (
               <p className="sci-event-desc">{spettro.evento_descrizione}</p>
@@ -414,7 +475,7 @@ export default function ScientificaScreen({ onLogout, navigazioneStatSigla = '0S
             ) : null}
           </section>
 
-          <section className="sci-panel">
+          <section className="sci-panel" hidden={!show('scan')}>
             <h2>Scan profondo</h2>
             <p className="sci-muted">
               Consuma 1 componente stiva per rivelare un indizio SP/ST nascosto (
@@ -480,7 +541,7 @@ export default function ScientificaScreen({ onLogout, navigazioneStatSigla = '0S
         </div>
       ) : null}
 
-      {data?.abilitato && data?.sessione_attiva && interventi ? (
+      {data?.abilitato && data?.sessione_attiva && interventi && show('interventi') ? (
         <InterventiPanel
           interventi={interventi}
           matrice={matrice}
@@ -489,6 +550,8 @@ export default function ScientificaScreen({ onLogout, navigazioneStatSigla = '0S
           onIntervento={runIntervento}
         />
       ) : null}
+
+      </div>
 
       <footer className="scientifica-footer">
         <p className="sci-muted">

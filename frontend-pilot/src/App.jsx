@@ -4,6 +4,7 @@ import IdleScreen from './components/IdleScreen.jsx';
 import Cockpit from './components/Cockpit.jsx';
 import CompattatoreScreen from './components/CompattatoreScreen.jsx';
 import ScientificaScreen from './components/ScientificaScreen.jsx';
+import StationPicker from './components/StationPicker.jsx';
 import { api, getToken, setToken } from './api.js';
 import {
   flushOfflineQueue,
@@ -11,14 +12,21 @@ import {
   saveCachedState,
   clearCachedState,
 } from './engine.js';
+import { applyViewportClass, fromStation, navigateScreen } from './viewport.js';
 
 const POLL_INTERVAL_MS = 3000;
-const SCREEN_MODE = new URLSearchParams(window.location.search).get('screen') || 'both';
+const QUERY = new URLSearchParams(window.location.search);
+const SCREEN_MODE = QUERY.get('screen') || 'both';
+const PREVIEW = QUERY.get('preview') || '';
 const POLL_ADVANCE_TICK = SCREEN_MODE !== 'status';
 const IS_CONTROL_ONLY = SCREEN_MODE === 'control';
 const IS_COMBINED = SCREEN_MODE === 'combined';
 const IS_COMPATTATORE = SCREEN_MODE === 'compattatore';
 const IS_SCIENTIFICA = SCREEN_MODE === 'scientifica';
+const IS_STATION = SCREEN_MODE === 'station';
+const IS_LAB = IS_COMPATTATORE || IS_SCIENTIFICA;
+const IS_PREVIEW_LAYOUT = PREVIEW === 'layout';
+const IS_PREVIEW_LOGIN = PREVIEW === 'login';
 
 export default function App() {
   const [authToken, setAuthToken] = useState(getToken());
@@ -35,8 +43,16 @@ export default function App() {
   const [tentativi, setTentativi] = useState([]);
   const [tickRuntime, setTickRuntime] = useState(null);
   const [commandStatus, setCommandStatus] = useState('');
+  const [compact, setCompact] = useState(() => applyViewportClass());
 
   const pollTimerRef = useRef(null);
+
+  useEffect(() => {
+    const apply = () => setCompact(applyViewportClass());
+    apply();
+    window.addEventListener('resize', apply);
+    return () => window.removeEventListener('resize', apply);
+  }, []);
 
   const refreshState = useCallback(async () => {
     if (!getToken()) return;
@@ -97,23 +113,39 @@ export default function App() {
   }, [loginRequired]);
 
   useEffect(() => {
-    const loader = IS_SCIENTIFICA ? api.scientificaConsoleEnabled : api.consoleEnabled;
+    if (IS_STATION || IS_PREVIEW_LAYOUT || IS_PREVIEW_LOGIN) {
+      setConsoleChecked(true);
+      return undefined;
+    }
+    const loader = IS_SCIENTIFICA
+      ? api.scientificaConsoleEnabled
+      : IS_COMPATTATORE
+        ? api.compattatoreConsoleEnabled
+        : api.consoleEnabled;
     loader()
       .then((res) => {
         setConsoleEnabled(!!res?.enabled);
         setLoginRequired(res?.login_required !== false);
-        const sigla = res?.scientifica_stat_accesso_sigla || res?.navigazione_stat_accesso_sigla;
+        const sigla = res?.scientifica_stat_accesso_sigla
+          || res?.compattatore_stat_accesso_sigla
+          || res?.navigazione_stat_accesso_sigla;
         if (sigla) {
           setNavigazioneStatSigla(String(sigla).toUpperCase());
         }
       })
       .catch(() => setConsoleEnabled(false))
       .finally(() => setConsoleChecked(true));
+    return undefined;
   }, []);
 
   useEffect(() => {
-    if (!consoleChecked || !consoleEnabled || loginRequired || authToken) return;
-    const loginFn = IS_SCIENTIFICA ? api.scientificaAutoLogin : api.autoLogin;
+    if (IS_STATION || IS_PREVIEW_LAYOUT || IS_PREVIEW_LOGIN) return undefined;
+    if (!consoleChecked || !consoleEnabled || loginRequired || authToken) return undefined;
+    const loginFn = IS_SCIENTIFICA
+      ? api.scientificaAutoLogin
+      : IS_COMPATTATORE
+        ? api.compattatoreAutoLogin
+        : api.autoLogin;
     loginFn()
       .then((res) => {
         if (res?.token) {
@@ -128,13 +160,13 @@ export default function App() {
   }, [consoleChecked, consoleEnabled, loginRequired, authToken]);
 
   useEffect(() => {
-    if (!authToken || IS_SCIENTIFICA) return;
+    if (!authToken || IS_LAB) return;
     refreshState();
     api.prefetture().then(setPrefetture).catch(() => setPrefetture([]));
   }, [authToken, refreshState]);
 
   useEffect(() => {
-    if (!authToken || IS_SCIENTIFICA) return;
+    if (!authToken || IS_LAB) return;
     const id = setInterval(() => {
       refreshState();
       flushOfflineQueue(api).then(({ applicati }) => {
@@ -170,6 +202,13 @@ export default function App() {
     setState(null);
     setTentativi([]);
     clearCachedState();
+    if (fromStation()) navigateScreen('station');
+  }, []);
+
+  const handleBackToStation = useCallback(() => {
+    setToken('');
+    setAuthToken('');
+    navigateScreen('station');
   }, []);
 
   const handleStart = useCallback(async (partenza, arrivo) => {
@@ -274,6 +313,74 @@ export default function App() {
     }
   }, []);
 
+  const consoleNome = IS_SCIENTIFICA ? 'scientifica' : IS_COMPATTATORE ? 'ingegneria' : 'pilotaggio';
+  const consoleTitolo = IS_SCIENTIFICA
+    ? 'CONSOLE SCIENTIFICA'
+    : IS_COMPATTATORE
+      ? 'CONSOLE INGEGNERIA'
+      : 'CONSOLE PILOTA';
+  const loginTitle = IS_SCIENTIFICA
+    ? 'KOR-35 // CONSOLE SCIENTIFICA'
+    : IS_COMPATTATORE
+      ? 'KOR-35 // CONSOLE INGEGNERIA'
+      : 'KOR-35 // CONSOLE PILOTA';
+  const loginRequisito = IS_LAB
+    ? `Requisito: statistica ${navigazioneStatSigla} > 0.`
+    : null;
+  const backToStation = fromStation() ? handleBackToStation : null;
+
+  if (IS_STATION) {
+    return (
+      <div className="app-shell app-shell-station">
+        <StationPicker preview={IS_PREVIEW_LAYOUT} />
+      </div>
+    );
+  }
+
+  if (IS_PREVIEW_LAYOUT && IS_LAB) {
+    return (
+      <div className={`app-shell ${IS_COMPATTATORE ? 'app-shell-compattatore' : 'app-shell-scientifica'}`}>
+        <main>
+          {IS_SCIENTIFICA ? (
+            <ScientificaScreen
+              onLogout={handleLogout}
+              onBack={backToStation}
+              navigazioneStatSigla={navigazioneStatSigla || '0SC'}
+              compact={compact}
+              preview
+            />
+          ) : (
+            <CompattatoreScreen
+              onLogout={handleLogout}
+              onBack={backToStation}
+              compact={compact}
+              preview
+            />
+          )}
+        </main>
+      </div>
+    );
+  }
+
+  if (IS_PREVIEW_LOGIN && IS_LAB) {
+    return (
+      <div className="app-shell">
+        <main>
+          <LoginQR
+            createTicket={api.createConsoleTicket}
+            pollTicket={api.ticketStatus}
+            onAuthorized={handleAuthorized}
+            navigazioneStatSigla={IS_SCIENTIFICA ? '0SC' : '0IN'}
+            title={loginTitle}
+            requisito={IS_SCIENTIFICA ? 'Requisito: statistica 0SC > 0.' : 'Requisito: statistica 0IN > 0.'}
+            onBack={backToStation}
+            previewClaimUrl="https://www.kor35.it/api/pilot/auth/console-ticket/preview/claim/?c=DEMO"
+          />
+        </main>
+      </div>
+    );
+  }
+
   if (!consoleChecked) {
     return <div className="center-screen"><div className="card">Verifica disponibilita console...</div></div>;
   }
@@ -282,8 +389,11 @@ export default function App() {
     return (
       <div className="center-screen">
         <div className="card">
-          <h1>KOR-35 // {IS_SCIENTIFICA ? 'CONSOLE SCIENTIFICA' : 'CONSOLE PILOTA'}</h1>
-          <div className="error">Console {IS_SCIENTIFICA ? 'scientifica' : 'pilotaggio'} non disponibile su questo ambiente.</div>
+          <h1>KOR-35 // {consoleTitolo}</h1>
+          <div className="error">Console {consoleNome} non disponibile su questo ambiente.</div>
+          {backToStation ? (
+            <button type="button" className="btn" onClick={backToStation}>Torna alla scelta</button>
+          ) : null}
         </div>
       </div>
     );
@@ -293,7 +403,7 @@ export default function App() {
     return (
       <div className="app-shell">
         <div className="banner">
-          <div className="ident">KOR-35 // {IS_SCIENTIFICA ? 'LAB CAMPO' : 'PILOT CONSOLE'}</div>
+          <div className="ident">KOR-35 // {IS_SCIENTIFICA ? 'LAB CAMPO' : IS_COMPATTATORE ? 'NODO Z' : 'PILOT CONSOLE'}</div>
           <div className="right">
             <span className={online ? 'net-online' : 'net-offline'}>
               {online ? 'BACKEND ON' : 'BACKEND OFF'}
@@ -303,11 +413,20 @@ export default function App() {
         <main>
           {loginRequired ? (
             <LoginQR
-              createTicket={IS_SCIENTIFICA ? api.createScientificaConsoleTicket : api.createConsoleTicket}
+              createTicket={
+                IS_SCIENTIFICA
+                  ? api.createScientificaConsoleTicket
+                  : IS_COMPATTATORE
+                    ? api.createCompattatoreConsoleTicket
+                    : api.createConsoleTicket
+              }
               pollTicket={api.ticketStatus}
               onAuthorized={handleAuthorized}
               error={authError}
               navigazioneStatSigla={navigazioneStatSigla}
+              title={loginTitle}
+              requisito={loginRequisito}
+              onBack={backToStation}
             />
           ) : (
             <div className="center-screen"><div className="card">Accesso automatico console in corso...</div></div>
@@ -321,7 +440,12 @@ export default function App() {
     return (
       <div className="app-shell app-shell-scientifica">
         <main>
-          <ScientificaScreen onLogout={handleLogout} navigazioneStatSigla={navigazioneStatSigla} />
+          <ScientificaScreen
+            onLogout={handleLogout}
+            onBack={backToStation}
+            navigazioneStatSigla={navigazioneStatSigla}
+            compact={compact}
+          />
         </main>
       </div>
     );
@@ -329,7 +453,7 @@ export default function App() {
 
   return (
     <div className={`app-shell ${IS_CONTROL_ONLY ? 'app-shell-control' : ''} ${IS_COMBINED ? 'app-shell-combined' : ''} ${IS_COMPATTATORE ? 'app-shell-compattatore' : ''}`}>
-      {!IS_CONTROL_ONLY ? (
+      {!IS_CONTROL_ONLY && !IS_COMPATTATORE ? (
         <div className="banner">
           <div className="ident">
             KOR-35 // PILOT // {state?.pilota?.nome || '...'}
@@ -349,7 +473,7 @@ export default function App() {
       ) : null}
       <main>
         {IS_COMPATTATORE ? (
-          <CompattatoreScreen onLogout={handleLogout} />
+          <CompattatoreScreen onLogout={handleLogout} onBack={backToStation} compact={compact} />
         ) : (
         <div className={`console-viewport-wrap ${IS_CONTROL_ONLY ? 'is-fixed' : ''} ${IS_COMBINED ? 'is-combined' : ''}`}>
           <div className={`console-viewport-fixed ${IS_CONTROL_ONLY ? 'is-fixed' : ''} ${IS_COMBINED ? 'is-combined' : ''}`}>

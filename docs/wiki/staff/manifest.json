@@ -25,6 +25,12 @@
       "ordine": 18
     },
     {
+      "slug": "staff-console-stazione-kiosk",
+      "titolo": "Console stazione — kiosk 800×480",
+      "source": "console-stazione-kiosk.md",
+      "ordine": 19
+    },
+    {
       "slug": "staff-mirror-pi",
       "titolo": "Mirror Pi — procedure",
       "source": "mirror-pi.md",

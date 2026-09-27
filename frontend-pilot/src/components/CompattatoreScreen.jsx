@@ -1,8 +1,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { PREVIEW_COMPATTATORE } from '../kioskPreview.js';
+import { initialTab } from '../viewport.js';
 import StivaCompattatoreGrid from './StivaCompattatoreGrid.jsx';
 import CompattatoreElementPicker from './CompattatoreElementPicker.jsx';
 import CompattatoreQrInput from './CompattatoreQrInput.jsx';
+
+const KIOSK_TABS = [
+  ['motore', 'Motore'],
+  ['quantico', 'Quantico'],
+  ['carburante', 'Fuel'],
+  ['stiva', 'Stiva'],
+];
 
 function ResultScreen({ title, children, variant = 'default', empty }) {
   return (
@@ -18,7 +27,7 @@ function ResultScreen({ title, children, variant = 'default', empty }) {
   );
 }
 
-export default function CompattatoreScreen({ onLogout }) {
+export default function CompattatoreScreen({ onLogout, onBack = null, compact = false, preview = false }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -31,8 +40,14 @@ export default function CompattatoreScreen({ onLogout }) {
   const [quanticoPgId, setQuanticoPgId] = useState('');
   const [burnQty, setBurnQty] = useState(1);
   const [lastSintesi, setLastSintesi] = useState(null);
+  const [tab, setTab] = useState(() => initialTab(KIOSK_TABS.map(([id]) => id), 'motore'));
 
   const refresh = useCallback(async () => {
+    if (preview) {
+      setData(PREVIEW_COMPATTATORE);
+      setError('');
+      return;
+    }
     try {
       const res = await api.compattatoreState();
       setData(res);
@@ -40,15 +55,20 @@ export default function CompattatoreScreen({ onLogout }) {
     } catch (e) {
       setError(e.message || 'Errore caricamento compattatore.');
     }
-  }, []);
+  }, [preview]);
 
   useEffect(() => {
     refresh();
+    if (preview) return undefined;
     const id = setInterval(refresh, 4000);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [preview, refresh]);
 
   const runOp = async (tipo) => {
+    if (preview) {
+      setLastClassicNote('Anteprima layout: operazione non inviata.');
+      return;
+    }
     if (!selectedMattone) {
       setError('Seleziona un componente sorgente.');
       return;
@@ -79,6 +99,10 @@ export default function CompattatoreScreen({ onLogout }) {
   };
 
   const runQuantico = async () => {
+    if (preview) {
+      setError('Anteprima layout: operazione non inviata.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -107,6 +131,7 @@ export default function CompattatoreScreen({ onLogout }) {
   };
 
   const runEnergizza = async () => {
+    if (preview) return;
     setBusy(true);
     setError('');
     try {
@@ -120,6 +145,16 @@ export default function CompattatoreScreen({ onLogout }) {
   };
 
   const runSintesi = async () => {
+    if (preview) {
+      setLastSintesi({
+        resa: 12,
+        aggiunto: 12,
+        sversato: 0,
+        carburante_attuale: 652,
+        carburante_massimo: 1000,
+      });
+      return;
+    }
     if (!selectedMattone) {
       setError('Seleziona un componente da bruciare.');
       return;
@@ -153,8 +188,11 @@ export default function CompattatoreScreen({ onLogout }) {
   const carburanteAttuale = Math.round(data?.sintesi_carburante?.carburante_attuale || 0);
   const carburanteMassimo = Math.round(data?.sintesi_carburante?.carburante_massimo || 0);
 
+  const selectedRow = (data?.stiva?.righe || []).find((r) => r.mattone_id === selectedMattone);
+  const show = (id) => !compact || tab === id;
+
   return (
-    <div className="compattatore-console">
+    <div className={`compattatore-console${compact ? ' is-kiosk800' : ''}`}>
       <header className="compattatore-hud">
         <div className="compattatore-hud-brand">
           <span className="compattatore-hud-kicker">KOR-35 // NODO Z</span>
@@ -185,12 +223,33 @@ export default function CompattatoreScreen({ onLogout }) {
             </>
           )}
         </div>
+        {compact && onBack ? (
+          <button type="button" className="comp-btn comp-btn--ghost kiosk800-back" onClick={onBack}>
+            Scelta
+          </button>
+        ) : null}
       </header>
+
+      {compact ? (
+        <nav className="kiosk800-tabs" aria-label="Sezioni ingegneria">
+          {KIOSK_TABS.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={`kiosk800-tab${tab === id ? ' is-active' : ''}`}
+              onClick={() => setTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      ) : null}
 
       {error ? <div className="compattatore-alert error">{error}</div> : null}
 
+      <div className={compact ? 'kiosk800-scroll' : undefined}>
       <div className="compattatore-columns">
-        <section className="compattatore-panel compattatore-panel--classic">
+        <section hidden={!show('motore')} className="compattatore-panel compattatore-panel--classic">
           <div className="compattatore-panel-corner compattatore-panel-corner--tl" aria-hidden="true" />
           <div className="compattatore-panel-corner compattatore-panel-corner--br" aria-hidden="true" />
           <h2 className="compattatore-panel-title">Motore classico</h2>
@@ -275,7 +334,7 @@ export default function CompattatoreScreen({ onLogout }) {
           </ResultScreen>
         </section>
 
-        <section className={`compattatore-panel compattatore-panel--quantico ${!quanticoOn ? 'is-disabled' : ''}`}>
+        <section hidden={!show('quantico')} className={`compattatore-panel compattatore-panel--quantico ${!quanticoOn ? 'is-disabled' : ''}`}>
           <div className="compattatore-panel-corner compattatore-panel-corner--tl" aria-hidden="true" />
           <div className="compattatore-panel-corner compattatore-panel-corner--br" aria-hidden="true" />
           <h2 className="compattatore-panel-title">Compattatore quantico</h2>
@@ -351,7 +410,7 @@ export default function CompattatoreScreen({ onLogout }) {
         </section>
       </div>
 
-      <section className="compattatore-panel compattatore-panel--fuel">
+      <section hidden={!show('carburante')} className="compattatore-panel compattatore-panel--fuel">
         <div className="compattatore-panel-corner compattatore-panel-corner--tl" aria-hidden="true" />
         <div className="compattatore-panel-corner compattatore-panel-corner--br" aria-hidden="true" />
         <h2 className="compattatore-panel-title">Bruciatore / sintesi carburante</h2>
@@ -393,7 +452,11 @@ export default function CompattatoreScreen({ onLogout }) {
         </div>
 
         <label className="comp-field">
-          <span className="comp-field-label">Quantità da bruciare (componente selezionato sopra)</span>
+          <span className="comp-field-label">
+            {compact
+              ? `Quantità · sorgente ${selectedRow ? (selectedRow.colore_nome || selectedRow.nome) : 'non scelta (tab Motore)'}`
+              : 'Quantità da bruciare (componente selezionato sopra)'}
+          </span>
           <input
             type="number"
             min={1}
@@ -444,7 +507,7 @@ export default function CompattatoreScreen({ onLogout }) {
         </ResultScreen>
       </section>
 
-      <section className="compattatore-stiva-deck">
+      <section hidden={!show('stiva')} className="compattatore-stiva-deck">
         <div className="compattatore-stiva-deck-header">
           <h2 className="compattatore-stiva-title">Stiva componenti</h2>
           <span className="compattatore-stiva-sub">Coppie opposte · rischio annichilamento</span>
@@ -454,6 +517,8 @@ export default function CompattatoreScreen({ onLogout }) {
           selectable={false}
         />
       </section>
+
+      </div>
 
       {onLogout ? (
         <footer className="compattatore-footer">

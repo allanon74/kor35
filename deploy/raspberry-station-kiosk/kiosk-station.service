@@ -1,0 +1,19 @@
+[Unit]
+Description=KOR35 kiosk stazione 800x480 (ingegneria / scientifica)
+After=display-manager.service graphical.target NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+User=__KIOSK_USER__
+Group=__KIOSK_USER__
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/__KIOSK_USER__/.Xauthority
+EnvironmentFile=-/etc/kor35/kiosk-station.env
+ExecStartPre=/bin/sleep 8
+ExecStart=/usr/local/bin/kiosk-station.sh
+Restart=on-failure
+RestartSec=8
+
+[Install]
+WantedBy=graphical.target
