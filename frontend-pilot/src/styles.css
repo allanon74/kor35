@@ -3745,8 +3745,10 @@ select, input[type=text], input[type=number] {
 }
 
 /* --- Console Scientifica (Fase 1) --- */
-.app-shell-scientifica main {
-  min-height: 100vh;
+.app-shell-scientifica > main {
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
   background: radial-gradient(ellipse at 20% 0%, #0d1a2d 0%, #050810 55%);
 }
 
