@@ -81,6 +81,19 @@ KIOSK_ROTATE=right
 sudo systemctl restart kiosk-station.service
 ```
 
+### Schermo bianco al boot
+
+Il desktop di Raspberry Pi OS è Wayland: `:0` è Xwayland. Se Chromium parte prima del primo frame, la finestra resta bianca. Nel journal, finché non si riavvia il servizio, compare `running xinput against an Xwayland server` (il loop di `xinput` non serve su un solo pannello e su Xwayland non mappa il touch).
+
+Un `systemctl restart kiosk-station.service` a sessione già avviata ridisegna la console. Lo script aspetta il socket Wayland e apre Chromium con `--ozone-platform=wayland`, senza `xinput`.
+
+Per aggiornare solo lo script, senza rifare l'installazione:
+
+```bash
+sudo install -m 0755 kiosk-station.sh /usr/local/bin/kiosk-station.sh
+sudo systemctl restart kiosk-station.service
+```
+
 ### Debug desktop
 
 ```bash

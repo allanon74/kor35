@@ -5,7 +5,8 @@ set -uo pipefail
 
 export DISPLAY="${DISPLAY:-:0}"
 export XAUTHORITY="${XAUTHORITY:-${HOME}/.Xauthority}"
-export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
 
 KIOSK_ENV="${KOR35_KIOSK_STATION_ENV:-/etc/kor35/kiosk-station.env}"
 NO_KIOSK_FLAG="${KOR35_NO_KIOSK_FLAG:-/etc/kor35/NO_KIOSK}"
@@ -119,18 +120,88 @@ ensure_wifi() {
   fi
 }
 
-wait_for_x() {
-  local _
-  for _ in $(seq 1 60); do
-    xset q >/dev/null 2>&1 && return 0
+prepare_runtime() {
+  local uid runtime
+  uid="$(id -u)"
+  runtime="/run/user/${uid}"
+  if [ ! -S "${XDG_RUNTIME_DIR:-}/wayland-0" ] && [ -S "${runtime}/wayland-0" ]; then
+    export XDG_RUNTIME_DIR="$runtime"
+  else
+    export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$runtime}"
+  fi
+  if [ -S "${XDG_RUNTIME_DIR}/wayland-0" ]; then
+    export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+  else
+    unset WAYLAND_DISPLAY || true
+  fi
+  if [ -S "${XDG_RUNTIME_DIR}/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
+  fi
+}
+
+# Su Pi OS il desktop è Wayland: :0 è Xwayland. xset risponde appena il
+# socket X esiste, prima che il compositor abbia un frame. Chromium lanciato
+# in quel momento resta bianco finché non lo si riavvia a sessione pronta.
+session_ready() {
+  prepare_runtime
+  if [ -n "${WAYLAND_DISPLAY:-}" ] && [ -S "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ]; then
+    return 0
+  fi
+  xset q >/dev/null 2>&1 || return 1
+  xrandr --query 2>/dev/null | awk '/ connected/{found=1} END{exit !found}'
+}
+
+wait_for_session() {
+  local i now age sock
+  for i in $(seq 1 90); do
+    if session_ready; then
+      if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        sock="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
+        now="$(date +%s)"
+        age=$(( now - $(stat -c %Y "$sock" 2>/dev/null || echo "$now") ))
+        if [ "$age" -lt 20 ]; then
+          log "Wayland appena avviato, attendo il primo frame"
+          sleep 3
+          prepare_runtime
+        fi
+        log "Sessione Wayland pronta (${WAYLAND_DISPLAY})"
+      else
+        log "Sessione X11 pronta (${DISPLAY})"
+      fi
+      return 0
+    fi
     sleep 1
   done
-  warn "X non disponibile su ${DISPLAY}"
+  warn "Sessione grafica non pronta"
   return 1
+}
+
+configure_wayland_output() {
+  local out transform
+  command -v wlr-randr >/dev/null 2>&1 || {
+    log "Wayland: modalità del pannello invariata (un solo schermo, niente xrandr su Xwayland)"
+    return 0
+  }
+  out="$(wlr-randr 2>/dev/null | awk 'NF && $1 !~ /^$/ { print $1; exit }')"
+  [ -n "$out" ] || return 0
+  case "$KIOSK_ROTATE" in
+    left) transform=90 ;;
+    right) transform=270 ;;
+    inverted) transform=180 ;;
+    *) transform=normal ;;
+  esac
+  wlr-randr --output "$out" --mode "${KIOSK_MODE}" --transform "$transform" \
+    || wlr-randr --output "$out" --transform "$transform" \
+    || true
+  log "Wayland output ${out} transform ${transform}"
 }
 
 configure_display() {
   local out
+  if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    configure_wayland_output
+    return 0
+  fi
   out="$(xrandr --query | awk '/ connected/{print $1; exit}')"
   [ -n "$out" ] || { warn "Nessun output video"; return 0; }
   log "Output ${out} modalità ${KIOSK_MODE} rotate ${KIOSK_ROTATE}"
@@ -147,8 +218,14 @@ configure_display() {
   echo "$out" >/tmp/kor35-kiosk-station-output
 }
 
+# xinput sul server Xwayland non mappa il touch e riempie il journal con
+# «running xinput against an Xwayland server». Sul pannello 800×480 c'è un
+# solo output: il touch è già quello schermo.
 map_touch() {
   local out dev_id
+  if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    return 0
+  fi
   out="$(cat /tmp/kor35-kiosk-station-output 2>/dev/null || true)"
   [ -n "$out" ] || return 0
   command -v xinput >/dev/null 2>&1 || return 0
@@ -156,7 +233,7 @@ map_touch() {
     [ -n "$dev_id" ] || continue
     xinput map-to-output "$dev_id" "$out" 2>/dev/null || true
   done < <(
-    xinput list | awk -F'id=' '
+    xinput list 2>/dev/null | awk -F'id=' '
       /[Tt]ouch|[Pp]en|[Ii][Ll]itek/ && !/[Kk]eyboard/ {
         gsub(/[^0-9].*/, "", $2)
         if ($2 != "") print $2
@@ -166,6 +243,9 @@ map_touch() {
 }
 
 disable_blank() {
+  if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    return 0
+  fi
   xset s off || true
   xset -dpms || true
   xset s noblank || true
@@ -176,32 +256,46 @@ disable_blank() {
 }
 
 launch_chromium() {
-  local url="$1" chromium
+  local url="$1" chromium pid
   chromium="$(find_chromium)" || { warn "Chromium non trovato"; return 1; }
   mkdir -p "$KIOSK_PROFILE"
   rm -f "$KIOSK_PROFILE/SingletonLock" "$KIOSK_PROFILE/SingletonSocket" "$KIOSK_PROFILE/SingletonCookie" 2>/dev/null || true
-  "$chromium" \
-    --no-first-run \
-    --disable-session-crashed-bubble \
-    --disable-infobars \
-    --disable-dev-shm-usage \
-    --disable-pinch \
-    --overscroll-history-navigation=0 \
-    --ignore-certificate-errors \
-    --password-store=basic \
-    --user-data-dir="$KIOSK_PROFILE" \
-    --kiosk \
-    --window-position=0,0 \
-    --window-size=800,480 \
-    --force-device-scale-factor=1 \
-    "$url" &
-  echo $! >/tmp/kor35-kiosk-station.pid
-  log "Chromium pid $(cat /tmp/kor35-kiosk-station.pid) → ${url}"
+  local -a cmd
+  cmd=(
+    "$chromium"
+    --no-first-run
+    --disable-session-crashed-bubble
+    --disable-infobars
+    --disable-dev-shm-usage
+    --disable-pinch
+    --overscroll-history-navigation=0
+    --ignore-certificate-errors
+    --password-store=basic
+    --user-data-dir="$KIOSK_PROFILE"
+    --kiosk
+    --force-device-scale-factor=1
+  )
+  if [ -n "${WAYLAND_DISPLAY:-}" ] && [ "${KIOSK_FORCE_X11:-0}" != "1" ]; then
+    CHROMIUM_BACKEND=wayland
+    cmd+=(--ozone-platform=wayland)
+    env -u DISPLAY \
+      XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+      WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+      "${cmd[@]}" "$url" &
+  else
+    CHROMIUM_BACKEND=x11
+    cmd+=(--window-position=0,0 --window-size=800,480)
+    "${cmd[@]}" "$url" &
+  fi
+  pid=$!
+  echo "$pid" >/tmp/kor35-kiosk-station.pid
+  log "Chromium pid ${pid} backend ${CHROMIUM_BACKEND} → ${url}"
 }
 
 main() {
-  local base url
-  wait_for_x || exit 1
+  local base url pid
+  CHROMIUM_BACKEND=x11
+  wait_for_session || exit 1
   ensure_wifi
   base="$(resolve_working_base)"
   PILOT_BASE_URL="$base"
@@ -209,15 +303,26 @@ main() {
   configure_display
   disable_blank
   map_touch
-  (
-    while true; do
-      sleep 45
-      map_touch
-    done
-  ) &
+  if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    (
+      while true; do
+        sleep 45
+        map_touch
+      done
+    ) &
+  fi
   while true; do
     launch_chromium "$url" || exit 1
-    wait "$(cat /tmp/kor35-kiosk-station.pid)" || true
+    pid="$(cat /tmp/kor35-kiosk-station.pid)"
+    if [ "$CHROMIUM_BACKEND" = "wayland" ]; then
+      sleep 4
+      if ! kill -0 "$pid" 2>/dev/null; then
+        warn "Chromium Wayland uscito subito, riprovo via X11"
+        KIOSK_FORCE_X11=1
+        continue
+      fi
+    fi
+    wait "$pid" || true
     log "Chromium terminato, riavvio"
     sleep 2
   done
