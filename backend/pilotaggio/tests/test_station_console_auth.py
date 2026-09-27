@@ -115,6 +115,19 @@ class StationConsoleAuthTests(TestCase):
         self.assertEqual(claim.status_code, 403, claim.content)
         self.assertIn("0SC", claim.json()["error"])
 
+    def test_scientifica_senza_login_non_chiede_la_statistica(self):
+        _cfg(scientifica_login_richiesto=False)
+        _personaggio("SenzaLab", "0PI", 2)
+        issued = self.console.post("/api/pilot/scientifica/auth/auto-login/", {}, format="json")
+        self.assertEqual(issued.status_code, 200, issued.content)
+        token = issued.json()["token"]
+        state = self.console.get(
+            "/api/pilot/scientifica/state/",
+            HTTP_AUTHORIZATION=f"PilotToken {token}",
+        )
+        self.assertEqual(state.status_code, 200, state.content)
+        self.assertTrue(state.json()["abilitato"])
+
     def test_console_spenta_non_emette_ticket(self):
         _cfg(compattatore_console_abilitata=False)
         res = self.console.post("/api/pilot/compattatore/auth/console-ticket/", {}, format="json")

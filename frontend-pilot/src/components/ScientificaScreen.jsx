@@ -352,9 +352,11 @@ export default function ScientificaScreen({
           <h1 className="scientifica-hud-title">Console Scientifica</h1>
         </div>
         <div className="scientifica-hud-status">
-          {!data?.abilitato ? (
+          {data && !data.abilitato ? (
             <span className="sci-pill sci-pill--off">Console disabilitata</span>
-          ) : !data?.sessione_attiva ? (
+          ) : !data ? (
+            <span className="sci-pill sci-pill--off">{error ? 'Accesso negato' : '…'}</span>
+          ) : !data.sessione_attiva ? (
             <span className="sci-pill sci-pill--off">Nessun volo attivo</span>
           ) : !data?.evento_pending ? (
             <span className="sci-pill sci-pill--idle">In attesa fenomeno</span>
@@ -397,7 +399,7 @@ export default function ScientificaScreen({
 
       <div className={compact ? 'kiosk800-scroll' : undefined}>
 
-      {!data?.abilitato ? (
+      {data && !data.abilitato ? (
         <p className="sci-muted sci-panel">Abilita la console in staff → Console di bordo.</p>
       ) : null}
 

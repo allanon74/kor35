@@ -51,7 +51,8 @@ async function request(path, { method = 'GET', body = null, auth = true } = {}) 
   let data = null;
   try { data = await res.json(); } catch (_) { /* no body */ }
   if (!res.ok) {
-    const err = new Error(data?.error || `HTTP ${res.status}`);
+    const detail = typeof data?.detail === 'string' ? data.detail : '';
+    const err = new Error(data?.error || detail || `HTTP ${res.status}`);
     err.status = res.status;
     err.payload = data;
     throw err;

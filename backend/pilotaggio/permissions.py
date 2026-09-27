@@ -19,7 +19,7 @@ class IsPilotConsole(permissions.BasePermission):
 
 
 class IsScientificConsole(permissions.BasePermission):
-    """Token console valido + statistica scientifica sul personaggio."""
+    """Token console valido. Con login richiesto, serve anche la statistica scientifica."""
 
     message = "Accesso console scientifica non autorizzato."
 
@@ -36,6 +36,8 @@ class IsScientificConsole(permissions.BasePermission):
         pilota = token.pilota
         if pilota is None:
             return False
+        if not cfg.scientifica_login_richiesto:
+            return True
         return int(pilota.get_valore_statistica(scientifica_stat_sigla(cfg)) or 0) > 0
 
 

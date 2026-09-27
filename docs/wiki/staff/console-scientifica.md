@@ -39,7 +39,9 @@ Il QR della stazione usa **questa** sigla. Un personaggio con solo navigazione (
 
 ## Login del giocatore
 
-Con **Login richiesto** attivo, la console mostra un QR. Lo smartphone deve essere già nell'app, con un personaggio la cui statistica (sigla staff, default `0SC`) è maggiore di 0. Il claim è un ticket di ruolo `scientifica`: non vale il ticket della plancia di navigazione.
+Con **Login richiesto** spento l'accesso è automatico, come in ingegneria: la sigla non viene controllata.
+
+Con **Login richiesto** attivo, la console mostra un QR. Lo smartphone deve essere già nell'app, con un personaggio la cui statistica (sigla staff, default `0SC`) è maggiore di 0. Creare la statistica in admin non basta: sul personaggio, in **Statistiche base**, il valore deve essere sopra 0. Il claim è un ticket di ruolo `scientifica`: non vale il ticket della plancia di navigazione.
 
 A fine volo coerenza, fasi della matrice e carica si azzerano.
 
