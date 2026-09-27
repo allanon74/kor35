@@ -494,6 +494,20 @@ export default function ScientificaScreen({
             ) : null}
             <h3 className="sci-subtitle">Firma spettrale</h3>
             <SpectralBands bands={spettro.firma_spettrale} />
+            <h3 className="sci-subtitle">Sistemi da regolare</h3>
+            {(spettro.indizi_sistemi || []).length ? (
+              <ul className="sci-delta-list">
+                {spettro.indizi_sistemi.map((row) => (
+                  <li key={row.codice}>
+                    <strong>{row.codice}</strong>
+                    {row.nome ? ` — ${row.nome}` : ''}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="sci-muted">Nessun sistema da segnalare su questo fenomeno.</p>
+            )}
+            <p className="sci-muted">Lo spettro ne indica al massimo due. Livello e manovra escono dallo scan profondo.</p>
             <RiskBadge rischio={spettro.rischio_ca} />
             {spettro.stato_soluzione ? (
               <p className="sci-soluzione">
