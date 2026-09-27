@@ -489,3 +489,58 @@ class StaffSerbatoioCarburanteTests(TestCase):
         res = self.client.post(url, {"riempi": True}, format="json")
         self.assertEqual(res.status_code, 400, res.content)
 
+
+class StaffBatteriaStorageTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="staff_batt", password="x", is_staff=True
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.staff)
+        _, self.pilota = _crea_pilota_con_0pi(nome="PilotaBatt", valore_0pi=1)
+        self.batteria = SottosistemaNave.objects.create(
+            codice="B",
+            nome="Batterie emergenza",
+            tipo="batteria",
+            capacita_storage=800.0,
+            attivo=True,
+        )
+        self.altro = SottosistemaNave.objects.create(
+            codice="Z", nome="Non batteria", tipo="standard", attivo=True
+        )
+        self.sessione = SessioneVolo.objects.create(
+            pilota=self.pilota,
+            stato=SESSIONE_STATO_IDLE,
+            storage_energia_attuale=40.0,
+            storage_energia_massimo=100.0,
+        )
+
+    def test_get_storage_sessione(self):
+        url = f"/api/pilot/staff/sottosistemi/{self.batteria.pk}/storage-sessione/"
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertTrue(body["sessione_attiva"])
+        self.assertEqual(body["storage_attuale"], 40.0)
+        self.assertEqual(body["storage_massimo"], 800.0)
+
+    def test_post_imposta_storage(self):
+        url = f"/api/pilot/staff/sottosistemi/{self.batteria.pk}/storage-sessione/"
+        res = self.client.post(url, {"storage_attuale": 250}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+        self.sessione.refresh_from_db()
+        self.assertEqual(self.sessione.storage_energia_attuale, 250.0)
+        self.assertEqual(self.sessione.storage_energia_massimo, 800.0)
+
+    def test_post_riempi(self):
+        url = f"/api/pilot/staff/sottosistemi/{self.batteria.pk}/storage-sessione/"
+        res = self.client.post(url, {"riempi": True}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+        self.sessione.refresh_from_db()
+        self.assertEqual(self.sessione.storage_energia_attuale, 800.0)
+
+    def test_rifiuta_non_batteria(self):
+        url = f"/api/pilot/staff/sottosistemi/{self.altro.pk}/storage-sessione/"
+        res = self.client.post(url, {"riempi": True}, format="json")
+        self.assertEqual(res.status_code, 400, res.content)
+

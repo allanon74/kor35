@@ -43,6 +43,13 @@ const PilotSottosistemaModal = ({
   onApplySerbatoioFuel,
   onFillSerbatoioFuel,
   onRefreshSerbatoioFuel,
+  batteriaStorage = null,
+  batteriaStorageDraft = '',
+  setBatteriaStorageDraft,
+  batteriaStorageBusy = false,
+  onApplyBatteriaStorage,
+  onFillBatteriaStorage,
+  onRefreshBatteriaStorage,
   mattoniCatalogo = [],
 }) => {
   if (!open) return null;
@@ -287,6 +294,81 @@ const PilotSottosistemaModal = ({
                       className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm text-white disabled:opacity-50"
                       disabled={serbatoioFuelBusy}
                       onClick={onFillSerbatoioFuel}
+                    >
+                      Riempi al massimo
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
+
+          {mode === 'edit' && String(draft.tipo || '').toLowerCase() === 'batteria' ? (
+            <div className="mt-4 rounded-xl border border-sky-700/40 bg-sky-950/20 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-semibold text-sky-200/90 uppercase tracking-wide">
+                  Batterie d&apos;emergenza — sessione console
+                </div>
+                {onRefreshBatteriaStorage ? (
+                  <button
+                    type="button"
+                    className="text-xs px-2 py-1 rounded border border-gray-600 text-gray-300 hover:bg-gray-800"
+                    onClick={onRefreshBatteriaStorage}
+                    disabled={batteriaStorageBusy}
+                  >
+                    Aggiorna
+                  </button>
+                ) : null}
+              </div>
+              {batteriaStorage?.loading ? (
+                <p className="text-xs text-gray-400">Lettura carica batterie…</p>
+              ) : batteriaStorage?.error ? (
+                <p className="text-xs text-red-300">{batteriaStorage.error}</p>
+              ) : !batteriaStorage?.sessione_attiva ? (
+                <p className="text-xs text-gray-400">
+                  Nessuna sessione attiva sulla console (idle o in volo). Avvia o ripristina una sessione pilota.
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-400">
+                    Pilota: <span className="text-gray-200">{batteriaStorage.pilota_nome || '—'}</span>
+                    {' · '}
+                    Stato: <span className="font-mono text-gray-200">{batteriaStorage.sessione_stato}</span>
+                    {' · '}
+                    Attuale:{' '}
+                    <span className="font-mono text-sky-200">
+                      {Math.round(Number(batteriaStorage.storage_attuale || 0))}
+                    </span>
+                    {' / '}
+                    <span className="font-mono text-gray-300">
+                      {Math.round(Number(batteriaStorage.storage_massimo || 0))}
+                    </span>
+                  </p>
+                  <label className="block">
+                    <span className="text-xs text-gray-400">Imposta carica attuale</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      className="bg-gray-900 rounded px-2 py-1.5 mt-1 w-full border border-gray-600 font-mono"
+                      value={batteriaStorageDraft}
+                      onChange={(e) => setBatteriaStorageDraft?.(e.target.value)}
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 rounded bg-sky-700 hover:bg-sky-600 text-sm text-white disabled:opacity-50"
+                      disabled={batteriaStorageBusy}
+                      onClick={onApplyBatteriaStorage}
+                    >
+                      Applica carica
+                    </button>
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm text-white disabled:opacity-50"
+                      disabled={batteriaStorageBusy}
+                      onClick={onFillBatteriaStorage}
                     >
                       Riempi al massimo
                     </button>

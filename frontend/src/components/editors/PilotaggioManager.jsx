@@ -40,6 +40,8 @@ import {
   staffGetPilotSottosistemi,
   staffGetPilotSerbatoioCarburante,
   staffSetPilotSerbatoioCarburante,
+  staffGetPilotBatteriaStorage,
+  staffSetPilotBatteriaStorage,
   staffGetPilotStatiAllerta,
   staffGetPilotStatoAllerta,
   staffGetPilotRuntimeConfig,
@@ -546,6 +548,9 @@ export default function PilotaggioManager({ onLogout }) {
   const [serbatoioFuel, setSerbatoioFuel] = useState(null);
   const [serbatoioFuelDraft, setSerbatoioFuelDraft] = useState('');
   const [serbatoioFuelBusy, setSerbatoioFuelBusy] = useState(false);
+  const [batteriaStorage, setBatteriaStorage] = useState(null);
+  const [batteriaStorageDraft, setBatteriaStorageDraft] = useState('');
+  const [batteriaStorageBusy, setBatteriaStorageBusy] = useState(false);
   const nuovoEffettoValidation = useMemo(
     () => validateEffettoGuastoBuilder(nuovoEffettoGuastoBuilder),
     [nuovoEffettoGuastoBuilder]
@@ -700,6 +705,9 @@ export default function PilotaggioManager({ onLogout }) {
     setSerbatoioFuel(null);
     setSerbatoioFuelDraft('');
     setSerbatoioFuelBusy(false);
+    setBatteriaStorage(null);
+    setBatteriaStorageDraft('');
+    setBatteriaStorageBusy(false);
   };
 
   const loadSerbatoioFuel = useCallback(async (sottosistemaId) => {
@@ -732,6 +740,39 @@ export default function PilotaggioManager({ onLogout }) {
       setError(err?.message || 'Impossibile aggiornare il carburante.');
     } finally {
       setSerbatoioFuelBusy(false);
+    }
+  };
+
+  const loadBatteriaStorage = useCallback(async (sottosistemaId) => {
+    if (!sottosistemaId) return;
+    setBatteriaStorage({ loading: true });
+    try {
+      const data = await staffGetPilotBatteriaStorage(sottosistemaId, onLogout);
+      setBatteriaStorage(data);
+      if (data?.sessione_attiva && data.storage_attuale != null) {
+        setBatteriaStorageDraft(String(Math.round(Number(data.storage_attuale))));
+      } else {
+        setBatteriaStorageDraft(String(Math.round(Number(data?.storage_massimo || 0))));
+      }
+    } catch (err) {
+      setBatteriaStorage({ loading: false, error: err?.message || 'Errore lettura batterie.' });
+    }
+  }, [onLogout]);
+
+  const applicaBatteriaStorage = async (payload) => {
+    if (!editSottoId) return;
+    setBatteriaStorageBusy(true);
+    setError('');
+    try {
+      const data = await staffSetPilotBatteriaStorage(editSottoId, payload, onLogout);
+      setBatteriaStorage(data);
+      if (data?.storage_attuale != null) {
+        setBatteriaStorageDraft(String(Math.round(Number(data.storage_attuale))));
+      }
+    } catch (err) {
+      setError(err?.message || 'Impossibile aggiornare le batterie.');
+    } finally {
+      setBatteriaStorageBusy(false);
     }
   };
 
@@ -1514,8 +1555,13 @@ export default function PilotaggioManager({ onLogout }) {
                       }
                       if (String(full.tipo || '').toLowerCase() === 'serbatoio') {
                         loadSerbatoioFuel(full.id);
+                        setBatteriaStorage(null);
+                      } else if (String(full.tipo || '').toLowerCase() === 'batteria') {
+                        loadBatteriaStorage(full.id);
+                        setSerbatoioFuel(null);
                       } else {
                         setSerbatoioFuel(null);
+                        setBatteriaStorage(null);
                       }
                     } catch (err) {
                       setError(err?.message || 'Impossibile caricare il sottosistema.');
@@ -2765,6 +2811,13 @@ export default function PilotaggioManager({ onLogout }) {
         onApplySerbatoioFuel={() => applicaSerbatoioFuel({ carburante_attuale: Number(serbatoioFuelDraft) })}
         onFillSerbatoioFuel={() => applicaSerbatoioFuel({ riempi: true })}
         onRefreshSerbatoioFuel={() => loadSerbatoioFuel(editSottoId)}
+        batteriaStorage={sottoModalMode === 'edit' && String(editSotto.tipo || '').toLowerCase() === 'batteria' ? batteriaStorage : null}
+        batteriaStorageDraft={batteriaStorageDraft}
+        setBatteriaStorageDraft={setBatteriaStorageDraft}
+        batteriaStorageBusy={batteriaStorageBusy}
+        onApplyBatteriaStorage={() => applicaBatteriaStorage({ storage_attuale: Number(batteriaStorageDraft) })}
+        onFillBatteriaStorage={() => applicaBatteriaStorage({ riempi: true })}
+        onRefreshBatteriaStorage={() => loadBatteriaStorage(editSottoId)}
         mattoniCatalogo={stivaData?.mattoni_catalogo || []}
       />
 

@@ -158,6 +158,61 @@ def applica_carburante_sintesi(resa: float) -> Dict[str, Any]:
         "resa_calcolata": round(float(resa), 3),
         "aggiunto": round(aggiunto, 3),
         "sversato": round(max(0.0, float(resa) - aggiunto), 3),
+        "destinazione": "carburante",
+    }
+
+
+def payload_storage_sessione() -> Dict[str, Any]:
+    from .engine import capacita_storage_batterie
+
+    sessione = _sessione_serbatoio()
+    massimo = capacita_storage_batterie()
+    attuale = (
+        float(getattr(sessione, "storage_energia_attuale", 0) or 0) if sessione else 0.0
+    )
+    if sessione is not None:
+        massimo = max(massimo, float(sessione.storage_energia_massimo or 0) or massimo)
+        attuale = min(attuale, massimo) if massimo > 0 else attuale
+    return {
+        "storage_attuale": round(attuale, 3),
+        "storage_massimo": round(massimo, 3),
+        "sessione_id": str(sessione.pk) if sessione else None,
+        "nave_ferma": nave_ferma_per_compattatore(sessione),
+    }
+
+
+def applica_storage_sintesi(resa: float) -> Dict[str, Any]:
+    """Versa la resa del bruciatore nelle batterie d'emergenza (stessa formula del carburante)."""
+    from .engine import capacita_storage_batterie
+
+    if resa <= 0:
+        raise ValueError("Resa energia nulla.")
+    sessione = _sessione_serbatoio()
+    if sessione is None:
+        raise ValueError(
+            "Nessuna sessione di volo: avviare la plancia almeno una volta."
+        )
+    massimo = capacita_storage_batterie()
+    if massimo <= 0:
+        raise ValueError("Nessuna batteria d'emergenza configurata.")
+    if float(sessione.storage_energia_massimo or 0) > massimo:
+        massimo = float(sessione.storage_energia_massimo or massimo)
+    prima = float(sessione.storage_energia_attuale or 0.0)
+    spazio = max(0.0, massimo - prima)
+    aggiunto = min(float(resa), spazio)
+    sessione.storage_energia_massimo = massimo
+    sessione.storage_energia_attuale = round(prima + aggiunto, 3)
+    sessione.save(
+        update_fields=["storage_energia_massimo", "storage_energia_attuale", "updated_at"]
+    )
+    return {
+        "storage_prima": round(prima, 3),
+        "storage_attuale": sessione.storage_energia_attuale,
+        "storage_massimo": massimo,
+        "resa_calcolata": round(float(resa), 3),
+        "aggiunto": round(aggiunto, 3),
+        "sversato": round(max(0.0, float(resa) - aggiunto), 3),
+        "destinazione": "batterie",
     }
 
 

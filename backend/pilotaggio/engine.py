@@ -1829,6 +1829,33 @@ def staff_imposta_carburante_sessione(
     return sessione
 
 
+def capacita_storage_batterie() -> float:
+    """Somma la capacità delle batterie attive. 0 se non ce n'è nessuna."""
+    total = float(
+        SottosistemaNave.objects.filter(attivo=True, tipo="batteria").aggregate(
+            total=Sum("capacita_storage")
+        )["total"]
+        or 0.0
+    )
+    return max(0.0, total)
+
+
+@transaction.atomic
+def staff_imposta_storage_sessione(
+    sessione: SessioneVolo, storage_attuale: float
+) -> SessioneVolo:
+    """Imposta la carica delle batterie d'emergenza sulla sessione console (clamp al massimo)."""
+    sessione = SessioneVolo.objects.select_for_update().get(pk=sessione.pk)
+    massimo = capacita_storage_batterie()
+    nuovo = max(0.0, min(float(massimo), float(storage_attuale)))
+    sessione.storage_energia_massimo = massimo
+    sessione.storage_energia_attuale = nuovo
+    sessione.save(
+        update_fields=["storage_energia_massimo", "storage_energia_attuale", "updated_at"]
+    )
+    return sessione
+
+
 def staff_azione_sottosistema_sessione(
     sessione: SessioneVolo,
     sottosistema: "SottosistemaNave",

@@ -39,6 +39,7 @@ export default function CompattatoreScreen({ onLogout, onBack = null, compact = 
   const [quanticoQrId, setQuanticoQrId] = useState('');
   const [quanticoPgId, setQuanticoPgId] = useState('');
   const [burnQty, setBurnQty] = useState(1);
+  const [burnTarget, setBurnTarget] = useState('carburante');
   const [lastSintesi, setLastSintesi] = useState(null);
   const [tab, setTab] = useState(() => initialTab(KIOSK_TABS.map(([id]) => id), 'motore'));
 
@@ -145,14 +146,25 @@ export default function CompattatoreScreen({ onLogout, onBack = null, compact = 
   };
 
   const runSintesi = async () => {
+    const versoBatterie = burnTarget === 'batterie';
     if (preview) {
-      setLastSintesi({
-        resa: 12,
-        aggiunto: 12,
-        sversato: 0,
-        carburante_attuale: 652,
-        carburante_massimo: 1000,
-      });
+      setLastSintesi(versoBatterie
+        ? {
+          destinazione: 'batterie',
+          resa: 12,
+          aggiunto: 12,
+          sversato: 0,
+          storage_attuale: 192,
+          storage_massimo: 500,
+        }
+        : {
+          destinazione: 'carburante',
+          resa: 12,
+          aggiunto: 12,
+          sversato: 0,
+          carburante_attuale: 652,
+          carburante_massimo: 1000,
+        });
       return;
     }
     if (!selectedMattone) {
@@ -163,13 +175,14 @@ export default function CompattatoreScreen({ onLogout, onBack = null, compact = 
     setBusy(true);
     setError('');
     try {
-      const res = await api.compattatoreSintesiCarburante([
-        { mattone_id: selectedMattone, quantita: qty },
-      ]);
+      const allocazioni = [{ mattone_id: selectedMattone, quantita: qty }];
+      const res = versoBatterie
+        ? await api.compattatoreRicaricaBatterie(allocazioni)
+        : await api.compattatoreSintesiCarburante(allocazioni);
       setData(res);
       if (res?.sintesi) setLastSintesi(res.sintesi);
     } catch (e) {
-      setError(e.message || 'Sintesi carburante non riuscita.');
+      setError(e.message || (versoBatterie ? 'Ricarica batterie non riuscita.' : 'Sintesi carburante non riuscita.'));
     } finally {
       setBusy(false);
     }
@@ -187,6 +200,9 @@ export default function CompattatoreScreen({ onLogout, onBack = null, compact = 
   );
   const carburanteAttuale = Math.round(data?.sintesi_carburante?.carburante_attuale || 0);
   const carburanteMassimo = Math.round(data?.sintesi_carburante?.carburante_massimo || 0);
+  const storageAttuale = Math.round(data?.ricarica_batterie?.storage_attuale || 0);
+  const storageMassimo = Math.round(data?.ricarica_batterie?.storage_massimo || 0);
+  const versoBatterie = burnTarget === 'batterie';
 
   const selectedRow = (data?.stiva?.righe || []).find((r) => r.mattone_id === selectedMattone);
   const show = (id) => !compact || tab === id;
@@ -413,9 +429,9 @@ export default function CompattatoreScreen({ onLogout, onBack = null, compact = 
       <section hidden={!show('carburante')} className="compattatore-panel compattatore-panel--fuel">
         <div className="compattatore-panel-corner compattatore-panel-corner--tl" aria-hidden="true" />
         <div className="compattatore-panel-corner compattatore-panel-corner--br" aria-hidden="true" />
-        <h2 className="compattatore-panel-title">Bruciatore / sintesi carburante</h2>
+        <h2 className="compattatore-panel-title">Bruciatore</h2>
         <p className="compattatore-panel-sub">
-          Consuma 1–3 componenti dalla stiva → riempie i serbatoi. Resa scala con livello Z e qualità.
+          Consuma 1–3 componenti dalla stiva. La resa va nei serbatoi o nelle batterie d&apos;emergenza.
         </p>
 
         {data?.puo_energizzare_minimo ? (
@@ -439,6 +455,14 @@ export default function CompattatoreScreen({ onLogout, onBack = null, compact = 
             </strong>
           </div>
           <div>
+            <span className="comp-field-label">Batterie</span>
+            <strong>
+              {storageAttuale}
+              /
+              {storageMassimo}
+            </strong>
+          </div>
+          <div>
             <span className="comp-field-label">Stato</span>
             <strong>{data?.nave_ferma ? 'Nave ferma' : 'In crociera'}</strong>
           </div>
@@ -449,6 +473,23 @@ export default function CompattatoreScreen({ onLogout, onBack = null, compact = 
               %
             </strong>
           </div>
+        </div>
+
+        <div className="comp-burn-target" role="group" aria-label="Destinazione ricarica">
+          <button
+            type="button"
+            className={burnTarget === 'carburante' ? 'is-active' : ''}
+            onClick={() => setBurnTarget('carburante')}
+          >
+            Serbatoi
+          </button>
+          <button
+            type="button"
+            className={burnTarget === 'batterie' ? 'is-active' : ''}
+            onClick={() => setBurnTarget('batterie')}
+          >
+            Batterie
+          </button>
         </div>
 
         <label className="comp-field">
@@ -474,7 +515,7 @@ export default function CompattatoreScreen({ onLogout, onBack = null, compact = 
           disabled={busy || !opReady || !selectedMattone}
           onClick={runSintesi}
         >
-          Sintetizza carburante
+          {versoBatterie ? 'Ricarica batterie' : 'Sintetizza carburante'}
         </button>
 
         <ResultScreen
@@ -491,15 +532,19 @@ export default function CompattatoreScreen({ onLogout, onBack = null, compact = 
                 {' → +'}
                 {lastSintesi.aggiunto}
                 {' '}
-                carburante
+                {lastSintesi.destinazione === 'batterie' ? 'energia storage' : 'carburante'}
                 {(lastSintesi.sversato || 0) > 0 ? ` (sversato ${lastSintesi.sversato})` : ''}
               </p>
               <p className="comp-result-line">
-                Serbatoi:
+                {lastSintesi.destinazione === 'batterie' ? 'Batterie:' : 'Serbatoi:'}
                 {' '}
-                {lastSintesi.carburante_attuale}
+                {lastSintesi.destinazione === 'batterie'
+                  ? lastSintesi.storage_attuale
+                  : lastSintesi.carburante_attuale}
                 /
-                {lastSintesi.carburante_massimo}
+                {lastSintesi.destinazione === 'batterie'
+                  ? lastSintesi.storage_massimo
+                  : lastSintesi.carburante_massimo}
                 {lastSintesi.miscela ? ' · miscela catalitica' : ''}
               </p>
             </>
