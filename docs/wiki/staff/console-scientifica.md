@@ -117,7 +117,7 @@ Scheda **Interventi**. I primi quattro spendono coerenza, azzerano la carica app
 | Eco parziale | La prossima valutazione SP non consuma un tick | 6 | 0 | 1 per evento |
 | Reset risonanza | Fasi R/S/T a 0 | 0 | 0 | libero, non conta nel tetto di volo, anche senza evento |
 
-I componenti, se richiesti, escono dalla stiva (override per tipo in `scientifica_interventi_requisiti_json`). La dilatazione non si applica a un evento a durata infinita. Coerenza insufficiente, gabbia già armata, correzione già usata o eco già attiva: il pulsante resta spento e indica il motivo.
+Sul kiosk 800×480 i cinque pulsanti stanno tutti nello spazio sotto le schede, senza scorrere. Se l'intervento chiede componenti, la console ne pesca uno a caso in stiva (la quantità richiesta, dello stesso tipo): non c'è un selettore. Un override in `scientifica_interventi_requisiti_json` restringe il pescaggio ai mattoni ammessi. La dilatazione non si applica a un evento a durata infinita. Coerenza insufficiente, gabbia già armata, correzione già usata o eco già attiva: il pulsante resta spento e il motivo è nel titolo del pulsante.
 
 ---
 

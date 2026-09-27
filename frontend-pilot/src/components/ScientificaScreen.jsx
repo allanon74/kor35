@@ -190,12 +190,10 @@ function MatricePanel({ matrice, busy, onFase }) {
 function InterventiPanel({
   interventi,
   matrice,
-  stivaRighe,
   busy,
+  compact = false,
   onIntervento,
 }) {
-  const [selectedByTipo, setSelectedByTipo] = useState({});
-
   const catalogo = interventi?.catalogo || [];
   if (!interventi?.abilitati) {
     return (
@@ -206,69 +204,33 @@ function InterventiPanel({
     );
   }
 
-  const mattoneOptions = (stivaRighe || []).filter((r) => (r.quantita || 0) > 0);
-
-  const runIntervento = (tipo, nComp) => {
-    const mid = selectedByTipo[tipo];
-    const componenti = nComp > 0 && mid
-      ? [{ mattone_id: mid, quantita: nComp }]
-      : [];
-    onIntervento(tipo, componenti);
-  };
-
   return (
-    <section className="sci-panel">
-      <h2>Interventi attivi</h2>
-      <p className="sci-muted">
+    <section className={`sci-panel${compact ? ' sci-interventi-kiosk' : ''}`}>
+      {compact ? null : <h2>Interventi attivi</h2>}
+      <p className="sci-muted sci-interventi-meta">
         {interventi.interventi_rimanenti_volo ?? 0}
         {' '}
-        interventi rimanenti questo volo · coerenza disponibile:
+        rimasti · coerenza
         {' '}
         {matrice?.coerenza ?? 0}
+        {compact ? ' · il componente esce a caso dalla stiva' : ' · componente pescato a caso dalla stiva'}
       </p>
       <div className="sci-interventi-list">
         {catalogo.map((iv) => (
-          <div key={iv.tipo} className="sci-intervento-row">
-            <div className="sci-intervento-info">
-              <strong>{iv.label}</strong>
-              <p>{iv.descrizione}</p>
-              <span className="sci-intervento-cost">
-                {iv.coerenza > 0 ? `${iv.coerenza} coerenza` : 'Gratuito'}
-                {iv.componenti > 0 ? ` · ${iv.componenti} comp.` : ''}
-              </span>
-            </div>
-            {iv.componenti > 0 && iv.disponibile ? (
-              <select
-                className="sci-intervento-select"
-                value={selectedByTipo[iv.tipo] || ''}
-                disabled={busy}
-                onChange={(e) => setSelectedByTipo((p) => ({ ...p, [iv.tipo]: e.target.value }))}
-              >
-                <option value="">— componente —</option>
-                {mattoneOptions.map((r) => (
-                  <option key={r.mattone_id} value={r.mattone_id}>
-                    {r.nome || r.indice_componente}
-                    {' '}
-                    (×
-                    {r.quantita}
-                    )
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <button
-              type="button"
-              className="sci-btn sci-btn--primary sci-btn--compact"
-              disabled={busy || !iv.disponibile}
-              title={iv.motivo_indisponibile || ''}
-              onClick={() => runIntervento(iv.tipo, iv.componenti)}
-            >
-              Esegui
-            </button>
-            {!iv.disponibile && iv.motivo_indisponibile ? (
-              <span className="sci-intervento-blocked">{iv.motivo_indisponibile}</span>
-            ) : null}
-          </div>
+          <button
+            key={iv.tipo}
+            type="button"
+            className="sci-btn sci-btn--primary sci-intervento-btn"
+            disabled={busy || !iv.disponibile}
+            title={iv.motivo_indisponibile || iv.descrizione || ''}
+            onClick={() => onIntervento(iv.tipo, [])}
+          >
+            <span className="sci-intervento-btn-label">{iv.label}</span>
+            <span className="sci-intervento-btn-cost">
+              {iv.coerenza > 0 ? `${iv.coerenza} coerenza` : 'gratis'}
+              {iv.componenti > 0 ? ` · ${iv.componenti}` : ''}
+            </span>
+          </button>
         ))}
       </div>
     </section>
@@ -602,8 +564,8 @@ export default function ScientificaScreen({
         <InterventiPanel
           interventi={interventi}
           matrice={matrice}
-          stivaRighe={stivaRighe}
           busy={busy}
+          compact={compact}
           onIntervento={runIntervento}
         />
       ) : null}
