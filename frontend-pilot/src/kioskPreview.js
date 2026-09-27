@@ -67,7 +67,6 @@ export const PREVIEW_SCIENTIFICA = {
       { gruppo: 'Termico', intensita: 41, colore: '#ff8a65' },
       { gruppo: 'Esotico', intensita: 18, colore: '#ce93d8' },
     ],
-    delta_navigazione: ['Deriva +2 sul vettore di crociera', 'Sensori V instabili'],
     rischio_ca: {
       livello: 'elevato',
       etichetta: 'Rischio elevato',
