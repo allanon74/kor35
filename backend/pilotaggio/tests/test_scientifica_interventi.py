@@ -141,6 +141,18 @@ class ScientificaInterventiTests(TestCase):
         staff_modifica_stiva(mattone_id=str(mattone.pk), delta=delta)
         return str(mattone.pk)
 
+    def test_dilatazione_senza_selezione_pesca_un_componente(self):
+        from pilotaggio.models import StivaComponenteNave
+
+        self._set_coerenza(20)
+        mid = self._mattone_stiva(4)
+        prima = int(StivaComponenteNave.objects.get(mattone_id=mid).quantita)
+        esegui_intervento_scientifico(tipo="dilatazione", componenti_scelti=[])
+        dopo = int(StivaComponenteNave.objects.get(mattone_id=mid).quantita)
+        self.assertEqual(dopo, prima - 1)
+        self.istanza.refresh_from_db()
+        self.assertEqual(self.istanza.ticks_rimanenti, 3)
+
     def test_dilatazione_aumenta_ticks(self):
         self._set_coerenza(20)
         mid = self._mattone_stiva(5)
