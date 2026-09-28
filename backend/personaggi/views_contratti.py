@@ -32,6 +32,7 @@ from personaggi.contratti_service import (
     segnala_ferita,
     serializza_contratto,
     serializza_modello,
+    slot_liberi,
     slot_totali,
     slot_usati,
     tab_visibile,
@@ -70,6 +71,7 @@ class ContrattiAccessoView(APIView):
                 "visibile": tab_visibile(pg, request.user),
                 "slot_totali": slot_totali(pg),
                 "slot_usati": slot_usati(pg),
+                "slot_liberi": slot_liberi(pg),
             }
         )
 
@@ -102,7 +104,8 @@ class ContrattiSchedaView(APIView):
                 "visibile": tab_visibile(pg, request.user),
                 "slot_totali": slot_totali(pg),
                 "slot_usati": slot_usati(pg),
-                "puo_proporre": slot_usati(pg) < slot_totali(pg),
+                "slot_liberi": slot_liberi(pg),
+                "puo_proporre": slot_liberi(pg) > 0,
                 "riepilogo": riepilogo_ruoli(pg),
                 "modelli": modelli,
                 "contratti": [serializza_contratto(c, pg.pk) for c in contratti[:80]],

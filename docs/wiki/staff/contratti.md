@@ -43,7 +43,9 @@ slot = base della Korp
 | Carica | `bonus_slot_contratto` | Intero libero, **diverso per ogni carica**. Il valore iniziale è 0: il grado d’ingresso non aggiunge slot da solo. Può essere +1, +2, oppure negativo. |
 | Scheda / abilità | statistica **SCT** | Creata dalla migrazione, parametro `SCT`, valore di partenza 0. Un’abilità di default della Korp, un’abilità acquistata o un oggetto la aumentano. Conta solo se la Korp sottoscrive. |
 
-Senza carica il bonus carica è 0. Occupano uno slot le proposte in attesa e i contratti stipulati. Rifiuto, annullamento, scadenza e scioglimento liberano lo slot.
+Senza carica il bonus carica è 0. Occupano uno slot le proposte in attesa e i contratti stipulati **come proponente**. I contratti stipulati come cliente non entrano nel conteggio dei liberi. Rifiuto, annullamento, scadenza e scioglimento liberano lo slot del proponente.
+
+I **contratti liberi** sono `slot − occupati come proponente`. Come cliente il tetto è un altro: **un solo contratto stipulato per ciascun modello**. Un secondo modello, anche con lo stesso nome di esempio, è un contratto diverso. Quando quello stipulato scade o si risolve, lo stesso modello si può firmare di nuovo.
 
 ### Esempio — tre Korp, cariche diverse
 
@@ -71,7 +73,7 @@ Dashboard staff → tool **Contratti** → nuovo modello. I campi sono sempre qu
 |-------|----------------|
 | Korp | Solo i membri di quella Korp possono proporlo. |
 | Nome | È l’etichetta che vede il giocatore. Non esiste un tipo fisso separato dal nome. |
-| Chiave di esclusività | Testo libero, opzionale. Il cliente può avere **un solo** contratto stipulato per la stessa chiave. Vuota = può firmarne quanti vuole di quel modello, gli slot del proponente permettendo. |
+| Limite del cliente | Un solo contratto **stipulato** per questo modello. Non dipende da una chiave: due modelli distinti si possono firmare entrambi. |
 | Durata | `GIORNI` = N giorni reali da quando nasce la proposta. `FINE_EVENTO` = scade alla `data_fine` dell’evento scelto in proposta. La data mostrata in firma non si sposta. |
 | Testo | Ciò che il cliente legge sul QR. Segnaposto: `{{proponente}}`, `{{cliente}}`, `{{korp}}`, `{{scadenza}}`, `{{parametri}}`, `{{clausole}}`, `{{compensi}}`. |
 | Parametri | Righe che aggiungi tu. Vedi sotto. |
@@ -241,7 +243,7 @@ Sblocca gli effetti (di modello o di clausola) il cui innesco è `AD_ATTIVAZIONE
 
 ## 6. Ricette da copiare
 
-In editor, **Crea da esempio** prepara queste combinazioni. Si possono duplicare e modificare. La chiave di esclusività è quella indicata: un cliente non firma due Talenti insieme, anche se i modelli hanno nomi diversi, finché la chiave è `talento`.
+In editor, **Crea da esempio** prepara queste combinazioni. Si possono duplicare e modificare. Il cliente ne stipula uno per ogni modello salvato: due copie del preset Talento sono due modelli e si possono firmare entrambe.
 
 ### Talento — chiave `talento`
 
@@ -303,7 +305,7 @@ Alla firma entrambi ricevono 40 sul deposito e non succede altro. All’attivazi
 
 Non è una settima maschera. Si compone così:
 
-- Nome: Patrono. Chiave di esclusività: `patrono` (così non si accumula con un altro Patrono; non blocca un Talento).
+- Nome: Patrono. È un modello a sé: il cliente può averne uno stipulato insieme a un Talento, e non un secondo Patrono finché il primo è stipulato.
 - `trasferimento` cliente → proponente alla stipula, somma 100, `BLOCCA`.
 - `percentuale_task` con 5% al cliente e 5% al proponente.
 - `penale_confermata` morte, conferma staff, importo 500, dal proponente al cliente.

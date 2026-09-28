@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { FileSignature } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import { contrattiGetScheda } from '../api';
-import { contrattiComeCliente, numeriContratti } from '../lib/contrattiRiepilogo';
+import { contrattiComeCliente, numeriContratti, slotLiberi } from '../lib/contrattiRiepilogo';
 import { renderTestoContratto } from '../lib/contrattoTesto';
 
 const STATO_LABEL = {
@@ -79,9 +79,14 @@ function ElencoCliente({ contratti, dettaglio }) {
   );
 }
 
-function Contatori({ attiviCliente, attiviOfferente }) {
+function Contatori({ attiviCliente, attiviOfferente, liberi }) {
   return (
     <div className="grid grid-cols-2 gap-3">
+      <div className="col-span-2 rounded-md bg-gray-800 p-2">
+        <p className="text-xs text-gray-400">Contratti liberi</p>
+        <p className="text-2xl font-black tabular-nums text-white">{liberi}</p>
+        <p className="text-[11px] text-gray-500">Slot ancora apribili come proponente.</p>
+      </div>
       <div className="rounded-md bg-gray-800 p-2">
         <p className="text-xs text-gray-400">Contratti attivi (cliente)</p>
         <p className="text-2xl font-black tabular-nums text-white">{attiviCliente}</p>
@@ -125,7 +130,7 @@ export default function ContrattiSchedaPresenza({ personaggioId, onLogout, modo 
 
   return (
     <section className="mx-auto mb-6 max-w-2xl space-y-3">
-      <Contatori attiviCliente={attiviCliente} attiviOfferente={attiviOfferente} />
+      <Contatori attiviCliente={attiviCliente} attiviOfferente={attiviOfferente} liberi={slotLiberi(dati)} />
       {comeCliente.length ? (
         <div>
           <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-200">

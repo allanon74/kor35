@@ -27,7 +27,7 @@ Creare una proposta richiede in più slot liberi (sotto). Un cliente fuori dalle
 
 ## Slot di contratto
 
-Uno **slot di contratto** è la capacità del proponente di tenere aperta una proposta o un contratto stipulato. Il cliente non consuma slot. Il tetto «uno per tipologia» è una **chiave di esclusività** scritta dallo staff sul modello (sotto): i sei esempi ne hanno una ciascuno, un modello futuro può riusare una chiave esistente, inventarne una, oppure non averne.
+Uno **slot di contratto** è la capacità del proponente di tenere aperta una proposta o un contratto stipulato. I contratti liberi sono gli slot ancora aperti e contano solo i contratti come proponente. Il cliente non consuma slot. Il tetto del cliente è **uno stipulato per modello**: due modelli distinti si firmano entrambi, anche se nascono dallo stesso preset.
 
 ### Perché statistica + dati su Korp/Carica
 
@@ -66,7 +66,7 @@ IN_ATTESA → STIPULATO → SCADUTO
 3. Nasce un `QrCode` collegato (stesso canale di negozi e scontri carte). Lo scanner esistente (`QrCodeDetailView`) risponde `tipo_modello: contratto`.
 4. Il cliente vede il testo e, in fondo, **Sottoscrivi fino al {data}** oppure **Rifiuta**. La data è quella fissata alla creazione della proposta (`adesso + durata`, oppure `data_fine` dell'evento se la durata è «fine evento»). Non si ricalcola al momento della firma.
 5. Se la proposta è già oltre la scadenza, il QR non è più firmabile e lo slot si libera.
-6. Alla firma si controlla: modulo attivo, cliente diverso dal proponente, proposta ancora `IN_ATTESA`, e — se il modello ha una chiave di esclusività — il cliente non ha già un `STIPULATO` con la stessa chiave. Poi partono gli effetti con innesco `ALLA_STIPULA`.
+6. Alla firma si controlla: modulo attivo, cliente diverso dal proponente, proposta ancora `IN_ATTESA`, e il cliente non ha già un `STIPULATO` dello stesso modello. Poi partono gli effetti con innesco `ALLA_STIPULA`.
 
 La scadenza è pigra: ogni lettura e ogni hook che eroga un bonus marca `SCADUTO` se `now > scadenza`. Gli hook economici agiscono solo su `STIPULATO` ancora nel termine. Funziona anche sul nodo edge offline, senza un cron.
 
@@ -90,7 +90,7 @@ La UI dello staff è generata dal registry: elenco effetti, e per ciascuno i cam
 |-------|--------|
 | `campagna`, `korp` | Offerta di quella Korp, in quella campagna. |
 | `nome`, `attivo` | Voce nel wizard del proponente. |
-| `chiave_esclusivita` | Testo libero, opzionale. Due modelli con la stessa chiave non possono essere entrambi stipulati dallo stesso cliente. Vuota = nessun tetto di questo tipo. I preset usano `talento`, `creatore`, `pubblicitario`, `protettore`, `mercenario`, `agente`. |
+| Limite cliente | Un solo `STIPULATO` per `ModelloContratto`. La chiave di esclusività dei preset non blocca più la firma. |
 | `durata_modo` | `GIORNI` (N giorni reali) oppure `FINE_EVENTO` (scadenza = `data_fine` dell'evento scelto in proposta; deve esistere un evento). |
 | `durata_giorni` | Usato se `GIORNI`. |
 | `testo` | Testo mostrato alla firma, con segnaposto. |
@@ -221,7 +221,7 @@ Tab `contratti` in `MainPage`, accanto alle altre tab a modulo.
 - Elenco attivi e in attesa: controparte, ruolo (Proponente / Cliente), nome modello, scadenza (data reale).
 - Slot usati / slot totali. Con slot liberi, wizard «Nuova proposta» (modelli della Korp, parametri lasciati al proponente, clausole e compensi ammessi).
 - Proposta in attesa: QR, testo, annulla.
-- Dal QR: testo completo, poi i due pulsanti. Se la chiave di esclusività è già occupata, la firma è disabilitata e compare il motivo.
+- Dal QR: testo completo, poi i due pulsanti. Se il cliente ha già uno stipulato di quello stesso modello, la firma è disabilitata e compare il motivo.
 - Le azioni extra dipendono dagli effetti nello snapshot, non dal nome del modello: associa post se c’è `post_tetto_evento`, registra servizio se c’è `contatore_servizi`, segnala ferita se c’è `penale_confermata` su `FERITA`, attiva se c’è `attivazione`.
 
 ## Sync ed edge

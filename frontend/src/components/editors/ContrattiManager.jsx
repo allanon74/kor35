@@ -295,7 +295,9 @@ export default function ContrattiManager({ onLogout }) {
                     <option key={k.id} value={k.id}>{k.nome}</option>
                   ))}
                 </select>
-                <input className="rounded border border-gray-700 bg-gray-900 p-2" placeholder="Chiave esclusività (vuota = nessuna)" value={bozza.chiave_esclusivita || ''} onChange={(e) => setBozza({ ...bozza, chiave_esclusivita: e.target.value })} />
+                <p className="rounded border border-gray-800 bg-gray-900 p-2 text-xs text-gray-400">
+                  Il cliente può avere un solo contratto stipulato per questo modello. Scaduto o risolto, può firmarne un altro uguale.
+                </p>
                 <select className="rounded border border-gray-700 bg-gray-900 p-2" value={bozza.durata_modo} onChange={(e) => setBozza({ ...bozza, durata_modo: e.target.value })}>
                   <option value="GIORNI">Giorni</option>
                   <option value="FINE_EVENTO">Fine evento</option>

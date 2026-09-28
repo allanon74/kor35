@@ -14,6 +14,13 @@ export function contrattiComeCliente(contratti) {
     .sort((a, b) => (ORDINE_CLIENTE[a.stato] ?? 9) - (ORDINE_CLIENTE[b.stato] ?? 9));
 }
 
+export function slotLiberi(scheda) {
+  if (scheda && Number.isFinite(Number(scheda.slot_liberi))) return Number(scheda.slot_liberi);
+  const totali = Number(scheda?.slot_totali) || 0;
+  const usati = Number(scheda?.slot_usati) || 0;
+  return Math.max(0, totali - usati);
+}
+
 export function numeriContratti(scheda) {
   const riepilogo = scheda?.riepilogo;
   if (riepilogo && Number.isFinite(Number(riepilogo.attivi_cliente)) && Number.isFinite(Number(riepilogo.attivi_offerente))) {

@@ -23,7 +23,9 @@ from personaggi.contratti_service import (
     riepilogo_ruoli,
     on_task_reclamata,
     risposta_qr_contratto,
+    slot_liberi,
     slot_totali,
+    slot_usati,
     tab_visibile,
 )
 from personaggi.economia_crediti import CONTO_CORRENTE, saldo_conto
@@ -149,9 +151,10 @@ class ContrattiMotoreTests(TestCase):
         self.carica.save(update_fields=["bonus_slot_contratto", "updated_at"])
         self.assertEqual(slot_totali(self.proponente), 0)
 
-    def test_firma_rifiuto_annullo_ed_esclusivita(self):
-        prima = self._proposta("talento")
-        seconda = self._proposta("talento")
+    def test_firma_rifiuto_annullo_e_un_cliente_per_modello(self):
+        modello = crea_preset(self.campagna, self.korp, "talento")
+        prima = crea_proposta(self.proponente, modello, {}, [])
+        seconda = crea_proposta(self.proponente, modello, {}, [])
         self.assertEqual(prima.stato, STATO_IN_ATTESA)
         with self.assertRaises(ValidationError):
             firma_contratto(prima, self.proponente)
@@ -160,11 +163,32 @@ class ContrattiMotoreTests(TestCase):
         self.assertEqual(prima.stato, STATO_STIPULATO)
         self.assertEqual(riepilogo_ruoli(self.cliente), {"attivi_cliente": 1, "attivi_offerente": 0})
         self.assertEqual(riepilogo_ruoli(self.proponente), {"attivi_cliente": 0, "attivi_offerente": 1})
+        self.assertEqual(slot_usati(self.cliente), 0)
         with self.assertRaises(ValidationError):
             firma_contratto(seconda, self.cliente)
         annulla_proposta(seconda, self.proponente)
         seconda.refresh_from_db()
         self.assertEqual(seconda.stato, STATO_ANNULLATO)
+
+    def test_slot_liberi_solo_proponente_e_altro_modello_firmabile(self):
+        PersonaggioCarrieraMembership.objects.create(
+            personaggio=self.cliente,
+            carriera=self.korp,
+            tipo_carriera=self.tipo_korp,
+        )
+        self.assertEqual(slot_totali(self.cliente), 3)
+        self.assertEqual(slot_liberi(self.cliente), 3)
+        talento = crea_preset(self.campagna, self.korp, "talento")
+        firma_contratto(crea_proposta(self.proponente, talento, {}, []), self.cliente)
+        self.assertEqual(slot_usati(self.cliente), 0)
+        self.assertEqual(slot_liberi(self.cliente), 3)
+        self.assertEqual(slot_usati(self.proponente), 1)
+        self.assertEqual(slot_liberi(self.proponente), slot_totali(self.proponente) - 1)
+        altro_talento = crea_preset(self.campagna, self.korp, "talento")
+        self.assertEqual(altro_talento.chiave_esclusivita, talento.chiave_esclusivita)
+        firma_contratto(crea_proposta(self.proponente, altro_talento, {}, []), self.cliente)
+        self.assertEqual(riepilogo_ruoli(self.cliente)["attivi_cliente"], 2)
+        self.assertEqual(slot_usati(self.cliente), 0)
 
     def test_firma_blocca_se_il_prezzo_non_e_coperto(self):
         proposta = self._proposta("protettore")
