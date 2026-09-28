@@ -12,12 +12,13 @@ from django.utils import timezone
 
 from gestione_plot.models import Evento
 from personaggi.contratti_effetti import calcola_post_tetto, render_testo_contratto
-from personaggi.contratti_models import STATO_ANNULLATO, STATO_IN_ATTESA, STATO_STIPULATO
+from personaggi.contratti_models import STATO_ANNULLATO, STATO_IN_ATTESA, STATO_STIPULATO, Contratto
 from personaggi.contratti_service import (
     annulla_proposta,
     costo_con_sconto_contratto,
     crea_preset,
     crea_proposta,
+    elimina_contratto,
     firma_contratto,
     on_evento_terminato,
     riepilogo_ruoli,
@@ -36,6 +37,7 @@ from personaggi.models import (
     Carriera,
     Personaggio,
     PersonaggioCarrieraMembership,
+    QrCode,
     Statistica,
     TipologiaPersonaggio,
     TipoCarriera,
@@ -189,6 +191,15 @@ class ContrattiMotoreTests(TestCase):
         firma_contratto(crea_proposta(self.proponente, altro_talento, {}, []), self.cliente)
         self.assertEqual(riepilogo_ruoli(self.cliente)["attivi_cliente"], 2)
         self.assertEqual(slot_usati(self.cliente), 0)
+
+    def test_elimina_contratto_libera_lo_slot_e_il_qr(self):
+        proposta = self._proposta("talento")
+        qr_id = proposta.qr_code_id
+        self.assertEqual(slot_usati(self.proponente), 1)
+        elimina_contratto(proposta)
+        self.assertFalse(Contratto.objects.filter(pk=proposta.pk).exists())
+        self.assertFalse(QrCode.objects.filter(pk=qr_id).exists())
+        self.assertEqual(slot_usati(self.proponente), 0)
 
     def test_firma_blocca_se_il_prezzo_non_e_coperto(self):
         proposta = self._proposta("protettore")

@@ -21,6 +21,7 @@ from personaggi.contratti_service import (
     associa_post,
     crea_preset,
     crea_proposta,
+    elimina_contratto,
     firma_contratto,
     marca_scaduti,
     qr_png_base64,
@@ -279,7 +280,12 @@ class ContrattiStaffRuntimeView(APIView):
         if not user_is_staff_campagna(request.user, campagna):
             return Response({"error": "Solo staff."}, status=status.HTTP_403_FORBIDDEN)
         marca_scaduti()
-        qs = Contratto.objects.filter(campagna=campagna).select_related("proponente", "cliente").prefetch_related("adempimenti")[:100]
+        qs = (
+            Contratto.objects.filter(campagna=campagna)
+            .select_related("proponente", "cliente")
+            .prefetch_related("adempimenti")
+            .order_by("-created_at")[:100]
+        )
         return Response([serializza_contratto(c) for c in qs])
 
     def post(self, request):
@@ -288,6 +294,10 @@ class ContrattiStaffRuntimeView(APIView):
             return Response({"error": "Solo staff."}, status=status.HTTP_403_FORBIDDEN)
         azione = request.data.get("azione") or "conferma"
         try:
+            if azione == "elimina":
+                contratto = get_object_or_404(Contratto, pk=request.data.get("contratto_id"), campagna=campagna)
+                elimina_contratto(contratto)
+                return Response({"eliminato": True})
             if azione == "attiva":
                 contratto = get_object_or_404(Contratto, pk=request.data.get("contratto_id"), campagna=campagna)
                 attiva_contratto(contratto, contratto.proponente, staff=True)
