@@ -114,7 +114,10 @@ export default function ContrattiTab({ onLogout }) {
         <div>
           <h1 className="text-xl font-black">Contratti</h1>
           <p className="text-sm text-gray-400">
-            Slot proponente: {scheda.slot_usati} / {scheda.slot_totali}
+            Contratti liberi: {Number.isFinite(Number(scheda.slot_liberi))
+              ? scheda.slot_liberi
+              : Math.max(0, (scheda.slot_totali || 0) - (scheda.slot_usati || 0))}
+            {' '}({scheda.slot_usati} occupati come proponente su {scheda.slot_totali})
           </p>
         </div>
       </header>

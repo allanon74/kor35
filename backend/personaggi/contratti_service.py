@@ -118,7 +118,28 @@ def slot_totali(personaggio) -> int:
 
 
 def slot_usati(personaggio) -> int:
+    """Solo i contratti aperti come proponente. Quelli stipulati come cliente non occupano slot."""
     return Contratto.objects.filter(proponente=personaggio, stato__in=STATI_OCCUPANO_SLOT).count()
+
+
+def slot_liberi(personaggio) -> int:
+    return max(0, slot_totali(personaggio) - slot_usati(personaggio))
+
+
+def cliente_ha_modello_stipulato(cliente, modello_id, escluso_pk=None) -> bool:
+    """Il cliente può avere un solo contratto STIPULATO per ciascun modello."""
+    qs = Contratto.objects.filter(cliente=cliente, modello_id=modello_id, stato=STATO_STIPULATO)
+    if escluso_pk is not None:
+        qs = qs.exclude(pk=escluso_pk)
+    return qs.exists()
+
+
+def riepilogo_ruoli(personaggio) -> dict:
+    """Contratti STIPULATO del personaggio, divisi per ruolo. Le proposte in attesa non contano."""
+    return {
+        "attivi_cliente": Contratto.objects.filter(cliente=personaggio, stato=STATO_STIPULATO).count(),
+        "attivi_offerente": Contratto.objects.filter(proponente=personaggio, stato=STATO_STIPULATO).count(),
+    }
 
 
 def tab_visibile(personaggio, user=None) -> bool:
@@ -719,12 +740,8 @@ def firma_contratto(contratto: Contratto, cliente) -> Contratto:
         raise ValidationError("La proposta è scaduta.")
     if cliente.pk == contratto.proponente_id:
         raise ValidationError("Non puoi sottoscrivere un tuo contratto.")
-    chiave = (contratto.snapshot or {}).get("chiave_esclusivita") or ""
-    if chiave:
-        occupata = Contratto.objects.filter(cliente=cliente, stato=STATO_STIPULATO).exclude(pk=contratto.pk)
-        for altro in occupata:
-            if (altro.snapshot or {}).get("chiave_esclusivita") == chiave:
-                raise ValidationError("Hai già un contratto attivo di questo tipo.")
+    if cliente_ha_modello_stipulato(cliente, contratto.modello_id, escluso_pk=contratto.pk):
+        raise ValidationError("Hai già un contratto stipulato di questo modello.")
     contratto.cliente = cliente
     contratto.stato = STATO_STIPULATO
     contratto.stipulata_at = timezone.now()
@@ -953,14 +970,9 @@ def risposta_qr_contratto(qr_code, request):
     dati = serializza_contratto(contratto, scanner.pk)
     puo_firmare = contratto.stato == STATO_IN_ATTESA and scanner.pk != contratto.proponente_id
     motivo = ""
-    if puo_firmare:
-        chiave = (contratto.snapshot or {}).get("chiave_esclusivita") or ""
-        if chiave:
-            for altro in Contratto.objects.filter(cliente=scanner, stato=STATO_STIPULATO):
-                if (altro.snapshot or {}).get("chiave_esclusivita") == chiave:
-                    puo_firmare = False
-                    motivo = "Hai già un contratto attivo di questo tipo."
-                    break
+    if puo_firmare and cliente_ha_modello_stipulato(scanner, contratto.modello_id, escluso_pk=contratto.pk):
+        puo_firmare = False
+        motivo = "Hai già un contratto stipulato di questo modello."
     dati["puo_firmare"] = puo_firmare
     dati["motivo_blocco"] = motivo
     dati["puo_rifiutare"] = contratto.stato == STATO_IN_ATTESA and scanner.pk != contratto.proponente_id
