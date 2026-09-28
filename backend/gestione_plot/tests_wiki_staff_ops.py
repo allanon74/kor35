@@ -87,6 +87,7 @@ class WikiStaffOpsSyncTests(TestCase):
         self.assertEqual(contratti_page.parent_id, parent.id)
         self.assertTrue(contratti_page.visibile_solo_staff)
         self.assertIn("slot_contratto_base", contratti_page.contenuto)
+        self.assertIn("Carica minima", contratti_page.contenuto)
         self.assertIn("Contratti come cliente", contratti_page.contenuto)
         self.assertIn("post_tetto_evento", contratti_page.contenuto)
         self.assertIn("conto deposito", contratti_page.contenuto)

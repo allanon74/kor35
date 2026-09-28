@@ -41,6 +41,13 @@ const PRESET = [
 
 const TIPI_PARAM = ['INTERO', 'DECIMALE', 'PERCENTUALE', 'TESTO', 'SCELTA', 'PERSONAGGIO'];
 
+function caricheDellaKorp(catalogo, korpId) {
+  return (catalogo?.cariche || [])
+    .filter((c) => (c.carriere_ids || []).some((id) => String(id) === String(korpId)))
+    .slice()
+    .sort((a, b) => (a.ordine || 0) - (b.ordine || 0) || String(a.nome).localeCompare(String(b.nome), 'it'));
+}
+
 function vuoto(korpId) {
   return {
     id: '',
@@ -48,6 +55,8 @@ function vuoto(korpId) {
     attivo: true,
     korp: korpId || '',
     chiave_esclusivita: '',
+    prototipo: '',
+    carica_minima: '',
     durata_modo: 'GIORNI',
     durata_giorni: 90,
     testo: '{{proponente}} propone a {{cliente}} fino al {{scadenza}}.\n{{parametri}}',
@@ -303,9 +312,10 @@ export default function ContrattiManager({ onLogout }) {
           <aside className={`${staffPanelClass} space-y-3`}>
             <div className="flex flex-wrap gap-2">
               {PRESET.map(([codice, label]) => (
-                <button key={codice} type="button" disabled={busy} className={`${staffSecondaryBtnClass} min-h-11`} onClick={() => creaPreset(codice)}>{label}</button>
+                <button key={codice} type="button" disabled={busy} className={`${staffSecondaryBtnClass} min-h-11`} onClick={() => creaPreset(codice)}>Aggiungi {label}</button>
               ))}
             </div>
+            <p className="text-xs text-gray-500">Ogni clic aggiunge un modello nuovo. Dello stesso tipo puoi averne più di uno, poi ne cambi nome e numeri.</p>
             <button
               type="button"
               className={`${staffSecondaryBtnClass} min-h-11 w-full justify-center`}
@@ -321,7 +331,12 @@ export default function ContrattiManager({ onLogout }) {
                 className={`block min-h-11 w-full rounded-lg border px-3 py-2 text-left text-sm ${bozza?.id === m.id ? 'border-indigo-500 bg-indigo-950/40' : 'border-gray-700 bg-gray-950'}`}
               >
                 {m.nome}
-                <span className="block text-xs text-gray-500">{m.korp_nome} · {m.attivo ? 'attivo' : 'spento'}</span>
+                <span className="block text-xs text-gray-500">
+                  {m.korp_nome}
+                  {m.prototipo ? ` · ${m.prototipo}` : ''}
+                  {m.carica_minima_nome ? ` · da ${m.carica_minima_nome} in su` : ' · tutte le cariche'}
+                  {` · ${m.attivo ? 'attivo' : 'spento'}`}
+                </span>
               </button>
             ))}
             <div className="pt-3 text-xs text-gray-500">
@@ -339,16 +354,43 @@ export default function ContrattiManager({ onLogout }) {
                 salva();
               }}
             >
-              <input className={campoClass} value={bozza.nome} onChange={(e) => setBozza({ ...bozza, nome: e.target.value })} />
+              <input className={campoClass} value={bozza.nome} onChange={(e) => setBozza({ ...bozza, nome: e.target.value })} aria-label="Nome modello" />
+              <label className="block text-xs text-gray-400">
+                Tipo
+                <input
+                  className={`${campoClass} mt-1`}
+                  value={bozza.prototipo || ''}
+                  placeholder="talento, creatore, oppure vuoto"
+                  onChange={(e) => setBozza({ ...bozza, prototipo: e.target.value })}
+                />
+              </label>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <select className={campoClass} value={bozza.korp ? String(bozza.korp) : ''} onChange={(e) => setBozza({ ...bozza, korp: Number(e.target.value) })}>
+                <select className={campoClass} value={bozza.korp ? String(bozza.korp) : ''} onChange={(e) => {
+                  const korp = Number(e.target.value);
+                  const ammesse = caricheDellaKorp(catalogo, korp).map((c) => String(c.id));
+                  const minima = ammesse.includes(String(bozza.carica_minima)) ? bozza.carica_minima : '';
+                  setBozza({ ...bozza, korp, carica_minima: minima });
+                }}>
                   <option value="">Korp</option>
                   {(catalogo.korp || []).map((k) => (
                     <option key={k.id} value={k.id}>{k.nome}</option>
                   ))}
                 </select>
-                <p className="rounded border border-gray-800 bg-gray-900 p-2 text-xs text-gray-400">
-                  Il cliente può avere un solo contratto stipulato per questo modello. Scaduto o risolto, può firmarne un altro uguale.
+                <label className="block text-xs text-gray-400">
+                  Carica minima
+                  <select
+                    className={`${campoClass} mt-1`}
+                    value={bozza.carica_minima ? String(bozza.carica_minima) : ''}
+                    onChange={(e) => setBozza({ ...bozza, carica_minima: e.target.value ? Number(e.target.value) : '' })}
+                  >
+                    <option value="">Tutte le cariche</option>
+                    {caricheDellaKorp(catalogo, bozza.korp).map((c) => (
+                      <option key={c.id} value={c.id}>{c.nome} (ordine {c.ordine ?? 0})</option>
+                    ))}
+                  </select>
+                </label>
+                <p className="rounded border border-gray-800 bg-gray-900 p-2 text-xs text-gray-400 sm:col-span-2">
+                  Il cliente può stipularne uno per questo modello. Un altro modello, anche dello stesso tipo, è un contratto diverso. La carica minima usa il campo Ordine: conta da quel numero in su. Senza selezione, vale per ogni membro della Korp.
                 </p>
                 <select className={campoClass} value={bozza.durata_modo} onChange={(e) => setBozza({ ...bozza, durata_modo: e.target.value })}>
                   <option value="GIORNI">Giorni</option>

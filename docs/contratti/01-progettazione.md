@@ -78,7 +78,7 @@ Tre livelli, dal più stabile al più estensibile:
 
 | Livello | Chi lo cambia | Cosa contiene |
 |---------|----------------|---------------|
-| Modello | Staff, a runtime | Nome, Korp, testo, durata, parametri, esclusività, effetti agganciati, clausole, compensi |
+| Modello | Staff, a runtime | Nome, Korp, tipo (etichetta non univoca), carica minima, testo, durata, parametri, effetti agganciati, clausole, compensi |
 | Effetto | Registry in codice | Un comportamento riutilizzabile (es. «percentuale sulla task del cliente») con i suoi campi |
 | Innesco | Punto nel codice di gioco | Il momento in cui gli effetti di quel tipo vengono valutati (firma, task, costo, fine evento, …) |
 
@@ -90,12 +90,14 @@ La UI dello staff è generata dal registry: elenco effetti, e per ciascuno i cam
 |-------|--------|
 | `campagna`, `korp` | Offerta di quella Korp, in quella campagna. |
 | `nome`, `attivo` | Voce nel wizard del proponente. |
-| Limite cliente | Un solo `STIPULATO` per `ModelloContratto`. La chiave di esclusività dei preset non blocca più la firma. |
+| `prototipo` | Etichetta del tipo (`talento`, `creatore`, …), vuota su un modello composto a mano. Non è univoca: ogni clic su un preset crea un'altra riga, con nome «(2)», «(3)» se il nome base esiste già. |
+| `carica_minima` | Opzionale. Il proponente la raggiunge se `carica.ordine` della sua membership è almeno l'ordine della carica scelta. Senza carica sul personaggio, quel modello non è proponibile. Senza minima, vale per ogni membro della Korp. Il confronto è sull'ordine, non sul nome. |
+| Limite cliente | Un solo `STIPULATO` per `ModelloContratto`. Due modelli con lo stesso prototipo si firmano entrambi. La chiave di esclusività dei preset non blocca la firma. |
 | `durata_modo` | `GIORNI` (N giorni reali) oppure `FINE_EVENTO` (scadenza = `data_fine` dell'evento scelto in proposta; deve esistere un evento). |
 | `durata_giorni` | Usato se `GIORNI`. |
 | `testo` | Testo mostrato alla firma, con segnaposto. |
 
-Non c’è un campo tipologia obbligatorio. Un’etichetta visibile al giocatore, se serve, è il `nome` del modello.
+Il tipo non è un tetto. L’etichetta visibile al giocatore resta il `nome` del modello.
 
 ### Parametri del modello
 

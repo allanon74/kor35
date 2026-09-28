@@ -201,6 +201,34 @@ class ContrattiMotoreTests(TestCase):
         self.assertFalse(QrCode.objects.filter(pk=qr_id).exists())
         self.assertEqual(slot_usati(self.proponente), 0)
 
+    def test_due_prototipi_talento_sono_due_modelli(self):
+        primo = crea_preset(self.campagna, self.korp, "talento")
+        secondo = crea_preset(self.campagna, self.korp, "talento")
+        self.assertNotEqual(primo.pk, secondo.pk)
+        self.assertEqual(primo.prototipo, "talento")
+        self.assertEqual(secondo.prototipo, "talento")
+        self.assertNotEqual(primo.nome, secondo.nome)
+        self.assertIn("(2)", secondo.nome)
+
+    def test_carica_minima_blocca_i_gradi_sotto(self):
+        self.carica.ordine = 2
+        self.carica.save(update_fields=["ordine", "updated_at"])
+        recluta = Carica.objects.create(nome="Recluta Test", ordine=0)
+        recluta.carriere.add(self.korp)
+        PersonaggioCarrieraMembership.objects.create(
+            personaggio=self.cliente,
+            carriera=self.korp,
+            tipo_carriera=self.tipo_korp,
+            carica=recluta,
+        )
+        modello = crea_preset(self.campagna, self.korp, "creatore")
+        modello.carica_minima = self.carica
+        modello.save(update_fields=["carica_minima", "updated_at"])
+        creato = crea_proposta(self.proponente, modello, {}, [])
+        self.assertEqual(creato.proponente_id, self.proponente.pk)
+        with self.assertRaises(ValidationError):
+            crea_proposta(self.cliente, modello, {}, [])
+
     def test_firma_blocca_se_il_prezzo_non_e_coperto(self):
         proposta = self._proposta("protettore")
         with self.assertRaises(ValidationError):

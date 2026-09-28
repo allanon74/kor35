@@ -642,6 +642,15 @@ def _effetti_risolti(modello: ModelloContratto, voci_ids: set, parametri: dict) 
     return righe
 
 
+def carica_sufficiente(membership, modello: ModelloContratto) -> bool:
+    """Senza carica minima il modello è per ogni membro. Altrimenti l'ordine della carica deve raggiungerla."""
+    if not modello.carica_minima_id:
+        return True
+    if not membership or not membership.carica_id:
+        return False
+    return int(membership.carica.ordine or 0) >= int(modello.carica_minima.ordine or 0)
+
+
 @transaction.atomic
 def crea_proposta(proponente, modello: ModelloContratto, parametri_inviati: dict, voci_ids: list, evento=None) -> Contratto:
     if not modulo_attivo_per(proponente):
@@ -651,6 +660,9 @@ def crea_proposta(proponente, modello: ModelloContratto, parametri_inviati: dict
         raise ValidationError("Questo modello non è offerto dalla tua Korp.")
     if not modello.attivo:
         raise ValidationError("Modello non attivo.")
+    if not carica_sufficiente(membership, modello):
+        nome = modello.carica_minima.nome if modello.carica_minima_id else ""
+        raise ValidationError(f"Questo modello è disponibile da {nome} in su.")
     marca_scaduti()
     if slot_usati(proponente) >= slot_totali(proponente):
         raise ValidationError("Non hai slot di contratto liberi.")
@@ -1002,6 +1014,22 @@ def salva_modello(modello: ModelloContratto, payload: dict) -> ModelloContratto:
     modello.nome = (payload.get("nome") or modello.nome or "").strip()
     modello.attivo = bool(payload.get("attivo", True))
     modello.chiave_esclusivita = (payload.get("chiave_esclusivita") or "").strip()[:64]
+    if "prototipo" in payload:
+        modello.prototipo = (payload.get("prototipo") or "").strip()[:32]
+    if "carica_minima" in payload:
+        raw = payload.get("carica_minima")
+        if raw in (None, "", 0, "0"):
+            modello.carica_minima_id = None
+        else:
+            from personaggi.models import Carica
+
+            carica = Carica.objects.filter(pk=raw).first()
+            if not carica:
+                raise ValidationError("Carica minima sconosciuta.")
+            korp_id = payload.get("korp") or modello.korp_id
+            if not carica.applies_to_carriera(korp_id):
+                raise ValidationError("La carica minima non appartiene a questa Korp.")
+            modello.carica_minima = carica
     modello.durata_modo = payload.get("durata_modo") or DURATA_GIORNI
     modello.durata_giorni = int(payload.get("durata_giorni") or 90)
     modello.testo = payload.get("testo") or ""
@@ -1079,6 +1107,10 @@ def serializza_modello(modello: ModelloContratto) -> dict:
         "korp_nome": modello.korp.nome,
         "campagna": str(modello.campagna_id),
         "chiave_esclusivita": modello.chiave_esclusivita,
+        "prototipo": modello.prototipo or "",
+        "carica_minima": modello.carica_minima_id,
+        "carica_minima_nome": modello.carica_minima.nome if modello.carica_minima_id else "",
+        "carica_minima_ordine": modello.carica_minima.ordine if modello.carica_minima_id else None,
         "durata_modo": modello.durata_modo,
         "durata_giorni": modello.durata_giorni,
         "testo": modello.testo,
@@ -1243,19 +1275,39 @@ PRESET = {
 
 
 @transaction.atomic
+def _nome_copia_preset(campagna, korp, nome_base: str) -> str:
+    """Ogni clic su un prototipo crea un modello nuovo, con un nome distinguibile."""
+    usati = set(
+        ModelloContratto.objects.filter(campagna=campagna, korp=korp, nome__startswith=nome_base).values_list(
+            "nome", flat=True
+        )
+    )
+    if nome_base not in usati:
+        return nome_base
+    numero = 2
+    while f"{nome_base} ({numero})" in usati:
+        numero += 1
+    return f"{nome_base} ({numero})"
+
+
 def crea_preset(campagna, korp, codice: str) -> ModelloContratto:
     ricetta = PRESET.get(codice)
     if not ricetta:
         raise ValidationError("Preset sconosciuto.")
+    nome = _nome_copia_preset(campagna, korp, ricetta["nome"])
     modello = ModelloContratto.objects.create(
         campagna=campagna,
         korp=korp,
-        nome=ricetta["nome"],
+        nome=nome,
+        prototipo=codice,
         chiave_esclusivita=ricetta["chiave_esclusivita"],
         durata_modo=DURATA_GIORNI,
         durata_giorni=ricetta["durata_giorni"],
         testo=ricetta["testo"],
         attivo=True,
     )
-    salva_modello(modello, {**ricetta, "korp": korp.pk, "campagna": campagna.pk})
+    salva_modello(
+        modello,
+        {**ricetta, "nome": nome, "prototipo": codice, "korp": korp.pk, "campagna": campagna.pk},
+    )
     return modello

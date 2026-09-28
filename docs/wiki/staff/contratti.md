@@ -45,7 +45,9 @@ slot = base della Korp
 
 Senza carica il bonus carica è 0. Occupano uno slot le proposte in attesa e i contratti stipulati **come proponente**. I contratti stipulati come cliente non entrano nel conteggio dei liberi. Rifiuto, annullamento, scadenza e scioglimento liberano lo slot del proponente.
 
-I **contratti liberi** sono `slot − occupati come proponente`. Come cliente il tetto è un altro: **un solo contratto stipulato per ciascun modello**. Un secondo modello, anche con lo stesso nome di esempio, è un contratto diverso. Quando quello stipulato scade o si risolve, lo stesso modello si può firmare di nuovo.
+I **contratti liberi** sono `slot − occupati come proponente`. Come cliente il tetto è un altro: **un solo contratto stipulato per ciascun modello**. Due modelli Talento sono due contratti: il cliente può firmarli entrambi. Quando uno scade o si risolve, quello stesso modello si può firmare di nuovo.
+
+Un modello può essere riservato **da una carica in su**. In editor si sceglie la carica minima. Il confronto usa il campo **Ordine** della carica: vale quella carica e quelle con ordine maggiore o uguale. Senza carica minima, il modello è per ogni membro della Korp. Un personaggio senza carica non propone i modelli che ne hanno una. Imposta gli ordini in modo che il grado più alto abbia il numero più alto: se tutte le cariche restano a 0, «da Capitano in su» coincide con qualunque carica.
 
 ### Esempio — tre Korp, cariche diverse
 
@@ -72,8 +74,9 @@ Dashboard staff → tool **Contratti** → nuovo modello. I campi sono sempre qu
 | Pezzo | A cosa serve |
 |-------|----------------|
 | Korp | Solo i membri di quella Korp possono proporlo. |
-| Nome | È l’etichetta che vede il giocatore. Non esiste un tipo fisso separato dal nome. |
-| Limite del cliente | Un solo contratto **stipulato** per questo modello. Non dipende da una chiave: due modelli distinti si possono firmare entrambi. |
+| Nome | È l’etichetta che vede il giocatore. |
+| Tipo | Etichetta libera (`talento`, `creatore`, …). Non è un tetto: **Aggiungi Talento** crea un altro modello, anche se ne esiste già uno. |
+| Carica minima | Opzionale. Il proponente la raggiunge se l'ordine della sua carica è almeno quello della carica scelta. |
 | Durata | `GIORNI` = N giorni reali da quando nasce la proposta. `FINE_EVENTO` = scade alla `data_fine` dell’evento scelto in proposta. La data mostrata in firma non si sposta. |
 | Testo | Ciò che il cliente legge sul QR. Segnaposto: `{{proponente}}`, `{{cliente}}`, `{{korp}}`, `{{scadenza}}`, `{{parametri}}`, `{{clausole}}`, `{{compensi}}`. |
 | Parametri | Righe che aggiungi tu. Vedi sotto. |
@@ -243,7 +246,7 @@ Sblocca gli effetti (di modello o di clausola) il cui innesco è `AD_ATTIVAZIONE
 
 ## 6. Ricette da copiare
 
-In editor, **Crea da esempio** prepara queste combinazioni. Si possono duplicare e modificare. Il cliente ne stipula uno per ogni modello salvato: due copie del preset Talento sono due modelli e si possono firmare entrambe.
+In editor, **Aggiungi Talento** (e gli altri cinque) prepara un modello nuovo ogni volta. Se il nome base esiste già, il successivo si chiama «Contratto di Talento (2)». Poi si rinomina, si cambiano i numeri e, se serve, si indica la carica minima.
 
 ### Talento — chiave `talento`
 

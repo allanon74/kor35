@@ -91,7 +91,21 @@ class ModelloContratto(SyncableModel, models.Model):
     )
     nome = models.CharField(max_length=160)
     attivo = models.BooleanField(default=True)
+    prototipo = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="Etichetta del tipo, per esempio talento. Più modelli possono condividerla.",
+    )
     chiave_esclusivita = models.CharField(max_length=64, blank=True, default="")
+    carica_minima = models.ForeignKey(
+        "personaggi.Carica",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modelli_contratto_minimi",
+        help_text="Se valorizzata, il proponente deve avere una carica con ordine maggiore o uguale.",
+    )
     durata_modo = models.CharField(max_length=16, choices=DURATA_MODI, default=DURATA_GIORNI)
     durata_giorni = models.PositiveIntegerField(default=90)
     testo = models.TextField(blank=True, default="")

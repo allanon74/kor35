@@ -23,6 +23,7 @@ from personaggi.contratti_service import (
     crea_proposta,
     elimina_contratto,
     firma_contratto,
+    carica_sufficiente,
     marca_scaduti,
     qr_png_base64,
     registra_servizio,
@@ -40,7 +41,7 @@ from personaggi.contratti_service import (
     user_is_staff_campagna,
     conferma_adempimento,
 )
-from personaggi.models import Carriera, Personaggio
+from personaggi.models import Carica, Carriera, Personaggio
 
 
 def _pg(request):
@@ -94,7 +95,8 @@ class ContrattiSchedaView(APIView):
                 serializza_modello(m)
                 for m in ModelloContratto.objects.filter(
                     korp=membership.carriera, attivo=True, campagna=pg.campagna
-                ).prefetch_related("parametri", "effetti", "voci__effetti")
+                ).select_related("korp", "carica_minima").prefetch_related("parametri", "effetti", "voci__effetti")
+                if carica_sufficiente(membership, m)
             ]
         contratti = (
             Contratto.objects.filter(proponente=pg)
@@ -210,12 +212,22 @@ class ContrattiStaffListaView(APIView):
             return Response({"error": "Solo staff."}, status=status.HTTP_403_FORBIDDEN)
         if not modulo_visibile_in_staff(campagna, MODULO_CONTRATTI):
             return Response({"error": "Modulo contratti spento."}, status=status.HTTP_403_FORBIDDEN)
-        modelli = ModelloContratto.objects.filter(campagna=campagna).select_related("korp").prefetch_related(
-            "parametri", "effetti", "voci__effetti"
-        )
+        modelli = ModelloContratto.objects.filter(campagna=campagna).select_related(
+            "korp", "carica_minima"
+        ).prefetch_related("parametri", "effetti", "voci__effetti")
+        cariche = Carica.objects.filter(attiva=True).prefetch_related("carriere").order_by("ordine", "nome")
         return Response(
             {
                 "effetti": EFFETTI_REGISTRY,
+                "cariche": [
+                    {
+                        "id": c.pk,
+                        "nome": c.nome,
+                        "ordine": c.ordine,
+                        "carriere_ids": [rel.pk for rel in c.carriere.all()],
+                    }
+                    for c in cariche
+                ],
                 "korp": [
                     {
                         "id": c.pk,
