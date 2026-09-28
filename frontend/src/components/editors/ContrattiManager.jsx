@@ -9,6 +9,26 @@ import {
   staffContrattiSalvaModello,
 } from '../../api';
 import { anteprimaModello } from '../../lib/contrattoTesto';
+import {
+  StaffToolPageTitle,
+  StaffToolShell,
+  StaffToolSubnav,
+  staffDangerBtnClass,
+  staffPanelClass,
+  staffPrimaryBtnClass,
+  staffSecondaryBtnClass,
+} from '../../staff/StaffToolShell';
+
+const STATO_LABEL = {
+  IN_ATTESA: 'In attesa',
+  STIPULATO: 'Stipulato',
+  SCADUTO: 'Scaduto',
+  RIFIUTATO: 'Rifiutato',
+  RISOLTO: 'Risolto',
+  ANNULLATO: 'Annullato',
+};
+
+const campoClass = 'min-h-11 w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-base sm:text-sm';
 
 const PRESET = [
   ['talento', 'Talento'],
@@ -62,7 +82,7 @@ function campoEffetto(effetto, campo, onChange) {
   if (campo.tipo === 'scelta') {
     return (
       <select
-        className="w-full rounded border border-gray-700 bg-gray-950 p-1 text-sm"
+        className={campoClass}
         value={valore || ''}
         onChange={(e) => onChange({ ...effetto.config, [campo.key]: e.target.value })}
       >
@@ -75,7 +95,7 @@ function campoEffetto(effetto, campo, onChange) {
   }
   return (
     <input
-      className="w-full rounded border border-gray-700 bg-gray-950 p-1 text-sm"
+      className={campoClass}
       value={valore ?? ''}
       placeholder="numero oppure {{param:chiave}}"
       onChange={(e) => onChange({ ...effetto.config, [campo.key]: e.target.value })}
@@ -90,6 +110,7 @@ export default function ContrattiManager({ onLogout }) {
   const [errore, setErrore] = useState('');
   const [busy, setBusy] = useState(false);
   const [vista, setVista] = useState('modelli');
+  const [confermaId, setConfermaId] = useState('');
 
   const carica = useCallback(async () => {
     setErrore('');
@@ -183,6 +204,7 @@ export default function ContrattiManager({ onLogout }) {
     setErrore('');
     try {
       await staffContrattiRuntimeAzione(payload, onLogout);
+      if (payload.azione === 'elimina') setConfermaId('');
       await carica();
     } catch (e) {
       setErrore(e.message || 'Azione staff non riuscita.');
@@ -193,70 +215,100 @@ export default function ContrattiManager({ onLogout }) {
 
   if (!catalogo) {
     return (
-      <div className="flex h-full items-center justify-center text-gray-400">
-        {errore || <Loader2 className="animate-spin" />}
-      </div>
+      <StaffToolShell className="flex h-full items-center justify-center">
+        {errore ? <p className="text-sm text-red-300">{errore}</p> : <Loader2 className="animate-spin text-gray-400" />}
+      </StaffToolShell>
     );
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-950 p-4 text-gray-100">
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <FileSignature className="text-amber-300" />
-          <div>
-            <h1 className="text-xl font-black">Contratti</h1>
-            <p className="text-xs text-gray-400">
-              I sei nomi sono preset. Un modello è nome, testo, parametri ed effetti. Gli slot si impostano in Carriere e KORP (base Korp, bonus carica). La statistica SCT (parametro SCT) è già in tabella: un’abilità o un oggetto la aumentano.
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button type="button" className={`rounded px-3 py-1 text-sm ${vista === 'modelli' ? 'bg-amber-800' : 'bg-gray-800'}`} onClick={() => setVista('modelli')}>Modelli</button>
-          <button type="button" className={`rounded px-3 py-1 text-sm ${vista === 'runtime' ? 'bg-amber-800' : 'bg-gray-800'}`} onClick={() => setVista('runtime')}>In corso</button>
-        </div>
-      </header>
-      {errore ? <p className="mb-3 text-sm text-red-300">{errore}</p> : null}
+    <StaffToolShell className="h-full space-y-4 overflow-y-auto overflow-x-hidden pb-8">
+      <StaffToolPageTitle
+        icon={<FileSignature size={22} />}
+        title="Contratti"
+        description="Modelli della Korp e contratti in corso. Gli slot si impostano in Carriere e KORP."
+      />
+      <StaffToolSubnav
+        className="mt-0"
+        tabs={[
+          { id: 'modelli', label: 'Modelli' },
+          { id: 'runtime', label: 'In corso' },
+        ]}
+        active={vista}
+        onChange={(id) => {
+          setVista(id);
+          setConfermaId('');
+        }}
+      />
+      {errore ? <p className="rounded-lg border border-red-800 bg-red-950/40 p-3 text-sm text-red-300">{errore}</p> : null}
 
       {vista === 'runtime' ? (
         <div className="space-y-3">
           {runtime.length === 0 ? <p className="text-sm text-gray-500">Nessun contratto.</p> : null}
           {runtime.map((c) => (
-            <article key={c.id} className="rounded border border-gray-800 bg-gray-900 p-3 text-sm">
-              <div className="flex flex-wrap justify-between gap-2">
-                <strong>{c.nome}</strong>
-                <span className="text-gray-400">{c.stato} · {c.proponente?.nome} → {c.cliente?.nome || '—'}</span>
+            <article key={c.id} className={`${staffPanelClass} space-y-3 text-sm`}>
+              <div className="min-w-0">
+                <h3 className="break-words text-base font-semibold">{c.nome}</h3>
+                <p className="mt-1 text-gray-400">
+                  {STATO_LABEL[c.stato] || c.stato}
+                  {' · '}
+                  {c.proponente?.nome || '—'}
+                  {' → '}
+                  {c.cliente?.nome || 'in attesa'}
+                </p>
               </div>
-              <div className="mt-2 flex flex-wrap gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 {c.azioni?.attiva ? (
-                  <button type="button" disabled={busy} className="rounded bg-indigo-800 px-2 py-1 text-xs" onClick={() => azioneRuntime({ azione: 'attiva', contratto_id: c.id })}>Attiva (staff)</button>
+                  <button type="button" disabled={busy} className={`${staffSecondaryBtnClass} min-h-11 justify-center`} onClick={() => azioneRuntime({ azione: 'attiva', contratto_id: c.id })}>Attiva</button>
                 ) : null}
                 {(c.adempimenti || []).map((a) => (
-                  <span key={a.id} className="flex items-center gap-1">
+                  <div key={a.id} className="flex flex-col gap-2 rounded-lg border border-gray-700 p-2 sm:flex-row sm:items-center">
                     <span className="text-xs text-gray-400">{a.codice} {a.stato} {a.dovuto}</span>
                     {a.stato === 'IN_ATTESA' ? (
-                      <button type="button" disabled={busy} className="rounded bg-emerald-900 px-2 py-1 text-xs" onClick={() => azioneRuntime({ azione: 'conferma', adempimento_id: a.id })}>Conferma</button>
+                      <button type="button" disabled={busy} className={`${staffSecondaryBtnClass} min-h-11 justify-center`} onClick={() => azioneRuntime({ azione: 'conferma', adempimento_id: a.id })}>Conferma</button>
                     ) : null}
                     {a.stato === 'DEBITO' ? (
-                      <button type="button" disabled={busy} className="rounded bg-amber-900 px-2 py-1 text-xs" onClick={() => azioneRuntime({ azione: 'salda', adempimento_id: a.id })}>Salda</button>
+                      <button type="button" disabled={busy} className={`${staffSecondaryBtnClass} min-h-11 justify-center`} onClick={() => azioneRuntime({ azione: 'salda', adempimento_id: a.id })}>Salda</button>
                     ) : null}
-                  </span>
+                  </div>
                 ))}
+                {confermaId === c.id ? (
+                  <div className="flex w-full flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className={`${staffDangerBtnClass} min-h-11 flex-1 justify-center`}
+                      onClick={() => azioneRuntime({ azione: 'elimina', contratto_id: c.id })}
+                    >
+                      Cancella definitivamente
+                    </button>
+                    <button type="button" className={`${staffSecondaryBtnClass} min-h-11 flex-1 justify-center`} onClick={() => setConfermaId('')}>
+                      Annulla
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" disabled={busy} className={`${staffDangerBtnClass} min-h-11 justify-center`} onClick={() => setConfermaId(c.id)}>
+                    Cancella
+                  </button>
+                )}
               </div>
+              {confermaId === c.id ? (
+                <p className="text-xs text-amber-200">Il contratto sparisce e lo slot del proponente si libera. I crediti già movimentati restano.</p>
+              ) : null}
             </article>
           ))}
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-          <aside className="space-y-2">
-            <div className="flex flex-wrap gap-1">
+        <div className="grid min-w-0 gap-4 lg:grid-cols-[280px_1fr]">
+          <aside className={`${staffPanelClass} space-y-3`}>
+            <div className="flex flex-wrap gap-2">
               {PRESET.map(([codice, label]) => (
-                <button key={codice} type="button" disabled={busy} className="rounded bg-gray-800 px-2 py-1 text-xs" onClick={() => creaPreset(codice)}>{label}</button>
+                <button key={codice} type="button" disabled={busy} className={`${staffSecondaryBtnClass} min-h-11`} onClick={() => creaPreset(codice)}>{label}</button>
               ))}
             </div>
             <button
               type="button"
-              className="w-full rounded bg-gray-800 px-2 py-1 text-sm"
+              className={`${staffSecondaryBtnClass} min-h-11 w-full justify-center`}
               onClick={() => setBozza(vuoto(catalogo.korp?.[0]?.id))}
             >
               Modello vuoto
@@ -266,7 +318,7 @@ export default function ContrattiManager({ onLogout }) {
                 key={m.id}
                 type="button"
                 onClick={() => setBozza(m)}
-                className={`block w-full rounded border px-2 py-2 text-left text-sm ${bozza?.id === m.id ? 'border-amber-600 bg-amber-950/40' : 'border-gray-800 bg-gray-900'}`}
+                className={`block min-h-11 w-full rounded-lg border px-3 py-2 text-left text-sm ${bozza?.id === m.id ? 'border-indigo-500 bg-indigo-950/40' : 'border-gray-700 bg-gray-950'}`}
               >
                 {m.nome}
                 <span className="block text-xs text-gray-500">{m.korp_nome} · {m.attivo ? 'attivo' : 'spento'}</span>
@@ -281,15 +333,15 @@ export default function ContrattiManager({ onLogout }) {
 
           {bozza ? (
             <form
-              className="space-y-3"
+              className={`${staffPanelClass} min-w-0 space-y-4`}
               onSubmit={(e) => {
                 e.preventDefault();
                 salva();
               }}
             >
-              <input className="w-full rounded border border-gray-700 bg-gray-900 p-2" value={bozza.nome} onChange={(e) => setBozza({ ...bozza, nome: e.target.value })} />
-              <div className="grid gap-2 sm:grid-cols-2">
-                <select className="rounded border border-gray-700 bg-gray-900 p-2" value={bozza.korp ? String(bozza.korp) : ''} onChange={(e) => setBozza({ ...bozza, korp: Number(e.target.value) })}>
+              <input className={campoClass} value={bozza.nome} onChange={(e) => setBozza({ ...bozza, nome: e.target.value })} />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <select className={campoClass} value={bozza.korp ? String(bozza.korp) : ''} onChange={(e) => setBozza({ ...bozza, korp: Number(e.target.value) })}>
                   <option value="">Korp</option>
                   {(catalogo.korp || []).map((k) => (
                     <option key={k.id} value={k.id}>{k.nome}</option>
@@ -298,17 +350,17 @@ export default function ContrattiManager({ onLogout }) {
                 <p className="rounded border border-gray-800 bg-gray-900 p-2 text-xs text-gray-400">
                   Il cliente può avere un solo contratto stipulato per questo modello. Scaduto o risolto, può firmarne un altro uguale.
                 </p>
-                <select className="rounded border border-gray-700 bg-gray-900 p-2" value={bozza.durata_modo} onChange={(e) => setBozza({ ...bozza, durata_modo: e.target.value })}>
+                <select className={campoClass} value={bozza.durata_modo} onChange={(e) => setBozza({ ...bozza, durata_modo: e.target.value })}>
                   <option value="GIORNI">Giorni</option>
                   <option value="FINE_EVENTO">Fine evento</option>
                 </select>
-                <input type="number" className="rounded border border-gray-700 bg-gray-900 p-2" value={bozza.durata_giorni} onChange={(e) => setBozza({ ...bozza, durata_giorni: Number(e.target.value) })} />
+                <input type="number" className={campoClass} value={bozza.durata_giorni} onChange={(e) => setBozza({ ...bozza, durata_giorni: Number(e.target.value) })} />
               </div>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={!!bozza.attivo} onChange={(e) => setBozza({ ...bozza, attivo: e.target.checked })} />
                 Attivo
               </label>
-              <textarea className="h-32 w-full rounded border border-gray-700 bg-gray-900 p-2 text-sm" value={bozza.testo || ''} onChange={(e) => setBozza({ ...bozza, testo: e.target.value })} />
+              <textarea className={`${campoClass} h-40`} value={bozza.testo || ''} onChange={(e) => setBozza({ ...bozza, testo: e.target.value })} />
               <div className="rounded border border-gray-800 bg-gray-900/70 p-3">
                 <p className="mb-1 text-xs uppercase tracking-wide text-gray-500">Anteprima</p>
                 <p className="whitespace-pre-wrap text-sm text-gray-200">{testoAnteprima}</p>
@@ -317,28 +369,28 @@ export default function ContrattiManager({ onLogout }) {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <h2 className="font-semibold">Parametri</h2>
-                  <button type="button" className="text-xs text-amber-300" onClick={() => setBozza({ ...bozza, parametri: [...(bozza.parametri || []), { chiave: '', etichetta: '', tipo: 'DECIMALE', chi_compila: 'STAFF', valore: '', vincoli: {} }] })}>Aggiungi</button>
+                  <button type="button" className={staffSecondaryBtnClass} onClick={() => setBozza({ ...bozza, parametri: [...(bozza.parametri || []), { chiave: '', etichetta: '', tipo: 'DECIMALE', chi_compila: 'STAFF', valore: '', vincoli: {} }] })}>Aggiungi</button>
                 </div>
                 {(bozza.parametri || []).map((p, index) => (
-                  <div key={`${p.chiave}-${index}`} className="grid gap-1 rounded border border-gray-800 p-2 sm:grid-cols-5">
-                    <input placeholder="chiave" className="rounded bg-gray-950 p-1 text-sm" value={p.chiave} onChange={(e) => {
+                  <div key={`${p.chiave}-${index}`} className="grid grid-cols-1 gap-2 rounded-lg border border-gray-700 p-3 sm:grid-cols-2">
+                    <input placeholder="chiave" aria-label="Chiave parametro" className={campoClass} value={p.chiave} onChange={(e) => {
                       const parametri = [...bozza.parametri];
                       parametri[index] = { ...p, chiave: e.target.value };
                       setBozza({ ...bozza, parametri });
                     }} />
-                    <input placeholder="etichetta" className="rounded bg-gray-950 p-1 text-sm" value={p.etichetta} onChange={(e) => {
+                    <input placeholder="etichetta" aria-label="Etichetta parametro" className={campoClass} value={p.etichetta} onChange={(e) => {
                       const parametri = [...bozza.parametri];
                       parametri[index] = { ...p, etichetta: e.target.value };
                       setBozza({ ...bozza, parametri });
                     }} />
-                    <select className="rounded bg-gray-950 p-1 text-sm" value={p.tipo} onChange={(e) => {
+                    <select aria-label="Tipo parametro" className={campoClass} value={p.tipo} onChange={(e) => {
                       const parametri = [...bozza.parametri];
                       parametri[index] = { ...p, tipo: e.target.value };
                       setBozza({ ...bozza, parametri });
                     }}>
                       {TIPI_PARAM.map((t) => <option key={t}>{t}</option>)}
                     </select>
-                    <select className="rounded bg-gray-950 p-1 text-sm" value={p.chi_compila} onChange={(e) => {
+                    <select aria-label="Chi compila" className={campoClass} value={p.chi_compila} onChange={(e) => {
                       const parametri = [...bozza.parametri];
                       parametri[index] = { ...p, chi_compila: e.target.value };
                       setBozza({ ...bozza, parametri });
@@ -346,7 +398,7 @@ export default function ContrattiManager({ onLogout }) {
                       <option value="STAFF">STAFF</option>
                       <option value="PROPONENTE">PROPONENTE</option>
                     </select>
-                    <input placeholder="default" className="rounded bg-gray-950 p-1 text-sm" value={p.valore ?? ''} onChange={(e) => {
+                    <input placeholder="valore" aria-label="Valore parametro" className={`${campoClass} sm:col-span-2`} value={p.valore ?? ''} onChange={(e) => {
                       const parametri = [...bozza.parametri];
                       parametri[index] = { ...p, valore: e.target.value };
                       setBozza({ ...bozza, parametri });
@@ -356,10 +408,10 @@ export default function ContrattiManager({ onLogout }) {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <h2 className="font-semibold">Effetti del modello</h2>
                   <select
-                    className="rounded bg-gray-900 p-1 text-xs"
+                    className={campoClass}
                     value=""
                     onChange={(e) => {
                       if (!e.target.value) return;
@@ -378,7 +430,7 @@ export default function ContrattiManager({ onLogout }) {
                     <div key={`${effetto.codice}-${index}`} className="space-y-1 rounded border border-gray-800 p-2">
                       <div className="flex justify-between text-sm">
                         <strong>{meta?.label || effetto.codice}</strong>
-                        <button type="button" className="text-xs text-red-300" onClick={() => setBozza({ ...bozza, effetti: bozza.effetti.filter((_, i) => i !== index) })}>Rimuovi</button>
+                        <button type="button" className="min-h-11 px-2 text-sm text-red-300" onClick={() => setBozza({ ...bozza, effetti: bozza.effetti.filter((_, i) => i !== index) })}>Rimuovi</button>
                       </div>
                       <p className="text-xs text-gray-500">{meta?.descrizione}</p>
                       {(meta?.campi || []).map((campo) => (
@@ -396,10 +448,10 @@ export default function ContrattiManager({ onLogout }) {
                 })}
               </div>
 
-              <div className="flex gap-2">
-                <button type="submit" disabled={busy} className="rounded bg-amber-700 px-3 py-2 text-sm font-semibold disabled:opacity-50">Salva</button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button type="submit" disabled={busy} className={`${staffPrimaryBtnClass} min-h-11 flex-1 justify-center disabled:opacity-50`}>Salva</button>
                 {bozza.id ? (
-                  <button type="button" disabled={busy} className="rounded bg-gray-800 px-3 py-2 text-sm" onClick={elimina}>Disattiva o elimina</button>
+                  <button type="button" disabled={busy} className={`${staffSecondaryBtnClass} min-h-11 flex-1 justify-center`} onClick={elimina}>Disattiva o elimina</button>
                 ) : null}
               </div>
             </form>
@@ -408,6 +460,6 @@ export default function ContrattiManager({ onLogout }) {
           )}
         </div>
       )}
-    </div>
+    </StaffToolShell>
   );
 }

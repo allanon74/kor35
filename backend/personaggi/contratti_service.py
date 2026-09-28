@@ -775,6 +775,17 @@ def annulla_proposta(contratto: Contratto, proponente) -> Contratto:
 
 
 @transaction.atomic
+def elimina_contratto(contratto: Contratto) -> None:
+    """Cancellazione staff: il record esce dal gioco e lo slot del proponente si libera."""
+    qr_id = contratto.qr_code_id
+    contratto.delete()
+    if qr_id:
+        from personaggi.models import QrCode
+
+        QrCode.objects.filter(pk=qr_id).delete()
+
+
+@transaction.atomic
 def attiva_contratto(contratto: Contratto, proponente, *, staff=False) -> Contratto:
     if contratto.stato != STATO_STIPULATO:
         raise ValidationError("Il contratto non è in corso.")
