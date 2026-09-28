@@ -320,7 +320,7 @@ Un modello **senza effetti** è un accordo solo testuale: si firma, scade, non m
 2. Korp con sottoscrive acceso e base slot quella decisa (non dare per scontato il 3).
 3. Cariche con il bonus deciso, grado d’ingresso a 0 se non deve aggiungere slot.
 4. Personaggio proponente: slot liberi uguali a base + carica + SCT.
-5. Proposta di prova, QR, secondo personaggio che firma.
+5. Proposta di prova, QR, secondo personaggio che firma. Sulla scheda del cliente compaiono i contatori «Contratti attivi (cliente)» e «Contratti attivi (offerente)» (solo i contratti in stato stipulato) e, sotto le valute, l’elenco «Contratti come cliente». Lo stesso elenco, con il testo, è la sottoscheda «Contratti come cliente» del tab Economia.
 6. Se c’è un prezzo alla firma, togliere i crediti deposito al cliente (o al proponente, nel mercenario) e verificare che la firma si blocchi.
 7. Per Talento: reclamare una task da 100 e leggere +10 e +20 sul deposito.
 8. Per Pubblicitario: associare 2 post, terminare l’evento, leggere 90 e 30.

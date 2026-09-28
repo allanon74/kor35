@@ -20,6 +20,7 @@ from personaggi.contratti_service import (
     crea_proposta,
     firma_contratto,
     on_evento_terminato,
+    riepilogo_ruoli,
     on_task_reclamata,
     risposta_qr_contratto,
     slot_totali,
@@ -157,6 +158,8 @@ class ContrattiMotoreTests(TestCase):
         firma_contratto(prima, self.cliente)
         prima.refresh_from_db()
         self.assertEqual(prima.stato, STATO_STIPULATO)
+        self.assertEqual(riepilogo_ruoli(self.cliente), {"attivi_cliente": 1, "attivi_offerente": 0})
+        self.assertEqual(riepilogo_ruoli(self.proponente), {"attivi_cliente": 0, "attivi_offerente": 1})
         with self.assertRaises(ValidationError):
             firma_contratto(seconda, self.cliente)
         annulla_proposta(seconda, self.proponente)

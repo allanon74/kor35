@@ -20,6 +20,7 @@ import { getOfflineCharacterDetail } from '../lib/offlineGameStateDb';
 import { OfflineConsultBanner } from './OfflineConsultBanner';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import StaffCompitiWidget from './StaffCompitiWidget';
+import ContrattiSchedaPresenza from './ContrattiSchedaPresenza';
 
 // --- Componenti Helper ---
 
@@ -583,6 +584,8 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
           <StatRow label="PC" value={punti_caratteristica || 0} icon={<Star className="text-blue-400" />} />
         </div>
       )}
+
+      <ContrattiSchedaPresenza personaggioId={personaggioId} onLogout={onLogout} modo="scheda" />
 
       {/* Statistiche Primarie */}
       {stat_primarie.length > 0 && (

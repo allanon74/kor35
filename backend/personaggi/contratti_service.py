@@ -121,6 +121,14 @@ def slot_usati(personaggio) -> int:
     return Contratto.objects.filter(proponente=personaggio, stato__in=STATI_OCCUPANO_SLOT).count()
 
 
+def riepilogo_ruoli(personaggio) -> dict:
+    """Contratti STIPULATO del personaggio, divisi per ruolo. Le proposte in attesa non contano."""
+    return {
+        "attivi_cliente": Contratto.objects.filter(cliente=personaggio, stato=STATO_STIPULATO).count(),
+        "attivi_offerente": Contratto.objects.filter(proponente=personaggio, stato=STATO_STIPULATO).count(),
+    }
+
+
 def tab_visibile(personaggio, user=None) -> bool:
     if not modulo_attivo_per(personaggio, user):
         return False

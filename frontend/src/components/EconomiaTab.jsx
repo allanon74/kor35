@@ -6,6 +6,7 @@ import {
   postTrasferimentoDeposito,
 } from '../api';
 import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
+import ContrattiSchedaPresenza from './ContrattiSchedaPresenza';
 
 function fmt(n) {
   const v = Number(n);
@@ -17,7 +18,9 @@ function fmt(n) {
  * Tab giocatore: saldi corrente/deposito/PC, trasferimento, log lazy.
  */
 function EconomiaTab({ onLogout }) {
-  const { selectedCharacterData, selectedCharacterId, refreshCharacterData } = useCharacter();
+  const { selectedCharacterData, selectedCharacterId, refreshCharacterData, canAccessModulo } = useCharacter();
+  const contrattiOk = !!canAccessModulo?.('contratti');
+  const [vista, setVista] = useState('conti');
   const char = selectedCharacterData || {};
   const economia = char.economia || {};
   const [importo, setImporto] = useState('');
@@ -74,9 +77,34 @@ function EconomiaTab({ onLogout }) {
       <PlayerTabHeader
         icon={<Wallet className="w-7 h-7 text-emerald-400" />}
         title="Economia"
-        subtitle="Conti, trasferimento e movimenti"
+        subtitle={vista === 'cliente' ? 'Contratti stipulati come cliente' : 'Conti, trasferimento e movimenti'}
       />
 
+      {contrattiOk ? (
+        <div className="mb-4 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setVista('conti')}
+            className={`rounded px-3 py-1.5 text-sm ${vista === 'conti' ? 'bg-emerald-800' : 'bg-gray-800'}`}
+          >
+            Conti
+          </button>
+          <button
+            type="button"
+            onClick={() => setVista('cliente')}
+            className={`rounded px-3 py-1.5 text-sm ${vista === 'cliente' ? 'bg-amber-800' : 'bg-gray-800'}`}
+          >
+            Contratti come cliente
+          </button>
+        </div>
+      ) : null}
+
+      {vista === 'cliente' && contrattiOk ? (
+        <ContrattiSchedaPresenza personaggioId={selectedCharacterId} onLogout={onLogout} modo="cliente" />
+      ) : null}
+
+      {vista === 'conti' || !contrattiOk ? (
+      <>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <div className="rounded-xl border border-emerald-800/50 bg-emerald-950/40 p-4">
           <div className="flex items-center gap-2 text-emerald-300 text-sm mb-1">
@@ -200,6 +228,8 @@ function EconomiaTab({ onLogout }) {
           </div>
         )}
       </section>
+      </>
+      ) : null}
     </PlayerTabShell>
   );
 }
