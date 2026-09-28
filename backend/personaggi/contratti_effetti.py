@@ -34,6 +34,7 @@ AMBITI_COSTO = [
 ]
 
 _PARAM_RE = re.compile(r"^\{\{param:([A-Za-z0-9_]+)\}\}$")
+_TOKEN_RE = re.compile(r"\{\{\s*([A-Za-z0-9_]+)(?:\s*:\s*([A-Za-z0-9_]+))?\s*\}\}")
 
 
 def q2(value) -> Decimal:
@@ -170,3 +171,51 @@ EFFETTI_PER_CODICE = {row["codice"]: row for row in EFFETTI_REGISTRY}
 
 def codice_noto(codice: str) -> bool:
     return codice in EFFETTI_PER_CODICE
+
+
+def render_testo_contratto(
+    modello_testo: str,
+    *,
+    proponente: str = "",
+    cliente: str = "il sottoscrittore",
+    korp: str = "",
+    scadenza: str = "",
+    parametri: dict | None = None,
+    etichette: dict | None = None,
+    clausole: list | None = None,
+    compensi: list | None = None,
+) -> str:
+    """Sostituisce i segnaposto del modello. ``{{param:chiave}}`` tollera spazi interni."""
+    valori = dict(parametri or {})
+    nomi = dict(etichette or {})
+    linee_param = "\n".join(
+        f"- {nomi.get(chiave) or chiave}: {'' if valore is None else valore}"
+        for chiave, valore in valori.items()
+    )
+    linee_clausole = "\n".join(f"- {riga}" for riga in (clausole or [])) or "—"
+    linee_compensi = "\n".join(f"- {riga}" for riga in (compensi or [])) or "—"
+    mappa = {
+        "proponente": proponente or "",
+        "cliente": cliente or "il sottoscrittore",
+        "korp": korp or "",
+        "scadenza": scadenza or "",
+        "parametri": linee_param,
+        "clausole": linee_clausole,
+        "compensi": linee_compensi,
+    }
+
+    def sostituisci(match: re.Match) -> str:
+        nome = match.group(1)
+        chiave = match.group(2)
+        if nome == "param" and chiave:
+            if chiave not in valori:
+                return match.group(0)
+            valore = valori[chiave]
+            if valore is None or valore == "":
+                return ""
+            return str(valore)
+        if nome in mappa:
+            return str(mappa[nome])
+        return match.group(0)
+
+    return _TOKEN_RE.sub(sostituisci, modello_testo or "")

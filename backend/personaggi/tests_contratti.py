@@ -11,7 +11,7 @@ from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.utils import timezone
 
 from gestione_plot.models import Evento
-from personaggi.contratti_effetti import calcola_post_tetto
+from personaggi.contratti_effetti import calcola_post_tetto, render_testo_contratto
 from personaggi.contratti_models import STATO_ANNULLATO, STATO_IN_ATTESA, STATO_STIPULATO
 from personaggi.contratti_service import (
     annulla_proposta,
@@ -57,6 +57,28 @@ class CalcolaPostTettoTests(SimpleTestCase):
                 atteso,
                 n_post,
             )
+
+
+class RenderTestoContrattoTests(SimpleTestCase):
+    def test_sostituisce_parametri_e_non_confonde_il_blocco(self):
+        testo = (
+            "{{proponente}} ({{korp}}) propone a {{cliente}} fino al {{scadenza}}.\n"
+            "Bonus {{param:pct_cliente}}% e {{ param: pct_proponente }}%.\n"
+            "{{parametri}}"
+        )
+        reso = render_testo_contratto(
+            testo,
+            proponente="Ada",
+            cliente="il sottoscrittore",
+            korp="Vigilanza",
+            scadenza="01/01/2027 18:00",
+            parametri={"pct_cliente": 10, "pct_proponente": 20},
+            etichette={"pct_cliente": "Percentuale cliente", "pct_proponente": "Percentuale proponente"},
+        )
+        self.assertIn("Ada (Vigilanza) propone a il sottoscrittore fino al 01/01/2027 18:00.", reso)
+        self.assertIn("Bonus 10% e 20%.", reso)
+        self.assertIn("- Percentuale cliente: 10", reso)
+        self.assertNotIn("{{param:", reso)
 
 
 class ContrattiMotoreTests(TestCase):

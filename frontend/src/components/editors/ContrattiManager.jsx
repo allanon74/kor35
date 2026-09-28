@@ -8,6 +8,7 @@ import {
   staffContrattiRuntimeAzione,
   staffContrattiSalvaModello,
 } from '../../api';
+import { anteprimaModello } from '../../lib/contrattoTesto';
 
 const PRESET = [
   ['talento', 'Talento'],
@@ -107,6 +108,12 @@ export default function ContrattiManager({ onLogout }) {
   useEffect(() => {
     carica();
   }, [carica]);
+
+  const testoAnteprima = useMemo(() => {
+    if (!bozza?.testo) return '';
+    const korp = (catalogo?.korp || []).find((k) => String(k.id) === String(bozza.korp));
+    return anteprimaModello({ ...bozza, korp_nome: korp?.nome || bozza.korp_nome || '' });
+  }, [bozza, catalogo]);
 
   const effettiMeta = useMemo(() => {
     const mappa = {};
@@ -300,6 +307,10 @@ export default function ContrattiManager({ onLogout }) {
                 Attivo
               </label>
               <textarea className="h-32 w-full rounded border border-gray-700 bg-gray-900 p-2 text-sm" value={bozza.testo || ''} onChange={(e) => setBozza({ ...bozza, testo: e.target.value })} />
+              <div className="rounded border border-gray-800 bg-gray-900/70 p-3">
+                <p className="mb-1 text-xs uppercase tracking-wide text-gray-500">Anteprima</p>
+                <p className="whitespace-pre-wrap text-sm text-gray-200">{testoAnteprima}</p>
+              </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">

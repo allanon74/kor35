@@ -28,6 +28,7 @@ from personaggi.contratti_effetti import (
     calcola_post_tetto,
     codice_noto,
     q2,
+    render_testo_contratto,
     risolvi_config,
 )
 from personaggi.contratti_models import (
@@ -154,24 +155,40 @@ def _parametri_snapshot(contratto: Contratto) -> dict:
 
 def _render_testo(modello_testo: str, *, proponente, cliente, korp, scadenza, parametri, clausole, compensi) -> str:
     nome_cliente = cliente.nome if cliente is not None else "il sottoscrittore"
-    linee_param = "\n".join(f"- {k}: {v}" for k, v in parametri.items())
-    linee_clausole = "\n".join(f"- {c}" for c in clausole) or "—"
-    linee_compensi = "\n".join(f"- {c}" for c in compensi) or "—"
-    testo = modello_testo or ""
-    sostituzioni = {
-        "{{proponente}}": getattr(proponente, "nome", "") or "",
-        "{{cliente}}": nome_cliente,
-        "{{korp}}": getattr(korp, "nome", "") or "",
-        "{{scadenza}}": timezone.localtime(scadenza).strftime("%d/%m/%Y %H:%M") if scadenza else "",
-        "{{parametri}}": linee_param,
-        "{{clausole}}": linee_clausole,
-        "{{compensi}}": linee_compensi,
-    }
-    for chiave, valore in sostituzioni.items():
-        testo = testo.replace(chiave, valore)
-    for chiave, valore in parametri.items():
-        testo = testo.replace(f"{{{{param:{chiave}}}}}", "" if valore is None else str(valore))
-    return testo
+    scadenza_txt = timezone.localtime(scadenza).strftime("%d/%m/%Y %H:%M") if scadenza else ""
+    return render_testo_contratto(
+        modello_testo,
+        proponente=getattr(proponente, "nome", "") or "",
+        cliente=nome_cliente,
+        korp=getattr(korp, "nome", "") or "",
+        scadenza=scadenza_txt,
+        parametri=parametri,
+        clausole=clausole,
+        compensi=compensi,
+    )
+
+
+def _testo_visibile(contratto: Contratto) -> str:
+    """Ricalcola il testo dallo snapshot, così i {{param:chiave}} non restano in pagina."""
+    snap = contratto.snapshot or {}
+    sorgente = snap.get("testo_modello") or ""
+    if not sorgente:
+        return snap.get("testo") or ""
+    clausole = [v.get("nome") or "" for v in snap.get("voci") or [] if v.get("tipo") != VOCE_COMPENSO]
+    compensi = [v.get("nome") or "" for v in snap.get("voci") or [] if v.get("tipo") == VOCE_COMPENSO]
+    scadenza_txt = ""
+    if contratto.scadenza:
+        scadenza_txt = timezone.localtime(contratto.scadenza).strftime("%d/%m/%Y %H:%M")
+    return render_testo_contratto(
+        sorgente,
+        proponente=getattr(contratto.proponente, "nome", "") or "",
+        cliente=contratto.cliente.nome if contratto.cliente_id else "il sottoscrittore",
+        korp=snap.get("korp_nome") or "",
+        scadenza=scadenza_txt,
+        parametri=snap.get("parametri") or {},
+        clausole=clausole,
+        compensi=compensi,
+    )
 
 
 def _nome_parte(contratto: Contratto, ruolo: str):
@@ -882,7 +899,7 @@ def serializza_contratto(contratto: Contratto, personaggio_id=None) -> dict:
         "cliente": (
             {"id": contratto.cliente_id, "nome": contratto.cliente.nome} if contratto.cliente_id else None
         ),
-        "testo": snap.get("testo") or "",
+        "testo": _testo_visibile(contratto),
         "parametri": snap.get("parametri") or {},
         "chiave_esclusivita": snap.get("chiave_esclusivita") or "",
         "qr_code_id": contratto.qr_code_id,

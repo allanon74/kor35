@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FileSignature, Loader2 } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import { contrattiAzione, contrattiCreaProposta, contrattiGetQr, contrattiGetScheda } from '../api';
+import { anteprimaModello, renderTestoContratto } from '../lib/contrattoTesto';
 
 const STATO_LABEL = {
   IN_ATTESA: 'In attesa',
@@ -20,7 +21,7 @@ function formatScadenza(iso) {
 }
 
 export default function ContrattiTab({ onLogout }) {
-  const { selectedCharacterId } = useCharacter();
+  const { selectedCharacterId, selectedCharacterData, personaggiList } = useCharacter();
   const [scheda, setScheda] = useState(null);
   const [errore, setErrore] = useState('');
   const [busy, setBusy] = useState(false);
@@ -44,6 +45,13 @@ export default function ContrattiTab({ onLogout }) {
   }, [carica]);
 
   const modello = (scheda?.modelli || []).find((m) => m.id === modelloId);
+  const nomePg = selectedCharacterData?.nome
+    || (personaggiList || []).find((p) => String(p?.id) === String(selectedCharacterId))?.nome
+    || '';
+  const testoAnteprima = useMemo(
+    () => anteprimaModello(modello, { nomeProponente: nomePg, valoriProponente: parametri }),
+    [modello, nomePg, parametri],
+  );
 
   const proponi = async () => {
     if (!modello) return;
@@ -130,7 +138,7 @@ export default function ContrattiTab({ onLogout }) {
           </select>
           {modello ? (
             <>
-              <p className="whitespace-pre-wrap text-sm text-gray-300">{modello.testo}</p>
+              <p className="whitespace-pre-wrap text-sm text-gray-300">{testoAnteprima}</p>
               {(modello.parametri || [])
                 .filter((p) => p.chi_compila === 'PROPONENTE')
                 .map((p) => (
@@ -179,7 +187,14 @@ export default function ContrattiTab({ onLogout }) {
               {c.proponente?.nome}
               {c.cliente ? ` → ${c.cliente.nome}` : ' → in attesa del cliente'}
             </p>
-            <p className="whitespace-pre-wrap text-sm text-gray-200">{c.testo}</p>
+            <p className="whitespace-pre-wrap text-sm text-gray-200">
+              {renderTestoContratto(c.testo, {
+                proponente: c.proponente?.nome,
+                cliente: c.cliente?.nome || 'il sottoscrittore',
+                scadenza: formatScadenza(c.scadenza),
+                parametri: c.parametri || {},
+              })}
+            </p>
             <div className="flex flex-wrap gap-2">
               {c.stato === 'IN_ATTESA' && c.ruolo === 'PROPONENTE' ? (
                 <>
