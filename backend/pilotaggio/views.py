@@ -2809,7 +2809,8 @@ class PilotScientificaStateView(APIView):
     def get(self, request):
         from .scientifica_spectro import build_scientifica_state_payload
 
-        return Response(build_scientifica_state_payload())
+        evento_id = (request.query_params.get("evento") or "").strip() or None
+        return Response(build_scientifica_state_payload(evento_id=evento_id))
 
 
 class PilotScientificaScanProfondoView(APIView):
@@ -2822,8 +2823,9 @@ class PilotScientificaScanProfondoView(APIView):
         from .scientifica_spectro import esegui_scan_profondo
 
         componenti = request.data.get("componenti_scelti") or request.data.get("componenti") or []
+        evento_id = (request.data.get("evento_id") or request.data.get("evento") or "").strip() or None
         try:
-            payload = esegui_scan_profondo(componenti_scelti=componenti)
+            payload = esegui_scan_profondo(componenti_scelti=componenti, evento_id=evento_id)
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(payload)

@@ -1,8 +1,8 @@
 """
 Console scientifica — Fase 1: spettrografia eventi e scan profondo.
 
-Read-only analysis degli eventi attivi + consumo opzionale componenti stiva
-per rivelare una condizione SP non ancora soddisfatta.
+Lettura di spettro senza la ricetta ST/SP. Lo scan profondo, a pagamento,
+rivela la soluzione del fenomeno scelto.
 """
 from __future__ import annotations
 
@@ -245,7 +245,7 @@ def _stato_rischio_ca(
         return {
             "livello": "elevato",
             "etichetta": "Rischio elevato",
-            "descrizione": f"Sottosistemi sensibili CA: {', '.join(sorted(set(ca_vicine)))}.",
+            "descrizione": "La firma si avvicina a una condizione di catastrofe.",
         }
     return {
         "livello": "moderato",
@@ -274,7 +274,7 @@ def _stato_sp_st(
     return {
         "codice": "in_corso",
         "etichetta": "In analisi",
-        "descrizione": "Né ST né SP soddisfatti — regolare sottosistemi indicati.",
+        "descrizione": "Né ST né SP risultano soddisfatti.",
     }
 
 
@@ -338,41 +338,60 @@ def _valida_consumo_scan(cfg, componenti_scelti: list) -> Tuple[bool, str, List[
     return valida_selezione_componenti(_FakeSS(), componenti_scelti)
 
 
-def _primo_hint_sp_non_soddisfatto(
+def _indizi_sistemi(
+    regole: dict,
+    stati_by_key: dict,
+    direzione_evento: str,
+    *,
+    max_sistemi: int = 2,
+) -> List[dict]:
+    """Uno o due sottosistemi ancora da regolare, senza livello né operatore."""
+    from .engine import _eval_soluzione_totale
+
+    if _eval_soluzione_totale(regole, stati_by_key, direzione_evento):
+        return []
+    visti: List[dict] = []
+    seen = set()
+    for sezione in ("st", "sp"):
+        for cond in _conditions_from_regole(regole or {}, sezione):
+            if not _hint_condizione(cond, stati_by_key, direzione_evento):
+                continue
+            ss = str(cond.get("sottosistema") or "").strip().upper()[:1]
+            if not ss or ss in seen:
+                continue
+            seen.add(ss)
+            stato = stati_by_key.get(ss)
+            nome = (
+                getattr(getattr(stato, "sottosistema", None), "nome", ss) if stato else ss
+            )
+            visti.append({"codice": ss, "nome": nome})
+            if len(visti) >= max_sistemi:
+                return visti
+    return visti
+
+
+def _soluzione_rivelabile(
     regole: dict,
     stati_by_key: dict,
     direzione_evento: str,
 ) -> Optional[dict]:
-    from .engine import _eval_leaf
+    """Ricetta ST/SP ancora aperta. Vuoto se non c'è nulla da rivelare."""
+    from .engine import _eval_soluzione_totale
 
-    for cond in _conditions_from_regole(regole or {}, "sp"):
-        if _eval_leaf(cond, stati_by_key, direzione_evento):
-            continue
-        hint = _hint_condizione(cond, stati_by_key, direzione_evento)
-        if not hint:
-            continue
-        ss = str(cond.get("sottosistema") or "").strip().upper()[:1]
-        return {
-            "sezione": "sp",
-            "sottosistema": ss,
-            "gruppo": _gruppo_sottosistema(ss),
-            "messaggio": hint,
-            "operatore": str(cond.get("op") or ""),
-        }
-    for cond in _conditions_from_regole(regole or {}, "st"):
-        if _eval_leaf(cond, stati_by_key, direzione_evento):
-            continue
-        hint = _hint_condizione(cond, stati_by_key, direzione_evento)
-        if hint:
-            ss = str(cond.get("sottosistema") or "").strip().upper()[:1]
-            return {
-                "sezione": "st",
-                "sottosistema": ss,
-                "gruppo": _gruppo_sottosistema(ss),
-                "messaggio": hint,
-                "operatore": str(cond.get("op") or ""),
-            }
-    return None
+    if _eval_soluzione_totale(regole, stati_by_key, direzione_evento):
+        return None
+    voci = [
+        voce
+        for voce in _delta_navigazione(regole, stati_by_key, direzione_evento)
+        if not voce.startswith("Nessun delta") and not voce.startswith("Configurazione ST")
+    ]
+    if not voci:
+        return None
+    return {
+        "sezione": "soluzione",
+        "voci": voci,
+        "messaggio": voci[0],
+    }
 
 
 def build_spectrografia_evento(sessione, istanza) -> dict:
@@ -390,7 +409,7 @@ def build_spectrografia_evento(sessione, istanza) -> dict:
         ),
         "direzione_evento": direzione,
         "firma_spettrale": _firma_spettrale(regole),
-        "delta_navigazione": _delta_navigazione(regole, stati_by_key, direzione),
+        "indizi_sistemi": _indizi_sistemi(regole, stati_by_key, direzione),
         "stato_soluzione": _stato_sp_st(regole, stati_by_key, direzione),
         "rischio_ca": _stato_rischio_ca(istanza, regole, stati_by_key, direzione),
         "cronometro": _cronometro_evento(sessione, istanza),
@@ -401,20 +420,40 @@ def build_spectrografia_evento(sessione, istanza) -> dict:
     }
 
 
-def build_scientifica_state_payload() -> dict:
-    from .engine import evento_attivo_corrente
-    from .models import EVENTO_ESITO_PENDING, PilotRuntimeConfig
+def _fenomeni_pending(sessione) -> list:
+    from .engine import eventi_attivi_correnti
+    from .models import EVENTO_ESITO_PENDING
+
+    if sessione is None or not sessione.is_attiva:
+        return []
+    return [
+        ist
+        for ist in eventi_attivi_correnti(sessione)
+        if ist.esito == EVENTO_ESITO_PENDING
+    ]
+
+
+def _istanza_fenomeno(sessione, evento_id: Optional[str]):
+    """Fenomeno pending scelto. Id sconosciuto: il più recente. Nessuno: None."""
+    pending = _fenomeni_pending(sessione)
+    if not pending:
+        return None
+    if evento_id:
+        for ist in pending:
+            if str(ist.pk) == str(evento_id):
+                return ist
+    return pending[0]
+
+
+def build_scientifica_state_payload(evento_id: Optional[str] = None) -> dict:
+    from .models import PilotRuntimeConfig
     from .views import _sessione_attiva_corrente
 
     cfg = PilotRuntimeConfig.get_solo()
     sessione = _sessione_attiva_corrente()
-    istanza = None
-    spettro = None
-
-    if sessione is not None and sessione.is_attiva:
-        istanza = evento_attivo_corrente(sessione)
-        if istanza is not None and istanza.esito == EVENTO_ESITO_PENDING:
-            spettro = build_spectrografia_evento(sessione, istanza)
+    pending = _fenomeni_pending(sessione)
+    istanza = _istanza_fenomeno(sessione, evento_id)
+    spettro = build_spectrografia_evento(sessione, istanza) if istanza is not None else None
 
     scans_usati = int(getattr(sessione, "scans_profondi_count", 0) or 0) if sessione else 0
     max_scans = int(getattr(cfg, "scientifica_scan_max_per_volo", 2) or 2)
@@ -423,14 +462,24 @@ def build_scientifica_state_payload() -> dict:
     from .scientifica_engine import build_interventi_payload, build_matrice_payload
 
     matrice = build_matrice_payload(sessione)
-    interventi = build_interventi_payload(sessione, istanza)
+    # Gli interventi restano sul fenomeno più recente: il selettore vale per spettro e scan.
+    interventi = build_interventi_payload(sessione, pending[0] if pending else None)
 
     return {
         "abilitato": bool(cfg.scientifica_console_abilitata),
         "sessione_attiva": sessione is not None and bool(sessione.is_attiva),
         "sessione_id": str(sessione.pk) if sessione else None,
         "defcon": int(sessione.defcon or 0) if sessione else 0,
-        "evento_pending": istanza is not None and istanza.esito == EVENTO_ESITO_PENDING,
+        "evento_pending": istanza is not None,
+        "evento_selezionato": str(istanza.pk) if istanza is not None else None,
+        "fenomeni": [
+            {
+                "id": str(ist.pk),
+                "nome": ist.evento.nome,
+                "scan_eseguito": bool(ist.scan_profondo_eseguito),
+            }
+            for ist in pending
+        ],
         "spettrografia": spettro,
         "matrice": matrice,
         "interventi": interventi,
@@ -450,10 +499,10 @@ def build_scientifica_state_payload() -> dict:
 
 
 @transaction.atomic
-def esegui_scan_profondo(*, componenti_scelti: list) -> dict:
+def esegui_scan_profondo(*, componenti_scelti: list, evento_id: Optional[str] = None) -> dict:
     from .componenti_stiva import consuma_mattoni_stiva
-    from .engine import evento_attivo_corrente
-    from .models import EVENTO_ESITO_PENDING, PilotRuntimeConfig
+    from .engine import _stati_by_key_sessione
+    from .models import PilotRuntimeConfig
     from .views import _sessione_attiva_corrente
 
     cfg = PilotRuntimeConfig.get_solo()
@@ -461,9 +510,17 @@ def esegui_scan_profondo(*, componenti_scelti: list) -> dict:
     if sessione is None or not sessione.is_attiva:
         raise ValueError("Nessuna sessione di volo attiva.")
 
-    istanza = evento_attivo_corrente(sessione)
-    if istanza is None or istanza.esito != EVENTO_ESITO_PENDING:
+    pending = _fenomeni_pending(sessione)
+    if not pending:
         raise ValueError("Nessun evento attivo da analizzare.")
+    if evento_id:
+        istanza = next((ist for ist in pending if str(ist.pk) == str(evento_id)), None)
+        if istanza is None:
+            raise ValueError("Evento non attivo: scegline uno in corso.")
+    elif len(pending) > 1:
+        raise ValueError("Seleziona quale fenomeno scansionare.")
+    else:
+        istanza = pending[0]
 
     if istanza.scan_profondo_eseguito:
         raise ValueError("Scan profondo già eseguito su questo evento.")
@@ -476,11 +533,9 @@ def esegui_scan_profondo(*, componenti_scelti: list) -> dict:
     if not ok:
         raise ValueError(err)
 
-    from .engine import _stati_by_key_sessione
-
     regole = istanza.evento.regole_json or {}
     stati_by_key = _stati_by_key_sessione(sessione)
-    hint = _primo_hint_sp_non_soddisfatto(regole, stati_by_key, istanza.direzione_evento or "")
+    hint = _soluzione_rivelabile(regole, stati_by_key, istanza.direzione_evento or "")
     if hint is None:
         raise ValueError("Nessuna condizione SP/ST da rivelare — configurazione già vicina alla soluzione.")
 
@@ -491,6 +546,6 @@ def esegui_scan_profondo(*, componenti_scelti: list) -> dict:
     sessione.scans_profondi_count = int(sessione.scans_profondi_count or 0) + 1
     sessione.save(update_fields=["scans_profondi_count", "updated_at"])
 
-    payload = build_scientifica_state_payload()
+    payload = build_scientifica_state_payload(evento_id=str(istanza.pk))
     payload["scan_eseguito"] = hint
     return payload

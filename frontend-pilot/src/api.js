@@ -150,10 +150,13 @@ export const api = {
   createScientificaConsoleTicket: () => request('/api/pilot/scientifica/auth/console-ticket/', {
     method: 'POST', body: {}, auth: false,
   }),
-  scientificaState: () => request('/api/pilot/scientifica/state/'),
-  scientificaScanProfondo: (componentiScelti) => request('/api/pilot/scientifica/scan-profondo/', {
+  scientificaState: (eventoId = '') => {
+    const q = eventoId ? `?evento=${encodeURIComponent(eventoId)}` : '';
+    return request(`/api/pilot/scientifica/state/${q}`);
+  },
+  scientificaScanProfondo: (componentiScelti, eventoId = '') => request('/api/pilot/scientifica/scan-profondo/', {
     method: 'POST',
-    body: { componenti_scelti: componentiScelti },
+    body: { componenti_scelti: componentiScelti, evento_id: eventoId || undefined },
   }),
   scientificaFase: (codice, fase) => request('/api/pilot/scientifica/fase/', {
     method: 'POST',
