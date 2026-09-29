@@ -1,0 +1,16 @@
+{
+  "name": "KOR35 Cloud Agent (DinD)",
+  "user": "ubuntu",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "install": "bash .cursor/cloud/install.sh",
+  "start": "bash .cursor/cloud/start.sh",
+  "ports": [
+    {
+      "name": "KOR35 frontend (dev-home)",
+      "port": 8080
+    }
+  ]
+}

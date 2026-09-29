@@ -15,6 +15,7 @@ Progetto Django + React, architettura **master** (prod) + **replica** (mirror/Pi
 | `docs/ANDROID_CAPACITOR.md` | Runbook build/sync app Android |
 | `docs/wiki/carte/README.md` | Wiki regolamento carte → `make wiki-carte-sync` |
 | `.cursor/rules/django-tests-docker.mdc` | Test Django in Docker: **sempre `--keepdb`** + `exec -T` |
+| `.cursor/environment.json` + `.cursor/cloud/` | Cloud Agent DinD (Docker CE + `dev-home`); vedi sezione Cloud sotto |
 | `config/docker/SYNC.md` | Runbook Docker: ruoli nodo, `make sync-db`, media rsync |
 | `docs/card-platform/` | Roadmap Card Studio / Card Arena, allineamento DB, contratti JSON |
 
@@ -46,4 +47,43 @@ Template env: `config/env_templates/backend.<profilo>.env.example`
 - Build consigliata: `make android-apk` (WSL, senza Android Studio; APK in `C:\dev\kor35-apk\`).
 - Con Studio: `make android-sync WIN=1`, poi apri **solo** `C:\dev\kor35-app\android` (`make android-path`). Path **bloccato** — non usare `C:\dev\kor35-android` né il parent `C:\dev\kor35-app`.
 - Regole: `.cursor/rules/android-capacitor.mdc`.
+
+## Cursor Cloud specific instructions
+
+Ambiente versionato in `.cursor/` (DinD):
+
+| File | Ruolo |
+|------|--------|
+| `.cursor/Dockerfile` | Ubuntu 24.04 + Docker CE + fuse-overlayfs + iptables-legacy |
+| `.cursor/environment.json` | `install` / `start` Cloud Agent |
+| `.cursor/cloud/install.sh` | Bootstrap Build (idempotente); crea `backend/.env.dev-home` se manca |
+| `.cursor/cloud/start.sh` | Avvia `dockerd` + SSH (`ID_DOCKER`) |
+| `.cursor/cloud/README.md` | Dettaglio secrets e smoke-test |
+
+**Secrets** (dashboard Environment, non in git): `ID_DOCKER` (chiave SSH), `SECRET_KEY` (Django, consigliato).
+
+**Profilo Cloud:** `ENV=dev-home` (stack locale isolato). Path workspace tipico: `/workspace`.
+
+Dopo che `start.sh` ha avviato Docker:
+
+```bash
+docker info
+test -f backend/.env.dev-home || cp config/env_templates/backend.dev-home.env.example backend/.env.dev-home
+
+cd config/docker
+export KOR35_BACKEND_ENV_FILE="$(pwd)/../../backend/.env.dev-home"
+# Stack minimo per test backend (più leggero del full compose):
+docker compose -f compose.base.yml -f compose.dev-home.yml up -d --build db redis backend
+
+docker compose -f compose.base.yml -f compose.dev-home.yml exec -T backend \
+  python manage.py test personaggi.tests_qr_multi_flow personaggi.tests_qr_random_pool \
+  personaggi.tests_qr_minigioco pilotaggio.tests.test_qr_sottosistema -v 2 --keepdb
+```
+
+Note DinD:
+
+- `dockerd` va avviato a ogni boot agent (`start.sh`); non sopravvive allo snapshot Build.
+- Se `docker` manca, l’agent non sta usando il Build da `.cursor/Dockerfile` — ricostruire l’Environment.
+- SSH mirror/prod resta opzionale via `ID_DOCKER` (vedi `.cursor/rules/mirror-pi-ops.mdc` / `prod-docker-ops.mdc`).
+- Non usare `python manage.py test` sull’host Cloud: sempre `docker compose … exec -T backend … --keepdb`.
 
