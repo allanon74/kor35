@@ -5143,6 +5143,46 @@ class RandomQrPoolMembership(SyncableModel, models.Model):
         return f"{self.qr_code_id} → {self.pool_id}"
 
 
+class RandomQrPoolClaim(SyncableModel, models.Model):
+    """
+    Anti-farm pool: un personaggio può ottenere un solo effetto da ciascun QR del pool.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    pool = models.ForeignKey(
+        RandomQrPool,
+        on_delete=models.CASCADE,
+        related_name="claims",
+    )
+    qr_code = models.ForeignKey(
+        "QrCode",
+        on_delete=models.CASCADE,
+        related_name="random_pool_claims",
+    )
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="random_pool_claims",
+    )
+
+    class Meta:
+        verbose_name = "Claim pool QR"
+        verbose_name_plural = "Claim pool QR"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["personaggio", "qr_code"],
+                name="uq_random_qr_pool_claim_pg_qr",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["personaggio", "qr_code"]),
+        ]
+
+    def __str__(self):
+        return f"claim {self.personaggio_id} @ {self.qr_code_id} → {self.pool_id}"
+
+
 class RandomQrPoolEffect(SyncableModel, models.Model):
     """Effetto pesato all'interno di un pool randomico."""
 
@@ -5464,6 +5504,14 @@ class SerieAssegnazione(SyncableModel, models.Model):
         verbose_name = "Assegnazione serie"
         verbose_name_plural = "Assegnazioni serie"
         unique_together = [("serie", "indice")]
+        constraints = [
+            # Anti-farm: un QR fisico assegna al massimo un pezzo (pool/standalone).
+            models.UniqueConstraint(
+                fields=["qr_code"],
+                condition=models.Q(qr_code__isnull=False),
+                name="uq_serie_assegnazione_qr_code",
+            ),
+        ]
         indexes = [
             models.Index(fields=["serie", "indice"]),
             models.Index(fields=["personaggio", "serie"]),

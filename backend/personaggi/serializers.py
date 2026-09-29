@@ -4699,6 +4699,7 @@ class RubaSerializer(serializers.Serializer):
 
 class AcquisisciSerializer(serializers.Serializer):
     qrcode_id = serializers.CharField(max_length=20)
+    minigioco_session_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     def validate(self, data):
         try:
@@ -4722,6 +4723,17 @@ class AcquisisciSerializer(serializers.Serializer):
                     "Questo QR non supporta l'acquisizione da questa azione (es. manifesto, inventario, innesco timer)."
                 )
             self.context["item"] = item
+            # Non bypassare il gate minigioco: l'acquisizione è un POST separato dalla GET scan.
+            from personaggi import qr_minigioco
+
+            gate = qr_minigioco.check_gate_minigioco(
+                qr_code=qr,
+                personaggio=self.context.get("richiedente"),
+                bypass_session_id=data.get("minigioco_session_id") or None,
+            )
+            blocco = qr_minigioco.messaggio_blocco_gate_minigioco(gate)
+            if blocco:
+                raise serializers.ValidationError(blocco)
             if isinstance(item, Oggetto):
                 ok, msg = qr_logic.oggetto_puo_essere_acquisito_da_qr(self.context["richiedente"], item)
                 if not ok:

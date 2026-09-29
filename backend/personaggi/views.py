@@ -1331,7 +1331,33 @@ class QrCodeDetailView(APIView):
     Risoluzione QR: timer legacy (TimerQrCode), InnescoTimer, personaggio/inventario/oggetto/tecniche/manifesto.
     Per inventari non-personaggio richiede doppia scansione (vedi qr_logic.gestisci_scansione_inventario_qr).
     Query opzionale: ?personaggio_id=<id> (personaggio dell'utente autenticato) per permessi manifesto/inventario/innesco.
+
+    Richiede autenticazione: mutazioni (timer, nodo, loot, …) e lettura schede non devono essere pubbliche.
     """
+
+    permission_classes = [IsAuthenticated]
+
+    def _response_minigioco_gate(self, request, qr_code, scanner_pg, bypass_sid=None, config_override=None):
+        """None se il gate è superato; altrimenti Response (richiesto / bloccato)."""
+        from personaggi import qr_minigioco
+
+        gate = qr_minigioco.check_gate_minigioco(
+            qr_code=qr_code,
+            personaggio=scanner_pg,
+            request=request,
+            bypass_session_id=bypass_sid,
+            config_override=config_override,
+        )
+        if not gate:
+            return None
+        if gate.get("tipo_modello") == "minigioco_bloccato":
+            return Response(gate, status=status.HTTP_200_OK)
+        if gate.get("blocked"):
+            return Response(
+                {"error": gate.get("error", "Accesso negato.")},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(gate, status=status.HTTP_200_OK)
 
     def get(self, request, qrcode_id, format=None):
         from personaggi.qr_logic import validate_qr_id
@@ -1457,19 +1483,25 @@ class QrCodeDetailView(APIView):
                 status=status.HTTP_200_OK,
             )
 
-        configurazione_timer = getattr(qr_code, "configurazione_timer", None)
-        if configurazione_timer:
-            return self.gestisci_scansione_timer(configurazione_timer)
-
         scanner_pg = None
         raw_pid = request.query_params.get("personaggio_id")
-        if request.user.is_authenticated and raw_pid not in (None, ""):
+        if raw_pid not in (None, ""):
             try:
                 pid = int(raw_pid)
             except (TypeError, ValueError):
                 pid = None
             if pid is not None:
                 scanner_pg = Personaggio.objects.filter(pk=pid, proprietario=request.user).first()
+        bypass_sid = request.query_params.get("minigioco_session_id")
+
+        configurazione_timer = getattr(qr_code, "configurazione_timer", None)
+        if configurazione_timer:
+            gate_resp = self._response_minigioco_gate(
+                request, qr_code, scanner_pg, bypass_sid=bypass_sid
+            )
+            if gate_resp is not None:
+                return gate_resp
+            return self.gestisci_scansione_timer(configurazione_timer)
 
         # Trappola / SerieQr standalone (OneToOne su QrCode, non A_vista)
         from personaggi import qr_random_pool
@@ -1482,6 +1514,11 @@ class QrCodeDetailView(APIView):
                     {"error": "Parametro personaggio_id richiesto per la trappola."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            gate_resp = self._response_minigioco_gate(
+                request, qr_code, scanner_pg, bypass_sid=bypass_sid
+            )
+            if gate_resp is not None:
+                return gate_resp
             return Response(
                 qr_random_pool.apply_trappola_standalone(
                     trappola=trappola,
@@ -1498,6 +1535,11 @@ class QrCodeDetailView(APIView):
                     {"error": "Parametro personaggio_id richiesto per la serie."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            gate_resp = self._response_minigioco_gate(
+                request, qr_code, scanner_pg, bypass_sid=bypass_sid
+            )
+            if gate_resp is not None:
+                return gate_resp
             serie_result = qr_random_pool.apply_serie_standalone(
                 serie_qr=serie_qr,
                 personaggio=scanner_pg,
@@ -1512,7 +1554,6 @@ class QrCodeDetailView(APIView):
 
         # Pool QR randomico: ha priorità sul vista collegato
         if qr_random_pool.get_active_pool_for_qr(qr_code) is not None:
-            bypass_sid = request.query_params.get("minigioco_session_id")
             pool_result = qr_random_pool.handle_pool_qr_scan(
                 qr_code=qr_code,
                 personaggio=scanner_pg,
@@ -1582,24 +1623,11 @@ class QrCodeDetailView(APIView):
                 status=status.HTTP_200_OK,
             )
 
-        from personaggi import qr_minigioco
-
-        bypass_sid = request.query_params.get("minigioco_session_id")
-        gate = qr_minigioco.check_gate_minigioco(
-            qr_code=qr_code,
-            personaggio=scanner_pg,
-            request=request,
-            bypass_session_id=bypass_sid,
+        gate_resp = self._response_minigioco_gate(
+            request, qr_code, scanner_pg, bypass_sid=bypass_sid
         )
-        if gate:
-            if gate.get("tipo_modello") == "minigioco_bloccato":
-                return Response(gate, status=status.HTTP_200_OK)
-            if gate.get("blocked"):
-                return Response(
-                    {"error": gate.get("error", "Accesso negato.")},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            return Response(gate, status=status.HTTP_200_OK)
+        if gate_resp is not None:
+            return gate_resp
 
         # Innesco timer (sottoclasse A_vista)
         inn_timer = InnescoTimer.objects.filter(pk=vista_obj.pk).first()
@@ -1801,61 +1829,64 @@ class QrCodeDetailView(APIView):
         return Response(response_payload, status=status.HTTP_200_OK) 
     
     def gestisci_scansione_timer(self, config):
+        from personaggi.models import TimerQrCode
+
         ora_attuale = timezone.now()
         oggi = ora_attuale.date()
-        
-        # Logica di Stacking (Somma del tempo)
-        stato, created = StatoTimerAttivo.objects.get_or_create(
-            tipologia=config.tipologia,
-            defaults={'data_fine': ora_attuale}
-        )
-        if config.ultima_attivazione == oggi:
-            return Response({
-                "error": "carica_esaurita",
-                "message": "Carica esaurita per oggi! Questo componente può essere attivato solo una volta al giorno."
-            }, status=status.HTTP_403_FORBIDDEN)
-            
-        if not created and stato.data_fine > ora_attuale:
-            # Aggiungo la durata del QR al tempo rimanente del primo
-            stato.data_fine += timedelta(seconds=config.durata_secondi)
-        else:
-            # Il timer era scaduto o nuovo, parte da ora + durata
-            stato.data_fine = ora_attuale + timedelta(seconds=config.durata_secondi)
-        
-        # 3. SALVATAGGIO STATI
+
         with transaction.atomic():
+            # Lock sulla config QR (carica giornaliera) e sullo stato tipologia.
+            config = TimerQrCode.objects.select_for_update().select_related("tipologia").get(pk=config.pk)
+            if config.ultima_attivazione == oggi:
+                return Response(
+                    {
+                        "error": "carica_esaurita",
+                        "message": (
+                            "Carica esaurita per oggi! Questo componente può essere "
+                            "attivato solo una volta al giorno."
+                        ),
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            stato, created = StatoTimerAttivo.objects.select_for_update().get_or_create(
+                tipologia=config.tipologia,
+                defaults={"data_fine": ora_attuale},
+            )
+            if not created and stato.data_fine > ora_attuale:
+                stato.data_fine += timedelta(seconds=config.durata_secondi)
+            else:
+                stato.data_fine = ora_attuale + timedelta(seconds=config.durata_secondi)
             stato.save()
-            # Registriamo l'attivazione per questo QR specifico
             config.ultima_attivazione = oggi
             config.save()
-        
-        stato.save()
 
-        # BROADCAST via WebSocket
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
-            'kor35_notifications', # Il gruppo che usi nel tuo NotificationConsumer
+            "kor35_notifications",
             {
-                'type': 'send_notification',
-                'message': {
-                    'action': 'TIMER_SYNC',
-                    'payload': {
-                        'id': stato.id,
-                        'nome': config.tipologia.nome,
-                        'data_fine': stato.data_fine.isoformat(),
-                        'alert_suono': config.tipologia.alert_suono,
-                        'notifica_push': config.tipologia.notifica_push,
-                        'messaggio_in_app': config.tipologia.messaggio_in_app,
-                    }
-                }
-            }
+                "type": "send_notification",
+                "message": {
+                    "action": "TIMER_SYNC",
+                    "payload": {
+                        "id": stato.id,
+                        "nome": config.tipologia.nome,
+                        "data_fine": stato.data_fine.isoformat(),
+                        "alert_suono": config.tipologia.alert_suono,
+                        "notifica_push": config.tipologia.notifica_push,
+                        "messaggio_in_app": config.tipologia.messaggio_in_app,
+                    },
+                },
+            },
         )
 
-        return Response({
-            "tipo_modello": "timer_attivato",
-            "messaggio": f"Timer {config.tipologia.nome} avviato/esteso!",
-            "dati": { "nome": config.tipologia.nome, "scadenza": stato.data_fine }
-        })
+        return Response(
+            {
+                "tipo_modello": "timer_attivato",
+                "messaggio": f"Timer {config.tipologia.nome} avviato/esteso!",
+                "dati": {"nome": config.tipologia.nome, "scadenza": stato.data_fine},
+            }
+        )
     
 class PersonaggioMeView(APIView):
     permission_classes = [IsAuthenticated]

@@ -338,9 +338,10 @@ export const rubaOggetto = (oggettoId, targetPersonaggioId, onLogout, personaggi
 /**
  * Acquisisce un oggetto/attivata da un QR code.
  */
-export const acquisisciItem = (qrCodeId, onLogout, personaggioId = null) => {
+export const acquisisciItem = (qrCodeId, onLogout, personaggioId = null, minigiocoSessionId = null) => {
   const body = { qrcode_id: qrCodeId };
   if (personaggioId != null && personaggioId !== '') body.personaggio_id = personaggioId;
+  if (minigiocoSessionId) body.minigioco_session_id = String(minigiocoSessionId);
   return fetchAuthenticated(
     '/api/personaggi/api/transazioni/acquisisci/', 
     {

@@ -621,7 +621,7 @@ const PersonaggioView = ({ data, qrcodeId, onLogout, onStealSuccess }) => {
 //##################################################################
 // ## VISTA QR: TIPO OGGETTO / ATTIVATA (3d) ##
 //##################################################################
-const TecnicaAcquisizioneView = ({ qrId, tipo, data, onLogout, onClose }) => {
+const TecnicaAcquisizioneView = ({ qrId, tipo, data, onLogout, onClose, minigiocoSessionId = null }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -637,7 +637,12 @@ const TecnicaAcquisizioneView = ({ qrId, tipo, data, onLogout, onClose }) => {
     setIsLoading(true);
     setError('');
     try {
-      const response = await acquisisciItem(qrId, onLogout, selectedCharacterId);
+      const response = await acquisisciItem(
+        qrId,
+        onLogout,
+        selectedCharacterId,
+        minigiocoSessionId || data?._minigioco_session_id || null,
+      );
       setMessage(response.success || 'Tecnica aggiunta alle tue possedute!');
       setTimeout(() => onClose(), 2000);
     } catch (err) {
@@ -683,7 +688,7 @@ const TecnicaAcquisizioneView = ({ qrId, tipo, data, onLogout, onClose }) => {
   );
 };
 
-const AcquisizioneView = ({ qrId, data, tipo, onLogout, onClose }) => {
+const AcquisizioneView = ({ qrId, data, tipo, onLogout, onClose, minigiocoSessionId = null }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -698,7 +703,12 @@ const AcquisizioneView = ({ qrId, data, tipo, onLogout, onClose }) => {
     setIsLoading(true);
     setError('');
     try {
-      const response = await acquisisciItem(qrId, onLogout, selectedCharacterId);
+      const response = await acquisisciItem(
+        qrId,
+        onLogout,
+        selectedCharacterId,
+        minigiocoSessionId || data?._minigioco_session_id || null,
+      );
       setMessage(response.success || "Oggetto acquisito!");
       setTimeout(() => {
         onClose();
@@ -1135,6 +1145,7 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             data={data.dati}
             onLogout={onLogout}
             onClose={onClose}
+            minigiocoSessionId={data._minigioco_session_id || null}
           />
         );
         
@@ -1152,13 +1163,31 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
         if (!qrId) { 
             return <p className="text-red-400">Errore: Manca l'ID del QrCode per l'acquisizione.</p>
         }
-        return <AcquisizioneView qrId={qrId} data={data.dati} tipo="oggetto" onLogout={onLogout} onClose={onClose} />;
+        return (
+          <AcquisizioneView
+            qrId={qrId}
+            data={data.dati}
+            tipo="oggetto"
+            onLogout={onLogout}
+            onClose={onClose}
+            minigiocoSessionId={data._minigioco_session_id || null}
+          />
+        );
       
       case 'attivata':
         if (!qrId) { 
             return <p className="text-red-400">Errore: Manca l'ID del QrCode per l'acquisizione.</p>
         }
-        return <AcquisizioneView qrId={qrId} data={data.dati} tipo="attivata" onLogout={onLogout} onClose={onClose} />;
+        return (
+          <AcquisizioneView
+            qrId={qrId}
+            data={data.dati}
+            tipo="attivata"
+            onLogout={onLogout}
+            onClose={onClose}
+            minigiocoSessionId={data._minigioco_session_id || null}
+          />
+        );
 
       // AGGIUNTO IL CASO MANCANTE PER IL TIMER PURO
       case 'timer_attivato':
@@ -1202,6 +1231,7 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
 
       case 'serie': {
         const serieImg = resolveMediaUrl(data.dati?.immagine_url);
+        const giaRiscattato = Boolean(data.dati?.gia_riscattato);
         return (
           <div className="text-center py-8">
             <Package size={56} className="mx-auto text-violet-400 mb-4" />
@@ -1220,7 +1250,11 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
                 />
               </div>
             ) : null}
-            <p className="text-xs text-gray-500 mt-4">L&apos;oggetto è stato aggiunto al tuo inventario.</p>
+            <p className="text-xs text-gray-500 mt-4">
+              {giaRiscattato
+                ? (data.dati?.messaggio || data.messaggio || 'Hai già riscosso questo QR della serie.')
+                : "L'oggetto è stato aggiunto al tuo inventario."}
+            </p>
             {typeof data.dati?.rimanenti === 'number' ? (
               <p className="text-xs text-gray-400 mt-2">Pezzi ancora disponibili: {data.dati.rimanenti}</p>
             ) : null}
@@ -1320,6 +1354,26 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             <X size={56} className="mx-auto text-red-500 mb-4" />
             <h3 className="text-2xl font-bold text-red-400 mb-2">Accesso negato</h3>
             <p className="text-gray-300">{data.messaggio || 'Questo QR non è più disponibile per il tuo personaggio.'}</p>
+          </div>
+        );
+
+      case 'minigioco_errore':
+        return (
+          <div className="text-center py-8">
+            <X size={56} className="mx-auto text-red-500 mb-4" />
+            <h3 className="text-2xl font-bold text-red-400 mb-2">Minigioco</h3>
+            <p className="text-gray-300">{data.messaggio || data.error || 'Sessione minigioco non valida.'}</p>
+          </div>
+        );
+
+      case 'minigioco_superato':
+        return (
+          <div className="text-center py-8">
+            <Sparkles size={56} className="mx-auto text-emerald-400 mb-4" />
+            <h3 className="text-2xl font-bold text-emerald-300 mb-2">Minigioco superato</h3>
+            <p className="text-gray-300">
+              {data.messaggio || 'Puoi procedere con l\'effetto del QR.'}
+            </p>
           </div>
         );
 

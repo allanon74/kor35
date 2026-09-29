@@ -833,11 +833,15 @@ def ha_sblocco_minigioco(personaggio, qr_code, config=None) -> bool:
 
 
 def session_allows_bypass(session_id, personaggio, qr_code) -> bool:
+    from django.core.exceptions import ValidationError
+
     from .models import MinigiocoQrConfig, MinigiocoQrSession
 
+    if not session_id or personaggio is None or qr_code is None:
+        return False
     try:
         sess = MinigiocoQrSession.objects.get(pk=session_id)
-    except MinigiocoQrSession.DoesNotExist:
+    except (MinigiocoQrSession.DoesNotExist, ValueError, TypeError, ValidationError):
         return False
     if sess.personaggio_id != personaggio.pk or sess.qr_code_id != qr_code.id:
         return False
@@ -984,6 +988,22 @@ def resolve_config_for_qr(qr_code, config_override=None):
     except MinigiocoQrConfig.DoesNotExist:
         pass
     return qr_random_pool.resolve_minigioco_config_for_qr(qr_code)
+
+
+def messaggio_blocco_gate_minigioco(gate: Optional[Dict[str, Any]]) -> Optional[str]:
+    """
+    Se `gate` blocca l'effetto/acquisizione, ritorna messaggio errore; altrimenti None.
+    Usato da Acquisisci e da percorsi che non devono restituire il payload minigioco.
+    """
+    if not gate:
+        return None
+    if gate.get("tipo_modello") == "minigioco_richiesto":
+        return "Completa il minigioco prima di usare questo QR."
+    if gate.get("tipo_modello") == "minigioco_bloccato":
+        return gate.get("messaggio") or gate.get("error") or "Accesso negato."
+    if gate.get("blocked"):
+        return gate.get("error") or gate.get("messaggio") or "Accesso negato."
+    return None
 
 
 def check_gate_minigioco(

@@ -244,6 +244,9 @@ def applica_serie(
     Assegna un indice unico globale della serie e crea oggetto in inventario.
     Ritorna (payload, errore, tipo_modello_override).
     tipo_modello_override = 'serie_esaurita' se non restano pezzi.
+
+    Anti-farm: ogni QrCode fisico assegna al massimo un pezzo (una sola
+    SerieAssegnazione per qr_code). Ri-scan dello stesso QR non crea pezzi nuovi.
     """
     from .models import Oggetto, SerieAssegnazione, TIPO_OGGETTO_FISICO
 
@@ -259,6 +262,37 @@ def applica_serie(
     with transaction.atomic():
         # Lock sulla collezione per evitare doppie assegnazioni in race
         locked = type(serie).objects.select_for_update().get(pk=serie.pk)
+
+        if qr_code is not None:
+            gia_qr = (
+                SerieAssegnazione.objects.select_for_update()
+                .filter(qr_code=qr_code)
+                .select_related("serie")
+                .first()
+            )
+            if gia_qr is not None:
+                if gia_qr.personaggio_id == personaggio.pk:
+                    return {
+                        "nome": locked.nome,
+                        "indice": gia_qr.indice,
+                        "totale": totale,
+                        "etichetta": f"{locked.nome} {gia_qr.indice} di {totale}",
+                        "rimanenti": max(
+                            0,
+                            totale
+                            - SerieAssegnazione.objects.filter(serie=locked).count(),
+                        ),
+                        "oggetto_id": gia_qr.oggetto_id,
+                        "assegnazione_id": str(gia_qr.pk),
+                        "immagine_url": _serie_immagine_url(gia_qr.immagine),
+                        "messaggio": (
+                            f"Hai già riscosso questo QR: "
+                            f"{locked.nome} {gia_qr.indice} di {totale}."
+                        ),
+                        "gia_riscattato": True,
+                    }, None, "serie"
+                return None, "Questo QR della serie è già stato riscosso da un altro personaggio.", None
+
         presi = set(
             SerieAssegnazione.objects.filter(serie=locked).values_list("indice", flat=True)
         )
@@ -599,6 +633,23 @@ def handle_pool_qr_scan(
     if gate:
         return gate
 
+    from .models import RandomQrPoolClaim
+
+    # Anti-farm: un personaggio può ottenere un solo effetto da ciascun QR del pool.
+    if personaggio is not None and RandomQrPoolClaim.objects.filter(
+        personaggio=personaggio, qr_code=qr_code
+    ).exists():
+        return {
+            "tipo_modello": "pool_errore",
+            "messaggio": "Hai già usato questo QR del pool.",
+            "dati": {
+                "pool_id": str(pool.pk),
+                "pool_nome": pool.nome,
+                "gia_usato": True,
+            },
+            "qrcode_id": qr_code.id,
+        }
+
     effect = scegli_effetto(pool)
     if not effect:
         return {
@@ -616,6 +667,12 @@ def handle_pool_qr_scan(
     )
     if result.get("blocked"):
         return result
+    if personaggio is not None and result.get("tipo_modello") != "pool_errore":
+        RandomQrPoolClaim.objects.get_or_create(
+            personaggio=personaggio,
+            qr_code=qr_code,
+            defaults={"pool": pool},
+        )
     result.setdefault("qrcode_id", qr_code.id)
     return result
 
