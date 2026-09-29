@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { PREVIEW_SCIENTIFICA } from '../kioskPreview.js';
 import { initialTab } from '../viewport.js';
@@ -9,6 +9,40 @@ const KIOSK_TABS = [
   ['matrice', 'Matrice'],
   ['interventi', 'Interventi'],
 ];
+
+function FenomenoPicker({ fenomeni, selectedId, onSelect }) {
+  if (!fenomeni || fenomeni.length < 2) return null;
+  return (
+    <div className="sci-event-picker" role="group" aria-label="Fenomeno da analizzare">
+      {fenomeni.map((f) => (
+        <button
+          key={f.id}
+          type="button"
+          className={`sci-event-chip${f.id === selectedId ? ' is-active' : ''}`}
+          onClick={() => onSelect(f.id)}
+        >
+          {f.nome}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SoluzioneAcquisita({ indizio }) {
+  if (!indizio) return null;
+  const voci = Array.isArray(indizio.voci) && indizio.voci.length
+    ? indizio.voci
+    : (indizio.messaggio ? [indizio.messaggio] : []);
+  if (!voci.length) return null;
+  return (
+    <div className="sci-scan-result">
+      <span className="sci-scan-kicker">Soluzione acquisita</span>
+      <ul className="sci-delta-list">
+        {voci.map((voce) => <li key={voce}>{voce}</li>)}
+      </ul>
+    </div>
+  );
+}
 
 function SpectralBands({ bands }) {
   if (!bands?.length) {
@@ -156,12 +190,10 @@ function MatricePanel({ matrice, busy, onFase }) {
 function InterventiPanel({
   interventi,
   matrice,
-  stivaRighe,
   busy,
+  compact = false,
   onIntervento,
 }) {
-  const [selectedByTipo, setSelectedByTipo] = useState({});
-
   const catalogo = interventi?.catalogo || [];
   if (!interventi?.abilitati) {
     return (
@@ -172,69 +204,33 @@ function InterventiPanel({
     );
   }
 
-  const mattoneOptions = (stivaRighe || []).filter((r) => (r.quantita || 0) > 0);
-
-  const runIntervento = (tipo, nComp) => {
-    const mid = selectedByTipo[tipo];
-    const componenti = nComp > 0 && mid
-      ? [{ mattone_id: mid, quantita: nComp }]
-      : [];
-    onIntervento(tipo, componenti);
-  };
-
   return (
-    <section className="sci-panel">
-      <h2>Interventi attivi</h2>
-      <p className="sci-muted">
+    <section className={`sci-panel${compact ? ' sci-interventi-kiosk' : ''}`}>
+      {compact ? null : <h2>Interventi attivi</h2>}
+      <p className="sci-muted sci-interventi-meta">
         {interventi.interventi_rimanenti_volo ?? 0}
         {' '}
-        interventi rimanenti questo volo · coerenza disponibile:
+        rimasti · coerenza
         {' '}
         {matrice?.coerenza ?? 0}
+        {compact ? ' · il componente esce a caso dalla stiva' : ' · componente pescato a caso dalla stiva'}
       </p>
       <div className="sci-interventi-list">
         {catalogo.map((iv) => (
-          <div key={iv.tipo} className="sci-intervento-row">
-            <div className="sci-intervento-info">
-              <strong>{iv.label}</strong>
-              <p>{iv.descrizione}</p>
-              <span className="sci-intervento-cost">
-                {iv.coerenza > 0 ? `${iv.coerenza} coerenza` : 'Gratuito'}
-                {iv.componenti > 0 ? ` · ${iv.componenti} comp.` : ''}
-              </span>
-            </div>
-            {iv.componenti > 0 && iv.disponibile ? (
-              <select
-                className="sci-intervento-select"
-                value={selectedByTipo[iv.tipo] || ''}
-                disabled={busy}
-                onChange={(e) => setSelectedByTipo((p) => ({ ...p, [iv.tipo]: e.target.value }))}
-              >
-                <option value="">— componente —</option>
-                {mattoneOptions.map((r) => (
-                  <option key={r.mattone_id} value={r.mattone_id}>
-                    {r.nome || r.indice_componente}
-                    {' '}
-                    (×
-                    {r.quantita}
-                    )
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <button
-              type="button"
-              className="sci-btn sci-btn--primary sci-btn--compact"
-              disabled={busy || !iv.disponibile}
-              title={iv.motivo_indisponibile || ''}
-              onClick={() => runIntervento(iv.tipo, iv.componenti)}
-            >
-              Esegui
-            </button>
-            {!iv.disponibile && iv.motivo_indisponibile ? (
-              <span className="sci-intervento-blocked">{iv.motivo_indisponibile}</span>
-            ) : null}
-          </div>
+          <button
+            key={iv.tipo}
+            type="button"
+            className="sci-btn sci-btn--primary sci-intervento-btn"
+            disabled={busy || !iv.disponibile}
+            title={iv.motivo_indisponibile || iv.descrizione || ''}
+            onClick={() => onIntervento(iv.tipo, [])}
+          >
+            <span className="sci-intervento-btn-label">{iv.label}</span>
+            <span className="sci-intervento-btn-cost">
+              {iv.coerenza > 0 ? `${iv.coerenza} coerenza` : 'gratis'}
+              {iv.componenti > 0 ? ` · ${iv.componenti}` : ''}
+            </span>
+          </button>
         ))}
       </div>
     </section>
@@ -253,6 +249,8 @@ export default function ScientificaScreen({
   const [busy, setBusy] = useState(false);
   const [selectedMattone, setSelectedMattone] = useState('');
   const [tab, setTab] = useState(() => initialTab(KIOSK_TABS.map(([id]) => id), 'spettro'));
+  const [eventoId, setEventoId] = useState('');
+  const eventoIdRef = useRef('');
 
   const refresh = useCallback(async () => {
     if (preview) {
@@ -261,13 +259,26 @@ export default function ScientificaScreen({
       return;
     }
     try {
-      const res = await api.scientificaState();
+      const res = await api.scientificaState(eventoIdRef.current);
       setData(res);
       setError('');
+      const ids = (res?.fenomeni || []).map((f) => f.id);
+      const current = eventoIdRef.current;
+      const next = ids.includes(current) ? current : (res?.evento_selezionato || ids[0] || '');
+      if (next !== current) {
+        eventoIdRef.current = next;
+        setEventoId(next);
+      }
     } catch (e) {
       setError(e.message || 'Errore caricamento console scientifica.');
     }
   }, [preview]);
+
+  const selectEvento = (id) => {
+    eventoIdRef.current = id;
+    setEventoId(id);
+    if (!preview) refresh();
+  };
 
   useEffect(() => {
     refresh();
@@ -301,7 +312,7 @@ export default function ScientificaScreen({
     try {
       const res = await api.scientificaScanProfondo([
         { mattone_id: selectedMattone, quantita: 1 },
-      ]);
+      ], eventoIdRef.current);
       setData(res);
       setSelectedMattone('');
     } catch (e) {
@@ -434,18 +445,31 @@ export default function ScientificaScreen({
       {spettro && (show('spettro') || show('scan')) ? (
         <div className="scientifica-grid">
           <section className="sci-panel" hidden={!show('spettro')}>
+            <FenomenoPicker
+              fenomeni={data?.fenomeni}
+              selectedId={eventoId || data?.evento_selezionato}
+              onSelect={selectEvento}
+            />
             <h2>Spettrografia — {spettro.evento_nome}</h2>
             {spettro.evento_descrizione ? (
               <p className="sci-event-desc">{spettro.evento_descrizione}</p>
             ) : null}
             <h3 className="sci-subtitle">Firma spettrale</h3>
             <SpectralBands bands={spettro.firma_spettrale} />
-            <h3 className="sci-subtitle">Delta navigazione</h3>
-            <ul className="sci-delta-list">
-              {(spettro.delta_navigazione || []).map((d) => (
-                <li key={d}>{d}</li>
-              ))}
-            </ul>
+            <h3 className="sci-subtitle">Sistemi da regolare</h3>
+            {(spettro.indizi_sistemi || []).length ? (
+              <ul className="sci-delta-list">
+                {spettro.indizi_sistemi.map((row) => (
+                  <li key={row.codice}>
+                    <strong>{row.codice}</strong>
+                    {row.nome ? ` — ${row.nome}` : ''}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="sci-muted">Nessun sistema da segnalare su questo fenomeno.</p>
+            )}
+            <p className="sci-muted">Lo spettro ne indica al massimo due. Livello e manovra escono dallo scan profondo.</p>
             <RiskBadge rischio={spettro.rischio_ca} />
             {spettro.stato_soluzione ? (
               <p className="sci-soluzione">
@@ -478,26 +502,19 @@ export default function ScientificaScreen({
           </section>
 
           <section className="sci-panel" hidden={!show('scan')}>
-            <h2>Scan profondo</h2>
+            <FenomenoPicker
+              fenomeni={data?.fenomeni}
+              selectedId={eventoId || data?.evento_selezionato}
+              onSelect={selectEvento}
+            />
+            <h2>Scan profondo{spettro.evento_nome ? ` — ${spettro.evento_nome}` : ''}</h2>
             <p className="sci-muted">
-              Consuma 1 componente stiva per rivelare un indizio SP/ST nascosto (
+              Consuma 1 componente stiva per rivelare la soluzione ST/SP di questo fenomeno (
               {scan.scans_rimanenti_volo ?? 0}
               {' '}
               rimanenti questo volo).
             </p>
-            {spettro.scan_profondo?.indizio ? (
-              <div className="sci-scan-result">
-                <span className="sci-scan-kicker">Indizio acquisito</span>
-                <p>{spettro.scan_profondo.indizio.messaggio}</p>
-                {spettro.scan_profondo.indizio.sezione ? (
-                  <span className="sci-scan-meta">
-                    Sezione
-                    {' '}
-                    {String(spettro.scan_profondo.indizio.sezione).toUpperCase()}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
+            <SoluzioneAcquisita indizio={spettro.scan_profondo?.indizio} />
             {scan.disponibile ? (
               <>
                 <label className="sci-select-wrap">
@@ -547,8 +564,8 @@ export default function ScientificaScreen({
         <InterventiPanel
           interventi={interventi}
           matrice={matrice}
-          stivaRighe={stivaRighe}
           busy={busy}
+          compact={compact}
           onIntervento={runIntervento}
         />
       ) : null}

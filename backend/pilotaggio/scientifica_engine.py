@@ -3,6 +3,7 @@ Console scientifica — Fase 2: matrice R/S/T, coerenza di campo, interventi att
 """
 from __future__ import annotations
 
+import random
 from typing import Optional
 
 from django.db import transaction
@@ -131,11 +132,49 @@ def _requisiti_intervento(cfg, tipo: str) -> list:
     return []
 
 
+def _scorta_stiva() -> list:
+    from .componenti_stiva import build_stiva_payload
+
+    return [
+        r
+        for r in (build_stiva_payload().get("righe") or [])
+        if int(r.get("quantita") or 0) > 0 and r.get("mattone_id")
+    ]
+
+
+def _preleva_componente_casuale(n: int, ammessi: Optional[set] = None):
+    """Un solo tipo di componente, pescato a caso tra quelli con scorta sufficiente."""
+    righe = _scorta_stiva()
+    if ammessi is not None:
+        righe = [r for r in righe if str(r.get("mattone_id")) in ammessi]
+    idonei = [r for r in righe if int(r.get("quantita") or 0) >= n]
+    if not idonei:
+        return False, "In stiva non c'è un componente sufficiente per l'intervento.", []
+    scelto = random.choice(idonei)
+    return True, "", [{"mattone_id": str(scelto["mattone_id"]), "quantita": n}]
+
+
+def _selezione_casuale_per_requisiti(requisiti: list):
+    scorta = {str(r["mattone_id"]): int(r["quantita"]) for r in _scorta_stiva()}
+    alloc = []
+    for req in requisiti:
+        qty = int(req["quantita"])
+        ids = [req["mattone_id"]] if req["tipo"] == "specifico" else list(req["mattone_ids"])
+        idonei = [i for i in ids if scorta.get(str(i), 0) >= qty]
+        if not idonei:
+            return None
+        scelto = str(random.choice(idonei))
+        scorta[scelto] = scorta.get(scelto, 0) - qty
+        alloc.append({"mattone_id": scelto, "quantita": qty})
+    return alloc
+
+
 def _valida_consumo_componenti(cfg, componenti_scelti: list, *, tipo: str, n_richiesti: int):
     from .componenti_riparazione import _requisiti_normalizzati_da_raw, valida_selezione_componenti
 
     if n_richiesti <= 0:
         return True, "", []
+    selezione = [c for c in (componenti_scelti or []) if isinstance(c, dict)]
     requisiti_raw = _requisiti_intervento(cfg, tipo)
     if requisiti_raw:
         requisiti = _requisiti_normalizzati_da_raw(requisiti_raw, richiedi_ricarica=False)
@@ -144,9 +183,13 @@ def _valida_consumo_componenti(cfg, componenti_scelti: list, *, tipo: str, n_ric
                 requisiti_riparazione_json = requisiti
                 richiede_componenti_riparazione = True
 
-            return valida_selezione_componenti(_FakeSS(), componenti_scelti)
-    if not componenti_scelti:
-        return False, f"Servono {n_richiesti} componente/i dalla stiva.", []
+            if not selezione:
+                selezione = _selezione_casuale_per_requisiti(requisiti) or []
+                if not selezione:
+                    return False, "In stiva non c'è un componente sufficiente per l'intervento.", []
+            return valida_selezione_componenti(_FakeSS(), selezione)
+    if not selezione:
+        return _preleva_componente_casuale(n_richiesti)
     tot = sum(int(c.get("quantita") or 0) for c in componenti_scelti if isinstance(c, dict))
     if tot < n_richiesti:
         return False, f"Servono {n_richiesti} componente/i (selezionati: {tot}).", []

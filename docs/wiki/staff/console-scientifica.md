@@ -60,9 +60,11 @@ A fine volo coerenza, fasi della matrice e carica si azzerano.
 
 ## Spettro
 
-La scheda **Spettro** è utile solo con un evento in corso (`pending`). Mostra nome del fenomeno, firma spettrale, delta di navigazione, stato della soluzione e rischio CA, con il countdown a tick.
+La scheda **Spettro** è utile solo con un evento in corso (`pending`). Mostra nome del fenomeno, firma spettrale (quali gruppi di bordo sono coinvolti), **uno o due sistemi** ancora da regolare (sigla e nome, senza il livello), se ST o SP risultano già soddisfatti, il rischio CA e il countdown a tick.
 
-Lo scienziato legge il fenomeno e lo comunica al pilota. Non risolve da solo le formule ST/SP: quelle restano sulla configurazione dei sottosistemi (vedi **Pilotaggio — eventi ST/SP/CA**).
+Non dice di quanto alzare o abbassare. Quella ricetta esce solo dallo **Scan profondo**.
+
+Se ci sono due o più fenomeni insieme, sulla scheda si sceglie quale leggere. Lo scienziato comunica al pilota il nome e la firma, non la soluzione (vedi **Pilotaggio — eventi ST/SP/CA**).
 
 ---
 
@@ -76,7 +78,9 @@ Consuma **1 componente di stiva** (o i requisiti in `scientifica_scan_requisiti_
 | Massimo per volo | 2 (`scientifica_scan_max_per_volo`) |
 | Serve un evento pending | sì |
 
-Rivela il **primo indizio SP o ST non ancora soddisfatto**. Se non resta nulla da rivelare, lo scan viene rifiutato e il componente non si consuma. Se lo scan su quell'evento è già stato fatto, o il tetto di volo è pieno, il pulsante non parte.
+Rivela la **soluzione** ancora aperta: le condizioni SP/ST non soddisfatte, con sottosistema e livello. Se non resta nulla da rivelare, lo scan viene rifiutato e il componente non si consuma. Se lo scan su quell'evento è già stato fatto, o il tetto di volo è pieno, il pulsante non parte.
+
+Con più fenomeni in corso va scelto quale scansionare. Ogni scan conta per quel fenomeno e per il tetto del volo.
 
 ---
 
@@ -113,7 +117,7 @@ Scheda **Interventi**. I primi quattro spendono coerenza, azzerano la carica app
 | Eco parziale | La prossima valutazione SP non consuma un tick | 6 | 0 | 1 per evento |
 | Reset risonanza | Fasi R/S/T a 0 | 0 | 0 | libero, non conta nel tetto di volo, anche senza evento |
 
-I componenti, se richiesti, escono dalla stiva (override per tipo in `scientifica_interventi_requisiti_json`). La dilatazione non si applica a un evento a durata infinita. Coerenza insufficiente, gabbia già armata, correzione già usata o eco già attiva: il pulsante resta spento e indica il motivo.
+Sul kiosk 800×480 i cinque pulsanti stanno tutti nello spazio sotto le schede, senza scorrere. Se l'intervento chiede componenti, la console ne pesca uno a caso in stiva (la quantità richiesta, dello stesso tipo): non c'è un selettore. Un override in `scientifica_interventi_requisiti_json` restringe il pescaggio ai mattoni ammessi. La dilatazione non si applica a un evento a durata infinita. Coerenza insufficiente, gabbia già armata, correzione già usata o eco già attiva: il pulsante resta spento e il motivo è nel titolo del pulsante.
 
 ---
 
@@ -122,7 +126,7 @@ I componenti, se richiesti, escono dalla stiva (override per tipo in `scientific
 1. Il pilota apre il volo sulla console di navigazione.
 2. Lo scienziato entra con il QR (`0SC > 0`, o la sigla che avete salvato).
 3. Con i nuclei R/S/T online, alza le fasi e accumula coerenza e carica.
-4. All'evento: legge lo **Spettro**, eventualmente uno **Scan** per un indizio ST/SP, poi un **Intervento** se serve tempo, bloccare la CA, abbassare il DEFCON o non bruciare un tick sulla SP.
+4. All'evento: legge lo **Spettro** (firma, non la ricetta). Se serve la soluzione, uno **Scan** sul fenomeno scelto. Poi un **Intervento** se serve tempo, bloccare la CA, abbassare il DEFCON o non bruciare un tick sulla SP.
 5. A fine volo il laboratorio si azzera.
 
 ---

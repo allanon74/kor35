@@ -67,7 +67,10 @@ export const PREVIEW_SCIENTIFICA = {
       { gruppo: 'Termico', intensita: 41, colore: '#ff8a65' },
       { gruppo: 'Esotico', intensita: 18, colore: '#ce93d8' },
     ],
-    delta_navigazione: ['Deriva +2 sul vettore di crociera', 'Sensori V instabili'],
+    indizi_sistemi: [
+      { codice: 'V', nome: 'Sensori prodieri' },
+      { codice: 'E', nome: 'Deflettori' },
+    ],
     rischio_ca: {
       livello: 'elevato',
       etichetta: 'Rischio elevato',
@@ -111,26 +114,13 @@ export const PREVIEW_SCIENTIFICA = {
   },
   interventi: {
     abilitati: true,
-    interventi_rimanenti_volo: 2,
+    interventi_rimanenti_volo: 8,
     catalogo: [
-      {
-        tipo: 'smorzamento',
-        label: 'Smorzamento',
-        descrizione: 'Riduce la deriva del fenomeno corrente.',
-        coerenza: 20,
-        componenti: 0,
-        disponibile: true,
-        motivo_indisponibile: '',
-      },
-      {
-        tipo: 'campione',
-        label: 'Campione di campo',
-        descrizione: 'Consuma un componente per stabilizzare la firma.',
-        coerenza: 10,
-        componenti: 1,
-        disponibile: true,
-        motivo_indisponibile: '',
-      },
+      { tipo: 'dilatazione', label: 'Dilatazione temporale', descrizione: '+1 tick.', coerenza: 8, componenti: 1, disponibile: true, motivo_indisponibile: '' },
+      { tipo: 'gabbia', label: 'Gabbia dimensionale', descrizione: 'Sopprime la prossima CA.', coerenza: 10, componenti: 2, disponibile: true, motivo_indisponibile: '' },
+      { tipo: 'correzione', label: 'Correzione paradosso', descrizione: 'DEFCON −1.', coerenza: 12, componenti: 1, disponibile: true, motivo_indisponibile: '' },
+      { tipo: 'eco', label: 'Eco parziale', descrizione: 'La prossima SP non consuma tick.', coerenza: 6, componenti: 0, disponibile: true, motivo_indisponibile: '' },
+      { tipo: 'reset_risonanza', label: 'Reset risonanza', descrizione: 'Azzera le fasi R/S/T.', coerenza: 0, componenti: 0, disponibile: true, motivo_indisponibile: '' },
     ],
   },
 };
