@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 
 const EditorSaveActions = ({
@@ -13,7 +14,9 @@ const EditorSaveActions = ({
   statusType = 'success',
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState(null);
   const menuRef = useRef(null);
+  const triggerRef = useRef(null);
 
   const menuActions = useMemo(() => {
     const actions = [];
@@ -23,15 +26,50 @@ const EditorSaveActions = ({
     return actions;
   }, [onSaveAndContinue, onSaveAsNew, onSaveAndNew]);
 
-  useEffect(() => {
-    if (!menuOpen) return undefined;
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setMenuOpen(false);
+  useLayoutEffect(() => {
+    if (!menuOpen || !triggerRef.current) {
+      setMenuPos(null);
+      return undefined;
+    }
+    const update = () => {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const spaceAbove = rect.top;
+      const openUp = spaceAbove > 180 || spaceAbove > window.innerHeight - rect.bottom;
+      const width = Math.max(rect.width, 224);
+      const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+      if (openUp) {
+        setMenuPos({
+          bottom: window.innerHeight - rect.top + 4,
+          left,
+          width,
+        });
+      } else {
+        setMenuPos({
+          top: rect.bottom + 4,
+          left,
+          width,
+        });
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const handlePointerOutside = (event) => {
+      const menuEl = document.getElementById('editor-save-actions-menu');
+      if (menuRef.current?.contains(event.target)) return;
+      if (menuEl?.contains(event.target)) return;
+      setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerOutside);
+    return () => document.removeEventListener('pointerdown', handlePointerOutside);
   }, [menuOpen]);
 
   const statusClasses = {
@@ -45,7 +83,7 @@ const EditorSaveActions = ({
     <div className="flex w-full min-w-0 flex-col items-stretch gap-2 sm:items-end">
       <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
         <div className="relative min-w-0 w-full sm:w-auto" ref={menuRef}>
-          <div className="inline-flex w-full overflow-hidden rounded-lg shadow-lg sm:w-auto">
+          <div className="inline-flex w-full overflow-hidden rounded-lg shadow-lg sm:w-auto" ref={triggerRef}>
             <button
               type="button"
               onClick={onSave}
@@ -66,23 +104,35 @@ const EditorSaveActions = ({
               </button>
             )}
           </div>
-          {menuOpen && menuActions.length > 0 && (
-            <div className="absolute right-0 bottom-full z-50 mb-1 w-full min-w-56 max-w-xs bg-gray-900 border border-gray-700 rounded-lg shadow-2xl overflow-hidden sm:w-56 lg:bottom-auto lg:top-full lg:mt-1 lg:mb-0">
-              {menuActions.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    item.action();
+          {menuOpen && menuActions.length > 0 && menuPos && typeof document !== 'undefined'
+            ? createPortal(
+                <div
+                  id="editor-save-actions-menu"
+                  className="fixed z-[130] bg-gray-900 border border-gray-700 rounded-lg shadow-2xl overflow-hidden"
+                  style={{
+                    top: menuPos.top != null ? `${menuPos.top}px` : undefined,
+                    bottom: menuPos.bottom != null ? `${menuPos.bottom}px` : undefined,
+                    left: `${menuPos.left}px`,
+                    width: `${menuPos.width}px`,
                   }}
-                  className="w-full min-h-11 text-left px-3 py-2.5 text-sm text-gray-200 hover:bg-gray-800 transition-colors"
                 >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          )}
+                  {menuActions.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        item.action();
+                      }}
+                      className="w-full min-h-11 text-left px-3 py-2.5 text-sm text-gray-200 hover:bg-gray-800 transition-colors"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>,
+                document.body,
+              )
+            : null}
         </div>
         {onCancel && (
           <button

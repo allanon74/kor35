@@ -139,7 +139,7 @@ const InfusioniTab = ({ onLogout }) => {
                     L{item.livello}
                 </span>
             </div>
-            <span className="font-bold text-gray-200 text-base truncate">{item.nome}</span>
+            <span className="font-bold text-gray-200 text-base break-words">{item.nome}</span>
         </div>
         
         <div className="flex items-center gap-1.5 justify-end shrink-0 touch-manipulation">
@@ -156,7 +156,7 @@ const InfusioniTab = ({ onLogout }) => {
           <button
             onClick={(e) => handleRevoke(item, e)}
             disabled={revokeMutation.isPending}
-            className="p-2 text-red-400 hover:text-red-200 hover:bg-red-900/20 rounded-full transition-colors ml-1"
+            className="min-h-11 min-w-11 flex items-center justify-center p-2 text-red-400 hover:text-red-200 hover:bg-red-900/20 rounded-full transition-colors ml-1"
             title="Revoca acquisto"
           >
             <Trash2 size={18} />
@@ -165,7 +165,7 @@ const InfusioniTab = ({ onLogout }) => {
 
         <button
             onClick={(e) => {e.stopPropagation(); handleOpenModal(item)}}
-            className="p-2.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded-full transition-colors min-h-10 min-w-10 flex items-center justify-center"
+            className="min-h-11 min-w-11 flex items-center justify-center p-2.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded-full transition-colors"
         >
             <Info size={18} />
         </button>
@@ -224,7 +224,7 @@ const InfusioniTab = ({ onLogout }) => {
             <button
                 onClick={(e) => handleAcquire(item, e)}
                 disabled={!canAfford || acquireMutation.isPending}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all shadow-md ml-auto sm:ml-0 ${
+                className={`flex items-center justify-center gap-2 min-h-11 px-3 py-2.5 rounded-lg text-sm font-bold transition-all shadow-md ml-auto sm:ml-0 touch-manipulation ${
                     canAfford 
                     ? 'bg-indigo-600 hover:bg-indigo-500 text-white hover:shadow-indigo-500/20' 
                     : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-50'
@@ -235,14 +235,14 @@ const InfusioniTab = ({ onLogout }) => {
                 ) : (
                     <>
                         <ShoppingCart size={16} />
-                        <span className="hidden sm:inline">Apprendi</span>
+                        <span>Apprendi</span>
                     </>
                 )}
             </button>
             
             <button
                 onClick={(e) => {e.stopPropagation(); handleOpenModal(item)}}
-                className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-full transition-colors"
+                className="min-h-11 min-w-11 flex items-center justify-center p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-full transition-colors touch-manipulation"
             >
                 <Info size={18} />
             </button>

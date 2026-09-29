@@ -1,10 +1,14 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * Shell layout unificato per i tool della dashboard staff.
  * Il main di StaffDashboard è p-0: lo shell fornisce padding e tipografia coerenti.
  *
  * fill=true → colonna full-height con body scrollabile (scommesse, personaggi, …)
+ *
+ * Responsive (obbligatorio): ogni tool deve funzionare sia su PC (≥lg) sia su telefono.
+ * Vedi `.cursor/rules/responsive-ui.mdc` e `.cursorrules` §3.
  */
 
 export const staffPageTitleClass = 'text-xl font-bold text-white tracking-tight';
@@ -55,7 +59,8 @@ export const staffEditorShellClass =
   'bg-gray-800 p-3 sm:p-5 lg:p-6 rounded-xl space-y-4 sm:space-y-6 mx-auto min-w-0 w-full max-w-full overflow-x-hidden text-white shadow-2xl border border-gray-700 pb-36 lg:pb-6';
 
 /**
- * Header editor: su telefono solo il titolo; Salva/Annulla restano in barra fissa in basso.
+ * Header editor: su telefono solo il titolo; Salva/Annulla restano in barra fissa in basso
+ * (portale su document.body: evita clipping da overflow/transform degli antenati staff).
  * Su desktop titolo e azioni restano sulla stessa riga.
  */
 export function StaffEditorHeader({
@@ -64,6 +69,19 @@ export function StaffEditorHeader({
   actions,
   sticky = false,
 }) {
+  const mobileFooter =
+    actions && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            data-testid="staff-editor-mobile-footer"
+            className="lg:hidden fixed inset-x-0 bottom-0 z-[120] border-t border-gray-700 bg-gray-950/95 px-3 pt-2 backdrop-blur-sm pb-[max(0.75rem,var(--kor-safe-bottom))]"
+          >
+            {actions}
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <>
       <div
@@ -79,11 +97,7 @@ export function StaffEditorHeader({
         </h2>
         <div className="hidden min-w-0 lg:block lg:w-auto lg:shrink-0">{actions}</div>
       </div>
-      {actions ? (
-        <div className="lg:hidden fixed inset-x-0 bottom-0 z-50 border-t border-gray-700 bg-gray-950/95 px-3 pt-2 backdrop-blur-sm pb-[max(0.75rem,var(--kor-safe-bottom))]">
-          {actions}
-        </div>
-      ) : null}
+      {mobileFooter}
     </>
   );
 }

@@ -12,6 +12,7 @@ Progetto Django + React, architettura **master** (prod) + **replica** (mirror/Pi
 | `.cursor/rules/mirror-pi-ops.mdc` | SSH mirror Pi: **`pi@kor35.ddns.net:10022`**, chiave `~/.ssh/id_docker`, `make mirror-pi-*` |
 | `.cursor/rules/wiki-staff-ops.mdc` | Wiki staff da `docs/wiki/staff/` → `make wiki-staff-sync` |
 | `.cursor/rules/android-capacitor.mdc` | Shell Android Capacitor (PWA-first, FCM nativo) |
+| `.cursor/rules/responsive-ui.mdc` | UI sempre responsive: PC **e** telefono (staff + giocatore) |
 | `docs/ANDROID_CAPACITOR.md` | Runbook build/sync app Android |
 | `docs/wiki/carte/README.md` | Wiki regolamento carte → `make wiki-carte-sync` |
 | `.cursor/rules/django-tests-docker.mdc` | Test Django in Docker: **sempre `--keepdb`** + `exec -T` |
@@ -30,6 +31,7 @@ Progetto Django + React, architettura **master** (prod) + **replica** (mirror/Pi
 7. Mirror Pi rete/SSH da PC dev → `make mirror-pi-configure`, `make mirror-pi-check` (`.cursor/rules/mirror-pi-ops.mdc`).
 8. Wiki staff (make / mirror) → `docs/wiki/staff/` + `make wiki-staff-sync` (`.cursor/rules/wiki-staff-ops.mdc`).
 9. Test backend → container + `exec -T` + **`--keepdb`** (vedi `.cursor/rules/django-tests-docker.mdc`); senza `--keepdb` Django chiede `yes/no` e il comando si blocca.
+10. UI → **sempre responsive PC + telefono** (staff e giocatore): `.cursor/rules/responsive-ui.mdc`.
 
 ## Profili ambiente
 

@@ -568,31 +568,31 @@ const RuntimeObjectWizardModal = ({
           </div>
 
           <div className="border border-gray-700 rounded-lg p-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="text-[10px] text-gray-500 uppercase font-black tracking-tighter">Formula</label>
               <button
                 type="button"
                 onClick={() => setIsObjFormulaBuilderOpen(true)}
-                className="px-2 py-1 rounded bg-cyan-700 hover:bg-cyan-600 text-xs font-bold uppercase"
+                className="min-h-11 px-3 py-2 rounded bg-cyan-700 hover:bg-cyan-600 text-xs font-bold uppercase"
               >
                 Builder formula oggetto
               </button>
             </div>
             <input
-              className="w-full mt-2 bg-gray-950 p-2 rounded border border-gray-700 text-sm font-mono text-white"
+              className="w-full mt-2 min-h-11 bg-gray-950 p-2 rounded border border-gray-700 text-sm font-mono text-white"
               value={draft.formula || ''}
               onChange={(e) => setDraft((p) => ({ ...p, formula: e.target.value }))}
             />
           </div>
 
           <div className="border border-gray-700 rounded-lg p-3 space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Statistiche base oggetto</span>
-              <button type="button" onClick={addStatBase} className="px-2 py-1 rounded bg-emerald-700 text-xs font-bold">+ Aggiungi</button>
+              <button type="button" onClick={addStatBase} className="min-h-11 px-3 py-2 rounded bg-emerald-700 text-xs font-bold">+ Aggiungi</button>
             </div>
             {(draft.statistiche_base || []).map((row, idx) => (
-              <div key={`sb-${idx}`} className="grid grid-cols-12 gap-2 items-center">
-                <div className="col-span-7">
+              <div key={`sb-${idx}`} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-stretch sm:items-center">
+                <div className="sm:col-span-7 min-w-0">
                   <SearchableSelect
                     label=""
                     value={row.stat_sigla}
@@ -600,7 +600,7 @@ const RuntimeObjectWizardModal = ({
                     onChange={(v) => updateListItem('statistiche_base', idx, { stat_sigla: v })}
                   />
                 </div>
-                <div className="col-span-3">
+                <div className="sm:col-span-3 min-w-0">
                   <Input
                     label=""
                     type="number"
@@ -608,21 +608,21 @@ const RuntimeObjectWizardModal = ({
                     onChange={(v) => updateListItem('statistiche_base', idx, { valore_base: parseInt(v || '0', 10) || 0 })}
                   />
                 </div>
-                <div className="col-span-2">
-                  <button type="button" onClick={() => removeListItem('statistiche_base', idx)} className="w-full px-2 py-2 rounded bg-red-700 text-xs font-bold">Rimuovi</button>
+                <div className="sm:col-span-2">
+                  <button type="button" onClick={() => removeListItem('statistiche_base', idx)} className="w-full min-h-11 px-2 py-2 rounded bg-red-700 text-xs font-bold">Rimuovi</button>
                 </div>
               </div>
             ))}
           </div>
 
           <div className="border border-gray-700 rounded-lg p-3 space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Modificatori statistiche</span>
-              <button type="button" onClick={addMod} className="px-2 py-1 rounded bg-amber-700 text-xs font-bold">+ Aggiungi</button>
+              <button type="button" onClick={addMod} className="min-h-11 px-3 py-2 rounded bg-amber-700 text-xs font-bold">+ Aggiungi</button>
             </div>
             {(draft.modificatori || []).map((row, idx) => (
-              <div key={`mod-${idx}`} className="grid grid-cols-12 gap-2 items-center">
-                <div className="col-span-5">
+              <div key={`mod-${idx}`} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-stretch sm:items-center">
+                <div className="sm:col-span-5 min-w-0">
                   <SearchableSelect
                     label=""
                     value={row.stat_sigla}
@@ -630,7 +630,7 @@ const RuntimeObjectWizardModal = ({
                     onChange={(v) => updateListItem('modificatori', idx, { stat_sigla: v })}
                   />
                 </div>
-                <div className="col-span-3">
+                <div className="sm:col-span-3 min-w-0">
                   <Input
                     label=""
                     type="number"
@@ -638,7 +638,7 @@ const RuntimeObjectWizardModal = ({
                     onChange={(v) => updateListItem('modificatori', idx, { valore: Number(v || 0) })}
                   />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2 min-w-0">
                   <Select
                     label=""
                     value={row.tipo_modificatore || 'ADD'}
@@ -646,8 +646,8 @@ const RuntimeObjectWizardModal = ({
                     onChange={(v) => updateListItem('modificatori', idx, { tipo_modificatore: v || 'ADD' })}
                   />
                 </div>
-                <div className="col-span-2">
-                  <button type="button" onClick={() => removeListItem('modificatori', idx)} className="w-full px-2 py-2 rounded bg-red-700 text-xs font-bold">Rimuovi</button>
+                <div className="sm:col-span-2">
+                  <button type="button" onClick={() => removeListItem('modificatori', idx)} className="w-full min-h-11 px-2 py-2 rounded bg-red-700 text-xs font-bold">Rimuovi</button>
                 </div>
               </div>
             ))}
@@ -693,13 +693,13 @@ const RuntimeObjectWizardModal = ({
             </div>
           </div>
         </div>
-        <div className="p-4 border-t border-gray-700 flex justify-end gap-2">
+        <div className="p-4 border-t border-gray-700 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
           {wizardError ? (
-            <div className="mr-auto text-xs text-red-300 bg-red-900/30 border border-red-700/40 rounded px-2 py-1">
+            <div className="sm:mr-auto text-xs text-red-300 bg-red-900/30 border border-red-700/40 rounded px-2 py-2 break-words">
               {wizardError}
             </div>
           ) : null}
-          <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-700 rounded text-white text-sm">Annulla</button>
+          <button type="button" onClick={onClose} className="min-h-11 w-full sm:w-auto px-4 py-2 bg-gray-700 rounded text-white text-sm">Annulla</button>
           <button
             type="button"
             onClick={() => {
@@ -723,7 +723,7 @@ const RuntimeObjectWizardModal = ({
               onApply?.(cleaned);
               onClose?.();
             }}
-            className="px-4 py-2 bg-indigo-600 rounded text-white text-sm font-bold"
+            className="min-h-11 w-full sm:w-auto px-4 py-2 bg-indigo-600 rounded text-white text-sm font-bold"
           >
             Applica al JSON runtime
           </button>

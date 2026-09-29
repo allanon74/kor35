@@ -382,14 +382,14 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                     rightSlot={
                         <div className="flex items-center gap-2">
                             {activeTool !== 'home' && (
-                                <button type="button" onClick={() => handleToolSelect('home')} className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-400 transition-colors" title="Dashboard">
+                                <button type="button" onClick={() => handleToolSelect('home')} className="min-h-11 min-w-11 flex items-center justify-center p-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-400 transition-colors" title="Dashboard">
                                     <LayoutGrid size={20} />
                                 </button>
                             )}
                             <button
                                 type="button"
                                 onClick={() => setIsMenuOpen(true)}
-                                className="md:hidden p-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-indigo-400 transition-colors"
+                                className="md:hidden min-h-11 min-w-11 flex items-center justify-center p-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-indigo-400 transition-colors"
                             >
                                 <Menu size={24} />
                             </button>

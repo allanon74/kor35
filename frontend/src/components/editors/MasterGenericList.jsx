@@ -243,7 +243,7 @@ const MasterGenericList = ({
               <button
                 type="button"
                 onClick={onAdd}
-                className="bg-cyan-600 hover:bg-cyan-500 px-4 py-2.5 lg:py-2 rounded-lg font-black text-xs transition-all flex items-center justify-center gap-2 uppercase text-white shadow-lg active:scale-95 whitespace-nowrap w-full sm:w-auto"
+                className="bg-cyan-600 hover:bg-cyan-500 min-h-11 px-4 py-2.5 rounded-lg font-black text-xs transition-all flex items-center justify-center gap-2 uppercase text-white shadow-lg active:scale-95 whitespace-nowrap w-full sm:w-auto"
               >
                 <Plus size={16} /> {addLabel}
               </button>

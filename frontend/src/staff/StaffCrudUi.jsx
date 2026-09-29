@@ -39,8 +39,12 @@ export function StaffModal({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">{children}</div>
-        <div className="flex shrink-0 justify-end gap-2 border-t border-gray-800 px-4 py-3">
-          <button type="button" onClick={onClose} className="rounded border border-gray-600 px-3 py-1.5 text-sm text-gray-300">
+        <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-gray-800 px-4 py-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-11 w-full rounded border border-gray-600 px-3 py-2 text-sm text-gray-300 sm:w-auto"
+          >
             Annulla
           </button>
           {onSave && (
@@ -48,7 +52,7 @@ export function StaffModal({
               type="button"
               disabled={saving}
               onClick={onSave}
-              className="flex items-center gap-1 rounded bg-emerald-800 px-3 py-1.5 text-sm font-bold disabled:opacity-50"
+              className="flex min-h-11 w-full items-center justify-center gap-1 rounded bg-emerald-800 px-3 py-2 text-sm font-bold disabled:opacity-50 sm:w-auto"
             >
               <Save size={14} /> {saveLabel}
             </button>
@@ -62,14 +66,14 @@ export function StaffModal({
 export function StaffListToolbar({ title, count, onAdd, addLabel = 'Nuovo' }) {
   return (
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-      <h3 className="font-bold text-gray-100">{title}{count != null ? ` (${count})` : ''}</h3>
+      <h3 className="min-w-0 break-words font-bold text-gray-100">{title}{count != null ? ` (${count})` : ''}</h3>
       {onAdd && (
         <button
           type="button"
           onClick={onAdd}
-          className="flex items-center gap-1 rounded bg-violet-800 px-2 py-1 text-xs font-bold"
+          className="flex min-h-11 shrink-0 items-center gap-1 rounded bg-violet-800 px-3 py-2 text-xs font-bold"
         >
-          <Plus size={12} /> {addLabel}
+          <Plus size={14} /> {addLabel}
         </button>
       )}
     </div>
