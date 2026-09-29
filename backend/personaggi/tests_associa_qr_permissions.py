@@ -1,17 +1,22 @@
 """Permessi e flusso associazione QR diretta (editor staff: nodi, manifesti, …)."""
 
+from datetime import time, timedelta
+
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
-from gestione_plot.models import Quest, QuestVista
+from gestione_plot.models import Evento, GiornoEvento, Quest, QuestVista
 from pilotaggio.models import SottosistemaNave
 from personaggi.models import (
+    AURA,
     CAMPAGNA_ROLE_MASTER,
     Campagna,
     CampagnaUtente,
     Manifesto,
     Nodo,
+    Punteggio,
     QrCode,
     Tessitura,
 )
@@ -32,6 +37,7 @@ class AssociaQrDirettoPermissionTests(TestCase):
         )
         self.client.force_authenticate(self.user)
         self.headers = {"HTTP_X_CAMPAGNA": self.campagna.slug}
+        self.aura = Punteggio.objects.create(nome="Aura QR perm", sigla="AQP", tipo=AURA)
 
     def test_campagna_master_can_associa_qr_a_nodo(self):
         nodo = Nodo.objects.create(nome="Nodo assoc perm", testo="", tipo_nodo="MIN")
@@ -58,7 +64,11 @@ class AssociaQrDirettoPermissionTests(TestCase):
 
     def test_campagna_master_associa_manifesto_tessitura(self):
         manifesto = Manifesto.objects.create(nome="Man QR", testo="")
-        tessitura = Tessitura.objects.create(nome="Tes QR", testo="")
+        tessitura = Tessitura.objects.create(
+            nome="Tes QR",
+            testo="",
+            aura_richiesta=self.aura,
+        )
         qr_m = QrCode.objects.create()
         qr_t = QrCode.objects.create()
         r1 = self._associa_diretto(manifesto.pk, qr_m)
@@ -91,8 +101,19 @@ class AssociaQrDirettoPermissionTests(TestCase):
         qr.refresh_from_db()
         self.assertEqual(qr.vista_id, nodo_b.pk)
 
+    def _sottosistema_test(self, codice: str, nome: str) -> SottosistemaNave:
+        """codice max_length=1; riusa riga esistente se --keepdb ha già il codice."""
+        sottos, _ = SottosistemaNave.objects.get_or_create(
+            codice=codice,
+            defaults={"nome": nome},
+        )
+        if sottos.nome != nome:
+            sottos.nome = nome
+            sottos.save(update_fields=["nome", "updated_at"])
+        return sottos
+
     def test_campagna_master_associa_qr_sottosistema_nave(self):
-        sottos = SottosistemaNave.objects.create(codice="PQR", nome="Reattore test QR")
+        sottos = self._sottosistema_test("Z", "Reattore test QR")
         qr = QrCode.objects.create()
         url = f"/api/pilot/staff/sottosistemi/{sottos.pk}/associa-qr/"
         r = self.client.post(url, {"qr_id": qr.id}, format="json", **self.headers)
@@ -105,7 +126,7 @@ class AssociaQrDirettoPermissionTests(TestCase):
 
     def test_staff_manifesti_esclude_gancio_pilota(self):
         narrativo = Manifesto.objects.create(nome="Manifesto narrativo", testo="ok")
-        sottos = SottosistemaNave.objects.create(codice="9", nome="Console test lista")
+        sottos = self._sottosistema_test("Y", "Console test lista")
         qr = QrCode.objects.create()
         r_assoc = self.client.post(
             f"/api/pilot/staff/sottosistemi/{sottos.pk}/associa-qr/",
@@ -137,11 +158,28 @@ class AssociaQrDirettoPermissionTests(TestCase):
         self.assertIn(pilot_pk, ids_all)
 
     def test_plot_associa_qr_vista_quest_master(self):
-        quest = Quest.objects.create(nome="Q test QR", descrizione="")
+        now = timezone.now()
+        evento = Evento.objects.create(
+            titolo="Evento QR perm test",
+            data_inizio=now,
+            data_fine=now + timedelta(days=1),
+        )
+        giorno = GiornoEvento.objects.create(
+            evento=evento,
+            titolo="Giorno QR",
+            data_ora_inizio=now,
+            data_ora_fine=now + timedelta(hours=8),
+            sinossi_breve="Sinossi test",
+        )
+        quest = Quest.objects.create(
+            giorno=giorno,
+            titolo="Q test QR",
+            orario_indicativo=time(10, 0),
+            descrizione_ampia="Descrizione test QR",
+        )
         manifesto = Manifesto.objects.create(nome="Man plot", testo="")
         vista = QuestVista.objects.create(
             quest=quest,
-            nome="Vista plot QR",
             tipo="MAN",
             manifesto=manifesto,
         )
