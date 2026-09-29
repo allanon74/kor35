@@ -9,6 +9,7 @@ Per editor staff (cataloghi, configurazioni, entità multiple):
 3. **Create/Edit in `StaffModal`** — mai pannello affiancato o sotto alla lista.
 4. **Campi con etichetta** via `LabeledField` (label + hint opzionale), non placeholder come unica etichetta.
 5. **Sezioni** raggruppate con `StaffSection` quando il form è lungo.
+6. **Responsive PC + telefono** obbligatorio (footer azioni tap-friendly, sheet mobile) — `.cursor/rules/responsive-ui.mdc`.
 
 ## Componenti
 

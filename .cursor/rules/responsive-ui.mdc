@@ -1,0 +1,38 @@
+# UI responsive — PC e telefono (obbligatorio)
+
+KOR35 è usata **sul campo** dagli smartphone dei giocatori e dallo staff (tablet/telefono), oltre che da PC.
+**Ogni maschera, tab giocatore e tool della dashboard staff DEVE funzionare sia su PC sia su telefono.**
+Non esiste un’interfaccia “solo desktop” o “solo mobile”.
+
+## Regola non negoziabile
+
+Prima di considerare completa una modifica UI:
+
+1. Viewport telefono (~360–430px) e desktop (≥1024px) devono entrambi permettere uso completo (leggere, compilare, salvare, scorrere).
+2. Dashboard staff inclusa: liste, editor (Infusioni, Tessiture, …), modali, tabelle, barre Salva.
+3. Controlli tap ≥ ~44px (`min-h-11`), testo che va a capo (`break-words` / `min-w-0`), niente overflow orizzontale che taglia azioni.
+4. Overlay (`fixed` / dropdown / barra Salva) in **coordinate viewport** o in **portal su `document.body`**: non fidarsi di `fixed` dentro antenati con `overflow-*` / `transform` (es. main staff, shell editor).
+
+## Checklist implementativa
+
+| Area | Da fare / evitare |
+|------|-------------------|
+| Layout | `flex-col` → `sm/md/lg:flex-row`; griglie `grid-cols-1` di default |
+| Tabelle larghe | Card / stack sotto `lg` (vedi `StaffDataTable`); niente sola tabella orizzontale tagliata |
+| Editor staff | `StaffEditorHeader` + `staffEditorShellClass` (`pb-36` su mobile per barra Salva) |
+| Select lunghe | `SearchableSelect`: menu in portal, position `fixed` **senza** `scrollY`/`scrollX` |
+| Modali | Sheet dal basso su mobile (`items-end sm:items-center`), footer azioni full-width tap-friendly |
+| URL API | Sempre relativi in produzione (già in `.cursorrules` §3) |
+
+## Test minimi
+
+- Unit/component: header editor mobile footer in portal; positioning SearchableSelect senza scroll offset.
+- Manuale / browser: aprire **Nuova Infusione** (e almeno un altro editor) a 390×844 — compilare select dopo aver scrollato, tap Salva visibile e utilizzabile.
+- Non chiudere un PR UI senza aver verificato almeno un flusso staff e uno giocatore su viewport stretta.
+
+## Riferimenti codice
+
+- `frontend/src/staff/StaffToolShell.jsx` — shell + header + footer mobile
+- `frontend/src/components/editors/SearchableSelect.jsx` — dropdown viewport-safe
+- `frontend/src/staff/StaffDataTable.jsx` — tabella desktop / card mobile
+- `.cursorrules` §3 (Frontend) — vincolo responsive + URL relativi

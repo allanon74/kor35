@@ -23,9 +23,9 @@ const ActivationCostInline = ({ items = [], options = [], onChange, onAdd, onRem
         <button
           type="button"
           onClick={onAdd}
-          className="flex items-center gap-1 px-2 py-1 rounded bg-amber-900/40 hover:bg-amber-800/50 text-[10px] font-bold uppercase text-amber-200"
+          className="flex min-h-11 items-center gap-1 px-3 py-2 rounded bg-amber-900/40 hover:bg-amber-800/50 text-[10px] font-bold uppercase text-amber-200"
         >
-          <Plus size={12} /> Aggiungi costo
+          <Plus size={14} /> Aggiungi costo
         </button>
       </div>
 
@@ -62,14 +62,14 @@ const ActivationCostInline = ({ items = [], options = [], onChange, onAdd, onRem
               <input
                 type="number"
                 min="1"
-                className="w-20 bg-gray-950 p-2 rounded text-xs text-center border border-gray-700 text-amber-400 font-bold"
+                className="w-20 min-h-11 bg-gray-950 p-2 rounded text-xs text-center border border-gray-700 text-amber-400 font-bold"
                 value={row.costo ?? 1}
                 onChange={(e) => onChange(idx, 'costo', parseInt(e.target.value || '1', 10) || 1)}
               />
               <button
                 type="button"
                 onClick={() => onRemove(idx)}
-                className="p-2 text-red-400 hover:text-red-300"
+                className="min-h-11 min-w-11 flex items-center justify-center p-2 text-red-400 hover:text-red-300"
                 title="Rimuovi"
               >
                 <Trash2 size={14} />

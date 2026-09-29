@@ -29,6 +29,7 @@ Poiché i database Master ed Edge operano separatamente e si sincronizzano a pos
 
 ## 3. Regole per il Frontend (React / Vite)
 - L'app React viene compilata (`npm run build`) ed eseguita fisicamente nei browser degli smartphone dei giocatori.
+- **Responsive obbligatorio (PC + telefono):** ogni maschera giocatore e **ogni** tool/editor della dashboard staff deve funzionare su viewport stretta (~360px) e su desktop. Nessuna UI “solo PC”. Controlli tap-friendly, niente overflow che nasconde Salva/azioni, overlay in portal o coordinate viewport. Dettaglio: `.cursor/rules/responsive-ui.mdc`.
 - È SEVERAMENTE VIETATO usare URL assoluti (come `http://localhost:8000` o `https://kor35.ddns.net`) nel codice di produzione per le chiamate API o per caricare immagini.
 - Le configurazioni di Axios o Fetch devono usare ESCLUSIVAMENTE percorsi relativi (es. `baseURL: ''` o semplicemente `/api/...`). Sarà Nginx a instradare la chiamata in base all'IP o dominio in uso dal giocatore (es. `10.42.0.1` nel bosco o `www.kor35.it` a casa).
 - L'unica eccezione è durante lo sviluppo locale (quando `VITE_API_URL` è valorizzato nel `.env` di sviluppo).

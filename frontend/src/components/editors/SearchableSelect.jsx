@@ -72,7 +72,7 @@ const SearchableDropdown = memo(({
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0, maxHeight: 240 });
     const [uniqueId] = useState(() => `searchable-${Math.random().toString(36).substr(2, 9)}`);
     const wrapperRef = useRef(null);
     const triggerRef = useRef(null);
@@ -94,7 +94,7 @@ const SearchableDropdown = memo(({
     }, [options, debouncedSearchTerm, labelKey]);
 
     useEffect(() => {
-        const handleClickOutside = (event) => {
+        const handlePointerOutside = (event) => {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
                 const dropdownElement = document.getElementById(`dropdown-${uniqueId}`);
                 if (!dropdownElement || !dropdownElement.contains(event.target)) {
@@ -102,8 +102,9 @@ const SearchableDropdown = memo(({
                 }
             }
         };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        // pointerdown copre mouse + touch (telefono): mousedown da solo è inaffidabile su mobile
+        document.addEventListener('pointerdown', handlePointerOutside);
+        return () => document.removeEventListener('pointerdown', handlePointerOutside);
     }, [uniqueId]);
 
     useEffect(() => {
@@ -114,11 +115,29 @@ const SearchableDropdown = memo(({
         if (isOpen && triggerRef.current) {
             const updatePosition = () => {
                 const rect = triggerRef.current.getBoundingClientRect();
-                setDropdownPosition({
-                    top: rect.bottom + window.scrollY + 4,
-                    left: rect.left + window.scrollX,
-                    width: rect.width,
-                });
+                // position:fixed → coordinate viewport (NO scrollY/scrollX), altrimenti
+                // dopo scroll della form staff il menu finisce fuori schermo sul telefono.
+                const gap = 4;
+                const maxMenuHeight = 240; // max-h-60
+                const spaceBelow = window.innerHeight - rect.bottom - gap;
+                const spaceAbove = rect.top - gap;
+                const openUpwards = spaceBelow < Math.min(maxMenuHeight, 160) && spaceAbove > spaceBelow;
+                const left = Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8));
+                if (openUpwards) {
+                    setDropdownPosition({
+                        bottom: window.innerHeight - rect.top + gap,
+                        left,
+                        width: rect.width,
+                        maxHeight: Math.max(120, Math.min(maxMenuHeight, spaceAbove)),
+                    });
+                } else {
+                    setDropdownPosition({
+                        top: rect.bottom + gap,
+                        left,
+                        width: rect.width,
+                        maxHeight: Math.max(120, Math.min(maxMenuHeight, spaceBelow)),
+                    });
+                }
             };
 
             updatePosition();
@@ -184,11 +203,15 @@ const SearchableDropdown = memo(({
                 createPortal(
                     <div
                         id={`dropdown-${uniqueId}`}
-                        className={`fixed ${SEARCHABLE_DROPDOWN_Z_CLASS} bg-gray-900 border border-gray-700 rounded shadow-xl max-h-60 overflow-y-auto custom-scrollbar`}
+                        className={`fixed ${SEARCHABLE_DROPDOWN_Z_CLASS} bg-gray-900 border border-gray-700 rounded shadow-xl overflow-y-auto custom-scrollbar`}
                         style={{
-                            top: `${dropdownPosition.top}px`,
+                            top: dropdownPosition.top != null ? `${dropdownPosition.top}px` : undefined,
+                            bottom: dropdownPosition.bottom != null ? `${dropdownPosition.bottom}px` : undefined,
                             left: `${dropdownPosition.left}px`,
                             width: `${dropdownPosition.width}px`,
+                            maxHeight: dropdownPosition.maxHeight
+                                ? `${dropdownPosition.maxHeight}px`
+                                : '15rem',
                             zIndex: dropdownZIndex,
                         }}
                     >
@@ -196,17 +219,18 @@ const SearchableDropdown = memo(({
                             filteredOptions.map((opt) => {
                                 const isSelected = String(opt[valueKey]) === String(value);
                                 return (
-                                    <div
+                                    <button
+                                        type="button"
                                         key={opt[valueKey]}
                                         onClick={() => handleSelect(opt)}
                                         className={`
-                                        px-3 py-2 text-sm cursor-pointer flex justify-between items-center border-b border-gray-800 last:border-0
+                                        w-full min-h-11 px-3 py-2.5 text-sm text-left cursor-pointer flex justify-between items-center border-b border-gray-800 last:border-0 touch-manipulation
                                         ${isSelected ? 'bg-indigo-900/40 text-indigo-200 font-bold' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}
                                     `}
                                     >
-                                        <span>{opt[labelKey]}</span>
-                                        {isSelected && <Check size={14} className="text-indigo-400" />}
-                                    </div>
+                                        <span className="min-w-0 break-words">{opt[labelKey]}</span>
+                                        {isSelected && <Check size={14} className="text-indigo-400 shrink-0 ml-2" />}
+                                    </button>
                                 );
                             })
                         ) : (
