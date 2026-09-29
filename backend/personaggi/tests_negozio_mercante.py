@@ -40,6 +40,62 @@ class NegozioMercanteServiceTests(TestCase):
         self.assertGreaterEqual(data["offerta_max"], data["offerta_min"])
         self.assertTrue(data["cassa_sufficiente"])
 
+    def test_listino_include_descrizione_oggetto(self):
+        """Il listino espone testo/descrizione oggetto (non solo il nome)."""
+        from personaggi.negozio_mercante_models import (
+            STOCK_DISPONIBILE,
+            VOCE_OGGETTO,
+            NegozioMercanteStock,
+            NegozioMercanteVoce,
+        )
+        from personaggi.negozio_mercante_service import (
+            build_listino,
+            serializza_stock_listino,
+            serializza_voce_listino,
+        )
+
+        og = Oggetto.objects.create(
+            nome="Spada NNT",
+            testo="<p>Lama corta usata dagli agenti NNT.</p>",
+            costo_acquisto=50,
+        )
+        voce = NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_OGGETTO,
+            oggetto=og,
+            prezzo_crediti=50,
+            attivo=True,
+        )
+        payload = serializza_voce_listino(voce, self.pg)
+        self.assertEqual(payload["nome"], "Spada NNT")
+        self.assertIn("Lama corta", payload["descrizione"])
+        self.assertTrue(payload["testo_formattato"])
+        self.assertIn("Lama corta", payload["testo_formattato"])
+
+        og_stock = Oggetto.objects.create(
+            nome="Scudo NNT",
+            testo="Scudo tattico della NNT.",
+            costo_acquisto=40,
+        )
+        og_stock.sposta_in_inventario(self.negozio.inventario)
+        stock = NegozioMercanteStock.objects.create(
+            negozio=self.negozio,
+            oggetto=og_stock,
+            stato=STOCK_DISPONIBILE,
+            prezzo_rivendita=40,
+            valore_riferimento=40,
+        )
+        payload_stock = serializza_stock_listino(stock, self.pg)
+        self.assertIn("Scudo tattico", payload_stock["descrizione"])
+        self.assertTrue(payload_stock["testo_formattato"])
+
+        listino = build_listino(self.negozio, self.pg)
+        nomi = {v["nome"]: v for v in listino["voci"]}
+        self.assertIn("Spada NNT", nomi)
+        self.assertIn("Lama corta", nomi["Spada NNT"]["descrizione"])
+        self.assertIn("Scudo NNT", nomi)
+        self.assertIn("Scudo tattico", nomi["Scudo NNT"]["descrizione"])
+
 
 class NegozioMercanteAssociaQrApiTests(TestCase):
     @classmethod

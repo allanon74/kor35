@@ -392,6 +392,15 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                           Pacchetto
                         </div>
                       )}
+                      {(v.testo_formattato || v.descrizione) ? (
+                        <div className="text-xs text-gray-400 mt-1 leading-relaxed prose prose-invert prose-sm max-w-none line-clamp-4">
+                          {v.tipo === 'bundle' && !v.testo_formattato ? (
+                            v.descrizione
+                          ) : (
+                            <RichTextViewer content={v.testo_formattato || v.descrizione} />
+                          )}
+                        </div>
+                      ) : null}
                       {v.tipo === 'bundle' && Array.isArray(v.componenti) && v.componenti.length > 0 && (
                         <ul className="mt-1 text-xs text-gray-400 list-disc list-inside">
                           {v.componenti.map((c) => (

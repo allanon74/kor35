@@ -1045,11 +1045,36 @@ def _meta_montaggio_listino(personaggio, *, infusione=None, oggetto=None) -> dic
     return meta
 
 
+def _descrizione_entita_listino(ent, personaggio=None) -> dict:
+    """Testo grezzo + formattato (placeholder risolti) per una voce di listino."""
+    if ent is None:
+        return {"descrizione": "", "testo_formattato": ""}
+    raw = (getattr(ent, "testo", None) or getattr(ent, "descrizione", None) or "") or ""
+    formatted = ""
+    if personaggio is not None and hasattr(personaggio, "get_testo_formattato_per_item"):
+        try:
+            formatted = personaggio.get_testo_formattato_per_item(ent) or ""
+        except Exception:
+            formatted = ""
+    if not formatted:
+        try:
+            formatted = getattr(ent, "TestoFormattato", None) or ""
+        except Exception:
+            formatted = ""
+    if not formatted:
+        formatted = raw
+    return {
+        "descrizione": raw,
+        "testo_formattato": formatted,
+    }
+
+
 def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio, *, prezzi_ctx=None) -> dict:
     from personaggi.economia_crediti import CATEGORIA_NEGOZIO, prezzi_duali
 
     ent = _voce_entita(voce)
     nome = getattr(ent, "nome", voce.consumabile_nome or "Consumabile")
+    desc = _descrizione_entita_listino(ent, personaggio)
     campagna = getattr(personaggio, "campagna", None)
     if prezzi_ctx:
         duali = prezzi_duali(
@@ -1071,6 +1096,8 @@ def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio, *, prezzi_ct
         "tipo": "voce",
         "tipo_voce": voce.tipo_voce,
         "nome": nome,
+        "descrizione": desc["descrizione"],
+        "testo_formattato": desc["testo_formattato"],
         "prezzo_crediti": voce.prezzo_crediti,
         "prezzo_corrente": duali["prezzo_corrente"],
         "prezzo_deposito": duali["prezzo_deposito"],
@@ -1145,6 +1172,7 @@ def serializza_stock_listino(stock: NegozioMercanteStock, personaggio=None, *, p
         "tipo": "stock",
         "tipo_voce": VOCE_OGGETTO,
         "nome": stock.oggetto.nome,
+        **_descrizione_entita_listino(stock.oggetto, personaggio),
         "prezzo_crediti": stock.prezzo_rivendita,
         "prezzo_corrente": duali["prezzo_corrente"],
         "prezzo_deposito": duali["prezzo_deposito"],
