@@ -25,6 +25,7 @@ from personaggi.negozio_mercante_service import (
     negozi_corporativi_per_personaggio,
     preview_vendita_oggetto,
     restituisci_prestito,
+    restituisci_prestito_da_id,
     restituisci_prestito_oggetto,
     restituisci_tutti_prestiti_attivi,
     serializza_prestiti_attivi,
@@ -174,11 +175,15 @@ class NegozioMercanteGiocatoreViewSet(viewsets.ViewSet):
 
     @action(detail=True, methods=["post"], url_path="restituisci")
     def restituisci(self, request, pk=None):
-        """Giocatore: restituisce un oggetto preso in prestito a questo negozio."""
+        """Giocatore: restituisce un prestito attivo a questo negozio."""
         char_id = request.data.get("char_id")
         oggetto_id = request.data.get("oggetto_id")
-        if not char_id or not oggetto_id:
-            return Response({"error": "char_id e oggetto_id richiesti."}, status=400)
+        prestito_id = request.data.get("prestito_id")
+        if not char_id or (not oggetto_id and not prestito_id):
+            return Response(
+                {"error": "char_id e (oggetto_id o prestito_id) richiesti."},
+                status=400,
+            )
         pg = _get_pg(request, char_id)
         negozio = get_object_or_404(NegozioMercante, pk=pk, attivo=True)
         if not negozio.negozio_prestiti:
@@ -187,14 +192,21 @@ class NegozioMercanteGiocatoreViewSet(viewsets.ViewSet):
                 status=400,
             )
         try:
-            return Response(
-                restituisci_prestito_oggetto(
+            if prestito_id:
+                result = restituisci_prestito_da_id(
+                    negozio,
+                    pg,
+                    prestito_id,
+                    nota=request.data.get("nota") or "",
+                )
+            else:
+                result = restituisci_prestito_oggetto(
                     negozio,
                     pg,
                     oggetto_id,
                     nota=request.data.get("nota") or "",
                 )
-            )
+            return Response(result)
         except ValidationError as e:
             msg = e.messages[0] if getattr(e, "messages", None) else str(e)
             return Response({"error": msg}, status=400)

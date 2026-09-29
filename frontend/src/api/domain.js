@@ -1476,12 +1476,21 @@ export const vendiOggettoNegozioMercante = (negozioId, charId, oggettoId, onLogo
     onLogout,
   );
 
-export const restituisciPrestitoNegozioMercante = (negozioId, charId, oggettoId, onLogout) =>
+export const restituisciPrestitoNegozioMercante = (
+  negozioId,
+  charId,
+  { oggettoId = null, prestitoId = null } = {},
+  onLogout,
+) =>
   fetchAuthenticated(
     `/api/personaggi/api/negozi-mercante/${negozioId}/restituisci/`,
     {
       method: 'POST',
-      body: JSON.stringify({ char_id: charId, oggetto_id: oggettoId }),
+      body: JSON.stringify({
+        char_id: charId,
+        oggetto_id: oggettoId,
+        prestito_id: prestitoId,
+      }),
     },
     onLogout,
   );
