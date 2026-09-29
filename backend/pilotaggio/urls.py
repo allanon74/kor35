@@ -5,7 +5,7 @@ Rotte sotto `/api/pilot/...`:
 - auth/qr-login, auth/logout
 - session/start, session/state, session/command, session/abort, session/history
 - subsystems/qr-action  (login DRF token: usato da app principale)
-- catalog, prefetture
+- catalog, percorsi, prefetture
 - staff/sottosistemi, staff/comandi, staff/intensita, staff/eventi, staff/sequenze,
   staff/stati-allerta, staff/comandi-critici, staff/sessioni
 """
@@ -19,6 +19,7 @@ from . import views
 
 router = DefaultRouter()
 router.register(r"staff/sottosistemi", views.StaffSottosistemaViewSet, basename="pilot-staff-sottosistemi")
+router.register(r"staff/percorsi", views.StaffPercorsoViewSet, basename="pilot-staff-percorsi")
 router.register(r"staff/comandi", views.StaffComandoViewSet, basename="pilot-staff-comandi")
 router.register(
     r"staff/comandi-critici",
@@ -72,6 +73,7 @@ urlpatterns = [
     path("subsystems/qr-recharge/", views.PilotSubsystemQrRechargeView.as_view(), name="pilot-subsystem-qr-recharge"),
 
     path("catalog/", views.PilotCatalogView.as_view(), name="pilot-catalog"),
+    path("percorsi/", views.PilotPercorsiView.as_view(), name="pilot-percorsi"),
     path("prefetture/", views.PilotPrefettureView.as_view(), name="pilot-prefetture"),
 
     path("staff/sessioni/", views.StaffSessioneListView.as_view(), name="pilot-staff-sessioni"),

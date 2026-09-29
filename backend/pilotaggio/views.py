@@ -9,6 +9,7 @@ Gruppi di endpoint:
 """
 from __future__ import annotations
 
+import uuid
 from datetime import timedelta
 from typing import Optional
 
@@ -44,7 +45,7 @@ from .engine import (
     applica_effetto_guasto,
     applica_effetto_inversione,
     build_annuncio_decollo,
-    calcola_distanza_target,
+    estrai_distanza_percorso,
     completa_decollo_sessione,
     evento_attivo_corrente,
     eventi_attivi_correnti,
@@ -71,6 +72,7 @@ from .models import (
     EventoAttivoSessione,
     EventoNave,
     IntensitaComando,
+    PercorsoVolo,
     PilotConsoleToken,
     PilotRuntimeConfig,
     PilotConsoleLoginTicket,
@@ -99,6 +101,7 @@ from .serializers import (
     EventoNaveSerializer,
     IntensitaComandoListSerializer,
     IntensitaComandoSerializer,
+    PercorsoVoloSerializer,
     PilotConsoleTokenSerializer,
     PilotRuntimeConfigSerializer,
     SequenzaVoloSerializer,
@@ -1051,10 +1054,10 @@ class PilotStateView(APIView):
 class PilotSessionStartView(APIView):
     """
     POST /api/pilot/session/start/
-    Body: {"prefettura_partenza_id": int, "prefettura_arrivo_id": int}
+    Body: {"percorso_id": "<uuid>"}
 
-    A nave ferma (stato 0 disattiva). Premi decollo e la sessione entra in volo.
-    Distanza e durata derivano dal tragitto (prefettura/regione) e crociera nominale.
+    A nave ferma (stato 0 disattiva). La distanza è un valore casuale
+    tra distanza minima e massima del percorso scelto.
     """
 
     authentication_classes = [PilotConsoleTokenAuthentication]
@@ -1063,13 +1066,18 @@ class PilotSessionStartView(APIView):
     def post(self, request):
         pilota = get_pilot_from_request(request)
         _chiudi_sessioni_orfane_pilota(pilota)
-        partenza_id = request.data.get("prefettura_partenza_id")
-        arrivo_id = request.data.get("prefettura_arrivo_id")
-        partenza = Prefettura.objects.filter(pk=partenza_id).first() if partenza_id else None
-        arrivo = Prefettura.objects.filter(pk=arrivo_id).first() if arrivo_id else None
-        if partenza is None or arrivo is None:
+        percorso_id = request.data.get("percorso_id")
+        percorso = None
+        if percorso_id:
+            try:
+                percorso_uuid = uuid.UUID(str(percorso_id))
+            except (ValueError, TypeError, AttributeError):
+                percorso_uuid = None
+            if percorso_uuid is not None:
+                percorso = PercorsoVolo.objects.filter(pk=percorso_uuid, attivo=True).first()
+        if percorso is None:
             return Response(
-                {"error": "Prefetture di partenza e arrivo richieste."},
+                {"error": "Percorso richiesto."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1080,9 +1088,7 @@ class PilotSessionStartView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        distanza_target, durata_pianificata = calcola_distanza_target(
-            partenza, arrivo, defcon_iniziale=0
-        )
+        distanza_target, durata_pianificata = estrai_distanza_percorso(percorso)
         now = timezone.now()
         carburante_max_target, storage_max_target = _capacita_energia_nave()
 
@@ -1091,8 +1097,7 @@ class PilotSessionStartView(APIView):
                 carb_att, carb_max, stor_att, stor_max = _risorse_energia_da_ultima_sessione()
                 attiva = SessioneVolo.objects.create(
                     pilota=pilota,
-                    prefettura_partenza=partenza,
-                    prefettura_arrivo=arrivo,
+                    percorso=percorso,
                     stato=SESSIONE_STATO_VOLO,
                     durata_pianificata_secondi=durata_pianificata,
                     defcon=0,
@@ -1106,8 +1111,9 @@ class PilotSessionStartView(APIView):
                 )
             else:
                 attiva.pilota = pilota
-                attiva.prefettura_partenza = partenza
-                attiva.prefettura_arrivo = arrivo
+                attiva.percorso = percorso
+                attiva.prefettura_partenza = None
+                attiva.prefettura_arrivo = None
                 attiva.stato = SESSIONE_STATO_VOLO
                 attiva.durata_pianificata_secondi = durata_pianificata
                 attiva.defcon = 0
@@ -1132,11 +1138,7 @@ class PilotSessionStartView(APIView):
             _ensure_tick_enabled()
             from .flight_log import log_volo_iniziato
 
-            log_volo_iniziato(
-                attiva,
-                partenza=getattr(partenza, "nome", "?"),
-                arrivo=getattr(arrivo, "nome", "?"),
-            )
+            log_volo_iniziato(attiva, percorso=percorso.etichetta)
 
         return Response(_build_state_payload(attiva, pilota))
 
@@ -1515,7 +1517,7 @@ class PilotSessionVoliView(APIView):
 
         qs = (
             SessioneVolo.objects.exclude(stato=SESSIONE_STATO_IDLE)
-            .select_related("prefettura_partenza", "prefettura_arrivo", "pilota")
+            .select_related("prefettura_partenza", "prefettura_arrivo", "percorso", "pilota")
             .order_by("-ended_at", "-created_at")[:25]
         )
         return Response({"voli": [riepilogo_sessione_per_pilota(s) for s in qs]})
@@ -1775,6 +1777,26 @@ class PilotCatalogView(APIView):
         )
 
 
+class PilotPercorsiView(APIView):
+    """Elenco percorsi attivi per il selettore di rotta (login console pilota)."""
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def get(self, request):
+        rows = [
+            {
+                "id": str(p.pk),
+                "partenza": p.partenza,
+                "arrivo": p.arrivo,
+                "distanza_minima": p.distanza_minima,
+                "distanza_massima": p.distanza_massima,
+            }
+            for p in PercorsoVolo.objects.filter(attivo=True).order_by("ordine", "partenza", "arrivo")
+        ]
+        return Response(rows)
+
+
 class PilotPrefettureView(generics.ListAPIView):
     """Elenco prefetture per dropdown partenza/arrivo (login console pilota)."""
 
@@ -1988,6 +2010,14 @@ class StaffComandoCriticoGlobaleViewSet(viewsets.ModelViewSet):
         if self.action == "list":
             return ComandoCriticoGlobaleListSerializer
         return ComandoCriticoGlobaleSerializer
+
+
+class StaffPercorsoViewSet(viewsets.ModelViewSet):
+    """CRUD rotte: partenza, arrivo, distanza minima, distanza massima."""
+
+    queryset = PercorsoVolo.objects.all().order_by("ordine", "partenza", "arrivo")
+    serializer_class = PercorsoVoloSerializer
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
 
 class StaffIntensitaViewSet(viewsets.ModelViewSet):

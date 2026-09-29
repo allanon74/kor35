@@ -7,6 +7,7 @@ from .models import (
     EventoAttivoSessione,
     EventoNave,
     IntensitaComando,
+    PercorsoVolo,
     PilotConsoleLoginTicket,
     PilotConsoleToken,
     PilotRuntimeConfig,
@@ -98,6 +99,14 @@ class ComandoCriticoGlobaleAdmin(admin.ModelAdmin):
 class ComandoNaveAdmin(admin.ModelAdmin):
     list_display = ("codice", "nome", "attivo")
     search_fields = ("codice", "nome")
+
+
+@admin.register(PercorsoVolo)
+class PercorsoVoloAdmin(admin.ModelAdmin):
+    list_display = ("partenza", "arrivo", "distanza_minima", "distanza_massima", "ordine", "attivo")
+    list_filter = ("attivo",)
+    search_fields = ("partenza", "arrivo")
+    ordering = ("ordine", "partenza", "arrivo")
 
 
 @admin.register(IntensitaComando)

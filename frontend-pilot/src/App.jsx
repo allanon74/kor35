@@ -36,7 +36,7 @@ export default function App() {
   const [navigazioneStatSigla, setNavigazioneStatSigla] = useState('0PI');
   const [consoleChecked, setConsoleChecked] = useState(false);
   const [state, setState] = useState(() => loadCachedState());
-  const [prefetture, setPrefetture] = useState([]);
+  const [percorsi, setPercorsi] = useState([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [online, setOnline] = useState(true);
@@ -162,7 +162,7 @@ export default function App() {
   useEffect(() => {
     if (!authToken || IS_LAB) return;
     refreshState();
-    api.prefetture().then(setPrefetture).catch(() => setPrefetture([]));
+    api.percorsi().then(setPercorsi).catch(() => setPercorsi([]));
   }, [authToken, refreshState]);
 
   useEffect(() => {
@@ -211,11 +211,11 @@ export default function App() {
     navigateScreen('station');
   }, []);
 
-  const handleStart = useCallback(async (partenza, arrivo) => {
+  const handleStart = useCallback(async (percorsoId) => {
     setError('');
     setBusy(true);
     try {
-      const res = await api.startSession(partenza, arrivo);
+      const res = await api.startSession(percorsoId);
       setState(res);
       saveCachedState(res);
     } catch (e) {
@@ -333,6 +333,20 @@ export default function App() {
     return (
       <div className="app-shell app-shell-station">
         <StationPicker preview={IS_PREVIEW_LAYOUT} />
+      </div>
+    );
+  }
+
+  if (IS_PREVIEW_LAYOUT && !IS_LAB && !IS_STATION) {
+    const percorsiPreview = [
+      { id: 'bosco', partenza: 'Bosco nord', arrivo: 'Avamposto', distanza_minima: 800, distanza_massima: 1400 },
+      { id: 'lunga', partenza: 'Cittadella', arrivo: 'Frontiera', distanza_minima: 3000, distanza_massima: 6000 },
+    ];
+    return (
+      <div className="app-shell">
+        <main>
+          <IdleScreen percorsi={percorsiPreview} onStart={() => {}} error="" busy={false} />
+        </main>
       </div>
     );
   }
@@ -479,7 +493,7 @@ export default function App() {
           <div className={`console-viewport-fixed ${IS_CONTROL_ONLY ? 'is-fixed' : ''} ${IS_COMBINED ? 'is-combined' : ''}`}>
             {(!state || !state.sessione || state.sessione.stato === 'idle') ? (
               <IdleScreen
-                prefetture={prefetture}
+                percorsi={percorsi}
                 onStart={handleStart}
                 error={error}
                 busy={busy}
