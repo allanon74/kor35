@@ -43,6 +43,13 @@ STOCK_STATO_CHOICES = [
     (STOCK_VENDUTO, "Venduto"),
 ]
 
+PRESTITO_ATTIVO = "ATT"
+PRESTITO_RESTITUITO = "RES"
+PRESTITO_STATO_CHOICES = [
+    (PRESTITO_ATTIVO, "In prestito"),
+    (PRESTITO_RESTITUITO, "Restituito"),
+]
+
 DEFAULT_CONFIG_ECONOMIA = {
     "pct_vendita_min": 20,
     "pct_vendita_max": 80,
@@ -111,6 +118,21 @@ class NegozioMercante(SyncableModel, models.Model):
         help_text='Per negozi corporativi: {"operator":"OR","requisiti":[...]}.',
     )
     config_economia = models.JSONField(default=dict, blank=True)
+    negozio_prestiti = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text=(
+            "Se attivo, gli oggetti del catalogo si prendono solo in prestito "
+            "(restituzione a fine evento). Il prezzo della voce è il costo di noleggio (0 ammesso)."
+        ),
+    )
+    limite_prestiti_per_personaggio = models.PositiveIntegerField(
+        default=1,
+        help_text=(
+            "Quanti oggetti un personaggio può tenere in prestito contemporaneamente "
+            "da questo negozio (solo se negozio_prestiti è attivo). Default: 1."
+        ),
+    )
 
     class Meta:
         verbose_name = "Negozio mercante"
@@ -153,7 +175,10 @@ class NegozioMercanteVoce(SyncableModel, models.Model):
     )
     tipo_voce = models.CharField(max_length=3, choices=VOCE_TIPO_CHOICES, db_index=True)
     prezzo_crediti = models.PositiveIntegerField(
-        help_text="Prezzo in crediti per questo negozio (obbligatorio, manuale).",
+        help_text=(
+            "Prezzo in crediti (acquisto) oppure costo di noleggio se il negozio "
+            "è in modalità prestiti (0 = prestito gratuito)."
+        ),
     )
     ordine = models.PositiveIntegerField(default=0)
     attivo = models.BooleanField(default=True)
@@ -404,3 +429,79 @@ class NegozioMercanteMovimento(SyncableModel, models.Model):
         verbose_name = "Movimento cassa negozio"
         verbose_name_plural = "Movimenti cassa negozi"
         ordering = ["-created_at"]
+
+
+class NegozioMercantePrestito(SyncableModel, models.Model):
+    """
+    Traccia un oggetto fisico preso in prestito da un negozio di prestiti.
+    Un personaggio può avere al più ``negozio.limite_prestiti_per_personaggio``
+    prestiti ATTIVI sullo stesso negozio.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    negozio = models.ForeignKey(
+        NegozioMercante,
+        on_delete=models.CASCADE,
+        related_name="prestiti",
+    )
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="prestiti_negozio_mercante",
+    )
+    oggetto = models.ForeignKey(
+        "Oggetto",
+        on_delete=models.CASCADE,
+        related_name="prestiti_negozio_mercante",
+    )
+    voce = models.ForeignKey(
+        NegozioMercanteVoce,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="prestiti",
+        help_text="Voce catalogo di origine (se prestito da listino).",
+    )
+    stock = models.ForeignKey(
+        NegozioMercanteStock,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="prestiti",
+        help_text="Riga stock di origine (se prestito da usato/magazzino).",
+    )
+    costo_noleggio = models.PositiveIntegerField(
+        default=0,
+        help_text="Crediti pagati come noleggio al momento del prestito (0 = gratuito).",
+    )
+    stato = models.CharField(
+        max_length=3,
+        choices=PRESTITO_STATO_CHOICES,
+        default=PRESTITO_ATTIVO,
+        db_index=True,
+    )
+    prestato_at = models.DateTimeField(default=timezone.now)
+    restituito_at = models.DateTimeField(null=True, blank=True)
+    nota_restituzione = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        verbose_name = "Prestito negozio mercante"
+        verbose_name_plural = "Prestiti negozi mercante"
+        ordering = ["-prestato_at"]
+        indexes = [
+            models.Index(fields=["negozio", "personaggio", "stato"]),
+            models.Index(fields=["oggetto", "stato"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["oggetto"],
+                condition=models.Q(stato=PRESTITO_ATTIVO),
+                name="uniq_oggetto_prestito_attivo",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.negozio.nome} → {self.personaggio_id} / {self.oggetto_id} ({self.stato})"

@@ -1644,6 +1644,9 @@ class OggettoSerializer(serializers.ModelSerializer):
     aura_dettagli = serializers.SerializerMethodField()
     slot_fisici_possibili = serializers.SerializerMethodField()
     costi_attivazione = serializers.SerializerMethodField()
+    in_prestito = serializers.SerializerMethodField()
+    prestito_negozio_id = serializers.SerializerMethodField()
+    prestito_negozio_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = Oggetto
@@ -1696,13 +1699,36 @@ class OggettoSerializer(serializers.ModelSerializer):
             'spegne_a_zero_cariche',
             'deve_essere_attivato',
             'is_pesante',
-            'aura_dettagli',  
+            'aura_dettagli',
+            'in_prestito',
+            'prestito_negozio_id',
+            'prestito_negozio_nome',
         )
     
     def get_aura_dettagli(self, obj):
         if obj.aura:
             return {"nome": obj.aura.nome, "colore": obj.aura.colore, "icona": obj.aura.icona_url}
         return None
+
+    def _prestito_attivo(self, obj):
+        cache = self.context.setdefault("_prestiti_attivi_cache", {})
+        pk = obj.pk
+        if pk not in cache:
+            from personaggi.negozio_mercante_service import prestito_attivo_per_oggetto
+
+            cache[pk] = prestito_attivo_per_oggetto(pk)
+        return cache[pk]
+
+    def get_in_prestito(self, obj):
+        return self._prestito_attivo(obj) is not None
+
+    def get_prestito_negozio_id(self, obj):
+        p = self._prestito_attivo(obj)
+        return str(p.negozio_id) if p else None
+
+    def get_prestito_negozio_nome(self, obj):
+        p = self._prestito_attivo(obj)
+        return p.negozio.nome if p else None
         
     def get_spegne_a_zero_cariche(self, obj):
     # Recupera il flag dall'aura (Punteggio) associata all'oggetto

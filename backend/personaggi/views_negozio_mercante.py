@@ -17,9 +17,6 @@ from personaggi.views_staff import (
     _get_active_campaign,
     _get_default_campaign,
 )
-from personaggi.negozio_mercante_models import NegozioMercante, NegozioMercanteBundle, NegozioMercanteVoce
-from personaggi.negozio_mercante_readiness import valuta_prontezza_negozio
-from personaggi.negozio_mercante_models import NegozioMercanteMovimento
 from personaggi.negozio_mercante_service import (
     acquista_bundle,
     acquista_stock,
@@ -27,8 +24,21 @@ from personaggi.negozio_mercante_service import (
     build_listino,
     negozi_corporativi_per_personaggio,
     preview_vendita_oggetto,
+    restituisci_prestito,
+    restituisci_prestito_oggetto,
+    restituisci_tutti_prestiti_attivi,
+    serializza_prestiti_attivi,
     vendi_oggetto_a_negozio,
 )
+from personaggi.negozio_mercante_models import (
+    NegozioMercante,
+    NegozioMercanteBundle,
+    NegozioMercanteMovimento,
+    NegozioMercantePrestito,
+    NegozioMercanteVoce,
+    PRESTITO_ATTIVO,
+)
+from personaggi.negozio_mercante_readiness import valuta_prontezza_negozio
 from personaggi.models import Personaggio, QrCode
 from gestione_plot.permissions import IsStaffOrMaster
 from personaggi.serializers_negozio_mercante import (
@@ -70,6 +80,7 @@ class NegozioMercanteGiocatoreViewSet(viewsets.ViewSet):
                 "id": str(n.id),
                 "nome": n.nome,
                 "descrizione": n.descrizione,
+                "negozio_prestiti": bool(n.negozio_prestiti),
             }
             for n in negozi
         ]
@@ -161,6 +172,33 @@ class NegozioMercanteGiocatoreViewSet(viewsets.ViewSet):
         except ValidationError as e:
             return Response({"error": str(e)}, status=400)
 
+    @action(detail=True, methods=["post"], url_path="restituisci")
+    def restituisci(self, request, pk=None):
+        """Giocatore: restituisce un oggetto preso in prestito a questo negozio."""
+        char_id = request.data.get("char_id")
+        oggetto_id = request.data.get("oggetto_id")
+        if not char_id or not oggetto_id:
+            return Response({"error": "char_id e oggetto_id richiesti."}, status=400)
+        pg = _get_pg(request, char_id)
+        negozio = get_object_or_404(NegozioMercante, pk=pk, attivo=True)
+        if not negozio.negozio_prestiti:
+            return Response(
+                {"error": "Questo negozio non è un negozio di prestiti."},
+                status=400,
+            )
+        try:
+            return Response(
+                restituisci_prestito_oggetto(
+                    negozio,
+                    pg,
+                    oggetto_id,
+                    nota=request.data.get("nota") or "",
+                )
+            )
+        except ValidationError as e:
+            msg = e.messages[0] if getattr(e, "messages", None) else str(e)
+            return Response({"error": msg}, status=400)
+
 
 class NegozioMercanteStaffViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
     modulo_key = MODULO_NEGOZI
@@ -239,6 +277,44 @@ class NegozioMercanteStaffViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
             for m in qs
         ]
         return Response(rows)
+
+    @action(detail=True, methods=["get"], url_path="prestiti")
+    def prestiti(self, request, pk=None):
+        negozio = self.get_object()
+        return Response(serializza_prestiti_attivi(negozio))
+
+    @action(detail=True, methods=["post"], url_path="restituisci-prestito")
+    def restituisci_prestito_staff(self, request, pk=None):
+        negozio = self.get_object()
+        prestito_id = request.data.get("prestito_id")
+        if not prestito_id:
+            return Response({"error": "prestito_id richiesto."}, status=400)
+        prestito = get_object_or_404(
+            NegozioMercantePrestito,
+            pk=prestito_id,
+            negozio=negozio,
+            stato=PRESTITO_ATTIVO,
+        )
+        try:
+            return Response(
+                restituisci_prestito(
+                    prestito,
+                    nota=request.data.get("nota") or "restituzione staff",
+                    forzato=True,
+                )
+            )
+        except ValidationError as e:
+            msg = e.messages[0] if getattr(e, "messages", None) else str(e)
+            return Response({"error": msg}, status=400)
+
+    @action(detail=True, methods=["post"], url_path="restituisci-tutti-prestiti")
+    def restituisci_tutti_prestiti(self, request, pk=None):
+        negozio = self.get_object()
+        result = restituisci_tutti_prestiti_attivi(
+            negozio=negozio,
+            nota=request.data.get("nota") or "restituzione staff massiva",
+        )
+        return Response(result)
 
 
 class NegozioMercanteVoceStaffViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):

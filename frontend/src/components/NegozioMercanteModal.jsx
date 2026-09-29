@@ -7,6 +7,7 @@ import {
   fetchNegozioMercanteListino,
   acquistaNegozioMercante,
   vendiOggettoNegozioMercante,
+  restituisciPrestitoNegozioMercante,
   previewVenditaNegozioMercante,
   searchPersonaggi,
   getBodySlots,
@@ -156,7 +157,14 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
       return;
     }
     const label = voce.nome || 'Articolo';
-    if (!window.confirm(`Acquistare "${label}" per ${voce.prezzo_crediti} CR?`)) return;
+    const isPrestito = !!listino?.negozio_prestiti;
+    const prezzo = Number(voce.prezzo_crediti) || 0;
+    const azione = isPrestito
+      ? prezzo > 0
+        ? `Prendere in prestito "${label}" (noleggio ${prezzo} CR)? Va restituito a fine evento.`
+        : `Prendere in prestito "${label}" (gratuito)? Va restituito a fine evento.`
+      : `Acquistare "${label}" per ${prezzo} CR?`;
+    if (!window.confirm(azione)) return;
     submitPurchase(voce, { conto: 'CORRENTE' });
   };
 
@@ -176,12 +184,24 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
           body.destinatario_id = extras.destinatarioId;
         }
       }
-      await acquistaNegozioMercante(negozioId, body, onLogout);
+      const res = await acquistaNegozioMercante(negozioId, body, onLogout);
       setCheckout(null);
       await refreshCharacterData();
       await reload();
+      if (res?.prestito) {
+        alert(
+          Number(res.prezzo) > 0
+            ? `Prestito effettuato (noleggio ${res.prezzo_pagato || res.prezzo} CR). Restituisci a fine evento.`
+            : 'Prestito effettuato (gratuito). Restituisci a fine evento.',
+        );
+      }
     } catch (e) {
-      alert(e.message || 'Acquisto fallito. Nessun credito è stato addebitato.');
+      alert(
+        e.message ||
+          (listino?.negozio_prestiti
+            ? 'Prestito fallito. Nessun credito è stato addebitato.'
+            : 'Acquisto fallito. Nessun credito è stato addebitato.'),
+      );
     } finally {
       setBusy(false);
     }
@@ -230,7 +250,32 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
     }
   };
 
+  const handleRestituisci = async (oggettoId, nome) => {
+    if (busy) return;
+    if (!window.confirm(`Restituire «${nome || 'oggetto'}» al negozio di prestiti?`)) return;
+    setBusy(true);
+    try {
+      await restituisciPrestitoNegozioMercante(
+        negozioId,
+        selectedCharacterId,
+        oggettoId,
+        onLogout,
+      );
+      await refreshCharacterData();
+      await reload();
+    } catch (e) {
+      alert(e.message || 'Restituzione fallita.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const prezzoVoce = (v) => {
+    const isPrestito = !!listino?.negozio_prestiti;
+    if (isPrestito) {
+      const n = Number(v.prezzo_crediti) || 0;
+      return n > 0 ? `Noleggio ${n} CR` : 'Prestito gratis';
+    }
     if (duale && v.deposito_ammesso && v.prezzo_deposito) {
       return `${fmtCr(v.prezzo_corrente)} / ${fmtCr(v.prezzo_deposito)} dep`;
     }
@@ -238,8 +283,10 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
   };
 
   const aperto = listino?.aperto !== false;
+  const isPrestitoNegozio = !!listino?.negozio_prestiti;
   const testoImmersivo =
     (listino?.descrizione_immersiva || listino?.descrizione || '').trim();
+  const prestitiMiei = listino?.prestiti_attivi || [];
 
   return (
     <Dialog open onClose={onClose} className="relative z-50">
@@ -276,19 +323,40 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                 className={`flex-1 py-2 ${tab === 'acquista' ? 'text-amber-400 border-b-2 border-amber-500' : 'text-gray-400'}`}
                 onClick={() => setTab('acquista')}
               >
-                Acquista
+                {isPrestitoNegozio ? 'Prendi in prestito' : 'Acquista'}
               </button>
-              <button
-                type="button"
-                className={`flex-1 py-2 ${tab === 'vendi' ? 'text-amber-400 border-b-2 border-amber-500' : 'text-gray-400'}`}
-                onClick={() => setTab('vendi')}
-              >
-                Vendi
-              </button>
+              {isPrestitoNegozio ? (
+                <button
+                  type="button"
+                  className={`flex-1 py-2 ${tab === 'restituisci' ? 'text-sky-400 border-b-2 border-sky-500' : 'text-gray-400'}`}
+                  onClick={() => setTab('restituisci')}
+                >
+                  Restituisci
+                  {prestitiMiei.length > 0 ? ` (${prestitiMiei.length})` : ''}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={`flex-1 py-2 ${tab === 'vendi' ? 'text-amber-400 border-b-2 border-amber-500' : 'text-gray-400'}`}
+                  onClick={() => setTab('vendi')}
+                >
+                  Vendi
+                </button>
+              )}
             </div>
           )}
 
           <div className="p-4 overflow-y-auto flex-1 space-y-4">
+            {isPrestitoNegozio && (
+              <p className="text-xs text-sky-300/90 bg-sky-950/40 border border-sky-800/60 rounded-lg px-3 py-2">
+                Negozio di prestiti · max {listino?.limite_prestiti_per_personaggio || 1} oggetto
+                {(listino?.limite_prestiti_per_personaggio || 1) === 1 ? '' : 'i'} per te
+                {typeof listino?.prestiti_attivi_personaggio === 'number'
+                  ? ` · in prestito: ${listino.prestiti_attivi_personaggio}`
+                  : ''}
+                . Restituzione a fine evento.
+              </p>
+            )}
             {testoImmersivo && (
               <div className="rounded-xl border border-amber-800/60 bg-amber-950/30 p-4 shadow-inner">
                 <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2">
@@ -357,7 +425,9 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                       className={`shrink-0 px-3 py-1.5 rounded disabled:opacity-40 text-white text-sm font-bold ${
                         v.tipo === 'bundle'
                           ? 'bg-violet-700 hover:bg-violet-600'
-                          : 'bg-amber-700 hover:bg-amber-600'
+                          : isPrestitoNegozio
+                            ? 'bg-sky-700 hover:bg-sky-600'
+                            : 'bg-amber-700 hover:bg-amber-600'
                       }`}
                     >
                       {prezzoVoce(v)}
@@ -365,7 +435,43 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                   </div>
                 ))}
                 {aperto && (listino?.voci || []).length === 0 && (
-                  <p className="text-gray-500 text-center py-6">Nessun articolo in vendita.</p>
+                  <p className="text-gray-500 text-center py-6">
+                    {isPrestitoNegozio
+                      ? 'Nessun articolo disponibile in prestito.'
+                      : 'Nessun articolo in vendita.'}
+                  </p>
+                )}
+              </div>
+            ) : tab === 'restituisci' ? (
+              <div className="space-y-2">
+                {prestitiMiei.length === 0 ? (
+                  <p className="text-gray-500 text-center py-6">
+                    Non hai oggetti in prestito da questo negozio.
+                  </p>
+                ) : (
+                  prestitiMiei.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex justify-between items-center gap-2 p-3 rounded-lg border border-sky-800/50 bg-sky-950/30"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-semibold text-white truncate">{p.oggetto_nome}</div>
+                        <div className="text-xs text-gray-400">
+                          {p.costo_noleggio
+                            ? `Noleggio pagato: ${p.costo_noleggio} CR`
+                            : 'Prestito gratuito'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleRestituisci(p.oggetto_id, p.oggetto_nome)}
+                        className="shrink-0 px-3 py-1.5 rounded bg-sky-700 hover:bg-sky-600 text-white text-sm font-bold disabled:opacity-40"
+                      >
+                        Restituisci
+                      </button>
+                    </div>
+                  ))
                 )}
               </div>
             ) : (

@@ -307,13 +307,16 @@ class EventoViewSet(viewsets.ModelViewSet):
             evento.ended_at = now
             evento.save(update_fields=["ended_at", "updated_at"])
             from personaggi.contratti_service import on_evento_terminato
+            from personaggi.negozio_mercante_service import restituisci_tutti_prestiti_attivi
 
             on_evento_terminato(evento)
+            prestiti_result = restituisci_tutti_prestiti_attivi(nota="fine evento")
         return Response(
             {
                 "ok": True,
                 "evento_id": evento.id,
                 "ended_at": now,
+                "prestiti_restituiti": prestiti_result.get("restituiti", 0),
             },
             status=status.HTTP_200_OK,
         )

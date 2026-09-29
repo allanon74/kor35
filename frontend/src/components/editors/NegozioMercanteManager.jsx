@@ -33,6 +33,9 @@ import {
   staffScollegaQrNegozioMercante,
   staffGetNegozioMercanteReadiness,
   staffGetNegozioMercanteMovimenti,
+  staffGetNegozioMercantePrestiti,
+  staffRestituisciPrestitoNegozio,
+  staffRestituisciTuttiPrestitiNegozio,
   staffGetOggettiBase,
   staffGetOggettiSenzaPosizione,
   staffGetKorps,
@@ -62,6 +65,7 @@ const MODAL_TABS = [
   { id: 'dati', label: 'Dati negozio' },
   { id: 'catalogo', label: 'Catalogo' },
   { id: 'cassa', label: 'Cassa' },
+  { id: 'prestiti', label: 'Prestiti' },
 ];
 
 const asList = (data) => (Array.isArray(data) ? data : data?.results || []);
@@ -73,6 +77,8 @@ const emptyNegozio = () => ({
   attivo: true,
   saldo_crediti: 0,
   incassa_acquisti_catalogo: true,
+  negozio_prestiti: false,
+  limite_prestiti_per_personaggio: 1,
   regole_apertura: { modalita: 'sempre_aperto' },
   regole_visibilita: { operator: 'OR', requisiti: [] },
   config_economia: {},
@@ -165,6 +171,17 @@ const NEGOZIO_COLUMNS = [
     ),
   },
   {
+    header: 'Modalità',
+    key: 'negozio_prestiti',
+    sortable: true,
+    render: (row) =>
+      row.negozio_prestiti ? (
+        <span className="text-sky-300">Prestiti (max {row.limite_prestiti_per_personaggio || 1})</span>
+      ) : (
+        <span className="text-gray-500">Vendita</span>
+      ),
+  },
+  {
     header: 'Cassa',
     key: 'saldo_crediti',
     sortable: true,
@@ -238,6 +255,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
   const [pendingQrConflict, setPendingQrConflict] = useState(null);
   const [readiness, setReadiness] = useState(null);
   const [movimenti, setMovimenti] = useState([]);
+  const [prestitiAttivi, setPrestitiAttivi] = useState([]);
   const [lookup, setLookup] = useState({
     abilita: [],
     korps: [],
@@ -323,18 +341,22 @@ const NegozioMercanteManager = ({ onLogout }) => {
       if (!negozioId) {
         setReadiness(null);
         setMovimenti([]);
+        setPrestitiAttivi([]);
         return;
       }
       try {
-        const [rdy, mov] = await Promise.all([
+        const [rdy, mov, prest] = await Promise.all([
           staffGetNegozioMercanteReadiness(negozioId, onLogout),
           staffGetNegozioMercanteMovimenti(negozioId, onLogout),
+          staffGetNegozioMercantePrestiti(negozioId, onLogout),
         ]);
         setReadiness(rdy);
         setMovimenti(Array.isArray(mov) ? mov : []);
+        setPrestitiAttivi(Array.isArray(prest) ? prest : []);
       } catch {
         setReadiness(null);
         setMovimenti([]);
+        setPrestitiAttivi([]);
       }
     },
     [onLogout],
@@ -366,6 +388,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
         setBundles([]);
         setReadiness(null);
         setMovimenti([]);
+        setPrestitiAttivi([]);
       }
     },
     [loadVoci, loadBundles, refreshReadiness],
@@ -796,7 +819,41 @@ const NegozioMercanteManager = ({ onLogout }) => {
                   />
                   Incassa acquisti catalogo in cassa
                 </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={!!form.negozio_prestiti}
+                    onChange={(e) =>
+                      setForm({ ...form, negozio_prestiti: e.target.checked })
+                    }
+                  />
+                  Negozio di prestiti
+                </label>
               </div>
+              {form.negozio_prestiti && (
+                <label className="block text-sm">
+                  Limite oggetti in prestito per personaggio
+                  <input
+                    type="number"
+                    min={1}
+                    className="w-full mt-1 bg-gray-950 border border-gray-600 rounded p-2"
+                    value={form.limite_prestiti_per_personaggio ?? 1}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        limite_prestiti_per_personaggio: Math.max(
+                          1,
+                          parseInt(e.target.value, 10) || 1,
+                        ),
+                      })
+                    }
+                  />
+                  <span className="text-xs text-gray-500 mt-1 block">
+                    Il prezzo delle voci è il costo di noleggio (0 = gratuito). Gli oggetti
+                    vanno restituiti a fine evento.
+                  </span>
+                </label>
+              )}
 
               <NegozioConfigEconomiaEditor
                 value={form.config_economia}
@@ -1322,6 +1379,99 @@ const NegozioMercanteManager = ({ onLogout }) => {
                     </li>
                   ))}
                 </ul>
+              )}
+            </div>
+          )}
+
+          {modalTab === 'prestiti' && (
+            <div className="space-y-3">
+              {!selected.id ? (
+                <p className="text-sm text-gray-400">Salva il negozio per gestire i prestiti.</p>
+              ) : !form.negozio_prestiti ? (
+                <p className="text-sm text-gray-400">
+                  Abilita «Negozio di prestiti» nei dati del negozio per usare questa sezione.
+                </p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-gray-400">
+                      Prestiti attivi: {prestitiAttivi.length}. Limite per PG:{' '}
+                      {form.limite_prestiti_per_personaggio || 1}.
+                    </p>
+                    <button
+                      type="button"
+                      className={staffSecondaryBtnClass}
+                      disabled={prestitiAttivi.length === 0 || saving}
+                      onClick={async () => {
+                        if (
+                          !window.confirm(
+                            `Restituire tutti i ${prestitiAttivi.length} prestiti attivi?`,
+                          )
+                        ) {
+                          return;
+                        }
+                        setSaving(true);
+                        try {
+                          await staffRestituisciTuttiPrestitiNegozio(selected.id, onLogout);
+                          setMsg('Tutti i prestiti restituiti.');
+                          await refreshReadiness(selected.id);
+                        } catch (e) {
+                          setMsg(e.message || 'Errore restituzione massiva.');
+                        } finally {
+                          setSaving(false);
+                        }
+                      }}
+                    >
+                      Restituisci tutti
+                    </button>
+                  </div>
+                  {prestitiAttivi.length === 0 ? (
+                    <p className="text-sm text-gray-500">Nessun prestito attivo.</p>
+                  ) : (
+                    <ul className="text-sm space-y-2">
+                      {prestitiAttivi.map((p) => (
+                        <li
+                          key={p.id}
+                          className="flex justify-between items-center gap-2 border border-gray-700 rounded-lg p-2 bg-gray-950/50"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-semibold text-white truncate">
+                              {p.oggetto_nome}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {p.personaggio_nome}
+                              {p.costo_noleggio != null
+                                ? ` · noleggio ${p.costo_noleggio} CR`
+                                : ''}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="shrink-0 px-2 py-1 text-xs rounded bg-sky-800 hover:bg-sky-700 text-white"
+                            onClick={async () => {
+                              setSaving(true);
+                              try {
+                                await staffRestituisciPrestitoNegozio(
+                                  selected.id,
+                                  p.id,
+                                  onLogout,
+                                );
+                                setMsg(`Restituito «${p.oggetto_nome}».`);
+                                await refreshReadiness(selected.id);
+                              } catch (e) {
+                                setMsg(e.message || 'Errore restituzione.');
+                              } finally {
+                                setSaving(false);
+                              }
+                            }}
+                          >
+                            Restituisci
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </div>
           )}

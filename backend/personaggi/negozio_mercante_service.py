@@ -25,9 +25,12 @@ from personaggi.negozio_mercante_models import (
     NegozioMercante,
     NegozioMercanteBundle,
     NegozioMercanteMovimento,
+    NegozioMercantePrestito,
     NegozioMercanteStock,
     NegozioMercanteVoce,
     NEGOZIO_TIPO_CORPORATIVO,
+    PRESTITO_ATTIVO,
+    PRESTITO_RESTITUITO,
 )
 from personaggi.models import (
     SCELTA_RISULTATO_AUMENTO,
@@ -77,6 +80,233 @@ def _aggiorna_saldo(
 
 def _config(negozio) -> dict:
     return negozio.get_config_economia()
+
+
+MSG_NON_DISPONIBILE_LISTINO = "Non più disponibile."
+MSG_ESAURITO_LISTINO = "Esaurito."
+MSG_USATO_LISTINO = "Usato — prezzo di rivendita."
+MSG_PRESTITO_NON_AMMESSO = (
+    "Questo articolo non è prestabile: solo oggetti fisici (template, istanze, "
+    "infusioni-istanza, stock usato)."
+)
+MSG_LIMITE_PRESTITI = (
+    "Hai già raggiunto il limite di oggetti in prestito da questo negozio. "
+    "Restituiscili a fine evento prima di prenderne altri."
+)
+MSG_OGGETTO_IN_PRESTITO = "Questo oggetto è in prestito e non può essere ceduto o venduto."
+MSG_NEGOZIO_SOLO_PRESTITI = "Questo negozio opera solo in modalità prestito: non acquista oggetti dai PG."
+
+
+def voce_e_prestabile(voce: NegozioMercanteVoce) -> bool:
+    """Solo consegna di oggetti fisici: OGB, OGG, INF-istanza."""
+    if voce.tipo_voce in (VOCE_OGGETTO_BASE, VOCE_OGGETTO):
+        return True
+    if voce.tipo_voce == VOCE_INFUSIONE and _voce_consegna_istanza(voce):
+        return True
+    return False
+
+
+def prestito_attivo_per_oggetto(oggetto_id) -> NegozioMercantePrestito | None:
+    if not oggetto_id:
+        return None
+    return (
+        NegozioMercantePrestito.objects.filter(oggetto_id=oggetto_id, stato=PRESTITO_ATTIVO)
+        .select_related("negozio")
+        .first()
+    )
+
+
+def assert_oggetto_non_in_prestito(oggetto) -> None:
+    if prestito_attivo_per_oggetto(getattr(oggetto, "pk", oggetto)):
+        raise ValidationError(MSG_OGGETTO_IN_PRESTITO)
+
+
+def conta_prestiti_attivi(negozio, personaggio) -> int:
+    return NegozioMercantePrestito.objects.filter(
+        negozio=negozio,
+        personaggio=personaggio,
+        stato=PRESTITO_ATTIVO,
+    ).count()
+
+
+def assert_limite_prestiti(negozio, personaggio, *, qty: int = 1) -> None:
+    if not negozio.negozio_prestiti:
+        return
+    limite = max(1, int(negozio.limite_prestiti_per_personaggio or 1))
+    if conta_prestiti_attivi(negozio, personaggio) + qty > limite:
+        raise ValidationError(MSG_LIMITE_PRESTITI)
+
+
+def registra_prestito(
+    negozio,
+    personaggio,
+    oggetto,
+    *,
+    costo_noleggio: int = 0,
+    voce=None,
+    stock=None,
+) -> NegozioMercantePrestito:
+    return NegozioMercantePrestito.objects.create(
+        negozio=negozio,
+        personaggio=personaggio,
+        oggetto=oggetto,
+        voce=voce,
+        stock=stock,
+        costo_noleggio=max(0, int(costo_noleggio or 0)),
+        stato=PRESTITO_ATTIVO,
+        prestato_at=timezone.now(),
+    )
+
+
+def _smonta_se_necessario(oggetto, personaggio) -> None:
+    """
+    Prima della restituzione: libera montaggio (innesto/mutazione equipaggiato)
+    e eventuale socketing (ospitato_su).
+    """
+    update_fields = []
+    if getattr(oggetto, "is_equipaggiato", False) or getattr(oggetto, "slot_corpo", None):
+        oggetto.is_equipaggiato = False
+        oggetto.slot_corpo = None
+        update_fields.extend(["is_equipaggiato", "slot_corpo"])
+    if getattr(oggetto, "ospitato_su_id", None):
+        oggetto.ospitato_su = None
+        update_fields.append("ospitato_su")
+    if update_fields:
+        update_fields.append("updated_at")
+        oggetto.save(update_fields=update_fields)
+
+
+@transaction.atomic
+def restituisci_prestito(
+    prestito: NegozioMercantePrestito,
+    *,
+    nota: str = "",
+    forzato: bool = False,
+) -> dict:
+    """
+    Restituisce un prestito attivo: smonta se serve, riporta l'oggetto in magazzino
+    e ripristina voce OGG / stock DISP.
+    """
+    prestito = (
+        NegozioMercantePrestito.objects.select_for_update(of=("self",))
+        .select_related("negozio", "oggetto", "voce", "stock", "personaggio")
+        .get(pk=prestito.pk)
+    )
+    if prestito.stato != PRESTITO_ATTIVO:
+        raise ValidationError("Questo prestito è già stato restituito.")
+
+    negozio = prestito.negozio
+    oggetto = prestito.oggetto
+    personaggio = prestito.personaggio
+
+    _smonta_se_necessario(oggetto, personaggio)
+
+    if negozio.inventario_id:
+        oggetto.sposta_in_inventario(negozio.inventario)
+
+    # Ripristina disponibilità listino
+    if prestito.stock_id:
+        stock = NegozioMercanteStock.objects.select_for_update(of=("self",)).get(
+            pk=prestito.stock_id
+        )
+        stock.stato = STOCK_DISPONIBILE
+        stock.save(update_fields=["stato", "updated_at"])
+    elif prestito.voce_id and prestito.voce and prestito.voce.tipo_voce == VOCE_OGGETTO:
+        voce = NegozioMercanteVoce.objects.select_for_update(of=("self",)).get(
+            pk=prestito.voce_id
+        )
+        voce.oggetto = oggetto
+        voce.attivo = True
+        voce.save(update_fields=["oggetto", "attivo", "updated_at"])
+    else:
+        # OGB / INF-istanza: torna come stock rivendibile/ri-prestabile
+        config = _config(negozio)
+        val_ref = valore_riferimento_oggetto(oggetto, config)
+        prezzo = max(0, int(prestito.costo_noleggio or 0)) or max(1, val_ref)
+        NegozioMercanteStock.objects.create(
+            negozio=negozio,
+            oggetto=oggetto,
+            prezzo_rivendita=prezzo,
+            valore_riferimento=val_ref,
+            stato=STOCK_DISPONIBILE,
+        )
+
+    now = timezone.now()
+    prestito.stato = PRESTITO_RESTITUITO
+    prestito.restituito_at = now
+    prestito.nota_restituzione = (nota or ("restituzione forzata" if forzato else ""))[:255]
+    prestito.save(
+        update_fields=["stato", "restituito_at", "nota_restituzione", "updated_at"]
+    )
+
+    personaggio.aggiungi_log(
+        f"Restituito «{oggetto.nome}» al negozio di prestiti «{negozio.nome}»."
+    )
+    return {
+        "status": "success",
+        "prestito_id": str(prestito.id),
+        "oggetto_id": oggetto.id,
+        "negozio_id": str(negozio.id),
+    }
+
+
+@transaction.atomic
+def restituisci_prestito_oggetto(negozio, personaggio, oggetto_id, *, nota: str = "") -> dict:
+    prestito = (
+        NegozioMercantePrestito.objects.select_for_update(of=("self",))
+        .filter(
+            negozio=negozio,
+            personaggio=personaggio,
+            oggetto_id=oggetto_id,
+            stato=PRESTITO_ATTIVO,
+        )
+        .first()
+    )
+    if not prestito:
+        raise ValidationError("Nessun prestito attivo per questo oggetto in questo negozio.")
+    return restituisci_prestito(prestito, nota=nota)
+
+
+@transaction.atomic
+def restituisci_tutti_prestiti_attivi(*, negozio=None, nota: str = "fine evento") -> dict:
+    """Restituisce tutti i prestiti attivi (opzionalmente filtrati per negozio)."""
+    qs = NegozioMercantePrestito.objects.filter(stato=PRESTITO_ATTIVO).select_related(
+        "negozio", "oggetto", "voce", "stock", "personaggio"
+    )
+    if negozio is not None:
+        qs = qs.filter(negozio=negozio)
+    restituiti = 0
+    errori = []
+    for prestito in list(qs):
+        try:
+            restituisci_prestito(prestito, nota=nota, forzato=True)
+            restituiti += 1
+        except ValidationError as exc:
+            msg = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+            errori.append({"prestito_id": str(prestito.id), "errore": msg})
+    return {"restituiti": restituiti, "errori": errori}
+
+
+def serializza_prestiti_attivi(negozio, personaggio=None) -> list[dict]:
+    qs = (
+        NegozioMercantePrestito.objects.filter(negozio=negozio, stato=PRESTITO_ATTIVO)
+        .select_related("oggetto", "personaggio")
+        .order_by("-prestato_at")
+    )
+    if personaggio is not None:
+        qs = qs.filter(personaggio=personaggio)
+    return [
+        {
+            "id": str(p.id),
+            "oggetto_id": p.oggetto_id,
+            "oggetto_nome": p.oggetto.nome if p.oggetto_id else "",
+            "personaggio_id": p.personaggio_id,
+            "personaggio_nome": p.personaggio.nome if p.personaggio_id else "",
+            "costo_noleggio": p.costo_noleggio,
+            "prestato_at": p.prestato_at.isoformat() if p.prestato_at else None,
+        }
+        for p in qs
+    ]
 
 
 def _inventario_corrente_pk(oggetto) -> int | None:
@@ -548,7 +778,14 @@ def serializza_bundle_listino(bundle: NegozioMercanteBundle, personaggio, *, pre
         "componenti": componenti,
         "richiede_montaggio": richiede_montaggio,
         "consegna_istanza": False,
+        "prestabile": False,
     }
+    if bundle.negozio.negozio_prestiti:
+        payload["acquistabile"] = False
+        payload["messaggio_usabilita"] = _unisci_messaggi_usabilita(
+            payload.get("messaggio_usabilita"),
+            "I pacchetti non sono disponibili nei negozi di prestiti.",
+        )
     if richiede_montaggio and montaggio_meta:
         for key in (
             "infusione_id",
@@ -645,9 +882,6 @@ MSG_SLOT_PIENO_LISTINO = (
     "Nessuno slot libero sul tuo corpo: scegli un altro destinatario "
     "oppure libera una locazione."
 )
-MSG_NON_DISPONIBILE_LISTINO = "Non più disponibile."
-MSG_ESAURITO_LISTINO = "Esaurito."
-MSG_USATO_LISTINO = "Usato — rivendita"
 
 
 def _unisci_messaggi_usabilita(*parti) -> str:
@@ -766,7 +1000,11 @@ def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio, *, prezzi_ct
         "messaggio_usabilita": "",
         "consegna_istanza": consegna_istanza,
         "richiede_montaggio": False,
+        "prestabile": voce_e_prestabile(voce),
     }
+    if voce.negozio.negozio_prestiti and not payload["prestabile"]:
+        payload["acquistabile"] = False
+        payload["messaggio_usabilita"] = MSG_PRESTITO_NON_AMMESSO
     if voce.tipo_voce in (VOCE_INFUSIONE, VOCE_TESSITURA, VOCE_CERIMONIALE):
         if voce.tipo_voce == VOCE_INFUSIONE and consegna_istanza:
             _applica_avvisi_montaggio_listino(
@@ -838,6 +1076,7 @@ def serializza_stock_listino(stock: NegozioMercanteStock, personaggio=None, *, p
         "usato": True,
         "consegna_istanza": True,
         "richiede_montaggio": False,
+        "prestabile": True,
     }
     if personaggio is not None:
         _applica_avvisi_montaggio_listino(
@@ -905,6 +1144,16 @@ def build_listino(negozio: NegozioMercante, personaggio) -> dict:
         "descrizione": negozio.descrizione,
         "descrizione_immersiva": negozio.descrizione_immersiva or negozio.descrizione or "",
         "tipo_negozio": negozio.tipo_negozio,
+        "negozio_prestiti": bool(negozio.negozio_prestiti),
+        "limite_prestiti_per_personaggio": int(negozio.limite_prestiti_per_personaggio or 1),
+        "prestiti_attivi_personaggio": (
+            conta_prestiti_attivi(negozio, personaggio) if negozio.negozio_prestiti else 0
+        ),
+        "prestiti_attivi": (
+            serializza_prestiti_attivi(negozio, personaggio)
+            if negozio.negozio_prestiti
+            else []
+        ),
         "aperto": ok,
         "messaggio_accesso": msg,
         "saldo_crediti": float(negozio.saldo_crediti or 0),
@@ -969,6 +1218,12 @@ def acquista_voce(
             "Questo articolo è vendibile solo all'interno di un pacchetto (bundle)."
         )
 
+    is_prestito = bool(negozio.negozio_prestiti)
+    if is_prestito:
+        if not voce_e_prestabile(voce):
+            raise ValidationError(MSG_PRESTITO_NON_AMMESSO)
+        assert_limite_prestiti(negozio, personaggio, qty=1)
+
     destinatario, slot_eff = _prepara_montaggio_voce(
         voce, personaggio, slot_corpo=slot_corpo, destinatario_id=destinatario_id
     )
@@ -985,11 +1240,12 @@ def acquista_voce(
         personaggio=personaggio,
         cfg=cfg,
     )
-    if conto == CONTO_DEPOSITO:
-        if saldo_conto(personaggio, CONTO_DEPOSITO) < da_pagare:
-            raise ValidationError(f"Deposito insufficiente. Servono {da_pagare} CR.")
-    elif saldo_spendibile(personaggio) < da_pagare:
-        raise ValidationError(f"Crediti insufficienti. Servono {da_pagare} CR.")
+    if prezzo > 0:
+        if conto == CONTO_DEPOSITO:
+            if saldo_conto(personaggio, CONTO_DEPOSITO) < da_pagare:
+                raise ValidationError(f"Deposito insufficiente. Servono {da_pagare} CR.")
+        elif saldo_spendibile(personaggio) < da_pagare:
+            raise ValidationError(f"Crediti insufficienti. Servono {da_pagare} CR.")
 
     motivo = _motivo_voce_non_acquistabile(voce, personaggio, qty=1)
     if motivo:
@@ -1004,34 +1260,61 @@ def acquista_voce(
         destinatario=destinatario,
     )
 
-    pagato = addebita_bene(
-        personaggio,
-        prezzo,
-        f"Acquisto presso {negozio.nome}",
-        conto=conto,
-        categoria=CATEGORIA_NEGOZIO,
-        campagna=getattr(personaggio, "campagna", None),
-        importo_gia_calcolato=da_pagare,
-        cfg=cfg,
-    )
-    if negozio.incassa_acquisti_catalogo:
-        _aggiorna_saldo(
-            negozio,
-            Decimal(prezzo),
-            tipo="incasso_acquisto",
-            personaggio=personaggio,
-            voce=voce,
-            nota=f"Acquisto: {voce}",
+    pagato = 0
+    if prezzo > 0:
+        descrizione_addebito = (
+            f"Noleggio presso {negozio.nome}"
+            if is_prestito
+            else f"Acquisto presso {negozio.nome}"
         )
+        pagato = addebita_bene(
+            personaggio,
+            prezzo,
+            descrizione_addebito,
+            conto=conto,
+            categoria=CATEGORIA_NEGOZIO,
+            campagna=getattr(personaggio, "campagna", None),
+            importo_gia_calcolato=da_pagare,
+            cfg=cfg,
+        )
+        if negozio.incassa_acquisti_catalogo:
+            _aggiorna_saldo(
+                negozio,
+                Decimal(prezzo),
+                tipo="incasso_noleggio" if is_prestito else "incasso_acquisto",
+                personaggio=personaggio,
+                voce=voce,
+                nota=(
+                    f"Noleggio: {voce}" if is_prestito else f"Acquisto: {voce}"
+                ),
+            )
 
-    personaggio.aggiungi_log(
-        f"Acquisto al negozio «{negozio.nome}» ({pagato} CR da {conto.lower()})."
-    )
+    if is_prestito:
+        if not entita_creata or not hasattr(entita_creata, "id"):
+            raise ValidationError(
+                "Prestito fallito: non è stato consegnato un oggetto fisico."
+            )
+        registra_prestito(
+            negozio,
+            personaggio,
+            entita_creata,
+            costo_noleggio=prezzo,
+            voce=voce,
+        )
+        personaggio.aggiungi_log(
+            f"Prestito al negozio «{negozio.nome}»"
+            + (f" (noleggio {pagato} CR da {conto.lower()})." if prezzo > 0 else " (gratuito).")
+        )
+    else:
+        personaggio.aggiungi_log(
+            f"Acquisto al negozio «{negozio.nome}» ({pagato} CR da {conto.lower()})."
+        )
     result = {
         "status": "success",
         "prezzo": prezzo,
         "prezzo_pagato": str(pagato),
         "conto": conto,
+        "prestito": is_prestito,
     }
     if richiede_montaggio:
         result["montato_su"] = destinatario.id
@@ -1066,6 +1349,11 @@ def acquista_bundle(
     ok, msg = negozio_e_aperto(negozio, personaggio)
     if not ok:
         raise ValidationError(msg or "Negozio chiuso.")
+
+    if negozio.negozio_prestiti:
+        raise ValidationError(
+            "I pacchetti non sono disponibili nei negozi di prestiti."
+        )
 
     conto = normalize_conto(conto)
     bundle = (
@@ -1229,6 +1517,10 @@ def acquista_stock(
     if not ok:
         raise ValidationError(msg or "Negozio chiuso.")
 
+    is_prestito = bool(negozio.negozio_prestiti)
+    if is_prestito:
+        assert_limite_prestiti(negozio, personaggio, qty=1)
+
     stock = (
         NegozioMercanteStock.objects.select_for_update(of=("self",))
         .select_related("oggetto", "negozio")
@@ -1266,11 +1558,12 @@ def acquista_stock(
         personaggio=personaggio,
         cfg=cfg,
     )
-    if conto == CONTO_DEPOSITO:
-        if saldo_conto(personaggio, CONTO_DEPOSITO) < da_pagare:
-            raise ValidationError(f"Deposito insufficiente. Servono {da_pagare} CR.")
-    elif saldo_spendibile(personaggio) < da_pagare:
-        raise ValidationError(f"Crediti insufficienti. Servono {da_pagare} CR.")
+    if prezzo > 0:
+        if conto == CONTO_DEPOSITO:
+            if saldo_conto(personaggio, CONTO_DEPOSITO) < da_pagare:
+                raise ValidationError(f"Deposito insufficiente. Servono {da_pagare} CR.")
+        elif saldo_spendibile(personaggio) < da_pagare:
+            raise ValidationError(f"Crediti insufficienti. Servono {da_pagare} CR.")
 
     if richiede_montaggio:
         _monta_aumento_o_annulla(destinatario, og, slot_corpo)
@@ -1280,38 +1573,62 @@ def acquista_stock(
     stock.stato = STOCK_VENDUTO
     stock.save(update_fields=["stato", "updated_at"])
 
-    pagato = addebita_bene(
-        personaggio,
-        prezzo,
-        f"Riacquisto usato da {negozio.nome}",
-        conto=conto,
-        categoria=CATEGORIA_NEGOZIO,
-        campagna=getattr(personaggio, "campagna", None),
-        importo_gia_calcolato=da_pagare,
-        cfg=cfg,
-    )
-    _aggiorna_saldo(
-        negozio,
-        Decimal(prezzo),
-        tipo="incasso_rivendita",
-        personaggio=personaggio,
-        stock=stock,
-    )
-    personaggio.aggiungi_log(
-        f"Riacquisto al negozio «{negozio.nome}» ({pagato} CR da {conto.lower()})."
-    )
-    return {
+    pagato = 0
+    if prezzo > 0:
+        pagato = addebita_bene(
+            personaggio,
+            prezzo,
+            (
+                f"Noleggio usato da {negozio.nome}"
+                if is_prestito
+                else f"Riacquisto usato da {negozio.nome}"
+            ),
+            conto=conto,
+            categoria=CATEGORIA_NEGOZIO,
+            campagna=getattr(personaggio, "campagna", None),
+            importo_gia_calcolato=da_pagare,
+            cfg=cfg,
+        )
+        _aggiorna_saldo(
+            negozio,
+            Decimal(prezzo),
+            tipo="incasso_noleggio" if is_prestito else "incasso_rivendita",
+            personaggio=personaggio,
+            stock=stock,
+        )
+
+    if is_prestito:
+        registra_prestito(
+            negozio,
+            personaggio,
+            og,
+            costo_noleggio=prezzo,
+            stock=stock,
+        )
+        personaggio.aggiungi_log(
+            f"Prestito usato al negozio «{negozio.nome}»"
+            + (
+                f" (noleggio {pagato} CR da {conto.lower()})."
+                if prezzo > 0
+                else " (gratuito)."
+            )
+        )
+    else:
+        personaggio.aggiungi_log(
+            f"Riacquisto al negozio «{negozio.nome}» ({pagato} CR da {conto.lower()})."
+        )
+    result = {
         "status": "success",
         "prezzo": prezzo,
         "prezzo_pagato": str(pagato),
         "conto": conto,
         "oggetto_id": og.id,
-        **(
-            {"montato_su": destinatario.id, "slot_corpo": slot_corpo}
-            if richiede_montaggio
-            else {}
-        ),
+        "prestito": is_prestito,
     }
+    if richiede_montaggio:
+        result["montato_su"] = destinatario.id
+        result["slot_corpo"] = slot_corpo
+    return result
 
 
 def preview_vendita_oggetto(negozio, personaggio, oggetto_id) -> dict:
@@ -1357,11 +1674,15 @@ def vendi_oggetto_a_negozio(negozio, personaggio, oggetto_id) -> dict:
     if not ok:
         raise ValidationError(msg or "Negozio chiuso.")
 
+    if negozio.negozio_prestiti:
+        raise ValidationError(MSG_NEGOZIO_SOLO_PRESTITI)
+
     og = Oggetto.objects.select_related("infusione_generatrice").get(pk=oggetto_id)
     if _inventario_corrente_pk(og) != personaggio.id:
         raise ValidationError("Oggetto non nel tuo inventario.")
     if og.ospitato_su_id:
         raise ValidationError("Smonta l'oggetto prima di venderlo.")
+    assert_oggetto_non_in_prestito(og)
 
     config = _config(negozio)
     val_ref = valore_riferimento_oggetto(og, config)

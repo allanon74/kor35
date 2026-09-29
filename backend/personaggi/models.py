@@ -8635,10 +8635,14 @@ class TransazioneSospesa(SyncableModel, models.Model):
             )
             
             # Esegui scambi oggetti
+            from personaggi.negozio_mercante_service import assert_oggetto_non_in_prestito
+
             for oggetto in self.ultima_proposta_iniziatore.oggetti_da_dare.all():
+                assert_oggetto_non_in_prestito(oggetto)
                 oggetto.sposta_in_inventario(self.destinatario)
             
             for oggetto in self.ultima_proposta_destinatario.oggetti_da_dare.all():
+                assert_oggetto_non_in_prestito(oggetto)
                 oggetto.sposta_in_inventario(self.iniziatore)
 
             for consumabile in self.ultima_proposta_iniziatore.consumabili_da_dare.all():
@@ -9532,6 +9536,7 @@ from personaggi.negozio_mercante_models import (  # noqa: E402
     NegozioMercanteBundleRiga,
     NegozioMercanteStock,
     NegozioMercanteMovimento,
+    NegozioMercantePrestito,
     NEGOZIO_TIPO_ALTERNATIVO,
     NEGOZIO_TIPO_CORPORATIVO,
     VOCE_OGGETTO_BASE,
@@ -9544,6 +9549,8 @@ from personaggi.negozio_mercante_models import (  # noqa: E402
     VOCE_SERIE,
     STOCK_DISPONIBILE,
     STOCK_VENDUTO,
+    PRESTITO_ATTIVO,
+    PRESTITO_RESTITUITO,
 )
 
 
