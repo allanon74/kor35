@@ -29,13 +29,17 @@ import {
   staffDeleteManifesto,
   staffGetSerieCollezioni,
   staffCreateSerieCollezione,
+  staffUpdateSerieCollezione,
   staffDeleteSerieCollezione,
+  staffUploadSerieImmagini,
+  staffDeleteSerieImmagine,
   staffGetSerieQr,
   staffCreateSerieQr,
   staffGetTrappole,
   staffCreateTrappola,
   staffUpdateTrappola,
   staffDeleteTrappola,
+  resolveMediaUrl,
 } from '../../api';
 
 const TABS = [
@@ -61,9 +65,17 @@ const ManifestoManager = ({ onBack, onLogout }) => {
   const [serieEditing, setSerieEditing] = useState(null);
   const [trappolaEditing, setTrappolaEditing] = useState(null);
   const [serieQrEditing, setSerieQrEditing] = useState(null);
+  const [seriePendingFiles, setSeriePendingFiles] = useState([]);
+  const [serieImgBusy, setSerieImgBusy] = useState(false);
 
   const [serieList, setSerieList] = useState([]);
-  const [serieForm, setSerieForm] = useState({ nome: '', totale: 30, descrizione: '' });
+  const [serieForm, setSerieForm] = useState({
+    id: null,
+    nome: '',
+    totale: 30,
+    descrizione: '',
+    immagini: [],
+  });
   const [serieQrList, setSerieQrList] = useState([]);
   const [serieQrForm, setSerieQrForm] = useState({ nome: '', testo: '', serie: '' });
   const [trappole, setTrappole] = useState([]);
@@ -117,9 +129,12 @@ const ManifestoManager = ({ onBack, onLogout }) => {
   const manifestoPayload = (editingRow) => {
     const hasNewAudio = editingRow.audio_file instanceof File;
     const hasNewVideo = editingRow.video_file instanceof File;
+    const hasNewImmagine = editingRow.immagine_file instanceof File;
     const clearAudio = Boolean(editingRow.clear_audio_file);
     const clearVideo = Boolean(editingRow.clear_video_file);
-    const useMultipart = hasNewAudio || hasNewVideo || clearAudio || clearVideo;
+    const clearImmagine = Boolean(editingRow.clear_immagine_file);
+    const useMultipart =
+      hasNewAudio || hasNewVideo || hasNewImmagine || clearAudio || clearVideo || clearImmagine;
 
     if (!useMultipart) {
       return {
@@ -149,8 +164,10 @@ const ManifestoManager = ({ onBack, onLogout }) => {
     );
     if (hasNewAudio) fd.append('audio_file', editingRow.audio_file);
     if (hasNewVideo) fd.append('video_file', editingRow.video_file);
+    if (hasNewImmagine) fd.append('immagine_file', editingRow.immagine_file);
     if (clearAudio) fd.append('clear_audio_file', 'true');
     if (clearVideo) fd.append('clear_video_file', 'true');
+    if (clearImmagine) fd.append('clear_immagine_file', 'true');
     return fd;
   };
 
@@ -206,10 +223,13 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                   condizioni_testo: emptyCondizioni(),
                   audio_url: null,
                   video_url: null,
+                  immagine_url: null,
                   audio_file: null,
                   video_file: null,
+                  immagine_file: null,
                   clear_audio_file: false,
                   clear_video_file: false,
+                  clear_immagine_file: false,
                 });
               }}
             >
@@ -333,10 +353,61 @@ const ManifestoManager = ({ onBack, onLogout }) => {
               Media alla scansione (opzionale)
             </div>
             <p className="text-xs text-gray-400">
-              Audio e/o video riprodotti sul telefono dopo la scansione (oltre o al posto del testo).
-              Formati consigliati: mp3/m4a e mp4 compresso. I file viaggiano con{' '}
+              Immagine, audio e/o video mostrati sul telefono dopo la scansione (oltre o al posto del testo).
+              Formati consigliati: jpg/png, mp3/m4a e mp4 compresso. Le immagini vengono sottoscalate
+              dal server. I file viaggiano con{' '}
               <code className="text-amber-200/80">make sync-media</code>, non nel JSON di sync.
             </p>
+            <label className="block text-sm">
+              Immagine
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
+                className="mt-1 block w-full text-sm text-gray-300 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-amber-800 file:text-amber-50"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setEditing({
+                    ...editing,
+                    immagine_file: file,
+                    clear_immagine_file: false,
+                  });
+                }}
+              />
+            </label>
+            {(editing.immagine_url || editing.immagine_file instanceof File) && !editing.clear_immagine_file && (
+              <div className="flex items-center justify-between gap-2 text-xs text-amber-100/90 bg-black/20 rounded px-2 py-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  {editing.immagine_file instanceof File ? (
+                    <span className="truncate">{editing.immagine_file.name}</span>
+                  ) : (
+                    <>
+                      {editing.immagine_url ? (
+                        <img
+                          src={resolveMediaUrl(editing.immagine_url)}
+                          alt=""
+                          className="h-12 w-12 object-cover rounded border border-amber-800/50"
+                        />
+                      ) : null}
+                      <span className="truncate">Immagine già caricata</span>
+                    </>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="shrink-0 text-red-300 hover:text-red-200"
+                  onClick={() =>
+                    setEditing({
+                      ...editing,
+                      immagine_file: null,
+                      clear_immagine_file: true,
+                      immagine_url: null,
+                    })
+                  }
+                >
+                  Rimuovi
+                </button>
+              </div>
+            )}
             <label className="block text-sm">
               Audio
               <input
@@ -464,6 +535,40 @@ const ManifestoManager = ({ onBack, onLogout }) => {
     </>
   );
 
+  const openSerieEditor = (serie = null) => {
+    setSeriePendingFiles([]);
+    if (serie) {
+      setSerieForm({
+        id: serie.id,
+        nome: serie.nome || '',
+        totale: serie.totale || 1,
+        descrizione: serie.descrizione || '',
+        immagini: Array.isArray(serie.immagini) ? serie.immagini : [],
+      });
+    } else {
+      setSerieForm({ id: null, nome: '', totale: 30, descrizione: '', immagini: [] });
+    }
+    setSerieEditing(true);
+  };
+
+  const refreshSerieFormFromList = async (serieId) => {
+    const serie = await staffGetSerieCollezioni(onLogout);
+    const list = Array.isArray(serie) ? serie : serie?.results || [];
+    setSerieList(list);
+    const updated = list.find((s) => String(s.id) === String(serieId));
+    if (updated) {
+      setSerieForm((f) => ({
+        ...f,
+        id: updated.id,
+        nome: updated.nome || '',
+        totale: updated.totale || 1,
+        descrizione: updated.descrizione || '',
+        immagini: Array.isArray(updated.immagini) ? updated.immagini : [],
+      }));
+    }
+    return list;
+  };
+
   const renderSerie = () => (
     <div className="space-y-4">
       <div className="flex justify-between items-center gap-2">
@@ -471,26 +576,33 @@ const ManifestoManager = ({ onBack, onLogout }) => {
         <button
           type="button"
           className="px-3 py-2 bg-indigo-600 rounded text-sm"
-          onClick={() => {
-            setSerieForm({ nome: '', totale: 30, descrizione: '' });
-            setSerieEditing(true);
-          }}
+          onClick={() => openSerieEditor(null)}
         >
           Nuova serie
         </button>
       </div>
       <p className="text-sm text-gray-400">
         Ogni pezzo («Nome X di N») viene assegnato una sola volta a livello globale. Usabile da QR standalone o come effetto di un pool randomico.
+        Opzionale: fino a N immagini (N = totale pezzi); in scansione vengono assegnate ai pezzi
+        (una diversa in ordine alfabetico se ne carichi esattamente N, altrimenti con ripetizioni random).
       </p>
       <ul className="space-y-2">
         {serieList.map((s) => (
-          <li key={s.id} className="flex items-center justify-between bg-gray-800/40 px-3 py-2 rounded text-sm">
-            <div>
+          <li key={s.id} className="flex items-center justify-between bg-gray-800/40 px-3 py-2 rounded text-sm gap-2">
+            <div className="min-w-0 flex-1">
               <div className="font-semibold">{s.nome}</div>
               <div className="text-xs text-gray-400">
                 Assegnati {s.pezzi_assegnati}/{s.totale} · restano {s.pezzi_rimanenti}
+                {typeof s.immagini_count === 'number' ? ` · img ${s.immagini_count}` : ''}
               </div>
             </div>
+            <button
+              type="button"
+              className="text-xs px-2 py-1 bg-gray-700 rounded"
+              onClick={() => openSerieEditor(s)}
+            >
+              Modifica
+            </button>
             <button
               type="button"
               className="text-red-400 text-xs"
@@ -626,20 +738,44 @@ const ManifestoManager = ({ onBack, onLogout }) => {
 
       {serieEditing && (
         <StaffEditorModal
-          title="Nuova serie"
-          onClose={() => setSerieEditing(null)}
+          title={serieForm.id ? `Serie: ${serieForm.nome || 'senza nome'}` : 'Nuova serie'}
+          size="lg"
+          onClose={() => {
+            setSerieEditing(null);
+            setSeriePendingFiles([]);
+          }}
           onSave={async () => {
+            if (!serieForm.nome?.trim()) {
+              setMsg('Il nome della serie è obbligatorio');
+              return;
+            }
             try {
-              await staffCreateSerieCollezione(serieForm, onLogout);
-              setSerieForm({ nome: '', totale: 30, descrizione: '' });
+              const payload = {
+                nome: serieForm.nome,
+                totale: Number(serieForm.totale) || 1,
+                descrizione: serieForm.descrizione || '',
+              };
+              let serieId = serieForm.id;
+              if (serieId) {
+                await staffUpdateSerieCollezione(serieId, payload, onLogout);
+              } else {
+                const created = await staffCreateSerieCollezione(payload, onLogout);
+                serieId = created?.id;
+              }
+              if (serieId && seriePendingFiles.length > 0) {
+                const fd = new FormData();
+                seriePendingFiles.forEach((file) => fd.append('immagini', file));
+                await staffUploadSerieImmagini(serieId, fd, onLogout);
+              }
+              setSeriePendingFiles([]);
               setSerieEditing(null);
-              setMsg('Serie creata.');
+              setMsg(serieForm.id ? 'Serie aggiornata.' : 'Serie creata.');
               await loadSerieTrappole();
             } catch (e) {
-              setMsg(e.message || 'Errore creazione serie');
+              setMsg(e.message || 'Errore salvataggio serie');
             }
           }}
-          saveLabel="Crea serie"
+          saveLabel={serieForm.id ? 'Salva' : 'Crea serie'}
         >
           <div className="space-y-3">
             <input
@@ -662,6 +798,114 @@ const ManifestoManager = ({ onBack, onLogout }) => {
               value={serieForm.descrizione}
               onChange={(e) => setSerieForm((f) => ({ ...f, descrizione: e.target.value }))}
             />
+            <div className="border border-violet-900/40 rounded-lg p-3 space-y-2 bg-violet-950/20">
+              <div className="text-xs uppercase text-violet-300 font-semibold">
+                Immagini pezzi (opzionale)
+              </div>
+              <p className="text-xs text-gray-400">
+                Massimo {Number(serieForm.totale) || 0} immagini (pari al totale della serie).
+                Se ne carichi esattamente N, ogni pezzo riceve un&apos;immagine diversa in ordine
+                alfabetico sul nome file; se ne carichi meno, le ripetizioni sono random.
+                Le immagini vengono sottoscalate dal server.
+              </p>
+              {(serieForm.immagini || []).length > 0 && (
+                <ul className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {serieForm.immagini.map((img) => (
+                    <li key={img.id} className="relative group">
+                      <img
+                        src={resolveMediaUrl(img.url)}
+                        alt={img.nome_file_originale || ''}
+                        className="h-20 w-full object-cover rounded border border-violet-800/40"
+                      />
+                      <div className="text-[10px] text-gray-400 truncate mt-0.5">
+                        {img.nome_file_originale || 'img'}
+                      </div>
+                      {serieForm.id && (
+                        <button
+                          type="button"
+                          disabled={serieImgBusy}
+                          className="absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded bg-black/70 text-red-300 opacity-90 hover:opacity-100"
+                          onClick={async () => {
+                            try {
+                              setSerieImgBusy(true);
+                              await staffDeleteSerieImmagine(serieForm.id, img.id, onLogout);
+                              await refreshSerieFormFromList(serieForm.id);
+                            } catch (e) {
+                              setMsg(e.message || 'Errore eliminazione immagine');
+                            } finally {
+                              setSerieImgBusy(false);
+                            }
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {(() => {
+                const remainingSlots = Math.max(
+                  0,
+                  (Number(serieForm.totale) || 0)
+                    - (serieForm.immagini?.length || 0)
+                    - seriePendingFiles.length,
+                );
+                return (
+                  <>
+                    <label className="block text-sm">
+                      Aggiungi immagini
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
+                        disabled={remainingSlots < 1}
+                        className="mt-1 block w-full text-sm text-gray-300 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-violet-800 file:text-violet-50"
+                        onChange={(e) => {
+                          const picked = Array.from(e.target.files || []);
+                          if (!picked.length) return;
+                          setSeriePendingFiles((prev) => {
+                            const room = Math.max(
+                              0,
+                              (Number(serieForm.totale) || 0)
+                                - (serieForm.immagini?.length || 0)
+                                - prev.length,
+                            );
+                            return [...prev, ...picked.slice(0, room)];
+                          });
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                    {seriePendingFiles.length > 0 && (
+                      <div className="text-xs text-violet-100/90 bg-black/20 rounded px-2 py-1.5 space-y-1">
+                        <div className="flex justify-between gap-2">
+                          <span>{seriePendingFiles.length} file in coda al salvataggio</span>
+                          <button
+                            type="button"
+                            className="text-red-300"
+                            onClick={() => setSeriePendingFiles([])}
+                          >
+                            Svuota coda
+                          </button>
+                        </div>
+                        <ul className="truncate text-gray-400">
+                          {seriePendingFiles.map((f) => (
+                            <li key={`${f.name}-${f.size}`}>{f.name}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <p className="text-[11px] text-gray-500">
+                      Slot liberi: {remainingSlots} / totale {Number(serieForm.totale) || 0}
+                      {serieForm.id
+                        ? ` · già caricate ${serieForm.immagini?.length || 0}`
+                        : ' · salva la serie per caricare'}
+                    </p>
+                  </>
+                );
+              })()}
+            </div>
           </div>
         </StaffEditorModal>
       )}

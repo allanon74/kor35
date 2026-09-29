@@ -194,6 +194,46 @@ def applica_trappola(
     return payload
 
 
+def _serie_immagine_url(serie_immagine) -> Optional[str]:
+    """Path relativo (/media/…) per l'immagine assegnata; None se assente."""
+    if not serie_immagine:
+        return None
+    field = getattr(serie_immagine, "immagine", None)
+    if not field:
+        return None
+    try:
+        url = field.url
+    except (ValueError, AttributeError):
+        return None
+    return url or None
+
+
+def scegli_immagine_serie(*, serie, indice: int, totale: int):
+    """
+    Seleziona l'immagine da associare all'indice assegnato.
+
+    - 0 immagini → None
+    - count >= totale → una diversa per indice, ordine alfabetico su nome_file_originale
+      (usa le prime `totale` in ordine alfa)
+    - count < totale → scelta random con ripetizioni
+    """
+    from .models import SerieImmagine
+
+    immagini = list(
+        SerieImmagine.objects.filter(serie=serie).order_by(
+            "nome_file_originale", "created_at", "id"
+        )
+    )
+    if not immagini:
+        return None
+    n = len(immagini)
+    if n >= totale:
+        # Indice 1..N → posizione 0..N-1 sulle prime N in ordine alfabetico
+        pos = max(0, min(int(indice) - 1, totale - 1))
+        return immagini[pos]
+    return random.choice(immagini)
+
+
 def applica_serie(
     *,
     personaggio,
@@ -228,6 +268,7 @@ def applica_serie(
                 "nome": locked.nome,
                 "totale": totale,
                 "rimanenti": 0,
+                "immagine_url": None,
                 "messaggio": f"La serie «{locked.nome}» è esaurita: tutti i {totale} pezzi sono stati trovati.",
             }, None, "serie_esaurita"
 
@@ -239,12 +280,14 @@ def applica_serie(
             tipo_oggetto=TIPO_OGGETTO_FISICO,
         )
         oggetto.sposta_in_inventario(personaggio)
+        img = scegli_immagine_serie(serie=locked, indice=indice, totale=totale)
         assegnazione = SerieAssegnazione.objects.create(
             serie=locked,
             indice=indice,
             personaggio=personaggio,
             oggetto=oggetto,
             qr_code=qr_code,
+            immagine=img,
         )
 
     rimanenti = totale - len(presi) - 1
@@ -256,6 +299,7 @@ def applica_serie(
         "rimanenti": max(0, rimanenti),
         "oggetto_id": oggetto.pk,
         "assegnazione_id": str(assegnazione.pk),
+        "immagine_url": _serie_immagine_url(img),
         "messaggio": f"Hai trovato: {nome_oggetto}",
     }, None, None
 

@@ -41,18 +41,32 @@ class QrManifestoInventarioTests(TestCase):
         self.assertIsNotNone(r.data["dati"].get("testo"))
         self.assertIsNone(r.data["dati"].get("audio_url"))
         self.assertIsNone(r.data["dati"].get("video_url"))
+        self.assertIsNone(r.data["dati"].get("immagine_url"))
+
+    def _tiny_jpeg(self, name="foto.jpg"):
+        """JPEG minimo valido per ImageField / PIL."""
+        from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        buf = BytesIO()
+        Image.new("RGB", (8, 8), (200, 40, 40)).save(buf, format="JPEG", quality=80)
+        return SimpleUploadedFile(name, buf.getvalue(), content_type="image/jpeg")
 
     def test_manifesto_media_visibile_solo_se_puo_leggere(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
 
         audio = SimpleUploadedFile("voce.mp3", b"ID3fakeaudio", content_type="audio/mpeg")
         video = SimpleUploadedFile("clip.mp4", b"\x00\x00\x00\x18ftypmp42", content_type="video/mp4")
+        immagine = self._tiny_jpeg("locandina.jpg")
         m = Manifesto.objects.create(
             nome="M media",
             testo="",
             requisiti_lettura=[{"tipo": "statistica", "sigla": "CCO", "min": 99}],
             audio_file=audio,
             video_file=video,
+            immagine_file=immagine,
         )
         qr = QrCode.objects.create(vista=m)
 
@@ -64,6 +78,7 @@ class QrManifestoInventarioTests(TestCase):
         self.assertFalse(r_deny.data["dati"].get("puo_leggere"))
         self.assertIsNone(r_deny.data["dati"].get("audio_url"))
         self.assertIsNone(r_deny.data["dati"].get("video_url"))
+        self.assertIsNone(r_deny.data["dati"].get("immagine_url"))
 
         m.requisiti_lettura = []
         m.save(update_fields=["requisiti_lettura", "updated_at"])
@@ -74,8 +89,10 @@ class QrManifestoInventarioTests(TestCase):
         self.assertTrue(r_ok.data["dati"].get("puo_leggere"))
         self.assertTrue(r_ok.data["dati"].get("audio_url"))
         self.assertTrue(r_ok.data["dati"].get("video_url"))
+        self.assertTrue(r_ok.data["dati"].get("immagine_url"))
         self.assertIn("manifesti/audio", r_ok.data["dati"]["audio_url"])
         self.assertIn("manifesti/video", r_ok.data["dati"]["video_url"])
+        self.assertIn("manifesti/immagini", r_ok.data["dati"]["immagine_url"])
 
     def test_inventario_doppia_scansione(self):
         inv = Inventario.objects.create(nome="Inv QR", testo="")

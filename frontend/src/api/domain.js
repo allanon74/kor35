@@ -1871,9 +1871,25 @@ export const staffGetSerieCollezioni = (onLogout) =>
 export const staffCreateSerieCollezione = (data, onLogout) =>
   fetchAuthenticated('/api/personaggi/api/staff/serie-collezioni/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
 export const staffUpdateSerieCollezione = (id, data, onLogout) =>
-  fetchAuthenticated(`/api/personaggi/api/staff/serie-collezioni/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/serie-collezioni/${id}/`,
+    { method: 'PATCH', body: data instanceof FormData ? data : JSON.stringify(data) },
+    onLogout,
+  );
 export const staffDeleteSerieCollezione = (id, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/serie-collezioni/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffUploadSerieImmagini = (serieId, formData, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/serie-collezioni/${serieId}/immagini/`,
+    { method: 'POST', body: formData },
+    onLogout,
+  );
+export const staffDeleteSerieImmagine = (serieId, imgId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/serie-collezioni/${serieId}/immagini/${imgId}/`,
+    { method: 'DELETE' },
+    onLogout,
+  );
 
 export const staffGetTrappole = (onLogout) =>
   fetchAuthenticated('/api/personaggi/api/staff/trappole/', { method: 'GET' }, onLogout);

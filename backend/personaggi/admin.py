@@ -52,7 +52,7 @@ from .models import (
     TipologiaTimer, TimerQrCode, StatoTimerAttivo,
     InnescoTimer, QrInventarioScanSession, StatoInnescoTimerPersonaggio,
     RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect,
-    Trappola, StatoTrappolaPersonaggio, SerieCollezione, SerieAssegnazione, SerieQr,
+    Trappola, StatoTrappolaPersonaggio, SerieCollezione, SerieImmagine, SerieAssegnazione, SerieQr,
     TipologiaEffetto, EffettoCasuale, ConsumabilePersonaggio, CreazioneConsumabileInCorso,
     TIPO_EFFETTO_OGGETTO, TIPO_EFFETTO_TESSITURA,
     Korp, Carriera, SegnoZodiacale, TipoCarriera, Carica,
@@ -849,7 +849,7 @@ admin.site.register(abilita_prerequisito)
 
 @admin.register(Manifesto)
 class ManifestoAdmin(SModelAdmin):
-    list_display = ('id', 'data_creazione', 'nome', 'has_audio', 'has_video')
+    list_display = ('id', 'data_creazione', 'nome', 'has_audio', 'has_video', 'has_immagine')
     readonly_fields = ('id', 'data_creazione')
     summernote_fields = ['testo', 'testo_condizionato']
     search_fields = ('nome', 'testo', 'testo_condizionato')
@@ -863,6 +863,7 @@ class ManifestoAdmin(SModelAdmin):
         'condizioni_testo',
         'audio_file',
         'video_file',
+        'immagine_file',
     )
 
     @admin.display(boolean=True, description='Audio')
@@ -872,6 +873,10 @@ class ManifestoAdmin(SModelAdmin):
     @admin.display(boolean=True, description='Video')
     def has_video(self, obj):
         return bool(obj.video_file)
+
+    @admin.display(boolean=True, description='Immagine')
+    def has_immagine(self, obj):
+        return bool(obj.immagine_file)
 
 
 @admin.register(Nodo)
@@ -943,14 +948,30 @@ class TrappolaAdmin(admin.ModelAdmin):
     raw_id_fields = ("qr_code",)
 
 
+class SerieImmagineInline(admin.TabularInline):
+    model = SerieImmagine
+    extra = 0
+    fields = ("immagine", "nome_file_originale", "created_at")
+    readonly_fields = ("created_at",)
+
+
 @admin.register(SerieCollezione)
 class SerieCollezioneAdmin(admin.ModelAdmin):
     list_display = ("nome", "totale", "campagna")
+    inlines = (SerieImmagineInline,)
+
+
+@admin.register(SerieImmagine)
+class SerieImmagineAdmin(admin.ModelAdmin):
+    list_display = ("serie", "nome_file_originale", "created_at")
+    search_fields = ("nome_file_originale", "serie__nome")
+    raw_id_fields = ("serie",)
 
 
 @admin.register(SerieAssegnazione)
 class SerieAssegnazioneAdmin(admin.ModelAdmin):
-    list_display = ("serie", "indice", "personaggio", "assegnato_at")
+    list_display = ("serie", "indice", "personaggio", "assegnato_at", "immagine")
+    raw_id_fields = ("serie", "personaggio", "oggetto", "qr_code", "immagine")
 
 
 @admin.register(SerieQr)

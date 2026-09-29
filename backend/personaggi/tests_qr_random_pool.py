@@ -15,11 +15,32 @@ from personaggi.models import (
     RandomQrPoolMembership,
     SerieAssegnazione,
     SerieCollezione,
+    SerieImmagine,
     SerieQr,
     StatoTrappolaPersonaggio,
     Trappola,
 )
 from personaggi import qr_random_pool
+
+
+def _tiny_jpeg_bytes():
+    from io import BytesIO
+
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", (8, 8), (200, 40, 40)).save(buf, format="JPEG", quality=80)
+    return buf.getvalue()
+
+
+def _serie_immagine(serie, filename):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    return SerieImmagine.objects.create(
+        serie=serie,
+        immagine=SimpleUploadedFile(filename, _tiny_jpeg_bytes(), content_type="image/jpeg"),
+        nome_file_originale=filename,
+    )
 
 
 class RandomQrPoolLogicTests(TestCase):
@@ -186,6 +207,59 @@ class TrappolaSerieTests(TestCase):
         )
         self.assertEqual(r3.status_code, 200)
         self.assertEqual(r3.data["tipo_modello"], "serie_esaurita")
+
+    def test_serie_immagini_alfabetiche_quando_pari_al_totale(self):
+        serie = SerieCollezione.objects.create(nome="Carte", totale=3)
+        img_b = _serie_immagine(serie, "b_beta.jpg")
+        img_a = _serie_immagine(serie, "a_alfa.jpg")
+        img_c = _serie_immagine(serie, "c_gamma.jpg")
+
+        # Con count == totale: indice i → i-esima in ordine alfabetico
+        self.assertEqual(
+            qr_random_pool.scegli_immagine_serie(serie=serie, indice=1, totale=3).pk,
+            img_a.pk,
+        )
+        self.assertEqual(
+            qr_random_pool.scegli_immagine_serie(serie=serie, indice=2, totale=3).pk,
+            img_b.pk,
+        )
+        self.assertEqual(
+            qr_random_pool.scegli_immagine_serie(serie=serie, indice=3, totale=3).pk,
+            img_c.pk,
+        )
+
+        qr = QrCode.objects.create()
+        SerieQr.objects.create(nome="QR Carte", serie=serie, qr_code=qr)
+        r = self.client.get(
+            f"/api/personaggi/api/qrcode/{qr.id}/",
+            {"personaggio_id": self.pg.id},
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["tipo_modello"], "serie")
+        self.assertTrue(r.data["dati"].get("immagine_url"))
+        ass = SerieAssegnazione.objects.get(serie=serie, personaggio=self.pg)
+        expected = {1: img_a.pk, 2: img_b.pk, 3: img_c.pk}[ass.indice]
+        self.assertEqual(ass.immagine_id, expected)
+
+    def test_serie_immagini_random_con_ripetizioni_se_meno_del_totale(self):
+        serie = SerieCollezione.objects.create(nome="Seed", totale=4)
+        only = _serie_immagine(serie, "unica.jpg")
+        with patch("personaggi.qr_random_pool.random.choice", side_effect=lambda seq: seq[0]):
+            chosen = qr_random_pool.scegli_immagine_serie(serie=serie, indice=3, totale=4)
+        self.assertEqual(chosen.pk, only.pk)
+
+        # Con una sola immagine e totale > 1, applica_serie deve comunque assegnarla
+        qr = QrCode.objects.create()
+        SerieQr.objects.create(nome="QR Seed", serie=serie, qr_code=qr)
+        r = self.client.get(
+            f"/api/personaggi/api/qrcode/{qr.id}/",
+            {"personaggio_id": self.pg.id},
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["tipo_modello"], "serie")
+        self.assertTrue(r.data["dati"].get("immagine_url"))
+        ass = SerieAssegnazione.objects.get(serie=serie, personaggio=self.pg)
+        self.assertEqual(ass.immagine_id, only.pk)
 
 
 class PoolMinigiocoOverrideTests(TestCase):

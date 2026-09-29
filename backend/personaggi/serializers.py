@@ -77,7 +77,7 @@ from .models import (
     QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, Punteggio, Tabella, 
     TipologiaPersonaggio, abilita_tier, abilita_requisito, abilita_sbloccata, 
     abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, NodoRewardConfig, A_vista, Mattone, InnescoTimer,
-    RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect, Trappola, SerieCollezione, SerieAssegnazione, SerieQr,
+    RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect, Trappola, SerieCollezione, SerieAssegnazione, SerieImmagine, SerieQr,
     MinigiocoPattern, MinigiocoPatternEntry, MinigiocoSezioneDefault, MinigiocoQrConfig,
     AURA, 
     Infusione, Tessitura, 
@@ -2469,37 +2469,40 @@ class ManifestoSerializer(serializers.ModelSerializer):
             "condizioni_testo",
             "audio_file",
             "video_file",
+            "immagine_file",
         )
 
 
 class ManifestoStaffSerializer(serializers.ModelSerializer):
-    """CRUD staff manifesti (HTML, requisiti, audio/video opzionali)."""
+    """CRUD staff manifesti (HTML, requisiti, audio/video/immagine opzionali)."""
 
     has_qrcode = serializers.BooleanField(read_only=True)
     qrcode_id = serializers.CharField(read_only=True, allow_null=True)
     minigioco_usa_default = serializers.BooleanField(read_only=True, default=False)
     audio_url = serializers.SerializerMethodField()
     video_url = serializers.SerializerMethodField()
+    immagine_url = serializers.SerializerMethodField()
     clear_audio_file = serializers.BooleanField(required=False, write_only=True, default=False)
     clear_video_file = serializers.BooleanField(required=False, write_only=True, default=False)
+    clear_immagine_file = serializers.BooleanField(required=False, write_only=True, default=False)
+
+    def _media_url(self, field_file):
+        if not field_file:
+            return None
+        req = self.context.get("request")
+        try:
+            return req.build_absolute_uri(field_file.url) if req else field_file.url
+        except Exception:
+            return None
 
     def get_audio_url(self, obj):
-        if not getattr(obj, "audio_file", None):
-            return None
-        req = self.context.get("request")
-        try:
-            return req.build_absolute_uri(obj.audio_file.url) if req else obj.audio_file.url
-        except Exception:
-            return None
+        return self._media_url(getattr(obj, "audio_file", None))
 
     def get_video_url(self, obj):
-        if not getattr(obj, "video_file", None):
-            return None
-        req = self.context.get("request")
-        try:
-            return req.build_absolute_uri(obj.video_file.url) if req else obj.video_file.url
-        except Exception:
-            return None
+        return self._media_url(getattr(obj, "video_file", None))
+
+    def get_immagine_url(self, obj):
+        return self._media_url(getattr(obj, "immagine_file", None))
 
     def _truthy_clear(self, value):
         if isinstance(value, bool):
@@ -2509,15 +2512,19 @@ class ManifestoStaffSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop("clear_audio_file", None)
         validated_data.pop("clear_video_file", None)
+        validated_data.pop("clear_immagine_file", None)
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
         clear_audio = self._truthy_clear(validated_data.pop("clear_audio_file", False))
         clear_video = self._truthy_clear(validated_data.pop("clear_video_file", False))
+        clear_immagine = self._truthy_clear(validated_data.pop("clear_immagine_file", False))
         if clear_audio and "audio_file" not in validated_data:
             validated_data["audio_file"] = None
         if clear_video and "video_file" not in validated_data:
             validated_data["video_file"] = None
+        if clear_immagine and "immagine_file" not in validated_data:
+            validated_data["immagine_file"] = None
         return super().update(instance, validated_data)
 
     class Meta:
@@ -2531,10 +2538,13 @@ class ManifestoStaffSerializer(serializers.ModelSerializer):
             "condizioni_testo",
             "audio_file",
             "video_file",
+            "immagine_file",
             "audio_url",
             "video_url",
+            "immagine_url",
             "clear_audio_file",
             "clear_video_file",
+            "clear_immagine_file",
             "has_qrcode",
             "qrcode_id",
             "minigioco_usa_default",
@@ -2542,6 +2552,7 @@ class ManifestoStaffSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "audio_file": {"required": False, "allow_null": True},
             "video_file": {"required": False, "allow_null": True},
+            "immagine_file": {"required": False, "allow_null": True},
         }
 
 
@@ -2937,9 +2948,29 @@ class MinigiocoSezioneDefaultStaffSerializer(serializers.ModelSerializer):
         return d
 
 
+class SerieImmagineStaffSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SerieImmagine
+        fields = ("id", "nome_file_originale", "url", "created_at", "updated_at")
+        read_only_fields = fields
+
+    def get_url(self, obj):
+        if not getattr(obj, "immagine", None):
+            return None
+        req = self.context.get("request")
+        try:
+            return req.build_absolute_uri(obj.immagine.url) if req else obj.immagine.url
+        except Exception:
+            return None
+
+
 class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
     pezzi_assegnati = serializers.SerializerMethodField()
     pezzi_rimanenti = serializers.SerializerMethodField()
+    immagini = SerieImmagineStaffSerializer(many=True, read_only=True)
+    immagini_count = serializers.SerializerMethodField()
     campagna = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
@@ -2952,10 +2983,20 @@ class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
             "campagna",
             "pezzi_assegnati",
             "pezzi_rimanenti",
+            "immagini",
+            "immagini_count",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("campagna", "created_at", "updated_at", "pezzi_assegnati", "pezzi_rimanenti")
+        read_only_fields = (
+            "campagna",
+            "created_at",
+            "updated_at",
+            "pezzi_assegnati",
+            "pezzi_rimanenti",
+            "immagini",
+            "immagini_count",
+        )
 
     def get_pezzi_assegnati(self, obj):
         annotated = getattr(obj, "_pezzi_assegnati", None)
@@ -2965,6 +3006,12 @@ class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
 
     def get_pezzi_rimanenti(self, obj):
         return max(0, int(obj.totale or 0) - self.get_pezzi_assegnati(obj))
+
+    def get_immagini_count(self, obj):
+        annotated = getattr(obj, "_immagini_count", None)
+        if annotated is not None:
+            return int(annotated)
+        return obj.immagini.count()
 
 
 class TrappolaStaffSerializer(serializers.ModelSerializer):

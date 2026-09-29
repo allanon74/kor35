@@ -3641,9 +3641,9 @@ class Manifesto(A_vista):
     testo base solo se lo scanner soddisfa il gruppo AND/OR di requisiti, es.:
     {"operator": "AND", "requisiti": [{"tipo": "statistica", "sigla": "INT", "min": 3}]}
 
-    Opzionale: `audio_file` / `video_file` riprodotti sul telefono alla scansione
-    (oltre o al posto del testo). Nel DB resta solo il path relativo; i file fisici
-    viaggiano con rsync (`make sync-media`). Il gate minigioco resta su QrCode.
+    Opzionale: `audio_file` / `video_file` / `immagine_file` riprodotti sul telefono
+    alla scansione (oltre o al posto del testo). Nel DB resta solo il path relativo;
+    i file fisici viaggiano con rsync (`make sync-media`). Il gate minigioco resta su QrCode.
     """
 
     requisiti_lettura = models.JSONField(
@@ -3679,9 +3679,36 @@ class Manifesto(A_vista):
         ],
         help_text="Video opzionale (mp4/webm…). Preferire file compressi: sync via rsync.",
     )
+    immagine_file = models.ImageField(
+        upload_to="manifesti/immagini/%Y/%m/",
+        null=True,
+        blank=True,
+        validators=[
+            FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "png", "webp", "gif"]),
+        ],
+        help_text="Immagine opzionale mostrata alla scansione con testo/audio/video. Compressa al salvataggio.",
+    )
 
     def __str__(self):
         return f"Manifesto: {self.nome}"
+
+    def save(self, *args, **kwargs):
+        # Sottoscala l'immagine solo se è un upload nuovo (file in memoria / non ancora su disco).
+        if self.immagine_file and getattr(self.immagine_file, "file", None) is not None:
+            from personaggi.media_images import optimize_uploaded_image
+
+            try:
+                # Evita ricomprimere a ogni save se il path è già un JPEG ottimizzato su storage
+                # e non c'è un nuovo upload: DRF passa InMemory/TemporaryUploadedFile.
+                name = getattr(self.immagine_file, "name", "") or ""
+                is_new_upload = hasattr(self.immagine_file, "content_type") or not name.startswith(
+                    "manifesti/immagini/"
+                )
+                if is_new_upload:
+                    self.immagine_file = optimize_uploaded_image(self.immagine_file)
+            except Exception:
+                pass
+        super().save(*args, **kwargs)
 
 TIPO_NODO_MINORE = "MIN"
 TIPO_NODO_MAGGIORE = "MAG"
@@ -5338,6 +5365,61 @@ class SerieCollezione(SyncableModel, models.Model):
         return max(0, int(self.totale or 0) - self.pezzi_assegnati)
 
 
+class SerieImmagine(SyncableModel, models.Model):
+    """
+    Immagine opzionale per pezzi di una SerieCollezione.
+    Massimo consigliato = `serie.totale`. All'assegnazione:
+    - se immagini == totale → una diversa per indice, ordine alfabetico su `nome_file_originale`;
+    - se immagini < totale → scelta random con ripetizioni.
+    File compressi al salvataggio; sync path in DB, byte via rsync.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    serie = models.ForeignKey(
+        SerieCollezione,
+        on_delete=models.CASCADE,
+        related_name="immagini",
+    )
+    immagine = models.ImageField(
+        upload_to="serie/immagini/%Y/%m/",
+        validators=[
+            FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "png", "webp", "gif"]),
+        ],
+    )
+    nome_file_originale = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Basename originale usato per l'ordinamento alfabetico all'assegnazione.",
+        db_index=True,
+    )
+
+    class Meta:
+        verbose_name = "Immagine serie"
+        verbose_name_plural = "Immagini serie"
+        ordering = ["nome_file_originale", "created_at"]
+
+    def __str__(self):
+        return f"{self.serie_id}: {self.nome_file_originale or self.immagine.name}"
+
+    def save(self, *args, **kwargs):
+        from personaggi.media_images import optimize_uploaded_image, original_filename_from_upload
+
+        if self.immagine and not self.nome_file_originale:
+            self.nome_file_originale = original_filename_from_upload(self.immagine)
+        if self.immagine and getattr(self.immagine, "file", None) is not None:
+            name = getattr(self.immagine, "name", "") or ""
+            is_new_upload = hasattr(self.immagine, "content_type") or not name.startswith(
+                "serie/immagini/"
+            )
+            if is_new_upload:
+                if not self.nome_file_originale:
+                    self.nome_file_originale = original_filename_from_upload(self.immagine)
+                self.immagine = optimize_uploaded_image(self.immagine)
+        super().save(*args, **kwargs)
+
+
 class SerieAssegnazione(SyncableModel, models.Model):
     """Assegnazione unica globale di un indice di serie a un personaggio."""
 
@@ -5368,6 +5450,14 @@ class SerieAssegnazione(SyncableModel, models.Model):
         null=True,
         blank=True,
         related_name="serie_assegnazioni",
+    )
+    immagine = models.ForeignKey(
+        "SerieImmagine",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assegnazioni",
+        help_text="Immagine assegnata a questo pezzo (se la collezione ne ha).",
     )
 
     class Meta:

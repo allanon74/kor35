@@ -185,7 +185,9 @@ const ManifestoView = ({ data }) => {
   const canRead = data.puo_leggere !== false;
   const blockMsg = data.messaggio_accesso;
   const showCond = canRead && data.mostra_testo_condizionato && data.testo_condizionato;
-  const hasMedia = canRead && Boolean(data.audio_url || data.video_url);
+  const imageSrc = canRead ? resolveMediaUrl(data.immagine_url) : null;
+  const hasAvMedia = canRead && Boolean(data.audio_url || data.video_url);
+  const hasMedia = hasAvMedia || Boolean(imageSrc);
   const hasBaseText = canRead && manifestoHasVisibleText(data.testo);
   const showParchment = canRead && (hasBaseText || showCond || !hasMedia);
   const bodyHtml = canRead
@@ -255,7 +257,17 @@ const ManifestoView = ({ data }) => {
         </p>
       )}
 
-      {canRead && hasMedia && (
+      {canRead && imageSrc && (
+        <div className="mb-4 rounded-lg overflow-hidden border border-amber-900/40 bg-stone-950">
+          <img
+            src={imageSrc}
+            alt={data.nome || 'Manifesto'}
+            className="w-full max-h-[45vh] object-contain bg-black"
+          />
+        </div>
+      )}
+
+      {canRead && hasAvMedia && (
         <ManifestoMediaPlayer audioUrl={data.audio_url} videoUrl={data.video_url} />
       )}
       
@@ -1188,7 +1200,8 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
           </div>
         );
 
-      case 'serie':
+      case 'serie': {
+        const serieImg = resolveMediaUrl(data.dati?.immagine_url);
         return (
           <div className="text-center py-8">
             <Package size={56} className="mx-auto text-violet-400 mb-4" />
@@ -1198,12 +1211,22 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             <p className="text-gray-300 mt-3">
               {data.dati?.nome} — pezzo {data.dati?.indice} di {data.dati?.totale}
             </p>
+            {serieImg ? (
+              <div className="mt-5 mx-auto max-w-sm rounded-lg overflow-hidden border border-violet-800/50 bg-black">
+                <img
+                  src={serieImg}
+                  alt={data.dati?.etichetta || 'Pezzo serie'}
+                  className="w-full max-h-[45vh] object-contain"
+                />
+              </div>
+            ) : null}
             <p className="text-xs text-gray-500 mt-4">L&apos;oggetto è stato aggiunto al tuo inventario.</p>
             {typeof data.dati?.rimanenti === 'number' ? (
               <p className="text-xs text-gray-400 mt-2">Pezzi ancora disponibili: {data.dati.rimanenti}</p>
             ) : null}
           </div>
         );
+      }
 
       case 'serie_esaurita':
         return (

@@ -18,7 +18,7 @@ from .models import (
     Infusione, Tessitura, Cerimoniale, Mattone,
     PersonaggioInfusione, PersonaggioTessitura, PersonaggioCerimoniale,
     QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario, Manifesto, Nodo, NodoRewardConfig, InnescoTimer,
-    RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect, Trappola, SerieCollezione, SerieQr,
+    RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect, Trappola, SerieCollezione, SerieImmagine, SerieQr,
     A_vista, Attivata, MinigiocoQrConfig, MinigiocoBibliotecaImmagine,
     MinigiocoPattern, MinigiocoPatternEntry, MinigiocoSezioneDefault,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
@@ -84,6 +84,7 @@ from .serializers import (
     MinigiocoPatternEntryStaffSerializer,
     MinigiocoSezioneDefaultStaffSerializer,
     SerieCollezioneStaffSerializer,
+    SerieImmagineStaffSerializer,
     TrappolaStaffSerializer,
     SerieQrStaffSerializer,
     A_vistaSerializer,
@@ -1530,11 +1531,17 @@ class MinigiocoSezioneDefaultStaffViewSet(viewsets.ModelViewSet):
 class SerieCollezioneStaffViewSet(viewsets.ModelViewSet):
     serializer_class = SerieCollezioneStaffSerializer
     permission_classes = [IsStaffOrMaster]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
-        qs = SerieCollezione.objects.annotate(
-            _pezzi_assegnati=Count("assegnazioni"),
-        ).order_by("nome")
+        qs = (
+            SerieCollezione.objects.annotate(
+                _pezzi_assegnati=Count("assegnazioni", distinct=True),
+                _immagini_count=Count("immagini", distinct=True),
+            )
+            .prefetch_related("immagini")
+            .order_by("nome")
+        )
         active = _get_active_campaign(self.request)
         base = _get_default_campaign()
         if not active:
@@ -1546,6 +1553,92 @@ class SerieCollezioneStaffViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         camp = _get_active_campaign(self.request) or _get_default_campaign()
         serializer.save(campagna=camp)
+
+    @action(detail=True, methods=["post"], url_path="immagini")
+    def upload_immagini(self, request, pk=None):
+        """
+        Carica una o più immagini per la serie (max = totale pezzi).
+        Multipart: campo `immagini` (multi) oppure `immagine` (singolo/multi).
+        """
+        serie = self.get_object()
+        totale = int(serie.totale or 0)
+        esistenti = serie.immagini.count()
+        files = list(request.FILES.getlist("immagini") or [])
+        if not files:
+            files = list(request.FILES.getlist("immagine") or [])
+        if not files and request.FILES.get("immagine"):
+            files = [request.FILES["immagine"]]
+        if not files:
+            return Response(
+                {"error": "Nessun file inviato. Usa il campo multipart «immagini»."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        slot_liberi = max(0, totale - esistenti)
+        if slot_liberi < 1:
+            return Response(
+                {
+                    "error": (
+                        f"La serie ha già {esistenti} immagini "
+                        f"(massimo = totale pezzi: {totale})."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(files) > slot_liberi:
+            return Response(
+                {
+                    "error": (
+                        f"Puoi caricare al massimo {slot_liberi} immagini "
+                        f"(totale serie {totale}, già presenti {esistenti})."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        created = []
+        with transaction.atomic():
+            for f in files:
+                img = SerieImmagine(serie=serie, immagine=f)
+                img.save()
+                created.append(img)
+
+        # Evita count da prefetch_related stale (cache vuota → 0)
+        immagini_count = SerieImmagine.objects.filter(serie_id=serie.pk).count()
+        ser = SerieImmagineStaffSerializer(created, many=True, context={"request": request})
+        return Response(
+            {
+                "status": "success",
+                "immagini": ser.data,
+                "immagini_count": immagini_count,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=True,
+        methods=["delete"],
+        url_path=r"immagini/(?P<img_id>[0-9a-fA-F-]{36})",
+    )
+    def delete_immagine(self, request, pk=None, img_id=None):
+        serie = self.get_object()
+        try:
+            img = SerieImmagine.objects.get(pk=img_id, serie=serie)
+        except (SerieImmagine.DoesNotExist, ValueError, TypeError):
+            return Response({"error": "Immagine non trovata."}, status=status.HTTP_404_NOT_FOUND)
+        # Rimuovi file da storage se possibile
+        try:
+            if img.immagine:
+                img.immagine.delete(save=False)
+        except Exception:
+            pass
+        img.delete()
+        return Response(
+            {
+                "status": "success",
+                "message": "Immagine eliminata.",
+                "immagini_count": SerieImmagine.objects.filter(serie_id=serie.pk).count(),
+            }
+        )
 
 
 class TrappolaStaffViewSet(viewsets.ModelViewSet):

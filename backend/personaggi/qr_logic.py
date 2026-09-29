@@ -94,7 +94,8 @@ def risolvi_payload_manifesto(manifesto, personaggio=None) -> Dict[str, Any]:
 
     - `requisiti_lettura`: gate hard (lista AND flat). Se fallisce → testo/media nascosti.
     - `condizioni_testo` + `testo_condizionato`: testo aggiuntivo se il gruppo è soddisfatto.
-    - `audio_url` / `video_url`: path relativi se `puo_leggere` (file sync via rsync).
+    - `audio_url` / `video_url` / `immagine_url`: path relativi se `puo_leggere`
+      (file sync via rsync).
     """
     from .requisiti_accesso import personaggio_soddisfa_requisiti_gruppo
 
@@ -110,7 +111,13 @@ def risolvi_payload_manifesto(manifesto, personaggio=None) -> Dict[str, Any]:
         "messaggio_accesso": None,
         "audio_url": None,
         "video_url": None,
+        "immagine_url": None,
     }
+
+    def _attach_media(target: Dict[str, Any]) -> None:
+        target["audio_url"] = _manifesto_media_url(getattr(manifesto, "audio_file", None))
+        target["video_url"] = _manifesto_media_url(getattr(manifesto, "video_file", None))
+        target["immagine_url"] = _manifesto_media_url(getattr(manifesto, "immagine_file", None))
 
     if personaggio is None:
         reqs = manifesto.requisiti_lettura or []
@@ -121,8 +128,7 @@ def risolvi_payload_manifesto(manifesto, personaggio=None) -> Dict[str, Any]:
             )
             payload["testo"] = None
         else:
-            payload["audio_url"] = _manifesto_media_url(getattr(manifesto, "audio_file", None))
-            payload["video_url"] = _manifesto_media_url(getattr(manifesto, "video_file", None))
+            _attach_media(payload)
         return payload
 
     ok_r, msg_r = personaggio_soddisfa_requisiti_manifesto(personaggio, manifesto)
@@ -132,8 +138,7 @@ def risolvi_payload_manifesto(manifesto, personaggio=None) -> Dict[str, Any]:
         payload["testo"] = None
         return payload
 
-    payload["audio_url"] = _manifesto_media_url(getattr(manifesto, "audio_file", None))
-    payload["video_url"] = _manifesto_media_url(getattr(manifesto, "video_file", None))
+    _attach_media(payload)
 
     testo_cond = (getattr(manifesto, "testo_condizionato", None) or "").strip()
     condizioni = getattr(manifesto, "condizioni_testo", None) or {}
