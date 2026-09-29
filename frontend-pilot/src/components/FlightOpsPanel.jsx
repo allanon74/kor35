@@ -45,7 +45,7 @@ export default function FlightOpsPanel({
     await run(async () => {
       const res = await onSetAllarme(id);
       if (res?.announcement) {
-        await speakAllarmeEquipaggio(res.announcement, id);
+        await speakAllarmeEquipaggio(res.announcement, id, res.allarme_campione_url);
       }
     });
   };

@@ -11,6 +11,7 @@ Convenzioni dei codici a 3 caratteri:
 """
 from __future__ import annotations
 
+import os
 import uuid
 
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -1238,6 +1239,15 @@ class ProtocolloComunicazione(SyncableModel, models.Model):
         default="",
         help_text="Frase letta dalla plancia. Vuoto = annuncio standard del colore.",
     )
+    campione = models.FileField(
+        upload_to="pilotaggio/allarmi/",
+        blank=True,
+        default="",
+        help_text=(
+            "Campione audio della plancia (mp3, wav, ogg, m4a, webm), "
+            "prima della voce. Vuoto = file statico storico se c'è, altrimenti solo voce."
+        ),
+    )
     ordine = models.PositiveIntegerField(default=0)
     attivo = models.BooleanField(default=True, db_index=True)
 
@@ -1248,6 +1258,43 @@ class ProtocolloComunicazione(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.colore} → {self.korp or 'nessuna KORP'}"
+
+    def save(self, *args, **kwargs):
+        self._fissa_nome_campione()
+        super().save(*args, **kwargs)
+
+    def _fissa_nome_campione(self) -> None:
+        """Un solo file per colore: pilotaggio/allarmi/<colore>.<ext>."""
+        if not self.campione or not self.colore:
+            return
+        if getattr(self.campione, "_committed", True):
+            return
+        ext = os.path.splitext(self.campione.name or "")[1].lower()
+        ammesse = {".mp3", ".wav", ".ogg", ".m4a", ".webm"}
+        if ext not in ammesse:
+            return
+        storage = self.campione.storage
+        for alt in ammesse:
+            altro = f"pilotaggio/allarmi/{self.colore}{alt}"
+            if storage.exists(altro):
+                storage.delete(altro)
+        # Solo il nome: upload_to aggiunge la cartella, altrimenti il path si duplica.
+        self.campione.name = f"{self.colore}{ext}"
+
+    def url_campione_pubblico(self) -> str:
+        """URL /media/ del campione, con versione per non riusare la cache del browser."""
+        if not self.campione:
+            return ""
+        try:
+            url = self.campione.url
+        except Exception:
+            return ""
+        if not url:
+            return ""
+        if self.updated_at is not None:
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}v={int(self.updated_at.timestamp())}"
+        return url
 
 
 class PilotRuntimeConfig(models.Model):

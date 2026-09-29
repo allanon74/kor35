@@ -200,12 +200,17 @@ export default function App() {
     alarmSpokenAtRef.current = at;
     const testo = String(state?.allarme_annuncio || '').trim();
     if (!testo) return;
-    speakAllarmeEquipaggio(testo, state?.allarme_equipaggio).catch(() => {});
+    speakAllarmeEquipaggio(
+      testo,
+      state?.allarme_equipaggio,
+      state?.allarme_campione_url,
+    ).catch(() => {});
   }, [
     state?.comunicazioni_console_abilitata,
     state?.allarme_equipaggio_at,
     state?.allarme_annuncio,
     state?.allarme_equipaggio,
+    state?.allarme_campione_url,
   ]);
 
   const handleAuthorized = useCallback((token) => {

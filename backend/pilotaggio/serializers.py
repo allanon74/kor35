@@ -6,6 +6,8 @@ runtime (sessione di volo, evento attivo, sottosistemi).
 """
 from __future__ import annotations
 
+import os
+
 from rest_framework import serializers
 
 from personaggi.models import Carriera
@@ -638,6 +640,9 @@ class ProtocolloComunicazioneSerializer(serializers.ModelSerializer):
         required=False,
     )
     korp_nome = serializers.CharField(source="korp.nome", read_only=True, default="")
+    campione = serializers.FileField(required=False, allow_null=True)
+    campione_url = serializers.SerializerMethodField()
+    rimuovi_campione = serializers.BooleanField(required=False, write_only=True, default=False)
 
     class Meta:
         model = ProtocolloComunicazione
@@ -648,10 +653,36 @@ class ProtocolloComunicazioneSerializer(serializers.ModelSerializer):
             "korp_nome",
             "testo",
             "testo_audio",
+            "campione",
+            "campione_url",
+            "rimuovi_campione",
             "ordine",
             "attivo",
         ]
-        read_only_fields = ["id", "korp_nome"]
+        read_only_fields = ["id", "korp_nome", "campione_url"]
+
+    def get_campione_url(self, obj):
+        return obj.url_campione_pubblico()
+
+    def validate_campione(self, value):
+        if not value:
+            return value
+        ext = os.path.splitext(getattr(value, "name", "") or "")[1].lower()
+        if ext not in {".mp3", ".wav", ".ogg", ".m4a", ".webm"}:
+            raise serializers.ValidationError("Usa un file mp3, wav, ogg, m4a o webm.")
+        size = int(getattr(value, "size", 0) or 0)
+        if size > 8 * 1024 * 1024:
+            raise serializers.ValidationError("Il campione supera 8 MB.")
+        return value
+
+    def update(self, instance, validated_data):
+        rimuovi = validated_data.pop("rimuovi_campione", False)
+        nuovo = validated_data.get("campione")
+        if rimuovi and not nuovo:
+            if instance.campione:
+                instance.campione.delete(save=False)
+            validated_data["campione"] = ""
+        return super().update(instance, validated_data)
 
     def validate_korp(self, value):
         if value is None:

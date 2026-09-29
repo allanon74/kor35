@@ -908,6 +908,17 @@ class PilotSessionResetView(APIView):
 # ---------------------------------------------------------------------------
 
 
+def _url_campione_allarme(colore: str) -> str:
+    """URL del campione caricato in staff per il colore, se c'è."""
+    key = str(colore or "").strip().lower()
+    if not key:
+        return ""
+    row = ProtocolloComunicazione.objects.filter(colore=key, attivo=True).first()
+    if row is None:
+        return ""
+    return row.url_campione_pubblico()
+
+
 def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
     """Stato runtime completo per la console pilota."""
     if sessione is not None:
@@ -1033,6 +1044,9 @@ def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
         ),
         "allarme_annuncio": (
             getattr(sessione, "allarme_annuncio", "") if sessione else ""
+        ),
+        "allarme_campione_url": _url_campione_allarme(
+            getattr(sessione, "allarme_equipaggio", "") if sessione else ""
         ),
         "comunicazioni_console_abilitata": bool(
             PilotRuntimeConfig.get_solo().comunicazioni_console_abilitata

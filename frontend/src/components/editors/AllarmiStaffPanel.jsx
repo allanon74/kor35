@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   staffCreatePilotProtocollo,
   staffGetPilotDipartimentiKorp,
@@ -18,7 +18,12 @@ const ALLARMI = [
 ];
 
 function vuoto() {
-  return Object.fromEntries(ALLARMI.map((a) => [a.id, { testo_audio: '', testo: '', korp: '' }]));
+  return Object.fromEntries(ALLARMI.map((a) => [a.id, {
+    testo_audio: '',
+    testo: '',
+    korp: '',
+    campione_url: '',
+  }]));
 }
 
 /**
@@ -31,6 +36,7 @@ export default function AllarmiStaffPanel({ onLogout }) {
   const [bozze, setBozze] = useState(vuoto);
   const [error, setError] = useState('');
   const [salvo, setSalvo] = useState('');
+  const fileRefs = useRef({});
 
   const load = useCallback(async () => {
     const [prot, dip] = await Promise.all([
@@ -47,6 +53,7 @@ export default function AllarmiStaffPanel({ onLogout }) {
         testo_audio: row.testo_audio || '',
         testo: row.testo || '',
         korp: row.korp ? String(row.korp) : '',
+        campione_url: row.campione_url || '',
       };
     });
     setBozze(next);
@@ -74,16 +81,39 @@ export default function AllarmiStaffPanel({ onLogout }) {
       attivo: true,
     };
     const esistente = protocolli.find((row) => row.colore === colore);
+    const file = fileRefs.current[colore]?.files?.[0];
     try {
-      if (esistente) {
-        await staffUpdatePilotProtocollo(esistente.id, payload, onLogout);
+      let id = esistente?.id;
+      if (id) {
+        await staffUpdatePilotProtocollo(id, payload, onLogout);
       } else {
-        await staffCreatePilotProtocollo({ ...payload, colore }, onLogout);
+        const created = await staffCreatePilotProtocollo({ ...payload, colore }, onLogout);
+        id = created?.id;
+      }
+      if (file && id) {
+        const fd = new FormData();
+        fd.append('campione', file);
+        await staffUpdatePilotProtocollo(id, fd, onLogout);
+        if (fileRefs.current[colore]) fileRefs.current[colore].value = '';
       }
       setSalvo(colore);
       await load();
     } catch (err) {
       setError(err?.message || 'Salvataggio non riuscito.');
+    }
+  };
+
+  const rimuoviCampione = async (colore) => {
+    setError('');
+    setSalvo('');
+    const esistente = protocolli.find((row) => row.colore === colore);
+    if (!esistente) return;
+    try {
+      await staffUpdatePilotProtocollo(esistente.id, { rimuovi_campione: true }, onLogout);
+      setSalvo(colore);
+      await load();
+    } catch (err) {
+      setError(err?.message || 'Rimozione audio non riuscita.');
     }
   };
 
@@ -97,6 +127,11 @@ export default function AllarmiStaffPanel({ onLogout }) {
           Il testo, con {'{sottosistema}'} e {'{evento}'}, arriva ai membri della KORP.
           Il bianco è l&apos;allarme medico: scegli la KORP del personale medico.
           Sull&apos;ambra i sottosistemi offline vengono aggiunti anche se non usi il segnaposto.
+          Il campione (mp3, wav, ogg, m4a o webm, fino a 8 MB) parte prima della voce.
+          Vale per tutti i colori, anche giallo, rosso, nero, blu e crociera:
+          se non carichi nulla, quei cinque usano ancora il file statico
+          {' '}/pilot/sounds/allarmi/&lt;colore&gt;.mp3 se è presente sul server.
+          Ambra, viola e bianco restano solo voce finché non carichi un campione.
         </p>
       </div>
       {error ? <p className="text-sm text-red-300">{error}</p> : null}
@@ -104,13 +139,37 @@ export default function AllarmiStaffPanel({ onLogout }) {
         <p className="text-sm text-gray-500">Nessuna KORP. Creala in Carriere e KORP, poi assegna i personaggi.</p>
       ) : null}
       {ALLARMI.map((allarme) => {
-        const bozza = bozze[allarme.id] || { testo_audio: '', testo: '', korp: '' };
+        const bozza = bozze[allarme.id] || { testo_audio: '', testo: '', korp: '', campione_url: '' };
         return (
           <div key={allarme.id} className="rounded-lg border border-gray-700 p-3 space-y-2">
             <h4 className="text-sm font-semibold text-gray-100">{allarme.label}</h4>
             <p className="text-xs text-gray-500">Standard: {allarme.standard}</p>
+            <div className="flex flex-col text-xs text-gray-400 gap-1">
+              Campione audio
+              {bozza.campione_url ? (
+                <audio controls preload="none" src={bozza.campione_url} className="w-full max-w-md" />
+              ) : (
+                <span className="text-gray-500">Nessun file caricato.</span>
+              )}
+              <input
+                ref={(node) => { fileRefs.current[allarme.id] = node; }}
+                type="file"
+                accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/webm,.mp3,.wav,.ogg,.m4a,.webm"
+                className="text-sm text-gray-200"
+              />
+              <span className="text-gray-500">Si carica insieme a Salva.</span>
+              {bozza.campione_url ? (
+                <button
+                  type="button"
+                  className="self-start px-2 py-1 rounded border border-gray-600 text-xs"
+                  onClick={() => rimuoviCampione(allarme.id)}
+                >
+                  Rimuovi campione
+                </button>
+              ) : null}
+            </div>
             <label className="flex flex-col text-xs text-gray-400 gap-1">
-              Audio della plancia
+              Frase letta dopo il campione
               <textarea
                 className="bg-gray-800 rounded px-2 py-1 text-sm text-gray-100 min-h-[3rem]"
                 value={bozza.testo_audio}

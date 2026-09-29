@@ -1,7 +1,11 @@
 """Console comunicazioni: allarme, dipartimento, grazia CA."""
+import tempfile
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.core.files.storage import default_storage
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test.utils import override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -14,6 +18,7 @@ from personaggi.models import (
     TipoCarriera,
 )
 from pilotaggio.comunicazioni import applica_grazia_colore, integra_elenco_guasti, render_messaggio
+from pilotaggio.serializers import ProtocolloComunicazioneSerializer
 from pilotaggio.engine import valuta_evento_tick
 from pilotaggio.models import (
     EVENTO_ESITO_PENDING,
@@ -167,6 +172,68 @@ class ComunicazioniAllarmeTests(TestCase):
         self.assertEqual(res.status_code, 200, res.content)
         self.assertNotIn("messaggio_dipartimento", res.json())
         notify.assert_not_called()
+
+    def test_campione_caricato_finisce_nello_stato_e_si_sostituisce(self):
+        media = tempfile.mkdtemp()
+        with override_settings(MEDIA_ROOT=media):
+            proto = ProtocolloComunicazione.objects.get(colore=ALLARME_EQUIPAGGIO_AMBRA)
+            primo = SimpleUploadedFile("sirena.mp3", b"ID3fake", content_type="audio/mpeg")
+            ser = ProtocolloComunicazioneSerializer(
+                proto, data={"campione": primo}, partial=True
+            )
+            self.assertTrue(ser.is_valid(), ser.errors)
+            ser.save()
+            proto.refresh_from_db()
+            self.assertTrue(proto.campione.name.endswith("ambra.mp3"))
+
+            with patch("personaggi.notify.notify_users", return_value=1):
+                res = self.client.post(
+                    "/api/pilot/session/allarme-equipaggio/",
+                    {"allarme": ALLARME_EQUIPAGGIO_AMBRA},
+                    format="json",
+                )
+            self.assertEqual(res.status_code, 200, res.content)
+            url = res.json()["allarme_campione_url"]
+            self.assertIn("/media/pilotaggio/allarmi/ambra.mp3", url)
+            self.assertIn("v=", url)
+
+            secondo = SimpleUploadedFile("altro.wav", b"RIFFxxxx", content_type="audio/wav")
+            ser = ProtocolloComunicazioneSerializer(
+                proto, data={"campione": secondo}, partial=True
+            )
+            self.assertTrue(ser.is_valid(), ser.errors)
+            ser.save()
+            proto.refresh_from_db()
+            self.assertTrue(proto.campione.name.endswith("ambra.wav"))
+            self.assertFalse(default_storage.exists("pilotaggio/allarmi/ambra.mp3"))
+
+            ser = ProtocolloComunicazioneSerializer(
+                proto, data={"rimuovi_campione": True}, partial=True
+            )
+            self.assertTrue(ser.is_valid(), ser.errors)
+            ser.save()
+            proto.refresh_from_db()
+            self.assertFalse(proto.campione)
+            self.assertFalse(default_storage.exists("pilotaggio/allarmi/ambra.wav"))
+
+    def test_campione_rifiuta_estensione(self):
+        proto = ProtocolloComunicazione.objects.get(colore=ALLARME_EQUIPAGGIO_AMBRA)
+        ser = ProtocolloComunicazioneSerializer(
+            proto,
+            data={"campione": SimpleUploadedFile("nota.txt", b"no", content_type="text/plain")},
+            partial=True,
+        )
+        self.assertFalse(ser.is_valid())
+
+    def test_senza_campione_lo_stato_non_ha_url(self):
+        with patch("personaggi.notify.notify_users", return_value=0):
+            res = self.client.post(
+                "/api/pilot/session/allarme-equipaggio/",
+                {"allarme": ALLARME_EQUIPAGGIO_AMBRA},
+                format="json",
+            )
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(res.json()["allarme_campione_url"], "")
 
     def test_grazia_salta_il_primo_controllo_ca(self):
         self.istanza.ca_soppressa_comunicazioni = True

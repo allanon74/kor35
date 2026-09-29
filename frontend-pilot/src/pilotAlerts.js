@@ -16,23 +16,24 @@ function delay(ms) {
   });
 }
 
-function alarmSampleUrl(allarmeId) {
+/**
+ * Campione da staff (`remoteUrl`) oppure, per i cinque colori storici,
+ * il file statico `/pilot/sounds/allarmi/<id>.mp3` se nessuno è stato caricato.
+ */
+export function resolveAlarmSampleUrl(allarmeId, remoteUrl = '') {
+  const remote = String(remoteUrl || '').trim();
+  if (remote) return remote;
   const id = String(allarmeId || '').toLowerCase();
+  if (!ALARM_SAMPLE_IDS.includes(id)) return '';
   const base = import.meta.env.BASE_URL || '/pilot/';
   return `${base}sounds/allarmi/${id}.mp3`;
 }
 
-function createAlarmAudio(allarmeId) {
-  const audio = new Audio(alarmSampleUrl(allarmeId));
+function createAlarmAudio(url) {
+  if (!url) return null;
+  const audio = new Audio(url);
   audio.preload = 'auto';
   return audio;
-}
-
-if (typeof window !== 'undefined') {
-  ALARM_SAMPLE_IDS.forEach((id) => {
-    const audio = createAlarmAudio(id);
-    audio.load();
-  });
 }
 
 export function getPilotAudioContext() {
@@ -115,10 +116,11 @@ function stopAnnouncementPlayback() {
  * Riproduce il campione MP3 una volta (antecedente alla voce).
  * @returns {Promise<void>}
  */
-export function playAlarmSampleOnce(allarmeId, { volume = 1 } = {}) {
+export function playAlarmSampleOnce(allarmeId, { volume = 1, url = '' } = {}) {
   if (typeof window === 'undefined') return Promise.resolve();
 
-  const audio = createAlarmAudio(allarmeId);
+  const audio = createAlarmAudio(resolveAlarmSampleUrl(allarmeId, url));
+  if (!audio) return Promise.resolve();
   audio.loop = false;
   audio.volume = Math.max(0, Math.min(1, volume));
 
@@ -139,12 +141,13 @@ export function playAlarmSampleOnce(allarmeId, { volume = 1 } = {}) {
  * Loop del campione MP3 in sottofondo (allarme rosso durante la voce).
  * @returns {() => void} stop
  */
-export function startAlarmSampleBed(allarmeId, { volume = 0.52 } = {}) {
+export function startAlarmSampleBed(allarmeId, { volume = 0.52, url = '' } = {}) {
   if (typeof window === 'undefined') return () => {};
 
   stopRedAlertSiren();
 
-  const audio = createAlarmAudio(allarmeId);
+  const audio = createAlarmAudio(resolveAlarmSampleUrl(allarmeId, url));
+  if (!audio) return () => {};
   audio.loop = true;
   audio.volume = Math.max(0, Math.min(1, volume));
 
@@ -284,20 +287,22 @@ export async function speakItalianAnnouncement(text, options = {}) {
     allarme = null,
     playSample = Boolean(allarme),
     pauseMs = allarme ? 480 : 360,
+    campioneUrl = '',
   } = options;
   const alarmId = String(allarme || '').toLowerCase();
   const isRedAlert = alarmId === 'rosso';
+  const sampleUrl = resolveAlarmSampleUrl(alarmId, campioneUrl);
 
   stopAnnouncementPlayback();
 
   let stopBed = null;
 
-  if (playSample && alarmId && ALARM_SAMPLE_IDS.includes(alarmId)) {
+  if (playSample && sampleUrl) {
     if (isRedAlert) {
-      stopBed = startAlarmSampleBed('rosso', { volume: 0.5 });
+      stopBed = startAlarmSampleBed('rosso', { volume: 0.5, url: sampleUrl });
       await delay(280);
     } else {
-      await playAlarmSampleOnce(alarmId);
+      await playAlarmSampleOnce(alarmId, { url: sampleUrl });
       await delay(120);
     }
   }
@@ -337,8 +342,12 @@ export async function speakItalianAnnouncement(text, options = {}) {
 }
 
 /** Annuncio allarme equipaggio: MP3 + voce. */
-export function speakAllarmeEquipaggio(text, allarmeId) {
-  return speakItalianAnnouncement(text, { allarme: allarmeId, playSample: true });
+export function speakAllarmeEquipaggio(text, allarmeId, campioneUrl = '') {
+  return speakItalianAnnouncement(text, {
+    allarme: allarmeId,
+    playSample: true,
+    campioneUrl,
+  });
 }
 
 export async function announceDefconChange(level) {
