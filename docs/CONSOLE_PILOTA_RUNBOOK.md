@@ -34,7 +34,7 @@ Tutti relativi (`/api/pilot/...`):
 - `GET  /api/pilot/session/state/` -> stato runtime (sessione, evento attivo, sottosistemi, sequenze).
 - `GET  /api/pilot/percorsi/` -> rotte attive (partenza, arrivo, distanza minima/massima).
 - `GET  /api/pilot/comunicazioni/quadro/` -> evento in corso (senza codici), guasti e protocolli colore. Auth `PilotToken`.
-- `POST /api/pilot/session/allarme-equipaggio/` body `{allarme}` -> colore (giallo, rosso, nero, blu, ambra, viola, crociera). Con la console comunicazioni attiva il testo va al dipartimento e l'audio è letto dalla plancia.
+- `POST /api/pilot/session/allarme-equipaggio/` body `{allarme}` -> colore (giallo, rosso, nero, blu, ambra, viola, bianco, crociera). Con la console comunicazioni attiva il testo va al dipartimento e l'audio è letto dalla plancia.
 - `POST /api/pilot/session/start/` body `{percorso_id}`. La distanza è un intero casuale tra minimo e massimo del percorso.
 - `POST /api/pilot/session/command/` body `{codice}` (3 char, ultimo numerico).
 - `POST /api/pilot/session/abort/`.
@@ -71,7 +71,8 @@ Staff (richiede `is_staff`):
 Schermata `/pilot/?screen=comunicazioni` (statistica default `0CO`). Sul pannello Pi è la terza scelta di `/pilot/?screen=station&viewport=800x480`. Si accende da staff **Pilotaggio → Console di bordo**. Con il flag attivo i pulsanti allarme spariscono dalla plancia di navigazione.
 
 - Destinatari: una **KORP** già presente in **Carriere e KORP** (lì è il dipartimento). Il protocollo (testo e audio) si associa in **Pilotaggio → Comunicazioni**. Ogni colore ha un solo protocollo. Segnaposto `{sottosistema}` e `{evento}`.
-- Colori aggiuntivi: **ambra** (riparazione) e **viola** (invasione), oltre a giallo, rosso, nero, blu e crociera. Sull'ambra i sottosistemi offline vengono sempre nominati nel messaggio ai membri e nell'audio di plancia.
+- Colori aggiuntivi: **ambra** (riparazione), **viola** (invasione) e **bianco** (medico), oltre a giallo, rosso, nero, blu e crociera. Sull'ambra i sottosistemi offline vengono sempre nominati nel messaggio ai membri e nell'audio di plancia.
+- La frase audio di ogni colore si personalizza in **Pilotaggio → Allarmi**. Vuoto = annuncio standard. Il bianco avvisa la KORP scelta su quel colore (personale medico).
 - L'audio (`testo_audio`, o l'annuncio standard del colore) esce dagli speaker della console di pilotaggio. Il testo va agli utenti dei personaggi con appartenenza ancora attiva a quella KORP.
 - Sull'evento, campo «colore richiesto»: se la radio lo dichiara prima della fine della reazione, il primo controllo di catastrofe non scatta. La radio non vede quel colore. Crociera non dà grazia.
 

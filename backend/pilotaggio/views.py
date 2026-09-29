@@ -1431,7 +1431,7 @@ class PilotSessionLandingView(APIView):
 class PilotSessionAllarmeEquipaggioView(APIView):
     """
     POST /api/pilot/session/allarme-equipaggio/
-    Body: { "allarme": "crociera"|"giallo"|"rosso"|"nero"|"blu"|"ambra"|"viola" }
+    Body: { "allarme": "crociera"|"giallo"|"rosso"|"nero"|"blu"|"ambra"|"viola"|"bianco" }
     """
 
     authentication_classes = [PilotConsoleTokenAuthentication]

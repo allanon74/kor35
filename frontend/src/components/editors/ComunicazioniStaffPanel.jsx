@@ -14,6 +14,8 @@ const COLORI = [
   { id: 'blu', label: 'Blu — manovra' },
   { id: 'ambra', label: 'Ambra — riparazione sottosistema' },
   { id: 'viola', label: 'Viola — invasione' },
+  { id: 'bianco', label: 'Bianco — medico' },
+  { id: 'crociera', label: 'Verde — crociera' },
 ];
 
 const protocolloVuoto = () => ({
@@ -71,6 +73,7 @@ export default function ComunicazioniStaffPanel({ onLogout }) {
         <p className="text-xs text-gray-400">
           Ogni colore manda un testo ai personaggi della KORP e una frase all&apos;audio della plancia.
           Le KORP, i dipartimenti, si creano in Carriere e KORP.
+          La frase letta in plancia si modifica anche in Allarmi.
           Nel testo puoi usare {'{sottosistema}'} e {'{evento}'}.
           Sull&apos;ambra i sottosistemi offline vengono sempre nominati, nel messaggio e nell&apos;audio.
         </p>

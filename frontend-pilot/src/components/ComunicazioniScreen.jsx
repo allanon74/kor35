@@ -8,6 +8,7 @@ const COLORI = [
   { id: 'blu', label: 'Blu', hint: 'Manovra', className: 'alarm-blu' },
   { id: 'ambra', label: 'Ambra', hint: 'Riparazione', className: 'alarm-ambra' },
   { id: 'viola', label: 'Viola', hint: 'Invasione', className: 'alarm-viola' },
+  { id: 'bianco', label: 'Bianco', hint: 'Medico', className: 'alarm-bianco' },
   { id: 'crociera', label: 'Verde', hint: 'Crociera', className: 'alarm-verde' },
 ];
 
@@ -35,6 +36,7 @@ const PREVIEW_QUADRO = {
   protocolli: [
     { colore: 'ambra', dipartimento: 'Ingegneria', ha_testo: true },
     { colore: 'viola', dipartimento: 'Sicurezza', ha_testo: true },
+    { colore: 'bianco', dipartimento: 'Medica', ha_testo: true },
   ],
 };
 

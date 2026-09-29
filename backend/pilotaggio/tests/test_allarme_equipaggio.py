@@ -5,8 +5,10 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from pilotaggio.allarme_equipaggio import (
+    ALLARME_EQUIPAGGIO_BIANCO,
     ALLARME_EQUIPAGGIO_GIALLO,
     ALLARME_EQUIPAGGIO_CROCIERA,
+    annuncio_vocale_allarme,
     build_allarme_led_payload,
 )
 from pilotaggio.models import (
@@ -57,6 +59,11 @@ class AllarmeEquipaggioTests(TestCase):
         self.assertEqual(body["allarme"], ALLARME_EQUIPAGGIO_GIALLO)
         self.assertEqual(body["schema_version"], 1)
         self.assertIn("hex", body["colore"])
+
+    def test_annuncio_bianco_medico(self):
+        testo = annuncio_vocale_allarme(ALLARME_EQUIPAGGIO_BIANCO)
+        self.assertIn("Bianco", testo)
+        self.assertIn("medico", testo.lower())
 
     def test_build_led_crociera_default(self):
         payload = build_allarme_led_payload(None)

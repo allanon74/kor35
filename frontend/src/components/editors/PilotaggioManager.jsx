@@ -61,6 +61,7 @@ import {
   staffModificaPilotStiva,
   staffAggiornaCodiciEventiPilot,
 } from '../../api';
+import AllarmiStaffPanel from './AllarmiStaffPanel';
 import ComunicazioniStaffPanel from './ComunicazioniStaffPanel';
 
 const PILOT_EVENTI_WIKI_SLUG = 'staff-pilot-eventi';
@@ -74,6 +75,7 @@ const PILOT_TABS = [
   { id: 'stati_allerta', label: 'Stati allerta (DEFCON)' },
   { id: 'sessione_live', label: 'Sessione live' },
   { id: 'stiva', label: 'Stiva componenti' },
+  { id: 'allarmi', label: 'Allarmi' },
   { id: 'comunicazioni', label: 'Comunicazioni' },
   { id: 'runtime', label: 'Console di bordo' },
 ];
@@ -86,6 +88,7 @@ const ALLARMI_RICHIESTI = [
   { id: 'blu', label: 'Blu' },
   { id: 'ambra', label: 'Ambra — riparazione sottosistema' },
   { id: 'viola', label: 'Viola — invasione' },
+  { id: 'bianco', label: 'Bianco — medico' },
 ];
 
 const defaultEvento = {
@@ -2316,6 +2319,10 @@ export default function PilotaggioManager({ onLogout }) {
           </>
         )}
       </section>
+      ) : null}
+
+      {activeTab === 'allarmi' ? (
+        <AllarmiStaffPanel onLogout={onLogout} />
       ) : null}
 
       {activeTab === 'comunicazioni' ? (

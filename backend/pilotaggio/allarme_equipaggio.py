@@ -17,6 +17,7 @@ ALLARME_EQUIPAGGIO_NERO = "nero"
 ALLARME_EQUIPAGGIO_BLU = "blu"
 ALLARME_EQUIPAGGIO_AMBRA = "ambra"
 ALLARME_EQUIPAGGIO_VIOLA = "viola"
+ALLARME_EQUIPAGGIO_BIANCO = "bianco"
 
 ALLARME_EQUIPAGGIO_CHOICES = [
     (ALLARME_EQUIPAGGIO_CROCIERA, "Crociera (nessun allarme)"),
@@ -26,6 +27,7 @@ ALLARME_EQUIPAGGIO_CHOICES = [
     (ALLARME_EQUIPAGGIO_BLU, "Allarme blu"),
     (ALLARME_EQUIPAGGIO_AMBRA, "Allarme ambra — riparazione"),
     (ALLARME_EQUIPAGGIO_VIOLA, "Allarme viola — invasione"),
+    (ALLARME_EQUIPAGGIO_BIANCO, "Allarme bianco — medico"),
 ]
 
 ALLARME_EQUIPAGGIO_VALIDI = frozenset(
@@ -57,6 +59,9 @@ ANNUNCIO_VOCALE_ALLARME: Dict[str, str] = {
     ),
     ALLARME_EQUIPAGGIO_VIOLA: (
         "Allarme Viola. Sicurezza, intercettare gli invasori."
+    ),
+    ALLARME_EQUIPAGGIO_BIANCO: (
+        "Allarme Bianco. Personale medico, pronto intervento."
     ),
 }
 
@@ -112,6 +117,13 @@ LED_PROFILE_ALLARME: Dict[str, Dict[str, Any]] = {
         "luminosita": 1.0,
         "pulse_ms": 500,
     },
+    ALLARME_EQUIPAGGIO_BIANCO: {
+        "hex": "#F5F5F5",
+        "rgb": [245, 245, 245],
+        "modalita": "pulse",
+        "luminosita": 1.0,
+        "pulse_ms": 700,
+    },
 }
 
 LED_API_SCHEMA_VERSION = 1
@@ -121,7 +133,7 @@ def normalizza_allarme_equipaggio(valore: Optional[str]) -> str:
     key = str(valore or ALLARME_EQUIPAGGIO_CROCIERA).strip().lower()
     if key not in ALLARME_EQUIPAGGIO_VALIDI:
         raise ValueError(
-            "Allarme non valido: usare crociera, giallo, rosso, nero, blu, ambra o viola."
+            "Allarme non valido: usare crociera, giallo, rosso, nero, blu, ambra, viola o bianco."
         )
     return key
 

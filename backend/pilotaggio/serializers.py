@@ -664,13 +664,11 @@ class ProtocolloComunicazioneSerializer(serializers.ModelSerializer):
         return value
 
     def validate_colore(self, value):
-        from .allarme_equipaggio import ALLARME_EQUIPAGGIO_CROCIERA, ALLARME_EQUIPAGGIO_VALIDI
+        from .allarme_equipaggio import ALLARME_EQUIPAGGIO_VALIDI
 
         key = str(value or "").strip().lower()
-        if key == ALLARME_EQUIPAGGIO_CROCIERA or key not in ALLARME_EQUIPAGGIO_VALIDI:
-            raise serializers.ValidationError(
-                "Scegli un colore di allarme (non la crociera)."
-            )
+        if key not in ALLARME_EQUIPAGGIO_VALIDI:
+            raise serializers.ValidationError("Scegli un colore di allarme.")
         return key
 
     def validate(self, attrs):

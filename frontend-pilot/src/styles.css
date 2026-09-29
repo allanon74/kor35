@@ -2757,6 +2757,12 @@ select, input[type=text], input[type=number] {
   background: linear-gradient(180deg, #ab47bc, #4a148c);
 }
 
+.comms-color.alarm-bianco {
+  background: linear-gradient(180deg, #fafafa, #cfd8dc);
+  color: #1a1a1a;
+  border-color: rgba(255, 255, 255, 0.75);
+}
+
 .flight-ops-alarm-btn.alarm-verde,
 .comms-color.alarm-verde {
   background: linear-gradient(180deg, #5ecf6a, #2e8b3a);

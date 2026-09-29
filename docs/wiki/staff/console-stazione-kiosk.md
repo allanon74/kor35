@@ -22,7 +22,7 @@ Script: `deploy/raspberry-station-kiosk/` (`sudo ./install-station-kiosk.sh`).
 
 Pagina di scelta: `/pilot/?screen=station&viewport=800x480`.
 
-Le schede ingegneria sono Motore, Quantico, Fuel, Stiva. Quelle scientifiche sono Spettro, Scan, Matrice, Interventi. Comunicazioni è una griglia di colori (giallo, rosso, nero, blu, ambra, viola, crociera) nello stesso riquadro 800×480: il testo di stato sta su una riga, i pulsanti riempiono il resto. **Scelta** torna al menu, **Esci** chiude il login.
+Le schede ingegneria sono Motore, Quantico, Fuel, Stiva. Quelle scientifiche sono Spettro, Scan, Matrice, Interventi. Comunicazioni è una griglia di colori (giallo, rosso, nero, blu, ambra, viola, bianco, crociera) nello stesso riquadro 800×480: il testo di stato sta su una riga, i pulsanti riempiono il resto. **Scelta** torna al menu, **Esci** chiude il login.
 
 Se nello staff il login della console è spento, dopo il pulsante l'accesso è automatico e il QR non compare.
 
