@@ -8,13 +8,12 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from personaggi.models import Personaggio
+from personaggi.models import Carriera
 
 from .models import (
     ComandoCriticoGlobale,
     ComandoNave,
     CoppiaColoriComponente,
-    DipartimentoBordo,
     EventoAttivoSessione,
     EventoNave,
     IntensitaComando,
@@ -632,45 +631,37 @@ class StivaComponenteNaveSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "updated_at"]
 
 
-class DipartimentoBordoSerializer(serializers.ModelSerializer):
-    membri_ids = serializers.PrimaryKeyRelatedField(
-        source="membri",
-        many=True,
-        queryset=Personaggio.objects.all(),
+class ProtocolloComunicazioneSerializer(serializers.ModelSerializer):
+    korp = serializers.PrimaryKeyRelatedField(
+        queryset=Carriera.objects.filter(tipo_carriera__codice="korp"),
+        allow_null=True,
         required=False,
     )
-    membri = serializers.SerializerMethodField()
-
-    class Meta:
-        model = DipartimentoBordo
-        fields = ["id", "nome", "ordine", "attivo", "membri", "membri_ids"]
-        read_only_fields = ["id", "membri"]
-
-    def get_membri(self, obj):
-        return [
-            {"id": p.pk, "nome": getattr(p, "nome", str(p))}
-            for p in obj.membri.all().order_by("nome")
-        ]
-
-
-class ProtocolloComunicazioneSerializer(serializers.ModelSerializer):
-    dipartimento_nome = serializers.CharField(
-        source="dipartimento.nome", read_only=True, default=""
-    )
+    korp_nome = serializers.CharField(source="korp.nome", read_only=True, default="")
 
     class Meta:
         model = ProtocolloComunicazione
         fields = [
             "id",
             "colore",
-            "dipartimento",
-            "dipartimento_nome",
+            "korp",
+            "korp_nome",
             "testo",
             "testo_audio",
             "ordine",
             "attivo",
         ]
-        read_only_fields = ["id", "dipartimento_nome"]
+        read_only_fields = ["id", "korp_nome"]
+
+    def validate_korp(self, value):
+        if value is None:
+            return value
+        codice = getattr(getattr(value, "tipo_carriera", None), "codice", "")
+        if codice != "korp":
+            raise serializers.ValidationError(
+                "Scegli un dipartimento KORP (Carriere e KORP)."
+            )
+        return value
 
     def validate_colore(self, value):
         from .allarme_equipaggio import ALLARME_EQUIPAGGIO_CROCIERA, ALLARME_EQUIPAGGIO_VALIDI

@@ -69,7 +69,6 @@ from .models import (
     CoppiaColoriComponente,
     DEFCON_MAX,
     EVENTO_ESITO_PENDING,
-    DipartimentoBordo,
     EventoAttivoSessione,
     EventoNave,
     IntensitaComando,
@@ -98,7 +97,6 @@ from .serializers import (
     ComandoCriticoGlobaleSerializer,
     ComandoNaveSerializer,
     CoppiaColoriComponenteSerializer,
-    DipartimentoBordoSerializer,
     ProtocolloComunicazioneSerializer,
     EventoAttivoSerializer,
     EventoNaveListSerializer,
@@ -2957,32 +2955,33 @@ class ComunicazioniQuadroView(APIView):
         return Response(quadro_comunicazioni(sessione))
 
 
-class StaffDipartimentoBordoViewSet(viewsets.ModelViewSet):
-    queryset = DipartimentoBordo.objects.all().order_by("ordine", "nome")
-    serializer_class = DipartimentoBordoSerializer
-    permission_classes = [IsAuthenticated, IsStaffOrMaster]
-
-    def get_queryset(self):
-        return DipartimentoBordo.objects.prefetch_related("membri").order_by("ordine", "nome")
-
-
 class StaffProtocolloComunicazioneViewSet(viewsets.ModelViewSet):
-    queryset = ProtocolloComunicazione.objects.select_related("dipartimento").order_by(
+    queryset = ProtocolloComunicazione.objects.select_related("korp").order_by(
         "ordine", "colore"
     )
     serializer_class = ProtocolloComunicazioneSerializer
     permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
 
-class StaffPersonaggiBreveView(APIView):
-    """Elenco id/nome per associare i membri di un dipartimento."""
+class StaffDipartimentiKorpView(APIView):
+    """KORP già gestite in Carriere e KORP: sono i dipartimenti della radio."""
 
     permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def get(self, request):
-        q = str(request.query_params.get("q") or "").strip()
-        qs = Personaggio.objects.all().order_by("nome")
-        if q:
-            qs = qs.filter(nome__icontains=q)
-        rows = [{"id": p.pk, "nome": p.nome} for p in qs[:80]]
+        from personaggi.models import Korp, PersonaggioCarrieraMembership
+
+        rows = []
+        for korp in Korp.objects.order_by("nome"):
+            membri = (
+                PersonaggioCarrieraMembership.objects.filter(
+                    carriera=korp,
+                    data_a__isnull=True,
+                    tipo_carriera__codice="korp",
+                )
+                .values("personaggio_id")
+                .distinct()
+                .count()
+            )
+            rows.append({"id": korp.pk, "nome": korp.nome, "membri": membri})
         return Response(rows)

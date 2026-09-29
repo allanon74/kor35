@@ -2566,9 +2566,9 @@ export default function PilotaggioManager({ onLogout }) {
               <p className="text-xs text-gray-400">
                 Radio di bordo su /pilot/?screen=comunicazioni. Se la accendi, i pulsanti
                 allarme spariscono dalla plancia: il colore lo dichiara la radio, l&apos;audio
-                esce dagli speaker della console di pilotaggio e il testo va al dipartimento.
-                Sigla di accesso nella tabella sopra (default 0CO). Dipartimenti e testi
-                nella scheda Comunicazioni.
+                esce dagli speaker della console di pilotaggio e il testo va ai membri della KORP.
+                Sigla di accesso nella tabella sopra (default 0CO). Le KORP si gestiscono
+                in Carriere e KORP; testi e audio nella scheda Comunicazioni.
               </p>
               <label className="flex items-center gap-2 text-sm">
                 <input

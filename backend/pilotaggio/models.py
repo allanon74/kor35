@@ -1210,52 +1210,28 @@ class StivaCoppiaOppositiStato(SyncableModel, models.Model):
         return f"{self.coppia} tick={self.tick_coesistenza}"
 
 
-class DipartimentoBordo(SyncableModel, models.Model):
-    """
-    Reparto di bordo che riceve i messaggi di un allarme cromatico
-    (ingegneria, sicurezza, …).
-    """
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    nome = models.CharField(max_length=80)
-    ordine = models.PositiveIntegerField(default=0)
-    attivo = models.BooleanField(default=True, db_index=True)
-    membri = models.ManyToManyField(
-        "personaggi.Personaggio",
-        blank=True,
-        related_name="dipartimenti_bordo",
-    )
-
-    class Meta:
-        verbose_name = "Dipartimento di bordo"
-        verbose_name_plural = "Dipartimenti di bordo"
-        ordering = ["ordine", "nome"]
-
-    def __str__(self):
-        return self.nome
-
-
 class ProtocolloComunicazione(SyncableModel, models.Model):
     """
-    Colore di allarme, testo inviato al dipartimento e frase letta
-    dall'audio della console di pilotaggio.
+    Colore di allarme, testo inviato ai membri della KORP
+    e frase letta dall'audio della console di pilotaggio.
+    La KORP è il dipartimento gestito in Carriere e KORP.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     colore = models.CharField(max_length=16, unique=True)
-    dipartimento = models.ForeignKey(
-        DipartimentoBordo,
+    korp = models.ForeignKey(
+        "personaggi.Carriera",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="protocolli",
+        related_name="protocolli_comunicazione",
+        help_text="Dipartimento: carriera di tipo KORP. I membri attivi ricevono il testo.",
     )
     testo = models.TextField(
         blank=True,
         default="",
-        help_text="Messaggio ai membri. Segnaposto: {sottosistema} {evento}.",
+        help_text="Messaggio ai membri della KORP. Segnaposto: {sottosistema} {evento}.",
     )
     testo_audio = models.TextField(
         blank=True,
@@ -1271,7 +1247,7 @@ class ProtocolloComunicazione(SyncableModel, models.Model):
         ordering = ["ordine", "colore"]
 
     def __str__(self):
-        return f"{self.colore} → {self.dipartimento or 'nessun dipartimento'}"
+        return f"{self.colore} → {self.korp or 'nessuna KORP'}"
 
 
 class PilotRuntimeConfig(models.Model):

@@ -8,10 +8,14 @@ from rest_framework.test import APIClient
 from django.test import TestCase
 
 from pilotaggio.allarme_equipaggio import ALLARME_EQUIPAGGIO_AMBRA, ALLARME_EQUIPAGGIO_ROSSO
-from pilotaggio.comunicazioni import applica_grazia_colore, render_messaggio
+from personaggi.models import (
+    Carriera,
+    PersonaggioCarrieraMembership,
+    TipoCarriera,
+)
+from pilotaggio.comunicazioni import applica_grazia_colore, integra_elenco_guasti, render_messaggio
 from pilotaggio.engine import valuta_evento_tick
 from pilotaggio.models import (
-    DipartimentoBordo,
     EVENTO_ESITO_PENDING,
     EventoAttivoSessione,
     EventoNave,
@@ -46,8 +50,18 @@ class ComunicazioniAllarmeTests(TestCase):
         cfg = PilotRuntimeConfig.get_solo()
         cfg.comunicazioni_console_abilitata = True
         cfg.save(update_fields=["comunicazioni_console_abilitata", "updated_at"])
-        self.reparto = DipartimentoBordo.objects.create(nome="Ingegneria")
-        self.reparto.membri.add(self.pilota)
+        tipo, _ = TipoCarriera.objects.get_or_create(
+            codice="korp", defaults={"nome": "KORP"}
+        )
+        korp = Carriera.objects.create(
+            nome="Ingegneria", tipo="T3", tipo_carriera=tipo
+        )
+        self.korp = korp
+        PersonaggioCarrieraMembership.objects.create(
+            personaggio=self.pilota,
+            carriera=korp,
+            tipo_carriera=tipo,
+        )
         self.sotto = SottosistemaNave.objects.create(codice="P", nome="Propulsore")
         StatoSottosistemaSessione.objects.create(
             sessione=self.sessione, sottosistema=self.sotto, online=False
@@ -69,7 +83,7 @@ class ComunicazioniAllarmeTests(TestCase):
         )
         ProtocolloComunicazione.objects.create(
             colore=ALLARME_EQUIPAGGIO_AMBRA,
-            dipartimento=self.reparto,
+            korp=self.korp,
             testo="Riparare {sottosistema} durante {evento}.",
             testo_audio="Tecnici su {sottosistema}.",
         )
@@ -98,6 +112,37 @@ class ComunicazioniAllarmeTests(TestCase):
         self.assertTrue(self.istanza.ca_soppressa_comunicazioni)
         self.sessione.refresh_from_db()
         self.assertIn("Propulsore", self.sessione.allarme_annuncio)
+
+    def test_ambra_nomina_i_guasti_anche_senza_segnaposto(self):
+        ProtocolloComunicazione.objects.filter(colore=ALLARME_EQUIPAGGIO_AMBRA).update(
+            testo="Squadra tecnica in sala macchine.",
+            testo_audio="Allarme Ambra.",
+        )
+        SottosistemaNave.objects.create(codice="S", nome="Scudi")
+        scudi = SottosistemaNave.objects.get(codice="S")
+        StatoSottosistemaSessione.objects.create(
+            sessione=self.sessione, sottosistema=scudi, online=False
+        )
+        with patch("personaggi.notify.notify_users", return_value=1) as notify:
+            res = self.client.post(
+                "/api/pilot/session/allarme-equipaggio/",
+                {"allarme": ALLARME_EQUIPAGGIO_AMBRA},
+                format="json",
+            )
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        for nome in ("Propulsore", "Scudi"):
+            self.assertIn(nome, body["messaggio_dipartimento"])
+            self.assertIn(nome, body["announcement"])
+        self.assertIn("Sottosistemi guasti:", body["messaggio_dipartimento"])
+        notify.assert_called_once()
+        _args, kwargs = notify.call_args
+        self.assertIn("Propulsore", kwargs["body"])
+        self.assertIn("Scudi", kwargs["body"])
+
+    def test_elenco_gia_presente_non_si_duplica(self):
+        testo = integra_elenco_guasti("Riparare Propulsore.", "Propulsore")
+        self.assertEqual(testo, "Riparare Propulsore.")
 
     def test_colore_sbagliato_non_arma_grazia(self):
         self.assertFalse(applica_grazia_colore(self.sessione, ALLARME_EQUIPAGGIO_ROSSO))

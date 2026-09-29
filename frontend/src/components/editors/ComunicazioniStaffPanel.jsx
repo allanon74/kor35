@@ -1,11 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  staffCercaPersonaggiBreve,
-  staffCreatePilotDipartimento,
   staffCreatePilotProtocollo,
-  staffDeletePilotDipartimento,
   staffDeletePilotProtocollo,
-  staffGetPilotDipartimenti,
+  staffGetPilotDipartimentiKorp,
   staffGetPilotProtocolli,
   staffUpdatePilotProtocollo,
 } from '../../api';
@@ -21,31 +18,28 @@ const COLORI = [
 
 const protocolloVuoto = () => ({
   colore: 'ambra',
-  dipartimento: '',
+  korp: '',
   testo: 'Riparare {sottosistema}.',
   testo_audio: 'Allarme Ambra. Squadra tecnica su {sottosistema}.',
   attivo: true,
 });
 
 /**
- * Dipartimenti di bordo e protocollo colore → testo + audio di plancia.
+ * Protocolli colore → dipartimento KORP, testo ai membri e audio di plancia.
+ * Le KORP si creano in Carriere e KORP.
  */
 export default function ComunicazioniStaffPanel({ onLogout }) {
   const [dipartimenti, setDipartimenti] = useState([]);
   const [protocolli, setProtocolli] = useState([]);
-  const [nome, setNome] = useState('');
-  const [ricerca, setRicerca] = useState('');
-  const [trovati, setTrovati] = useState([]);
-  const [selezionati, setSelezionati] = useState([]);
   const [protocollo, setProtocollo] = useState(protocolloVuoto);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
-    const [dip, prot] = await Promise.all([
-      staffGetPilotDipartimenti(onLogout),
+    const [lista, prot] = await Promise.all([
+      staffGetPilotDipartimentiKorp(onLogout),
       staffGetPilotProtocolli(onLogout),
     ]);
-    setDipartimenti(Array.isArray(dip) ? dip : (dip?.results || []));
+    setDipartimenti(Array.isArray(lista) ? lista : []);
     setProtocolli(Array.isArray(prot) ? prot : (prot?.results || []));
   }, [onLogout]);
 
@@ -53,54 +47,12 @@ export default function ComunicazioniStaffPanel({ onLogout }) {
     load().catch((err) => setError(err?.message || 'Caricamento comunicazioni non riuscito.'));
   }, [load]);
 
-  useEffect(() => {
-    const q = ricerca.trim();
-    if (q.length < 2) {
-      setTrovati([]);
-      return undefined;
-    }
-    const timer = window.setTimeout(() => {
-      staffCercaPersonaggiBreve(q, onLogout)
-        .then((rows) => setTrovati(Array.isArray(rows) ? rows : []))
-        .catch(() => setTrovati([]));
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [ricerca, onLogout]);
-
-  const aggiungiMembro = (persona) => {
-    setSelezionati((prev) => (
-      prev.some((p) => String(p.id) === String(persona.id)) ? prev : [...prev, persona]
-    ));
-  };
-
-  const creaDipartimento = async () => {
-    const label = nome.trim();
-    if (!label) {
-      setError('Il nome del dipartimento è obbligatorio.');
-      return;
-    }
-    setError('');
-    try {
-      await staffCreatePilotDipartimento({
-        nome: label,
-        attivo: true,
-        membri_ids: selezionati.map((p) => p.id),
-      }, onLogout);
-      setNome('');
-      setSelezionati([]);
-      setRicerca('');
-      await load();
-    } catch (err) {
-      setError(err?.message || 'Dipartimento non creato.');
-    }
-  };
-
   const creaProtocollo = async () => {
     setError('');
     try {
       await staffCreatePilotProtocollo({
         colore: protocollo.colore,
-        dipartimento: protocollo.dipartimento || null,
+        korp: protocollo.korp || null,
         testo: protocollo.testo,
         testo_audio: protocollo.testo_audio,
         attivo: true,
@@ -117,63 +69,22 @@ export default function ComunicazioniStaffPanel({ onLogout }) {
       <div>
         <h3 className="font-semibold mb-1">Comunicazioni</h3>
         <p className="text-xs text-gray-400">
-          Ogni colore manda un testo ai membri del dipartimento e una frase all&apos;audio della plancia.
+          Ogni colore manda un testo ai personaggi della KORP e una frase all&apos;audio della plancia.
+          Le KORP, i dipartimenti, si creano in Carriere e KORP.
           Nel testo puoi usare {'{sottosistema}'} e {'{evento}'}.
+          Sull&apos;ambra i sottosistemi offline vengono sempre nominati, nel messaggio e nell&apos;audio.
         </p>
       </div>
 
       {error ? <p className="text-sm text-red-300">{error}</p> : null}
 
       <div className="space-y-2">
-        <h4 className="text-sm font-semibold text-gray-200">Nuovo dipartimento</h4>
-        <div className="flex flex-wrap gap-2 items-end">
-          <label className="flex flex-col text-xs text-gray-400 gap-1 flex-1 min-w-[12rem]">
-            Nome
-            <input className="bg-gray-800 rounded px-2 py-1 text-sm text-gray-100" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ingegneria, Sicurezza…" />
-          </label>
-          <button type="button" className="px-3 py-1 rounded bg-indigo-600" onClick={creaDipartimento}>Aggiungi</button>
-        </div>
-        <label className="flex flex-col text-xs text-gray-400 gap-1">
-          Cerca personaggi da associare
-          <input className="bg-gray-800 rounded px-2 py-1 text-sm text-gray-100" value={ricerca} onChange={(e) => setRicerca(e.target.value)} placeholder="Almeno 2 lettere" />
-        </label>
-        {trovati.length ? (
-          <div className="flex flex-wrap gap-2">
-            {trovati.map((p) => (
-              <button key={p.id} type="button" className="text-xs px-2 py-1 rounded bg-gray-800" onClick={() => aggiungiMembro(p)}>
-                {p.nome}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {selezionati.length ? (
-          <p className="text-xs text-gray-300">
-            Membri: {selezionati.map((p) => p.nome).join(', ')}
-            <button type="button" className="ml-2 text-gray-400" onClick={() => setSelezionati([])}>svuota</button>
+        <h4 className="text-sm font-semibold text-gray-200">Protocollo colore</h4>
+        {dipartimenti.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            Nessuna KORP. Creala in Carriere e KORP, poi assegna i personaggi in Appartenenze.
           </p>
         ) : null}
-        {dipartimenti.length === 0 ? (
-          <p className="text-sm text-gray-500">Nessun dipartimento.</p>
-        ) : dipartimenti.map((row) => (
-          <div key={row.id} className="flex items-center justify-between bg-gray-800/60 rounded px-2 py-1 text-sm gap-2">
-            <span>
-              {row.nome}
-              <span className="text-gray-400"> · {(row.membri || []).map((m) => m.nome).join(', ') || 'nessun membro'}</span>
-              {row.attivo === false ? <span className="text-amber-400"> · spento</span> : null}
-            </span>
-            <button
-              type="button"
-              className="text-red-400 shrink-0"
-              onClick={() => staffDeletePilotDipartimento(row.id, onLogout).then(load).catch((err) => setError(err?.message || 'Eliminazione non riuscita.'))}
-            >
-              Elimina
-            </button>
-          </div>
-        ))}
-      </div>
-
-      <div className="space-y-2">
-        <h4 className="text-sm font-semibold text-gray-200">Protocollo colore</h4>
         <div className="flex flex-wrap gap-2 items-end">
           <label className="flex flex-col text-xs text-gray-400 gap-1">
             Colore
@@ -181,11 +92,13 @@ export default function ComunicazioniStaffPanel({ onLogout }) {
               {COLORI.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
           </label>
-          <label className="flex flex-col text-xs text-gray-400 gap-1 flex-1 min-w-[10rem]">
-            Dipartimento
-            <select className="bg-gray-800 rounded px-2 py-1 text-sm" value={protocollo.dipartimento} onChange={(e) => setProtocollo((p) => ({ ...p, dipartimento: e.target.value }))}>
+          <label className="flex flex-col text-xs text-gray-400 gap-1 flex-1 min-w-[12rem]">
+            Dipartimento (KORP)
+            <select className="bg-gray-800 rounded px-2 py-1 text-sm" value={protocollo.korp} onChange={(e) => setProtocollo((p) => ({ ...p, korp: e.target.value }))}>
               <option value="">— nessuno —</option>
-              {dipartimenti.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
+              {dipartimenti.map((d) => (
+                <option key={d.id} value={d.id}>{d.nome} — {Number(d.membri || 0)} membri</option>
+              ))}
             </select>
           </label>
         </div>
@@ -199,12 +112,12 @@ export default function ComunicazioniStaffPanel({ onLogout }) {
         </label>
         <button type="button" className="px-3 py-1 rounded bg-indigo-600" onClick={creaProtocollo}>Aggiungi protocollo</button>
         {protocolli.length === 0 ? (
-          <p className="text-sm text-gray-500">Nessun protocollo. Senza protocollo il colore usa solo l&apos;annuncio standard.</p>
+          <p className="text-sm text-gray-500">Nessun protocollo. Senza protocollo il colore usa solo l&apos;annuncio standard. L&apos;ambra nomina comunque i guasti in plancia.</p>
         ) : protocolli.map((row) => (
           <div key={row.id} className="bg-gray-800/60 rounded px-2 py-1 text-sm mb-1">
             <div className="flex justify-between gap-2">
               <span>
-                {row.colore} → {row.dipartimento_nome || 'nessun dipartimento'}
+                {row.colore} → {row.korp_nome || 'nessun dipartimento'}
                 {row.attivo === false ? <span className="text-amber-400"> · spento</span> : null}
               </span>
               <span className="flex gap-3 shrink-0">

@@ -10,8 +10,10 @@ from typing import Any, Dict, List, Optional
 from django.utils import timezone
 
 from .allarme_equipaggio import (
+    ALLARME_EQUIPAGGIO_AMBRA,
     ALLARME_EQUIPAGGIO_CHOICES,
     ALLARME_EQUIPAGGIO_CROCIERA,
+    annuncio_vocale_allarme,
     imposta_allarme_equipaggio_sessione,
     normalizza_allarme_equipaggio,
 )
@@ -59,6 +61,30 @@ def render_messaggio(template: str, sessione, evento_nome: str) -> str:
     )
 
 
+def integra_elenco_guasti(testo: str, nomi: str, *, vuoto: str = "") -> str:
+    """
+    Se l'elenco dei sottosistemi offline non è già nel testo, lo aggiunge.
+    Usato dall'allarme ambra, nel messaggio alla KORP e nell'audio di plancia.
+    """
+    base = str(testo or "").strip()
+    elenco = str(nomi or "").strip()
+    ha_nomi = bool(elenco) and elenco != "nessun sottosistema"
+    if ha_nomi and elenco in base:
+        return base
+    if not ha_nomi and "nessun sottosistema" in base.lower():
+        return base
+    coda = (
+        f"Sottosistemi guasti: {elenco}."
+        if ha_nomi
+        else "Nessun sottosistema risulta guasto."
+    )
+    if coda in base:
+        return base
+    if not base:
+        return (vuoto or coda).strip()
+    return f"{base} {coda}"
+
+
 def applica_grazia_colore(sessione, colore: str) -> bool:
     """
     Se il colore coincide con quello richiesto dall'evento e la reazione
@@ -88,16 +114,42 @@ def applica_grazia_colore(sessione, colore: str) -> bool:
     return granted
 
 
-def _notifica_dipartimento(dipartimento, *, head: str, body: str) -> int:
-    if dipartimento is None or not body:
+def _personaggi_korp(korp) -> list:
+    """Membri attivi del dipartimento (appartenenza KORP ancora aperta)."""
+    if korp is None:
+        return []
+    from personaggi.models import PersonaggioCarrieraMembership
+
+    visti = set()
+    persone = []
+    righe = (
+        PersonaggioCarrieraMembership.objects.filter(
+            carriera=korp,
+            data_a__isnull=True,
+            tipo_carriera__codice="korp",
+        )
+        .select_related("personaggio__proprietario")
+        .order_by("personaggio__nome")
+    )
+    for riga in righe:
+        persona = riga.personaggio
+        if persona is None or persona.pk in visti:
+            continue
+        visti.add(persona.pk)
+        persone.append(persona)
+    return persone
+
+
+def _notifica_korp(korp, *, head: str, body: str) -> int:
+    if korp is None or not body:
         return 0
     try:
         from personaggi.notify import notify_users
     except Exception:
-        logger.exception("Notify dipartimento non disponibile")
+        logger.exception("Notify KORP non disponibile")
         return 0
     utenti = []
-    for persona in dipartimento.membri.select_related("proprietario").all():
+    for persona in _personaggi_korp(korp):
         utente = getattr(persona, "proprietario", None)
         if utente is not None:
             utenti.append(utente)
@@ -116,20 +168,20 @@ def _notifica_dipartimento(dipartimento, *, head: str, body: str) -> int:
             or 0
         )
     except Exception:
-        logger.exception("Invio messaggio dipartimento fallito")
+        logger.exception("Invio messaggio alla KORP fallito")
         return 0
 
 
 def dichiara_allarme_comunicazioni(sessione, allarme: str) -> Dict[str, Any]:
     """
-    Imposta il colore, legge l'audio in plancia, avvisa il dipartimento
+    Imposta il colore, legge l'audio in plancia, avvisa i membri della KORP
     e, se il colore è quello dell'evento in reazione, arma la grazia CA.
     """
     from .models import ProtocolloComunicazione
 
     key = normalizza_allarme_equipaggio(allarme)
     protocollo = (
-        ProtocolloComunicazione.objects.select_related("dipartimento")
+        ProtocolloComunicazione.objects.select_related("korp")
         .filter(colore=key, attivo=True)
         .first()
     )
@@ -138,22 +190,40 @@ def dichiara_allarme_comunicazioni(sessione, allarme: str) -> Dict[str, Any]:
     if pending is not None and pending.evento_id:
         evento_nome = str(pending.evento.nome or "")
     testo = ""
-    dipartimento_nome = ""
+    korp = None
+    korp_nome = ""
     if protocollo is not None:
         testo = render_messaggio(protocollo.testo, sessione, evento_nome)
-        if protocollo.dipartimento_id and protocollo.dipartimento is not None:
-            dipartimento_nome = protocollo.dipartimento.nome
+        korp = protocollo.korp if protocollo.korp_id else None
+        if korp is not None:
+            korp_nome = korp.nome
     annuncio_custom = ""
     if protocollo is not None and str(protocollo.testo_audio or "").strip():
         annuncio_custom = render_messaggio(protocollo.testo_audio, sessione, evento_nome)
+    if key == ALLARME_EQUIPAGGIO_AMBRA:
+        nomi = _nomi_sottosistemi_guasti(sessione)
+        if testo or korp is not None:
+            testo = integra_elenco_guasti(
+                testo,
+                nomi,
+                vuoto=(
+                    f"Riparare i sottosistemi guasti: {nomi}."
+                    if nomi and nomi != "nessun sottosistema"
+                    else "Nessun sottosistema risulta guasto."
+                ),
+            )
+        annuncio_custom = integra_elenco_guasti(
+            annuncio_custom or annuncio_vocale_allarme(key),
+            nomi,
+        )
     annuncio = imposta_allarme_equipaggio_sessione(
         sessione, key, annuncio=annuncio_custom or None
     )
     inviati = 0
-    if protocollo is not None and testo and protocollo.dipartimento_id:
-        inviati = _notifica_dipartimento(
-            protocollo.dipartimento,
-            head=f"{etichetta_colore(key)} — {dipartimento_nome}".strip(" —"),
+    if korp is not None and testo:
+        inviati = _notifica_korp(
+            korp,
+            head=f"{etichetta_colore(key)} — {korp_nome}".strip(" —"),
             body=testo,
         )
     grazia = applica_grazia_colore(sessione, key)
@@ -161,7 +231,7 @@ def dichiara_allarme_comunicazioni(sessione, allarme: str) -> Dict[str, Any]:
         "annuncio": annuncio,
         "colore": key,
         "testo": testo,
-        "dipartimento": dipartimento_nome,
+        "dipartimento": korp_nome,
         "inviati": inviati,
         "grazia": grazia,
     }
@@ -194,7 +264,7 @@ def quadro_comunicazioni(sessione) -> Dict[str, Any]:
         }
     protocolli: List[Dict[str, Any]] = []
     for row in (
-        ProtocolloComunicazione.objects.select_related("dipartimento")
+        ProtocolloComunicazione.objects.select_related("korp")
         .filter(attivo=True)
         .order_by("ordine", "colore")
     ):
@@ -202,7 +272,7 @@ def quadro_comunicazioni(sessione) -> Dict[str, Any]:
             {
                 "colore": row.colore,
                 "etichetta": etichetta_colore(row.colore),
-                "dipartimento": row.dipartimento.nome if row.dipartimento_id else "",
+                "dipartimento": row.korp.nome if row.korp_id else "",
                 "ha_testo": bool(str(row.testo or "").strip()),
             }
         )

@@ -70,9 +70,9 @@ Staff (richiede `is_staff`):
 
 Schermata `/pilot/?screen=comunicazioni` (statistica default `0CO`). Si accende da staff **Pilotaggio → Console di bordo**. Con il flag attivo i pulsanti allarme spariscono dalla plancia di navigazione.
 
-- Dipartimenti e testi: **Pilotaggio → Comunicazioni**. Ogni colore ha un solo protocollo. Segnaposto `{sottosistema}` e `{evento}`.
-- Colori aggiuntivi: **ambra** (riparazione) e **viola** (invasione), oltre a giallo, rosso, nero, blu e crociera.
-- L'audio (`testo_audio`, o l'annuncio standard del colore) esce dagli speaker della console di pilotaggio. Il testo va agli utenti dei personaggi del dipartimento.
+- Destinatari: una **KORP** già presente in **Carriere e KORP** (lì è il dipartimento). Il protocollo (testo e audio) si associa in **Pilotaggio → Comunicazioni**. Ogni colore ha un solo protocollo. Segnaposto `{sottosistema}` e `{evento}`.
+- Colori aggiuntivi: **ambra** (riparazione) e **viola** (invasione), oltre a giallo, rosso, nero, blu e crociera. Sull'ambra i sottosistemi offline vengono sempre nominati nel messaggio ai membri e nell'audio di plancia.
+- L'audio (`testo_audio`, o l'annuncio standard del colore) esce dagli speaker della console di pilotaggio. Il testo va agli utenti dei personaggi con appartenenza ancora attiva a quella KORP.
 - Sull'evento, campo «colore richiesto»: se la radio lo dichiara prima della fine della reazione, il primo controllo di catastrofe non scatta. La radio non vede quel colore. Crociera non dà grazia.
 
 ## Comandi operativi (Docker-first)

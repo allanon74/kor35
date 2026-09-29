@@ -168,7 +168,7 @@ def navigation_roles_catalog(
             "url_console": "/pilot/?screen=comunicazioni",
             "implementato": bool(getattr(cfg, "comunicazioni_console_abilitata", False)),
             "note": (
-                "Allarmi cromatici, messaggio al dipartimento e audio sulla plancia. "
+                "Allarmi cromatici, messaggio ai membri della KORP e audio sulla plancia. "
                 "Se attiva, i pulsanti allarme escono dalla console di navigazione."
             ),
         },
