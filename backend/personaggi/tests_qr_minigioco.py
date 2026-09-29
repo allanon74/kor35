@@ -122,6 +122,62 @@ class QrMinigiocoLogicTests(SimpleTestCase):
         cfg = _Cfg(difficolta=4, regole_difficolta=[])
         self.assertEqual(risolvi_difficolta(_Pg(), cfg), 4)
 
+    def test_risolvi_difficolta_rdm_riduce_di_uno(self):
+        cfg = _Cfg(difficolta=4, regole_difficolta=[])
+        self.assertEqual(risolvi_difficolta(_Pg(stats={"RDM": 1}), cfg), 3)
+        self.assertEqual(risolvi_difficolta(_Pg(stats={"RDM": 2}), cfg), 2)
+        self.assertEqual(risolvi_difficolta(_Pg(stats={"RDM": 0}), cfg), 4)
+
+    def test_risolvi_difficolta_rdm_azzera_e_salta(self):
+        cfg = _Cfg(difficolta=1, regole_difficolta=[])
+        self.assertEqual(risolvi_difficolta(_Pg(stats={"RDM": 1}), cfg), 0)
+        self.assertEqual(risolvi_difficolta(_Pg(stats={"RDM": 3}), cfg), 0)
+
+    @patch("personaggi.models.Statistica.objects.filter")
+    def test_risolvi_difficolta_rdm_dopo_regole(self, mock_stat):
+        mock_stat.return_value.first.return_value = None
+        cfg = _Cfg(
+            difficolta=4,
+            regole_difficolta=[
+                {
+                    "operator": "AND",
+                    "requisiti": [{"tipo": "statistica", "sigla": "PV", "min": 1}],
+                    "difficolta": 2,
+                },
+            ],
+        )
+        # Regola → 2, poi RDM −1 → 1
+        self.assertEqual(risolvi_difficolta(_Pg(stats={"PV": 5, "RDM": 1}), cfg), 1)
+        # Regola → 2, RDM −2 → 0 (skip)
+        self.assertEqual(risolvi_difficolta(_Pg(stats={"PV": 5, "RDM": 2}), cfg), 0)
+
+    def test_difficolta_effettiva_massima_senza_pattern(self):
+        from personaggi.qr_minigioco import difficolta_effettiva_massima
+
+        cfg = _Cfg(
+            difficolta=2,
+            regole_difficolta=[],
+            tipi_abilitati=[MINIGIOCO_TIPO_SIMON],
+            pattern=None,
+        )
+        with patch("personaggi.qr_minigioco.resolve_pattern", return_value=None):
+            self.assertEqual(difficolta_effettiva_massima(_Pg(stats={"RDM": 2}), cfg), 0)
+            self.assertEqual(difficolta_effettiva_massima(_Pg(stats={"RDM": 1}), cfg), 1)
+
+    @patch("personaggi.qr_minigioco.minigioco_ha_immagine_disponibile", return_value=True)
+    def test_scegli_tipo_skip_se_rdm_azzera(self, _mock_img):
+        cfg = _Cfg(
+            tipi_abilitati=[MINIGIOCO_TIPO_SIMON],
+            difficolta=1,
+            regole_difficolta=[],
+            pattern=None,
+        )
+        with patch("personaggi.qr_minigioco.resolve_pattern", return_value=None):
+            with patch("personaggi.qr_minigioco.tipi_pool_giocabili", return_value=[MINIGIOCO_TIPO_SIMON]):
+                tipo, d = scegli_tipo_e_difficolta(cfg, 99, personaggio=_Pg(stats={"RDM": 1}))
+        self.assertEqual(d, 0)
+        # tipo può essere simon ma difficoltà 0 → il gate salta comunque
+
     @patch("personaggi.models.Punteggio.objects.filter")
     def test_risolvi_difficolta_aura(self, mock_punteggio_filter):
         mock_p = MagicMock()
@@ -531,4 +587,31 @@ class MinigiocoSezioneAccessoTests(TestCase):
         self.config.save()
         gate = check_gate_minigioco(qr_code=self.qr, personaggio=self.pg)
         self.assertEqual(gate["tipo_modello"], "minigioco_richiesto")
+
+    @patch("personaggi.qr_minigioco.minigioco_ha_immagine_disponibile", return_value=True)
+    def test_rdm_salta_minigioco_se_difficolta_zero(self, _mock_img):
+        from personaggi.qr_minigioco import check_gate_minigioco
+
+        self.config.requisiti_attivazione = []
+        self.config.attivo = True
+        self.config.difficolta = 1
+        self.config.tipi_abilitati = [MINIGIOCO_TIPO_SIMON]
+        self.config.save()
+        with patch.object(self.pg, "get_valore_statistica", side_effect=lambda s: 1 if str(s).upper() == "RDM" else 0):
+            gate = check_gate_minigioco(qr_code=self.qr, personaggio=self.pg)
+        self.assertIsNone(gate)
+
+    @patch("personaggi.qr_minigioco.minigioco_ha_immagine_disponibile", return_value=True)
+    def test_rdm_riduce_ma_non_salta_se_resta_positivo(self, _mock_img):
+        from personaggi.qr_minigioco import check_gate_minigioco
+
+        self.config.requisiti_attivazione = []
+        self.config.attivo = True
+        self.config.difficolta = 3
+        self.config.tipi_abilitati = [MINIGIOCO_TIPO_SIMON]
+        self.config.save()
+        with patch.object(self.pg, "get_valore_statistica", side_effect=lambda s: 1 if str(s).upper() == "RDM" else 0):
+            gate = check_gate_minigioco(qr_code=self.qr, personaggio=self.pg)
+        self.assertEqual(gate["tipo_modello"], "minigioco_richiesto")
+        self.assertEqual(gate["dati"]["difficolta"], 2)
 

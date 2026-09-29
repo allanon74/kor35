@@ -62,6 +62,9 @@ STATI_SBLocco = frozenset({SESSIONE_COMPLETATO, SESSIONE_SCADUTO_ATTIVA})
 # Finestra per bypass immediato post-vittoria (caricamento effetto QR) in modalità ogni_scansione.
 BYPASS_TRANSITO_SECONDI = 120
 
+# Statistica PG: ogni punto abbassa di 1 la difficoltà minigioco; ≤0 → skip.
+SIGLA_RIDUZIONE_DIFFICOLTA_MINIGIOCO = "RDM"
+
 # Sliding: diff 4 resta 4×4 (niente 5×5 outdoor).
 _SLIDING_GRID = {1: 2, 2: 3, 3: 4, 4: 4}
 _ROTATE_GRID = {1: 2, 2: 3, 3: 4, 4: 5}
@@ -581,10 +584,25 @@ def difficolta_default(config) -> int:
     return max(1, min(4, int(getattr(config, "difficolta", 4) or 4)))
 
 
+def riduzione_difficolta_minigioco(personaggio) -> int:
+    """Punti RDM del personaggio (0 se assente / non valorizzata)."""
+    if personaggio is None:
+        return 0
+    getter = getattr(personaggio, "get_valore_statistica", None)
+    if not callable(getter):
+        return 0
+    try:
+        return max(0, int(getter(SIGLA_RIDUZIONE_DIFFICOLTA_MINIGIOCO) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def risolvi_difficolta(personaggio, config, base=None) -> int:
     """
     Parte dalla difficoltà predefinita (o `base` da entry pattern); per ogni regola
     condizionale che matcha applica il minimo (più favorevole al giocatore).
+    Poi sottrae la statistica RDM del personaggio (ogni punto = −1 difficoltà).
+    Può restituire 0 (o restare 0 dopo clamp): in quel caso il gate salta il minigioco.
     """
     best = difficolta_default(config) if base is None else max(1, min(4, int(base)))
     for rule in getattr(config, "regole_difficolta", None) or []:
@@ -597,22 +615,52 @@ def risolvi_difficolta(personaggio, config, base=None) -> int:
         except (TypeError, ValueError):
             continue
         best = min(best, d)
-    return best
+    rid = riduzione_difficolta_minigioco(personaggio)
+    if rid > 0:
+        best = best - rid
+    return max(0, best)
 
 
 def deve_saltare_minigioco(personaggio, config) -> bool:
-    """True = nessun minigioco, effetto QR immediato."""
+    """True = nessun minigioco, effetto QR immediato (esclusioni staff)."""
     for gruppo in getattr(config, "esclusioni_minigioco", None) or []:
         if isinstance(gruppo, dict) and gruppo_requisiti_soddisfatto(personaggio, gruppo):
             return True
     return False
 
 
+def _base_diff_entry(entry, config) -> int:
+    try:
+        return max(1, min(4, int(entry.difficolta)))
+    except (TypeError, ValueError):
+        return difficolta_default(config)
+
+
+def difficolta_effettiva_massima(personaggio, config) -> int:
+    """
+    Massima difficoltà effettiva tra le opzioni giocabili (dopo regole + RDM).
+    Se ≤0 non ha senso avviare un minigioco.
+    """
+    pattern = resolve_pattern(config)
+    raw_entries = _pattern_entries_attive(pattern) if pattern else []
+    if raw_entries:
+        entries = pattern_entries_giocabili(config)
+        if not entries:
+            entries = [e for e in raw_entries if e.tipo in MINIGIOCO_TIPI_SENZA_IMMAGINE]
+        if entries:
+            return max(
+                risolvi_difficolta(personaggio, config, base=_base_diff_entry(e, config))
+                for e in entries
+            )
+    return risolvi_difficolta(personaggio, config)
+
+
 def scegli_tipo_e_difficolta(config, seed: int, personaggio=None) -> Tuple[str, int]:
     """
     Estrae (tipo, difficoltà).
-    Con pattern e entry attive: pick pesato (tipo+diff per entry), poi regole PG.
+    Con pattern e entry attive: pick pesato (tipo+diff per entry), poi regole PG + RDM.
     Altrimenti: legacy tipi_abilitati + difficolta config.
+    Se dopo RDM nessuna opzione ha difficoltà > 0, ritorna ("", 0) → skip gate.
     """
     rng = _rng(seed)
     pattern = resolve_pattern(config)
@@ -622,16 +670,20 @@ def scegli_tipo_e_difficolta(config, seed: int, personaggio=None) -> Tuple[str, 
         if not entries:
             entries = [e for e in raw_entries if e.tipo in MINIGIOCO_TIPI_SENZA_IMMAGINE]
         if entries:
+            if personaggio is not None:
+                candidati = []
+                for e in entries:
+                    d = risolvi_difficolta(personaggio, config, base=_base_diff_entry(e, config))
+                    if d > 0:
+                        candidati.append((e, d))
+                if not candidati:
+                    return "", 0
+                weights = [max(1, int(getattr(e, "peso", 1) or 1)) for e, _d in candidati]
+                chosen_e, chosen_d = rng.choices(candidati, weights=weights, k=1)[0]
+                return chosen_e.tipo, chosen_d
             weights = [max(1, int(getattr(e, "peso", 1) or 1)) for e in entries]
             chosen = rng.choices(entries, weights=weights, k=1)[0]
-            tipo = chosen.tipo
-            try:
-                base_diff = max(1, min(4, int(chosen.difficolta)))
-            except (TypeError, ValueError):
-                base_diff = difficolta_default(config)
-            if personaggio is not None:
-                return tipo, risolvi_difficolta(personaggio, config, base=base_diff)
-            return tipo, base_diff
+            return chosen.tipo, _base_diff_entry(chosen, config)
 
     pool = tipi_pool_giocabili(config)
     if not pool:
@@ -894,6 +946,9 @@ def _crea_sessione(personaggio, qr_code, config, request=None):
 
     seed = random.randint(1, 2_147_483_647)
     tipo, difficolta = scegli_tipo_e_difficolta(config, seed, personaggio=personaggio)
+    if not tipo or difficolta <= 0:
+        # RDM (o regole) ha azzerato tutte le difficoltà giocabili: niente sessione.
+        return None
     game_seed = _rng(seed).randint(1, 2_147_483_647)
     stato = generate_game_state(tipo, difficolta, game_seed)
     img_url, bib_row = risolvi_immagine_sessione(config, request, seed=seed)
@@ -994,6 +1049,10 @@ def check_gate_minigioco(
     if deve_saltare_minigioco(personaggio, config):
         return None
 
+    # RDM (e regole) hanno portato ogni difficoltà giocabile a ≤0 → effetto QR diretto.
+    if difficolta_effettiva_massima(personaggio, config) <= 0:
+        return None
+
     has_pattern_playable = bool(pattern_entries_giocabili(config))
     if not has_pattern_playable:
         pattern = resolve_pattern(config)
@@ -1024,6 +1083,8 @@ def check_gate_minigioco(
         }
 
     sess = _crea_sessione(personaggio, qr_code, config, request)
+    if sess is None:
+        return None
     return {
         "tipo_modello": "minigioco_richiesto",
         "messaggio": (config.messaggio_pre or "").strip() or "Completa il minigioco per sbloccare il QR.",
@@ -1133,6 +1194,17 @@ def gestisci_scadenza_sessione(sess, config, *, request=None, personaggio=None) 
     sess.completato_at = now
     sess.save(update_fields=["stato", "completato_at", "updated_at"])
     nuova = _crea_sessione(sess.personaggio, sess.qr_code, config, request)
+    if nuova is None:
+        # RDM ha azzerato la difficoltà nel frattempo: niente nuovo gioco, sblocca il QR.
+        sess.stato = SESSIONE_SCADUTO_ATTIVA
+        sess.save(update_fields=["stato", "updated_at"])
+        return {
+            "tipo_modello": "minigioco_superato",
+            "minigioco_session_id": str(sess.id),
+            "messaggio": "Il minigioco non è più necessario: il QR si attiva.",
+            "qrcode_id": sess.qr_code_id,
+            "scadenza_esito": TIMER_SCADENZA_ATTIVA,
+        }
     return {
         "tipo_modello": "minigioco_richiesto",
         "messaggio": "Tempo scaduto: il minigioco riparte.",
