@@ -1087,3 +1087,164 @@ class NegozioMercanteSerieVoceTests(TestCase):
         self.assertEqual(voce.tipo_voce, VOCE_SERIE)
         self.assertEqual(voce.serie_id, self.serie.id)
         self.assertEqual(res.data.get("entita_nome"), "Figurine test")
+
+
+class NegozioMercantePrestitiTests(TestCase):
+    """Negozio di prestiti: noleggio, limite per PG, restituzione."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from personaggi.models import OggettoBase
+
+        cls.campagna, _ = Campagna.objects.get_or_create(
+            slug="kor35",
+            defaults={
+                "nome": "KOR35",
+                "is_default": True,
+                "is_base": True,
+                "attiva": True,
+            },
+        )
+        cls.user = User.objects.create_user(username="negozio_prestito_pg", password="test")
+        cls.pg = Personaggio.objects.create(
+            nome="Prestatario", proprietario=cls.user, campagna=cls.campagna
+        )
+        cls.negozio = NegozioMercante.objects.create(
+            nome="Armeria prestiti",
+            campagna=cls.campagna,
+            saldo_crediti=Decimal("0"),
+            regole_apertura={"modalita": "sempre_aperto"},
+            negozio_prestiti=True,
+            limite_prestiti_per_personaggio=1,
+        )
+        cls.oggetto_base = OggettoBase.objects.create(
+            nome="Spada prestito",
+            costo=50,
+            in_vendita=True,
+        )
+
+    def _fondi(self, importo="200"):
+        from personaggi.economia_crediti import CONTO_CORRENTE, modifica_crediti
+
+        modifica_crediti(self.pg, Decimal(importo), "fondi prestito test", conto=CONTO_CORRENTE)
+
+    def _voce_ogb(self, *, prezzo=10):
+        from personaggi.negozio_mercante_models import NegozioMercanteVoce, VOCE_OGGETTO_BASE
+
+        return NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_OGGETTO_BASE,
+            oggetto_base=self.oggetto_base,
+            prezzo_crediti=prezzo,
+            attivo=True,
+        )
+
+    def test_prestito_gratuito_e_limite(self):
+        from personaggi.economia_crediti import CONTO_CORRENTE, saldo_corrente
+        from personaggi.negozio_mercante_models import NegozioMercantePrestito, PRESTITO_ATTIVO
+        from personaggi.negozio_mercante_service import (
+            acquista_voce,
+            build_listino,
+            restituisci_prestito_oggetto,
+        )
+
+        self._fondi()
+        voce = self._voce_ogb(prezzo=0)
+        listino = build_listino(self.negozio, self.pg)
+        self.assertTrue(listino["negozio_prestiti"])
+        self.assertEqual(listino["limite_prestiti_per_personaggio"], 1)
+
+        prima = saldo_corrente(self.pg)
+        res = acquista_voce(self.negozio, self.pg, voce.id, conto=CONTO_CORRENTE)
+        self.assertTrue(res["prestito"])
+        self.assertEqual(res["prezzo"], 0)
+        self.assertEqual(saldo_corrente(self.pg), prima)
+        self.assertEqual(
+            NegozioMercantePrestito.objects.filter(
+                personaggio=self.pg, negozio=self.negozio, stato=PRESTITO_ATTIVO
+            ).count(),
+            1,
+        )
+        oggetto_id = res["oggetto_id"]
+
+        voce2 = self._voce_ogb(prezzo=0)
+        with self.assertRaises(ValidationError):
+            acquista_voce(self.negozio, self.pg, voce2.id, conto=CONTO_CORRENTE)
+
+        rest = restituisci_prestito_oggetto(self.negozio, self.pg, oggetto_id)
+        self.assertEqual(rest["status"], "success")
+        self.assertEqual(
+            NegozioMercantePrestito.objects.filter(
+                personaggio=self.pg, negozio=self.negozio, stato=PRESTITO_ATTIVO
+            ).count(),
+            0,
+        )
+
+        # Dopo restituzione può riprendere
+        res2 = acquista_voce(self.negozio, self.pg, voce2.id, conto=CONTO_CORRENTE)
+        self.assertTrue(res2["prestito"])
+
+    def test_noleggio_addebita_crediti(self):
+        from personaggi.economia_crediti import CONTO_CORRENTE, saldo_corrente
+        from personaggi.negozio_mercante_service import acquista_voce
+
+        self._fondi("100")
+        voce = self._voce_ogb(prezzo=25)
+        prima = saldo_corrente(self.pg)
+        res = acquista_voce(self.negozio, self.pg, voce.id, conto=CONTO_CORRENTE)
+        self.assertTrue(res["prestito"])
+        self.assertEqual(res["prezzo"], 25)
+        self.assertEqual(saldo_corrente(self.pg), prima - Decimal("25"))
+        self.negozio.refresh_from_db()
+        self.assertEqual(self.negozio.saldo_crediti, Decimal("25"))
+
+    def test_vendita_bloccata_su_negozio_prestiti(self):
+        from personaggi.negozio_mercante_service import vendi_oggetto_a_negozio
+
+        og = Oggetto.objects.create(nome="Mio pugnale", costo_acquisto=40)
+        OggettoInInventario.objects.create(oggetto=og, inventario=self.pg)
+        with self.assertRaises(ValidationError):
+            vendi_oggetto_a_negozio(self.negozio, self.pg, og.id)
+
+    def test_oggetto_in_prestito_non_vendibile_altrove(self):
+        from personaggi.economia_crediti import CONTO_CORRENTE
+        from personaggi.negozio_mercante_service import acquista_voce, vendi_oggetto_a_negozio
+
+        self._fondi()
+        voce = self._voce_ogb(prezzo=0)
+        res = acquista_voce(self.negozio, self.pg, voce.id, conto=CONTO_CORRENTE)
+        altro = NegozioMercante.objects.create(
+            nome="Mercante normale",
+            campagna=self.campagna,
+            saldo_crediti=Decimal("5000"),
+            regole_apertura={"modalita": "sempre_aperto"},
+            negozio_prestiti=False,
+        )
+        with self.assertRaises(ValidationError):
+            vendi_oggetto_a_negozio(altro, self.pg, res["oggetto_id"])
+
+    def test_restituisci_tutti_a_fine_evento(self):
+        from personaggi.economia_crediti import CONTO_CORRENTE
+        from personaggi.negozio_mercante_models import NegozioMercantePrestito, PRESTITO_ATTIVO
+        from personaggi.negozio_mercante_service import (
+            acquista_voce,
+            restituisci_tutti_prestiti_attivi,
+        )
+
+        self.negozio.limite_prestiti_per_personaggio = 2
+        self.negozio.save(update_fields=["limite_prestiti_per_personaggio", "updated_at"])
+        self._fondi()
+        v1 = self._voce_ogb(prezzo=0)
+        v2 = self._voce_ogb(prezzo=0)
+        acquista_voce(self.negozio, self.pg, v1.id, conto=CONTO_CORRENTE)
+        acquista_voce(self.negozio, self.pg, v2.id, conto=CONTO_CORRENTE)
+        self.assertEqual(
+            NegozioMercantePrestito.objects.filter(stato=PRESTITO_ATTIVO).count(),
+            2,
+        )
+        out = restituisci_tutti_prestiti_attivi(nota="fine evento")
+        self.assertEqual(out["restituiti"], 2)
+        self.assertEqual(
+            NegozioMercantePrestito.objects.filter(stato=PRESTITO_ATTIVO).count(),
+            0,
+        )

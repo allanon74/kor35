@@ -1476,6 +1476,16 @@ export const vendiOggettoNegozioMercante = (negozioId, charId, oggettoId, onLogo
     onLogout,
   );
 
+export const restituisciPrestitoNegozioMercante = (negozioId, charId, oggettoId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/negozi-mercante/${negozioId}/restituisci/`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ char_id: charId, oggetto_id: oggettoId }),
+    },
+    onLogout,
+  );
+
 export const previewVenditaNegozioMercante = (negozioId, charId, oggettoId, onLogout) =>
   fetchAuthenticated(
     `/api/personaggi/api/negozi-mercante/${negozioId}/preview-vendita/?char_id=${charId}&oggetto_id=${oggettoId}`,
@@ -1587,6 +1597,30 @@ export const staffGetNegozioMercanteMovimenti = (negozioId, onLogout) =>
   fetchAuthenticated(
     `/api/personaggi/api/staff/negozi-mercante/${negozioId}/movimenti/`,
     { method: 'GET' },
+    onLogout,
+  );
+
+export const staffGetNegozioMercantePrestiti = (negozioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante/${negozioId}/prestiti/`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const staffRestituisciPrestitoNegozio = (negozioId, prestitoId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante/${negozioId}/restituisci-prestito/`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ prestito_id: prestitoId }),
+    },
+    onLogout,
+  );
+
+export const staffRestituisciTuttiPrestitiNegozio = (negozioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante/${negozioId}/restituisci-tutti-prestiti/`,
+    { method: 'POST', body: JSON.stringify({}) },
     onLogout,
   );
 
