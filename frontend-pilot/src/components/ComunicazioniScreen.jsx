@@ -38,7 +38,7 @@ const PREVIEW_QUADRO = {
   ],
 };
 
-export default function ComunicazioniScreen({ onLogout, onBack, preview = false }) {
+export default function ComunicazioniScreen({ onLogout, onBack, preview = false, compact = false }) {
   const [quadro, setQuadro] = useState(preview ? {
     ...PREVIEW_QUADRO,
     evento: {
@@ -108,20 +108,38 @@ export default function ComunicazioniScreen({ onLogout, onBack, preview = false 
     }
   };
 
+  const guasti = quadro?.sottosistemi_guasti || [];
+  const statoCompatto = !quadro?.sessione_attiva
+    ? 'Nessun volo in corso'
+    : evento
+      ? `${evento.nome}${evento.in_reazione ? ` · reazione ${reazione == null ? '…' : `${reazione}s`}` : ' · reazione chiusa'}`
+      : 'Nessun evento';
+
   return (
-    <div className="comms-console">
+    <div className={`comms-console${compact ? ' is-kiosk800' : ''}`}>
       <header className="comms-head">
         <div>
           <div className="comms-kicker">KOR-35 // RADIO</div>
           <h1>Comunicazioni</h1>
         </div>
         <div className="comms-head-actions">
-          {onBack ? <button type="button" className="btn" onClick={onBack}>Stazione</button> : null}
-          <button type="button" className="btn" onClick={onLogout}>Esci</button>
+          {onBack ? (
+            <button type="button" className={compact ? 'btn kiosk800-back' : 'btn'} onClick={onBack}>
+              {compact ? 'Scelta' : 'Stazione'}
+            </button>
+          ) : null}
+          <button type="button" className={compact ? 'btn kiosk800-back' : 'btn'} onClick={onLogout}>Esci</button>
         </div>
       </header>
 
-      <section className="comms-event">
+      {compact ? (
+        <p className="comms-statusline">
+          {statoCompatto}
+          {guasti.length ? ` · guasti ${guasti.join(', ')}` : ''}
+        </p>
+      ) : null}
+
+      <section className="comms-event" hidden={compact}>
         {!quadro?.sessione_attiva ? (
           <p>Nessun volo in corso. Gli allarmi partono quando la nave è in missione.</p>
         ) : evento ? (
@@ -137,8 +155,8 @@ export default function ComunicazioniScreen({ onLogout, onBack, preview = false 
         ) : (
           <p>Nessun evento in corso. Puoi comunque dichiarare un allarme al dipartimento.</p>
         )}
-        {(quadro?.sottosistemi_guasti || []).length ? (
-          <p className="comms-faults">Guasti: {quadro.sottosistemi_guasti.join(', ')}</p>
+        {guasti.length ? (
+          <p className="comms-faults">Guasti: {guasti.join(', ')}</p>
         ) : null}
       </section>
 

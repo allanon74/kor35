@@ -230,4 +230,4 @@ Checklist rapida: `deploy/raspberry-pilot-kiosk/TEST-CHECKLIST-10MIN.md`.
 - `deploy/raspberry-pilot-kiosk/kiosk.env.example` — template completo `kiosk.env`
 - `docs/CONSOLE_PILOTA_RUNBOOK.md` — API e stack server
 - Wiki [Test offline — mesh Omada](/regolamento/staff-test-offline-omada) — rete evento e IP LAN
-- Wiki [Console stazione — kiosk 800×480](/regolamento/staff-console-stazione-kiosk) — Pi 4 con touch 7" per ingegneria o scientifica
+- Wiki [Console stazione — kiosk 800×480](/regolamento/staff-console-stazione-kiosk) — Pi 4 con touch 7" per ingegneria, scientifica e comunicazioni

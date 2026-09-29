@@ -110,7 +110,7 @@ export default function LoginQR({
         <div className="login-qr-actions">
           {onBack ? (
             <button type="button" className="btn" onClick={onBack}>
-              Console
+              Scelta
             </button>
           ) : null}
           <button type="button" className="btn primary" onClick={previewClaimUrl ? undefined : startFlow}>

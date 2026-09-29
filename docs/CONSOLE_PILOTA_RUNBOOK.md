@@ -68,7 +68,7 @@ Staff (richiede `is_staff`):
 
 ## Console comunicazioni
 
-Schermata `/pilot/?screen=comunicazioni` (statistica default `0CO`). Si accende da staff **Pilotaggio → Console di bordo**. Con il flag attivo i pulsanti allarme spariscono dalla plancia di navigazione.
+Schermata `/pilot/?screen=comunicazioni` (statistica default `0CO`). Sul pannello Pi è la terza scelta di `/pilot/?screen=station&viewport=800x480`. Si accende da staff **Pilotaggio → Console di bordo**. Con il flag attivo i pulsanti allarme spariscono dalla plancia di navigazione.
 
 - Destinatari: una **KORP** già presente in **Carriere e KORP** (lì è il dipartimento). Il protocollo (testo e audio) si associa in **Pilotaggio → Comunicazioni**. Ogni colore ha un solo protocollo. Segnaposto `{sottosistema}` e `{evento}`.
 - Colori aggiuntivi: **ambra** (riparazione) e **viola** (invasione), oltre a giallo, rosso, nero, blu e crociera. Sull'ambra i sottosistemi offline vengono sempre nominati nel messaggio ai membri e nell'audio di plancia.

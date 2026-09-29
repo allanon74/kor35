@@ -1,5 +1,5 @@
 [Unit]
-Description=KOR35 kiosk stazione 800x480 (ingegneria / scientifica)
+Description=KOR35 kiosk stazione 800x480 (ingegneria / scientifica / comunicazioni)
 After=display-manager.service graphical.target NetworkManager.service
 Wants=NetworkManager.service
 

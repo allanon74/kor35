@@ -1,6 +1,6 @@
 # Console stazione — kiosk 800×480 (Raspberry Pi 4)
 
-Pannello touch **7" 800×480** per la **Console Ingegneria** o la **Console Scientifica**. Un solo schermo, Chromium a tutto schermo, nessun Docker sul device.
+Pannello touch **7" 800×480** per **Ingegneria**, **Scientifica** e **Comunicazioni**. Un solo schermo, Chromium a tutto schermo, nessun Docker sul device.
 
 Lo stack (API e `/pilot/`) gira sul **mirror in modalità bosco** oppure su **prod**. Il Pi è solo un browser.
 
@@ -10,7 +10,7 @@ Script: `deploy/raspberry-station-kiosk/` (`sudo ./install-station-kiosk.sh`).
 
 ## Cosa vede il giocatore
 
-1. Due pulsanti: **Ingegneria** e **Scientifica**. Sotto, la sigla richiesta (quella dei settaggi di pilotaggio, default `0IN > 0` e `0SC > 0`).
+1. Tre pulsanti: **Ingegneria**, **Scientifica** e **Comunicazioni**. Sotto, la sigla richiesta (quella dei settaggi di pilotaggio, default `0IN > 0`, `0SC > 0` e `0CO > 0`). Comunicazioni resta spenta finché non la abiliti in Console di bordo.
 2. Dopo il tocco, il QR di login. Lo smartphone deve essere già nell'app, con un personaggio che ha quella statistica.
 3. La console si apre a schede, nel riquadro 800×480.
 
@@ -18,10 +18,11 @@ Script: `deploy/raspberry-station-kiosk/` (`sudo ./install-station-kiosk.sh`).
 |----------|-----|--------|---------|
 | Ingegneria | `/pilot/?screen=compattatore&viewport=800x480` | ruolo `ingegneria` | sigla staff ingegneria (`compattatore_stat_accesso_sigla`) |
 | Scientifica | `/pilot/?screen=scientifica&viewport=800x480` | ruolo `scientifica` | sigla staff scientifica |
+| Comunicazioni | `/pilot/?screen=comunicazioni&viewport=800x480` | ruolo `comunicazioni` | sigla staff comunicazioni (`comunicazioni_stat_accesso_sigla`, default `0CO`) |
 
 Pagina di scelta: `/pilot/?screen=station&viewport=800x480`.
 
-Le schede ingegneria sono Motore, Quantico, Fuel, Stiva. Quelle scientifiche sono Spettro, Scan, Matrice, Interventi. **Logout** torna alla scelta.
+Le schede ingegneria sono Motore, Quantico, Fuel, Stiva. Quelle scientifiche sono Spettro, Scan, Matrice, Interventi. Comunicazioni è una griglia di colori (giallo, rosso, nero, blu, ambra, viola, crociera) nello stesso riquadro 800×480: il testo di stato sta su una riga, i pulsanti riempiono il resto. **Scelta** torna al menu, **Esci** chiude il login.
 
 Se nello staff il login della console è spento, dopo il pulsante l'accesso è automatico e il QR non compare.
 
@@ -71,7 +72,7 @@ journalctl -u kiosk-station.service -n 80 --no-pager
 curl -fsS -k https://www.kor35.it/api/pilot/station/consoles/
 ```
 
-Atteso: `ingegneria.enabled` e `scientifica.enabled` a true quando le due console sono accese nello staff e `PILOT_CONSOLE_ENABLED` è attivo sul server.
+Atteso: `ingegneria.enabled`, `scientifica.enabled` e `comunicazioni.enabled` a true quando le tre console sono accese nello staff e `PILOT_CONSOLE_ENABLED` è attivo sul server.
 
 ### Pannello ruotato
 
@@ -94,7 +95,7 @@ sudo systemctl start kiosk-station.service
 
 ## Staff
 
-In runtime console abilita le due console e, se serve, cambia la sigla. Il QR della stazione usa quella sigla: un personaggio con solo navigazione (`0PI`) non sblocca l'ingegneria.
+In runtime console abilita le tre console e, se serve, cambia la sigla. Il QR della stazione usa quella sigla: un personaggio con solo navigazione (`0PI`) non sblocca l'ingegneria. Comunicazioni si accende con il flag in Console di bordo.
 
 Anteprima layout sul PC (senza backend), finestra del browser larga:
 
@@ -105,6 +106,8 @@ Poi i pulsanti aprono il QR dimostrativo. Per la console piena:
 `/pilot/?screen=compattatore&viewport=800x480&preview=layout`
 
 `/pilot/?screen=scientifica&viewport=800x480&preview=layout`
+
+`/pilot/?screen=comunicazioni&viewport=800x480&preview=layout`
 
 Aggiungi `&tab=stiva` o `&tab=matrice` per aprire una scheda.
 

@@ -382,7 +382,7 @@ export default function App() {
     return (
       <div className="app-shell app-shell-comunicazioni">
         <main>
-          <ComunicazioniScreen preview onLogout={() => {}} onBack={backToStation} />
+          <ComunicazioniScreen preview onLogout={() => {}} onBack={backToStation} compact={compact} />
         </main>
       </div>
     );
@@ -516,6 +516,7 @@ export default function App() {
           <ComunicazioniScreen
             onLogout={handleLogout}
             onBack={backToStation}
+            compact={compact}
           />
         </main>
       </div>

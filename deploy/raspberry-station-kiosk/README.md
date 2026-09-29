@@ -7,11 +7,11 @@ Client leggero per il **pannello touch 7" 800×480**: un solo Chromium, niente D
 | **Server** (mirror in modalità bosco, oppure prod) | API + `/pilot/` |
 | **Questo Pi** | Schermo di scelta, poi QR di login |
 
-All'avvio il browser apre `/pilot/?screen=station&viewport=800x480`:
+All'avvio il browser apre `/pilot/?screen=station&viewport=800x480` (riquadro fisico 800×480):
 
-1. Due pulsanti: **Console Ingegneria** e **Console Scientifica**.
-2. Dopo il tocco compare il QR. Il telefono del giocatore deve avere la statistica impostata nello staff (default ingegneria `0IN > 0`, scientifica `0SC > 0`).
-3. La console entra nel layout compatto a schede, pensato per 800×480.
+1. Tre pulsanti: **Ingegneria**, **Scientifica** e **Comunicazioni**. Comunicazioni compare spenta finché non la abiliti in Console di bordo.
+2. Dopo il tocco compare il QR. Il telefono del giocatore deve avere la statistica impostata nello staff (default ingegneria `0IN > 0`, scientifica `0SC > 0`, comunicazioni `0CO > 0`).
+3. La console entra nel layout compatto, pensato per 800×480. Ingegneria e scientifica usano le schede; comunicazioni mostra i colori di allarme.
 
 Il WiFi prova prima **`kor35-larp`** (mesh Omada, modalità evento / bosco). Se quella rete non c'è, usa l'SSID di riserva salvato oppure chiede a schermo quale rete usare.
 
@@ -90,6 +90,6 @@ Valori: `normal`, `left`, `right`, `inverted`. Poi `sudo systemctl restart kiosk
 | Device | Cartella | Schermi |
 |--------|----------|---------|
 | Plancia doppio HDMI | `deploy/raspberry-pilot-kiosk/` | status + control |
-| Questo Pi 7" | `deploy/raspberry-station-kiosk/` | ingegneria o scientifica |
+| Questo Pi 7" | `deploy/raspberry-station-kiosk/` | ingegneria, scientifica o comunicazioni |
 
 Runbook staff: `docs/wiki/staff/console-stazione-kiosk.md`.

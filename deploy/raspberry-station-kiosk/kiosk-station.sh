@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # KOR35 — kiosk singolo schermo 800×480 (Console Ingegneria o Scientifica).
-# Apre /pilot/?screen=station : due pulsanti, poi il QR di login della console scelta.
+# Apre /pilot/?screen=station : ingegneria, scientifica e comunicazioni, poi il QR.
 set -uo pipefail
 
 export DISPLAY="${DISPLAY:-:0}"

@@ -49,7 +49,12 @@ class StationConsoleAuthTests(TestCase):
         self.console = APIClient()
 
     def test_station_payload_usa_sigle_runtime(self):
-        _cfg(compattatore_stat_accesso_sigla="ABX", scientifica_stat_accesso_sigla="QSC")
+        _cfg(
+            compattatore_stat_accesso_sigla="ABX",
+            scientifica_stat_accesso_sigla="QSC",
+            comunicazioni_console_abilitata=True,
+            comunicazioni_stat_accesso_sigla="0CO",
+        )
         res = self.console.get("/api/pilot/station/consoles/")
         self.assertEqual(res.status_code, 200, res.content)
         body = res.json()
@@ -60,6 +65,10 @@ class StationConsoleAuthTests(TestCase):
         self.assertEqual(body["scientifica"]["sigla"], "QSC")
         self.assertEqual(body["scientifica"]["requisito"], "QSC > 0")
         self.assertEqual(body["scientifica"]["screen"], "scientifica")
+        self.assertEqual(body["comunicazioni"]["sigla"], "0CO")
+        self.assertEqual(body["comunicazioni"]["requisito"], "0CO > 0")
+        self.assertEqual(body["comunicazioni"]["screen"], "comunicazioni")
+        self.assertTrue(body["comunicazioni"]["enabled"])
 
     def test_ticket_ingegneria_rifiuta_solo_navigazione(self):
         user, _pg = _personaggio("SoloPilota", "0PI", 3)
