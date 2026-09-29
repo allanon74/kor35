@@ -24,6 +24,7 @@ VOCE_INFUSIONE = "INF"
 VOCE_TESSITURA = "TES"
 VOCE_CERIMONIALE = "CER"
 VOCE_CONSUMABILE = "CON"
+VOCE_SERIE = "SER"
 VOCE_TIPO_CHOICES = [
     (VOCE_OGGETTO_BASE, "Oggetto base (template)"),
     (VOCE_OGGETTO, "Oggetto (istanza unica)"),
@@ -32,6 +33,7 @@ VOCE_TIPO_CHOICES = [
     (VOCE_TESSITURA, "Tessitura"),
     (VOCE_CERIMONIALE, "Cerimoniale"),
     (VOCE_CONSUMABILE, "Consumabile (lotto)"),
+    (VOCE_SERIE, "Serie (pezzo collezione)"),
 ]
 
 STOCK_DISPONIBILE = "DISP"
@@ -210,6 +212,14 @@ class NegozioMercanteVoce(SyncableModel, models.Model):
         blank=True,
         related_name="voci_consumabile_negozio",
         help_text="Template tessitura per generare il consumabile all'acquisto.",
+    )
+    serie = models.ForeignKey(
+        "SerieCollezione",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="voci_negozio_mercante",
+        help_text="Serie collezione: all'acquisto assegna un pezzo via inventario serie (non zaino).",
     )
     consumabile_nome = models.CharField(max_length=200, blank=True, default="")
     consumabile_livello = models.PositiveIntegerField(default=1)

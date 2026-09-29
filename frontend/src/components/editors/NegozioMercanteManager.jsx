@@ -42,6 +42,7 @@ import {
   staffGetInfusioni,
   staffGetTessiture,
   staffGetCerimoniali,
+  staffGetSerieCollezioni,
 } from '../../api';
 
 const TIPO_VOCE_OPTS = [
@@ -52,6 +53,7 @@ const TIPO_VOCE_OPTS = [
   { id: 'TES', nome: 'Tessitura' },
   { id: 'CER', nome: 'Cerimoniale' },
   { id: 'CON', nome: 'Consumabile' },
+  { id: 'SER', nome: 'Serie (pezzo collezione)' },
 ];
 
 const TIPO_VOCE_LABEL = Object.fromEntries(TIPO_VOCE_OPTS.map((o) => [o.id, o.nome]));
@@ -107,6 +109,7 @@ const refIdFromVoce = (v) => {
     TES: v.tessitura,
     CER: v.cerimoniale,
     CON: v.consumabile_tessitura,
+    SER: v.serie,
   };
   const raw = map[v.tipo_voce];
   if (raw && typeof raw === 'object') return raw.id || '';
@@ -205,6 +208,11 @@ const entityLabel = (tipo, o) => {
   if (tipo === 'OGG') {
     return `${o.nome}${o.tipo_oggetto ? ` · ${o.tipo_oggetto}` : ''}`;
   }
+  if (tipo === 'SER') {
+    const tot = o.totale != null ? ` · 1–${o.totale}` : '';
+    const dup = o.ammetti_duplicati ? ' · duplicati' : '';
+    return `${o.nome || String(o.id)}${tot}${dup}`;
+  }
   return o.nome || String(o.id);
 };
 
@@ -240,6 +248,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
     tessiture: [],
     cerimoniali: [],
     oggettiLiberi: [],
+    serie: [],
   });
 
   const loadNegozi = useCallback(async () => {
@@ -290,8 +299,9 @@ const NegozioMercanteManager = ({ onLogout }) => {
       staffGetTessiture(onLogout, { page_size: 500 }),
       staffGetCerimoniali(onLogout, { page_size: 500 }),
       staffGetOggettiSenzaPosizione(onLogout),
+      staffGetSerieCollezioni(onLogout),
     ])
-      .then(([ogb, korps, carriere, cariche, abilita, inf, tes, cer, ogg]) => {
+      .then(([ogb, korps, carriere, cariche, abilita, inf, tes, cer, ogg, serie]) => {
         setLookup({
           oggettiBase: asList(ogb),
           korps: asList(korps),
@@ -302,6 +312,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
           tessiture: asList(tes),
           cerimoniali: asList(cer),
           oggettiLiberi: asList(ogg),
+          serie: asList(serie),
         });
       })
       .catch(console.error);
@@ -419,6 +430,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
       CER: lookup.cerimoniali,
       CON: lookup.tessiture,
       OGG: lookup.oggettiLiberi,
+      SER: lookup.serie,
     }[voceDraft.tipo_voce] || [];
     return source.map((o) => ({
       id: o.id,
@@ -445,6 +457,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
       tessitura: null,
       cerimoniale: null,
       consumabile_tessitura: null,
+      serie: null,
     };
     const refId = voceDraft.ref_id ? String(voceDraft.ref_id).trim() : '';
     if (voceDraft.tipo_voce === 'OGB' && refId) body.oggetto_base = refId;
@@ -453,6 +466,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
     if (voceDraft.tipo_voce === 'INF' && refId) body.infusione = refId;
     if (voceDraft.tipo_voce === 'TES' && refId) body.tessitura = refId;
     if (voceDraft.tipo_voce === 'CER' && refId) body.cerimoniale = refId;
+    if (voceDraft.tipo_voce === 'SER' && refId) body.serie = refId;
     if (voceDraft.tipo_voce === 'INF') {
       body.consegna_istanza =
         Boolean(voceDraft.consegna_istanza) || selectedInfusione?.tipo_risultato === 'AUM';
@@ -659,6 +673,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
     TES: 'Cerca tessitura…',
     CER: 'Cerca cerimoniale…',
     CON: 'Cerca tessitura del consumabile…',
+    SER: 'Cerca serie collezione…',
   }[voceDraft.tipo_voce];
 
   return (
@@ -900,7 +915,11 @@ const NegozioMercanteManager = ({ onLogout }) => {
                         }
                       />
                       <input
-                        placeholder="Quantità (vuoto = illimitata)"
+                        placeholder={
+                          voceDraft.tipo_voce === 'SER'
+                            ? 'Quantità shop (vuoto = pezzi serie)'
+                            : 'Quantità (vuoto = illimitata)'
+                        }
                         className="bg-gray-900 border border-gray-600 rounded p-2"
                         value={voceDraft.quantita_residua}
                         onChange={(e) =>
@@ -908,6 +927,13 @@ const NegozioMercanteManager = ({ onLogout }) => {
                         }
                       />
                     </div>
+                    {voceDraft.tipo_voce === 'SER' && (
+                      <p className="text-xs text-gray-400">
+                        All&apos;acquisto assegna un pezzo nell&apos;inventario serie del
+                        personaggio (non nello zaino). Senza duplicati la disponibilità segue
+                        anche i pezzi rimanenti della collezione.
+                      </p>
+                    )}
                     {voceDraft.tipo_voce === 'INF' && (
                       <label className="flex items-start gap-2 text-xs text-gray-300">
                         <input

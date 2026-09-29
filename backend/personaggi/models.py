@@ -9541,6 +9541,7 @@ from personaggi.negozio_mercante_models import (  # noqa: E402
     VOCE_TESSITURA,
     VOCE_CERIMONIALE,
     VOCE_CONSUMABILE,
+    VOCE_SERIE,
     STOCK_DISPONIBILE,
     STOCK_VENDUTO,
 )

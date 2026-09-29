@@ -255,6 +255,7 @@ class NegozioMercanteVoceStaffViewSet(ModuloStaffGateMixin, viewsets.ModelViewSe
             "infusione",
             "tessitura",
             "cerimoniale",
+            "serie",
         )
         negozio_id = self.request.query_params.get("negozio")
         if negozio_id:
@@ -277,6 +278,7 @@ class NegozioMercanteBundleStaffViewSet(ModuloStaffGateMixin, viewsets.ModelView
             "righe__voce__tessitura",
             "righe__voce__cerimoniale",
             "righe__voce__consumabile_tessitura",
+            "righe__voce__serie",
         )
         negozio_id = self.request.query_params.get("negozio")
         if negozio_id:
