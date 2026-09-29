@@ -250,15 +250,16 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
     }
   };
 
-  const handleRestituisci = async (oggettoId, nome) => {
-    if (busy) return;
-    if (!window.confirm(`Restituire «${nome || 'oggetto'}» al negozio di prestiti?`)) return;
+  const handleRestituisci = async (prestito) => {
+    if (busy || !prestito) return;
+    const nome = prestito.oggetto_nome || 'articolo';
+    if (!window.confirm(`Restituire «${nome}» al negozio di prestiti?`)) return;
     setBusy(true);
     try {
       await restituisciPrestitoNegozioMercante(
         negozioId,
         selectedCharacterId,
-        oggettoId,
+        { prestitoId: prestito.id, oggettoId: prestito.oggetto_id },
         onLogout,
       );
       await refreshCharacterData();
@@ -465,7 +466,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => handleRestituisci(p.oggetto_id, p.oggetto_nome)}
+                        onClick={() => handleRestituisci(p)}
                         className="shrink-0 px-3 py-1.5 rounded bg-sky-700 hover:bg-sky-600 text-white text-sm font-bold disabled:opacity-40"
                       >
                         Restituisci

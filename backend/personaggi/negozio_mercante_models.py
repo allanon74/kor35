@@ -433,9 +433,9 @@ class NegozioMercanteMovimento(SyncableModel, models.Model):
 
 class NegozioMercantePrestito(SyncableModel, models.Model):
     """
-    Traccia un oggetto fisico preso in prestito da un negozio di prestiti.
-    Un personaggio può avere al più ``negozio.limite_prestiti_per_personaggio``
-    prestiti ATTIVI sullo stesso negozio.
+    Traccia un prestito attivo da un negozio di prestiti.
+    Può essere un oggetto fisico oppure una tecnica temporanea (abilità/infusione/…).
+    Limite: ``negozio.limite_prestiti_per_personaggio`` prestiti ATTIVI per PG.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -455,6 +455,37 @@ class NegozioMercantePrestito(SyncableModel, models.Model):
     oggetto = models.ForeignKey(
         "Oggetto",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="prestiti_negozio_mercante",
+        help_text="Oggetto fisico in prestito (OGB/OGG/INF-istanza/stock).",
+    )
+    abilita = models.ForeignKey(
+        "Abilita",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="prestiti_negozio_mercante",
+    )
+    infusione = models.ForeignKey(
+        "Infusione",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="prestiti_negozio_mercante",
+    )
+    tessitura = models.ForeignKey(
+        "Tessitura",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="prestiti_negozio_mercante",
+    )
+    cerimoniale = models.ForeignKey(
+        "Cerimoniale",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="prestiti_negozio_mercante",
     )
     voce = models.ForeignKey(
@@ -498,10 +529,20 @@ class NegozioMercantePrestito(SyncableModel, models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["oggetto"],
-                condition=models.Q(stato=PRESTITO_ATTIVO),
+                condition=models.Q(stato=PRESTITO_ATTIVO, oggetto__isnull=False),
                 name="uniq_oggetto_prestito_attivo",
             ),
         ]
 
     def __str__(self):
-        return f"{self.negozio.nome} → {self.personaggio_id} / {self.oggetto_id} ({self.stato})"
+        label = self.etichetta_prestito()
+        return f"{self.negozio.nome} → {self.personaggio_id} / {label} ({self.stato})"
+
+    def etichetta_prestito(self) -> str:
+        if self.oggetto_id:
+            return getattr(self.oggetto, "nome", None) or f"oggetto#{self.oggetto_id}"
+        for attr in ("abilita", "infusione", "tessitura", "cerimoniale"):
+            ent = getattr(self, attr, None)
+            if ent is not None:
+                return getattr(ent, "nome", None) or f"{attr}#{getattr(self, f'{attr}_id')}"
+        return "prestito"

@@ -958,6 +958,7 @@ class SerieImmagineInline(admin.TabularInline):
 @admin.register(SerieCollezione)
 class SerieCollezioneAdmin(admin.ModelAdmin):
     list_display = ("nome", "totale", "campagna")
+    search_fields = ("nome",)
     inlines = (SerieImmagineInline,)
 
 
@@ -1706,6 +1707,218 @@ class CreazioneConsumabileInCorsoAdmin(admin.ModelAdmin):
     list_filter = ('completata',)
     search_fields = ('personaggio__nome', 'tessitura__nome')
     autocomplete_fields = ['personaggio', 'tessitura']
+
+
+# ---------------------------------------------------------------------------
+# Negozi mercante (staff tool + admin di supporto)
+# ---------------------------------------------------------------------------
+from personaggi.negozio_mercante_models import (  # noqa: E402
+    NegozioMercante,
+    NegozioMercanteBundle,
+    NegozioMercanteBundleRiga,
+    NegozioMercanteMovimento,
+    NegozioMercantePrestito,
+    NegozioMercanteStock,
+    NegozioMercanteVoce,
+)
+
+
+class NegozioMercanteVoceInline(admin.TabularInline):
+    model = NegozioMercanteVoce
+    extra = 0
+    fields = (
+        "tipo_voce",
+        "prezzo_crediti",
+        "attivo",
+        "non_vendibile",
+        "consegna_istanza",
+        "quantita_residua",
+        "ordine",
+        "oggetto_base",
+        "oggetto",
+        "abilita",
+        "infusione",
+        "tessitura",
+        "cerimoniale",
+        "serie",
+    )
+    autocomplete_fields = (
+        "oggetto_base",
+        "oggetto",
+        "abilita",
+        "infusione",
+        "tessitura",
+        "cerimoniale",
+        "serie",
+    )
+    show_change_link = True
+
+
+class NegozioMercantePrestitoInline(admin.TabularInline):
+    model = NegozioMercantePrestito
+    extra = 0
+    fields = (
+        "personaggio",
+        "stato",
+        "oggetto",
+        "infusione",
+        "abilita",
+        "tessitura",
+        "cerimoniale",
+        "costo_noleggio",
+        "prestato_at",
+        "restituito_at",
+    )
+    readonly_fields = ("prestato_at", "restituito_at")
+    autocomplete_fields = (
+        "personaggio",
+        "oggetto",
+        "infusione",
+        "abilita",
+        "tessitura",
+        "cerimoniale",
+    )
+    show_change_link = True
+
+
+@admin.register(NegozioMercante)
+class NegozioMercanteAdmin(admin.ModelAdmin):
+    list_display = (
+        "nome",
+        "campagna",
+        "tipo_negozio",
+        "attivo",
+        "negozio_prestiti",
+        "limite_prestiti_per_personaggio",
+        "saldo_crediti",
+        "qr_code",
+    )
+    list_filter = ("tipo_negozio", "attivo", "negozio_prestiti", "campagna")
+    search_fields = ("nome", "descrizione", "id")
+    autocomplete_fields = ("campagna", "qr_code", "inventario")
+    readonly_fields = ("id", "created_at", "updated_at", "sync_id")
+    inlines = [NegozioMercanteVoceInline, NegozioMercantePrestitoInline]
+
+
+@admin.register(NegozioMercanteVoce)
+class NegozioMercanteVoceAdmin(admin.ModelAdmin):
+    list_display = (
+        "negozio",
+        "tipo_voce",
+        "prezzo_crediti",
+        "attivo",
+        "non_vendibile",
+        "consegna_istanza",
+        "quantita_residua",
+        "ordine",
+    )
+    list_filter = ("tipo_voce", "attivo", "non_vendibile", "consegna_istanza", "negozio")
+    search_fields = (
+        "negozio__nome",
+        "oggetto_base__nome",
+        "oggetto__nome",
+        "abilita__nome",
+        "infusione__nome",
+        "tessitura__nome",
+        "cerimoniale__nome",
+        "serie__nome",
+        "consumabile_nome",
+    )
+    autocomplete_fields = (
+        "negozio",
+        "oggetto_base",
+        "oggetto",
+        "abilita",
+        "infusione",
+        "tessitura",
+        "cerimoniale",
+        "consumabile_tessitura",
+        "serie",
+    )
+
+
+@admin.register(NegozioMercanteBundle)
+class NegozioMercanteBundleAdmin(admin.ModelAdmin):
+    list_display = ("negozio", "nome", "prezzo_crediti", "attivo", "ordine")
+    list_filter = ("attivo", "negozio")
+    search_fields = ("nome", "negozio__nome")
+    autocomplete_fields = ("negozio",)
+
+
+@admin.register(NegozioMercanteBundleRiga)
+class NegozioMercanteBundleRigaAdmin(admin.ModelAdmin):
+    list_display = ("bundle", "voce", "quantita", "ordine")
+    autocomplete_fields = ("bundle", "voce")
+
+
+@admin.register(NegozioMercanteStock)
+class NegozioMercanteStockAdmin(admin.ModelAdmin):
+    list_display = (
+        "negozio",
+        "oggetto",
+        "stato",
+        "prezzo_rivendita",
+        "valore_riferimento",
+        "venduto_da",
+    )
+    list_filter = ("stato", "negozio")
+    search_fields = ("oggetto__nome", "negozio__nome")
+    autocomplete_fields = ("negozio", "oggetto", "venduto_da")
+
+
+@admin.register(NegozioMercanteMovimento)
+class NegozioMercanteMovimentoAdmin(admin.ModelAdmin):
+    list_display = ("negozio", "tipo", "importo", "saldo_dopo", "personaggio", "created_at")
+    list_filter = ("tipo", "negozio")
+    search_fields = ("nota", "negozio__nome", "personaggio__nome")
+    autocomplete_fields = (
+        "negozio",
+        "personaggio",
+        "riferimento_voce",
+        "riferimento_stock",
+        "riferimento_bundle",
+    )
+    readonly_fields = ("created_at", "updated_at", "sync_id")
+
+
+@admin.register(NegozioMercantePrestito)
+class NegozioMercantePrestitoAdmin(admin.ModelAdmin):
+    list_display = (
+        "negozio",
+        "personaggio",
+        "stato",
+        "etichetta",
+        "costo_noleggio",
+        "prestato_at",
+        "restituito_at",
+    )
+    list_filter = ("stato", "negozio")
+    search_fields = (
+        "negozio__nome",
+        "personaggio__nome",
+        "oggetto__nome",
+        "infusione__nome",
+        "abilita__nome",
+        "tessitura__nome",
+        "cerimoniale__nome",
+    )
+    autocomplete_fields = (
+        "negozio",
+        "personaggio",
+        "oggetto",
+        "abilita",
+        "infusione",
+        "tessitura",
+        "cerimoniale",
+        "voce",
+        "stock",
+    )
+    readonly_fields = ("id", "created_at", "updated_at", "sync_id", "prestato_at")
+
+    @admin.display(description="Cosa")
+    def etichetta(self, obj):
+        return obj.etichetta_prestito()
+
 
 # Carte collezionabili — registrazione modelli admin
 from personaggi import admin_carte  # noqa: F401, E402

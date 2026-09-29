@@ -1248,3 +1248,74 @@ class NegozioMercantePrestitiTests(TestCase):
             NegozioMercantePrestito.objects.filter(stato=PRESTITO_ATTIVO).count(),
             0,
         )
+
+
+class NegozioMercantePrestitoTecnicaTests(TestCase):
+    """Prestito di infusioni-ricetta (senza consegna istanza)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from personaggi.models import AURA, Infusione, Punteggio, SCELTA_RISULTATO_POTENZIAMENTO
+
+        cls.campagna, _ = Campagna.objects.get_or_create(
+            slug="kor35",
+            defaults={
+                "nome": "KOR35",
+                "is_default": True,
+                "is_base": True,
+                "attiva": True,
+            },
+        )
+        cls.user = User.objects.create_user(username="negozio_prestito_tec", password="test")
+        cls.pg = Personaggio.objects.create(
+            nome="PrestitoTec", proprietario=cls.user, campagna=cls.campagna
+        )
+        cls.aura = Punteggio.objects.create(
+            nome="Aura prestito tec", tipo=AURA, sigla="APT", colore="#112233"
+        )
+        cls.inf = Infusione.objects.create(
+            nome="Potere prestito",
+            aura_richiesta=cls.aura,
+            tipo_risultato=SCELTA_RISULTATO_POTENZIAMENTO,
+            campagna=cls.campagna,
+        )
+        cls.negozio = NegozioMercante.objects.create(
+            nome="Armeria poteri",
+            campagna=cls.campagna,
+            regole_apertura={"modalita": "sempre_aperto"},
+            negozio_prestiti=True,
+            limite_prestiti_per_personaggio=1,
+        )
+
+    def test_prestito_e_restituzione_infusione_ricetta(self):
+        from personaggi.economia_crediti import CONTO_CORRENTE
+        from personaggi.negozio_mercante_models import (
+            NegozioMercantePrestito,
+            NegozioMercanteVoce,
+            PRESTITO_ATTIVO,
+            VOCE_INFUSIONE,
+        )
+        from personaggi.negozio_mercante_service import (
+            acquista_voce,
+            restituisci_prestito_da_id,
+        )
+
+        voce = NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_INFUSIONE,
+            infusione=self.inf,
+            prezzo_crediti=0,
+            consegna_istanza=False,
+            attivo=True,
+        )
+        res = acquista_voce(self.negozio, self.pg, voce.id, conto=CONTO_CORRENTE)
+        self.assertTrue(res["prestito"])
+        self.assertTrue(self.pg.infusioni_possedute.filter(pk=self.inf.pk).exists())
+        prestito = NegozioMercantePrestito.objects.get(
+            personaggio=self.pg, negozio=self.negozio, stato=PRESTITO_ATTIVO
+        )
+        self.assertIsNone(prestito.oggetto_id)
+        self.assertEqual(prestito.infusione_id, self.inf.id)
+
+        restituisci_prestito_da_id(self.negozio, self.pg, prestito.id)
+        self.assertFalse(self.pg.infusioni_possedute.filter(pk=self.inf.pk).exists())
