@@ -20,6 +20,7 @@ from personaggi.negozio_mercante_models import (
     VOCE_INFUSIONE,
     VOCE_OGGETTO,
     VOCE_OGGETTO_BASE,
+    VOCE_SERIE,
     VOCE_TESSITURA,
     NegozioMercante,
     NegozioMercanteBundle,
@@ -108,8 +109,26 @@ def _voce_entita(voce: NegozioMercanteVoce):
         VOCE_INFUSIONE: voce.infusione,
         VOCE_TESSITURA: voce.tessitura,
         VOCE_CERIMONIALE: voce.cerimoniale,
+        VOCE_SERIE: voce.serie,
     }
     return mapping.get(voce.tipo_voce)
+
+
+def _quantita_effettiva_serie(voce: NegozioMercanteVoce) -> int | None:
+    """
+    Disponibilità listino per voce SER.
+    Con ammetti_duplicati: solo quantita_residua (None = illimitato).
+    Altrimenti: min(quantita_residua, pezzi_rimanenti) oppure solo pezzi_rimanenti.
+    """
+    serie = voce.serie
+    if serie is None:
+        return 0
+    pezzi = serie.pezzi_rimanenti  # None se ammetti_duplicati
+    if pezzi is None:
+        return voce.quantita_residua
+    if voce.quantita_residua is None:
+        return pezzi
+    return min(int(voce.quantita_residua), int(pezzi))
 
 
 def _assert_voce_globally_vendibile(entita) -> None:
@@ -185,7 +204,7 @@ def _voce_richiede_montaggio(voce: NegozioMercanteVoce) -> bool:
 
 
 def _voce_permette_quantita_multipla(voce: NegozioMercanteVoce) -> bool:
-    if voce.tipo_voce in (VOCE_OGGETTO_BASE, VOCE_CONSUMABILE):
+    if voce.tipo_voce in (VOCE_OGGETTO_BASE, VOCE_CONSUMABILE, VOCE_SERIE):
         return True
     if voce.tipo_voce == VOCE_INFUSIONE and _voce_consegna_istanza(voce):
         # Aumenti corporei: una sola unità (montaggio unico).
@@ -229,6 +248,14 @@ def _motivo_voce_non_acquistabile(voce: NegozioMercanteVoce, personaggio, *, qty
             return MSG_NON_DISPONIBILE_LISTINO
         if qty != 1:
             return "Gli oggetti unici si acquistano uno alla volta."
+        return None
+
+    if voce.tipo_voce == VOCE_SERIE:
+        if not voce.serie_id:
+            return "Voce catalogo incompleta."
+        disponibili = _quantita_effettiva_serie(voce)
+        if disponibili is not None and disponibili < qty:
+            return MSG_ESAURITO_LISTINO
         return None
 
     if voce.tipo_voce == VOCE_ABILITA:
@@ -344,6 +371,26 @@ def _consegna_unita_voce(
         if personaggio.cerimoniali_posseduti.filter(pk=t.pk).exists():
             raise ValidationError("Cerimoniale già posseduto.")
         personaggio.cerimoniali_posseduti.add(t)
+    elif voce.tipo_voce == VOCE_SERIE:
+        serie = voce.serie
+        if serie is None:
+            raise ValidationError("Voce catalogo incompleta.")
+        from personaggi.qr_random_pool import applica_serie
+
+        payload, err, override = applica_serie(
+            personaggio=personaggio,
+            serie=serie,
+            qr_code=None,
+        )
+        if err:
+            raise ValidationError(err)
+        if override == "serie_esaurita":
+            raise ValidationError(
+                (payload or {}).get("messaggio") or MSG_ESAURITO_LISTINO
+            )
+        oggetto_id = (payload or {}).get("oggetto_id")
+        if oggetto_id:
+            entita_creata = Oggetto.objects.filter(pk=oggetto_id).first()
     elif voce.tipo_voce == VOCE_CONSUMABILE:
         tess = voce.consumabile_tessitura
         nome = voce.consumabile_nome or (tess.nome if tess else "Consumabile")
@@ -400,7 +447,15 @@ def _righe_bundle_qs(bundle: NegozioMercanteBundle):
         "voce__tessitura",
         "voce__cerimoniale",
         "voce__consumabile_tessitura",
+        "voce__serie",
     ).order_by("ordine", "created_at")
+
+
+def _stock_disponibile_voce(voce: NegozioMercanteVoce) -> int | None:
+    """Unità rimanenti della voce (None = illimitato)."""
+    if voce.tipo_voce == VOCE_SERIE:
+        return _quantita_effettiva_serie(voce)
+    return voce.quantita_residua
 
 
 def _bundle_disponibilita(bundle: NegozioMercanteBundle, personaggio) -> tuple[bool, str, int | None]:
@@ -421,8 +476,9 @@ def _bundle_disponibilita(bundle: NegozioMercanteBundle, personaggio) -> tuple[b
         motivo = _motivo_voce_non_acquistabile(voce, personaggio, qty=riga.quantita)
         if motivo:
             return False, motivo, 0
-        if voce.quantita_residua is not None:
-            disponibili = voce.quantita_residua // max(1, riga.quantita)
+        stock = _stock_disponibile_voce(voce)
+        if stock is not None:
+            disponibili = stock // max(1, riga.quantita)
             qty_eff = disponibili if qty_eff is None else min(qty_eff, disponibili)
     if qty_eff is not None and qty_eff <= 0:
         return False, MSG_ESAURITO_LISTINO, 0
@@ -736,7 +792,15 @@ def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio, *, prezzi_ct
             payload["messaggio_usabilita"] = _unisci_messaggi_usabilita(
                 payload.get("messaggio_usabilita"), MSG_NON_DISPONIBILE_LISTINO
             )
-    if voce.quantita_residua is not None and voce.quantita_residua <= 0:
+    elif voce.tipo_voce == VOCE_SERIE:
+        disponibili = _quantita_effettiva_serie(voce)
+        payload["quantita_residua"] = disponibili
+        if disponibili is not None and disponibili <= 0:
+            payload["acquistabile"] = False
+            payload["messaggio_usabilita"] = _unisci_messaggi_usabilita(
+                payload.get("messaggio_usabilita"), MSG_ESAURITO_LISTINO
+            )
+    if voce.tipo_voce != VOCE_SERIE and voce.quantita_residua is not None and voce.quantita_residua <= 0:
         payload["acquistabile"] = False
         payload["messaggio_usabilita"] = _unisci_messaggi_usabilita(
             payload.get("messaggio_usabilita"), MSG_ESAURITO_LISTINO
@@ -814,6 +878,7 @@ def build_listino(negozio: NegozioMercante, personaggio) -> dict:
             "tessitura",
             "cerimoniale",
             "consumabile_tessitura",
+            "serie",
         ):
             try:
                 ent = _voce_entita(voce)
@@ -895,6 +960,7 @@ def acquista_voce(
             "tessitura",
             "cerimoniale",
             "consumabile_tessitura",
+            "serie",
         )
         .get(pk=voce_id, negozio=negozio, attivo=True)
     )
@@ -1025,6 +1091,7 @@ def acquista_bundle(
             "tessitura",
             "cerimoniale",
             "consumabile_tessitura",
+            "serie",
         )
         .filter(pk__in=voce_ids, negozio=negozio)
     }

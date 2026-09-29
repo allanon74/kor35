@@ -928,3 +928,162 @@ class NegozioMercanteBundleTests(TestCase):
 
         with self.assertRaises(ValidationError):
             acquista_bundle(self.negozio, self.pg, bundle.id)
+
+
+class NegozioMercanteSerieVoceTests(TestCase):
+    """Voci SER: listino e acquisto pezzi serie (inventario serie, non zaino)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from personaggi.campagna_moduli import MODULO_ACCESSO_OPEN, MODULO_CONTO_DEPOSITO, apply_moduli_accesso
+        from personaggi.models import SerieCollezione
+
+        cls.campagna, _ = Campagna.objects.get_or_create(
+            slug="kor35",
+            defaults={
+                "nome": "KOR35",
+                "is_default": True,
+                "is_base": True,
+                "attiva": True,
+            },
+        )
+        apply_moduli_accesso(cls.campagna, {MODULO_CONTO_DEPOSITO: MODULO_ACCESSO_OPEN})
+        cls.user = User.objects.create_user(username="negozio_serie_buyer", password="test")
+        cls.pg = Personaggio.objects.create(
+            nome="Collezionista", proprietario=cls.user, campagna=cls.campagna
+        )
+        cls.negozio = NegozioMercante.objects.create(
+            nome="Bottega serie",
+            campagna=cls.campagna,
+            saldo_crediti=Decimal("0"),
+            regole_apertura={"modalita": "sempre_aperto"},
+        )
+        cls.serie = SerieCollezione.objects.create(
+            nome="Figurine test",
+            totale=2,
+            campagna=cls.campagna,
+            ammetti_duplicati=False,
+        )
+        cls.serie_dup = SerieCollezione.objects.create(
+            nome="Figurine dup",
+            totale=3,
+            campagna=cls.campagna,
+            ammetti_duplicati=True,
+        )
+
+    def _fondi(self, corrente="500"):
+        from personaggi.economia_crediti import CONTO_CORRENTE, modifica_crediti
+
+        modifica_crediti(self.pg, Decimal(corrente), "fondi serie test", conto=CONTO_CORRENTE)
+
+    def _voce(self, serie, *, prezzo=50, quantita_residua=None):
+        from personaggi.negozio_mercante_models import NegozioMercanteVoce, VOCE_SERIE
+
+        return NegozioMercanteVoce.objects.create(
+            negozio=self.negozio,
+            tipo_voce=VOCE_SERIE,
+            serie=serie,
+            prezzo_crediti=prezzo,
+            quantita_residua=quantita_residua,
+            attivo=True,
+        )
+
+    def test_listino_espone_serie_e_disponibilita_pezzi(self):
+        from personaggi.negozio_mercante_service import build_listino
+
+        self._voce(self.serie, prezzo=40)
+        data = build_listino(self.negozio, self.pg)
+        voce = next(v for v in data["voci"] if v["tipo_voce"] == "SER")
+        self.assertEqual(voce["nome"], "Figurine test")
+        self.assertEqual(voce["quantita_residua"], 2)
+        self.assertTrue(voce["acquistabile"])
+
+    def test_acquisto_assegna_pezzo_inventario_serie_non_zaino(self):
+        from personaggi.economia_crediti import CONTO_CORRENTE, saldo_corrente
+        from personaggi.models import SerieAssegnazione
+        from personaggi.negozio_mercante_service import acquista_voce
+
+        self._fondi()
+        voce = self._voce(self.serie, prezzo=40)
+        prima = saldo_corrente(self.pg)
+        result = acquista_voce(self.negozio, self.pg, voce.id, conto=CONTO_CORRENTE)
+        self.assertEqual(result["status"], "success")
+        self.assertIn("oggetto_id", result)
+        ass = SerieAssegnazione.objects.get(personaggio=self.pg, serie=self.serie)
+        self.assertEqual(ass.oggetto_id, result["oggetto_id"])
+        self.assertIsNone(ass.oggetto.inventario_corrente)
+        self.assertEqual(saldo_corrente(self.pg), prima - Decimal("40.00"))
+
+    def test_acquisto_esaurisce_serie_senza_duplicati(self):
+        from personaggi.economia_crediti import CONTO_CORRENTE
+        from personaggi.models import SerieAssegnazione
+        from personaggi.negozio_mercante_service import acquista_voce, build_listino
+
+        self._fondi("500")
+        voce = self._voce(self.serie, prezzo=10)
+        acquista_voce(self.negozio, self.pg, voce.id, conto=CONTO_CORRENTE)
+        acquista_voce(self.negozio, self.pg, voce.id, conto=CONTO_CORRENTE)
+        self.assertEqual(SerieAssegnazione.objects.filter(serie=self.serie).count(), 2)
+
+        listino = build_listino(self.negozio, self.pg)
+        row = next(v for v in listino["voci"] if v["tipo_voce"] == "SER")
+        self.assertEqual(row["quantita_residua"], 0)
+        self.assertFalse(row["acquistabile"])
+
+        with self.assertRaises(ValidationError):
+            acquista_voce(self.negozio, self.pg, voce.id, conto=CONTO_CORRENTE)
+
+    def test_quantita_residua_shop_limita_anche_con_duplicati(self):
+        from personaggi.economia_crediti import CONTO_CORRENTE
+        from personaggi.models import SerieAssegnazione
+        from personaggi.negozio_mercante_service import acquista_voce, build_listino
+
+        self._fondi()
+        voce = self._voce(self.serie_dup, prezzo=15, quantita_residua=1)
+        listino = build_listino(self.negozio, self.pg)
+        row = next(v for v in listino["voci"] if v["tipo_voce"] == "SER")
+        self.assertEqual(row["quantita_residua"], 1)
+
+        acquista_voce(self.negozio, self.pg, voce.id, conto=CONTO_CORRENTE)
+        self.assertEqual(
+            SerieAssegnazione.objects.filter(personaggio=self.pg, serie=self.serie_dup).count(),
+            1,
+        )
+        voce.refresh_from_db()
+        self.assertEqual(voce.quantita_residua, 0)
+
+        listino2 = build_listino(self.negozio, self.pg)
+        row2 = next(v for v in listino2["voci"] if v["tipo_voce"] == "SER")
+        self.assertFalse(row2["acquistabile"])
+
+        with self.assertRaises(ValidationError):
+            acquista_voce(self.negozio, self.pg, voce.id, conto=CONTO_CORRENTE)
+
+    def test_staff_api_crea_voce_serie(self):
+        from personaggi.negozio_mercante_models import NegozioMercanteVoce, VOCE_SERIE
+
+        staff = User.objects.create_superuser(
+            username="staff_serie_negozio",
+            password="test",
+            email="staff-serie@test.local",
+        )
+        client = APIClient()
+        client.force_authenticate(user=staff)
+        url = "/api/personaggi/api/staff/negozi-mercante-voci/"
+        res = client.post(
+            url,
+            {
+                "negozio": str(self.negozio.id),
+                "tipo_voce": VOCE_SERIE,
+                "serie": str(self.serie.id),
+                "prezzo_crediti": 25,
+                "attivo": True,
+            },
+            format="json",
+            HTTP_X_CAMPAGNA="kor35",
+        )
+        self.assertEqual(res.status_code, 201, res.content)
+        voce = NegozioMercanteVoce.objects.get(pk=res.data["id"])
+        self.assertEqual(voce.tipo_voce, VOCE_SERIE)
+        self.assertEqual(voce.serie_id, self.serie.id)
+        self.assertEqual(res.data.get("entita_nome"), "Figurine test")
