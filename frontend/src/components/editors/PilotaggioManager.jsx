@@ -66,7 +66,7 @@ const PILOT_EVENTI_WIKI_SLUG = 'staff-pilot-eventi';
 
 const PILOT_TABS = [
   { id: 'sottosistemi', label: 'Sottosistemi' },
-  { id: 'percorsi', label: 'Percorsi' },
+  { id: 'percorsi', label: 'Rotte' },
   { id: 'intensita', label: 'Intensità' },
   { id: 'eventi', label: 'Eventi' },
   { id: 'comandi_critici', label: 'Comandi critici (globali)' },
@@ -543,19 +543,16 @@ export default function PilotaggioManager({ onLogout }) {
   const [editIntensita, setEditIntensita] = useState({ valore: 0, nome: '' });
   const [editIntensitaId, setEditIntensitaId] = useState(null);
   const [nuovaIntensita, setNuovaIntensita] = useState({ valore: 0, nome: '' });
-  const [nuovoPercorso, setNuovoPercorso] = useState({
-    nome: '',
+  const percorsoVuoto = () => ({
+    partenza: '',
+    arrivo: '',
     distanza_minima: 1000,
     distanza_massima: 5000,
     attivo: true,
   });
+  const [nuovoPercorso, setNuovoPercorso] = useState(percorsoVuoto);
   const [editPercorsoId, setEditPercorsoId] = useState(null);
-  const [editPercorso, setEditPercorso] = useState({
-    nome: '',
-    distanza_minima: 1000,
-    distanza_massima: 5000,
-    attivo: true,
-  });
+  const [editPercorso, setEditPercorso] = useState(percorsoVuoto);
   const [editEventoId, setEditEventoId] = useState(null);
   const [editEvento, setEditEvento] = useState(() => emptyEditEventoModal());
   const [editCriticoId, setEditCriticoId] = useState(null);
@@ -817,18 +814,28 @@ export default function PilotaggioManager({ onLogout }) {
     loadData();
   };
 
+  const etichettaRotta = (row) => {
+    const partenza = String(row?.partenza || '').trim();
+    const arrivo = String(row?.arrivo || '').trim();
+    if (partenza && arrivo) return `${partenza} → ${arrivo}`;
+    return partenza || arrivo || 'Rotta';
+  };
+
   const normalizzaPercorso = (row) => {
     const minima = Number(row.distanza_minima);
     const massima = Number(row.distanza_massima);
-    const nome = String(row.nome || '').trim();
-    if (!nome) return { ok: false, message: 'Il nome del percorso è obbligatorio.' };
+    const partenza = String(row.partenza || '').trim();
+    const arrivo = String(row.arrivo || '').trim();
+    if (!partenza) return { ok: false, message: 'La partenza è obbligatoria.' };
+    if (!arrivo) return { ok: false, message: "L'arrivo è obbligatorio." };
     if (!Number.isFinite(minima) || minima < 1 || !Number.isFinite(massima) || massima < minima) {
       return { ok: false, message: 'Distanza minima ≥ 1 e massima almeno uguale alla minima.' };
     }
     return {
       ok: true,
       data: {
-        nome,
+        partenza,
+        arrivo,
         distanza_minima: Math.round(minima),
         distanza_massima: Math.round(massima),
         attivo: Boolean(row.attivo),
@@ -846,10 +853,10 @@ export default function PilotaggioManager({ onLogout }) {
     setError('');
     try {
       await staffCreatePilotPercorso(parsed.data, onLogout);
-      setNuovoPercorso({ nome: '', distanza_minima: 1000, distanza_massima: 5000, attivo: true });
+      setNuovoPercorso(percorsoVuoto());
       loadData();
     } catch (err) {
-      setError(err?.message || 'Impossibile creare il percorso.');
+      setError(err?.message || 'Impossibile creare la rotta.');
     }
   };
 
@@ -865,7 +872,7 @@ export default function PilotaggioManager({ onLogout }) {
       setEditPercorsoId(null);
       loadData();
     } catch (err) {
-      setError(err?.message || 'Impossibile salvare il percorso.');
+      setError(err?.message || 'Impossibile salvare la rotta.');
     }
   };
 
@@ -1658,34 +1665,39 @@ export default function PilotaggioManager({ onLogout }) {
 
       {activeTab === 'percorsi' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
-        <h3 className="font-semibold mb-1">Percorsi</h3>
+        <h3 className="font-semibold mb-1">Rotte</h3>
         <p className="text-xs text-gray-400 mb-3">
-          All&apos;avvio missione la console propone questi percorsi. La distanza del viaggio è un valore casuale tra minimo e massimo.
+          Ogni rotta indica partenza, arrivo e un intervallo di distanza. All&apos;avvio missione la console pesca un valore intero tra minimo e massimo.
         </p>
         <div className="flex flex-wrap gap-2 mb-3 items-end">
-          <label className="flex flex-col text-xs text-gray-400 gap-1 flex-1 min-w-[10rem]">
-            Nome
-            <input className="bg-gray-800 rounded px-2 py-1 text-sm text-gray-100" value={nuovoPercorso.nome} onChange={(e) => setNuovoPercorso((p) => ({ ...p, nome: e.target.value }))} placeholder="Es. Bosco nord" />
+          <label className="flex flex-col text-xs text-gray-400 gap-1 flex-1 min-w-[8rem]">
+            Partenza
+            <input className="bg-gray-800 rounded px-2 py-1 text-sm text-gray-100" value={nuovoPercorso.partenza} onChange={(e) => setNuovoPercorso((p) => ({ ...p, partenza: e.target.value }))} placeholder="Es. Bosco nord" />
           </label>
-          <label className="flex flex-col text-xs text-gray-400 gap-1 w-28">
-            Minima
+          <label className="flex flex-col text-xs text-gray-400 gap-1 flex-1 min-w-[8rem]">
+            Arrivo
+            <input className="bg-gray-800 rounded px-2 py-1 text-sm text-gray-100" value={nuovoPercorso.arrivo} onChange={(e) => setNuovoPercorso((p) => ({ ...p, arrivo: e.target.value }))} placeholder="Es. Avamposto" />
+          </label>
+          <label className="flex flex-col text-xs text-gray-400 gap-1 w-32">
+            Distanza minima
             <input type="number" min={1} className="bg-gray-800 rounded px-2 py-1 text-sm text-gray-100" value={nuovoPercorso.distanza_minima} onChange={(e) => setNuovoPercorso((p) => ({ ...p, distanza_minima: e.target.value }))} />
           </label>
-          <label className="flex flex-col text-xs text-gray-400 gap-1 w-28">
-            Massima
+          <label className="flex flex-col text-xs text-gray-400 gap-1 w-32">
+            Distanza massima
             <input type="number" min={1} className="bg-gray-800 rounded px-2 py-1 text-sm text-gray-100" value={nuovoPercorso.distanza_massima} onChange={(e) => setNuovoPercorso((p) => ({ ...p, distanza_massima: e.target.value }))} />
           </label>
           <button type="button" className="px-3 py-1 rounded bg-indigo-600" onClick={addPercorso}>Aggiungi</button>
         </div>
         {percorsi.length === 0 ? (
-          <p className="text-sm text-gray-500">Nessun percorso. Senza catalogo la console non può preparare una missione.</p>
+          <p className="text-sm text-gray-500">Nessuna rotta. Senza catalogo la console non può preparare una missione.</p>
         ) : percorsi.map((row) => (
           <div key={row.id} className="flex items-center justify-between bg-gray-800/60 rounded px-2 py-1 text-sm mb-1 gap-2">
             {editPercorsoId === row.id ? (
               <div className="flex flex-wrap gap-2 w-full items-center">
-                <input className="bg-gray-700 rounded px-2 py-1 flex-1 min-w-[8rem]" value={editPercorso.nome} onChange={(e) => setEditPercorso((p) => ({ ...p, nome: e.target.value }))} />
-                <input type="number" min={1} className="bg-gray-700 rounded px-2 py-1 w-24" value={editPercorso.distanza_minima} onChange={(e) => setEditPercorso((p) => ({ ...p, distanza_minima: e.target.value }))} />
-                <input type="number" min={1} className="bg-gray-700 rounded px-2 py-1 w-24" value={editPercorso.distanza_massima} onChange={(e) => setEditPercorso((p) => ({ ...p, distanza_massima: e.target.value }))} />
+                <input className="bg-gray-700 rounded px-2 py-1 flex-1 min-w-[7rem]" aria-label="Partenza" value={editPercorso.partenza} onChange={(e) => setEditPercorso((p) => ({ ...p, partenza: e.target.value }))} />
+                <input className="bg-gray-700 rounded px-2 py-1 flex-1 min-w-[7rem]" aria-label="Arrivo" value={editPercorso.arrivo} onChange={(e) => setEditPercorso((p) => ({ ...p, arrivo: e.target.value }))} />
+                <input type="number" min={1} aria-label="Distanza minima" className="bg-gray-700 rounded px-2 py-1 w-24" value={editPercorso.distanza_minima} onChange={(e) => setEditPercorso((p) => ({ ...p, distanza_minima: e.target.value }))} />
+                <input type="number" min={1} aria-label="Distanza massima" className="bg-gray-700 rounded px-2 py-1 w-24" value={editPercorso.distanza_massima} onChange={(e) => setEditPercorso((p) => ({ ...p, distanza_massima: e.target.value }))} />
                 <label className="text-xs flex items-center gap-1">
                   <input type="checkbox" checked={Boolean(editPercorso.attivo)} onChange={(e) => setEditPercorso((p) => ({ ...p, attivo: e.target.checked }))} />
                   attivo
@@ -1696,7 +1708,7 @@ export default function PilotaggioManager({ onLogout }) {
             ) : (
               <>
                 <span>
-                  {row.nome}{' '}
+                  {etichettaRotta(row)}{' '}
                   <span className="text-gray-400">{row.distanza_minima}–{row.distanza_massima}</span>
                   {row.attivo === false ? <span className="text-amber-400"> · spento</span> : null}
                 </span>
@@ -1707,7 +1719,8 @@ export default function PilotaggioManager({ onLogout }) {
                     onClick={() => {
                       setEditPercorsoId(row.id);
                       setEditPercorso({
-                        nome: row.nome || '',
+                        partenza: row.partenza || '',
+                        arrivo: row.arrivo || '',
                         distanza_minima: row.distanza_minima ?? 1,
                         distanza_massima: row.distanza_massima ?? 1,
                         attivo: row.attivo !== false,

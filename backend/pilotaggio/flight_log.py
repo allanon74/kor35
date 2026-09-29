@@ -95,9 +95,8 @@ def registra_voce_diario(
 def etichetta_rotta(sessione) -> str | None:
     """Nome percorso, oppure partenza → arrivo per i voli ancora legati alle prefetture."""
     percorso = getattr(sessione, "percorso", None)
-    nome = getattr(percorso, "nome", None) if percorso is not None else None
-    if nome:
-        return str(nome)
+    if percorso is not None and getattr(percorso, "partenza", None) and getattr(percorso, "arrivo", None):
+        return f"{percorso.partenza} → {percorso.arrivo}"
     partenza = getattr(getattr(sessione, "prefettura_partenza", None), "nome", None)
     arrivo = getattr(getattr(sessione, "prefettura_arrivo", None), "nome", None)
     if partenza and arrivo:

@@ -1138,7 +1138,7 @@ class PilotSessionStartView(APIView):
             _ensure_tick_enabled()
             from .flight_log import log_volo_iniziato
 
-            log_volo_iniziato(attiva, percorso=percorso.nome)
+            log_volo_iniziato(attiva, percorso=percorso.etichetta)
 
         return Response(_build_state_payload(attiva, pilota))
 
@@ -1787,11 +1787,12 @@ class PilotPercorsiView(APIView):
         rows = [
             {
                 "id": str(p.pk),
-                "nome": p.nome,
+                "partenza": p.partenza,
+                "arrivo": p.arrivo,
                 "distanza_minima": p.distanza_minima,
                 "distanza_massima": p.distanza_massima,
             }
-            for p in PercorsoVolo.objects.filter(attivo=True).order_by("ordine", "nome")
+            for p in PercorsoVolo.objects.filter(attivo=True).order_by("ordine", "partenza", "arrivo")
         ]
         return Response(rows)
 
@@ -2012,9 +2013,9 @@ class StaffComandoCriticoGlobaleViewSet(viewsets.ModelViewSet):
 
 
 class StaffPercorsoViewSet(viewsets.ModelViewSet):
-    """CRUD tratte: nome, distanza minima, distanza massima."""
+    """CRUD rotte: partenza, arrivo, distanza minima, distanza massima."""
 
-    queryset = PercorsoVolo.objects.all().order_by("ordine", "nome")
+    queryset = PercorsoVolo.objects.all().order_by("ordine", "partenza", "arrivo")
     serializer_class = PercorsoVoloSerializer
     permission_classes = [IsAuthenticated, IsStaffOrMaster]
 

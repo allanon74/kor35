@@ -100,7 +100,8 @@ class SessioneEndToEndTests(TestCase):
         self.partenza = Prefettura.objects.create(era=era, nome="P1")
         self.arrivo = Prefettura.objects.create(era=era, nome="P2")
         self.percorso = PercorsoVolo.objects.create(
-            nome="Tratta test",
+            partenza="P1",
+            arrivo="P2",
             distanza_minima=400,
             distanza_massima=400,
         )
@@ -258,7 +259,8 @@ class SessioneEndToEndTests(TestCase):
 
     def test_start_percorso_spento_rifiutato(self):
         spento = PercorsoVolo.objects.create(
-            nome="Spento",
+            partenza="Alpha",
+            arrivo="Spento",
             distanza_minima=10,
             distanza_massima=20,
             attivo=False,
@@ -274,7 +276,8 @@ class SessioneEndToEndTests(TestCase):
         from unittest.mock import patch
 
         variabile = PercorsoVolo.objects.create(
-            nome="Variabile",
+            partenza="Alpha",
+            arrivo="Beta",
             distanza_minima=10,
             distanza_massima=20,
         )
@@ -287,7 +290,7 @@ class SessioneEndToEndTests(TestCase):
         self.assertEqual(res.status_code, 200, res.content)
         sessione = res.json()["sessione"]
         self.assertEqual(sessione["distanza_target"], 17.0)
-        self.assertEqual(sessione["percorso_nome"], "Variabile")
+        self.assertEqual(sessione["percorso_nome"], "Alpha → Beta")
         self.assertEqual(sessione["percorso"], str(variabile.pk))
 
 

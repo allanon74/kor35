@@ -103,10 +103,10 @@ class ComandoNaveAdmin(admin.ModelAdmin):
 
 @admin.register(PercorsoVolo)
 class PercorsoVoloAdmin(admin.ModelAdmin):
-    list_display = ("nome", "distanza_minima", "distanza_massima", "ordine", "attivo")
+    list_display = ("partenza", "arrivo", "distanza_minima", "distanza_massima", "ordine", "attivo")
     list_filter = ("attivo",)
-    search_fields = ("nome",)
-    ordering = ("ordine", "nome")
+    search_fields = ("partenza", "arrivo")
+    ordering = ("ordine", "partenza", "arrivo")
 
 
 @admin.register(IntensitaComando)

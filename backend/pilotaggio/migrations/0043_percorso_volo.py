@@ -31,7 +31,8 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
-                ("nome", models.CharField(max_length=120)),
+                ("partenza", models.CharField(max_length=120)),
+                ("arrivo", models.CharField(max_length=120)),
                 (
                     "distanza_minima",
                     models.PositiveIntegerField(
@@ -50,9 +51,9 @@ class Migration(migrations.Migration):
                 ("attivo", models.BooleanField(db_index=True, default=True)),
             ],
             options={
-                "verbose_name": "Percorso di volo",
-                "verbose_name_plural": "Percorsi di volo",
-                "ordering": ["ordine", "nome"],
+                "verbose_name": "Rotta",
+                "verbose_name_plural": "Rotte",
+                "ordering": ["ordine", "partenza", "arrivo"],
             },
         ),
         migrations.AddField(

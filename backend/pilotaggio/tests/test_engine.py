@@ -183,7 +183,8 @@ class EstraiDistanzaPercorsoTests(TestCase):
         from pilotaggio.models import PercorsoVolo
 
         percorso = PercorsoVolo.objects.create(
-            nome="Bosco",
+            partenza="Bosco",
+            arrivo="Nord",
             distanza_minima=100,
             distanza_massima=250,
         )
@@ -197,7 +198,8 @@ class EstraiDistanzaPercorsoTests(TestCase):
         from pilotaggio.models import PercorsoVolo
 
         percorso = PercorsoVolo.objects.create(
-            nome="Corta",
+            partenza="Corta",
+            arrivo="Base",
             distanza_minima=42,
             distanza_massima=42,
         )

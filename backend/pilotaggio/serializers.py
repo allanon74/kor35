@@ -160,7 +160,8 @@ class PercorsoVoloSerializer(serializers.ModelSerializer):
         model = PercorsoVolo
         fields = [
             "id",
-            "nome",
+            "partenza",
+            "arrivo",
             "distanza_minima",
             "distanza_massima",
             "ordine",
@@ -177,9 +178,12 @@ class PercorsoVoloSerializer(serializers.ModelSerializer):
             "distanza_massima",
             getattr(self.instance, "distanza_massima", None),
         )
-        nome = attrs.get("nome", getattr(self.instance, "nome", ""))
-        if not str(nome or "").strip():
-            raise serializers.ValidationError({"nome": "Il nome del percorso è obbligatorio."})
+        partenza = attrs.get("partenza", getattr(self.instance, "partenza", ""))
+        arrivo = attrs.get("arrivo", getattr(self.instance, "arrivo", ""))
+        if not str(partenza or "").strip():
+            raise serializers.ValidationError({"partenza": "La partenza è obbligatoria."})
+        if not str(arrivo or "").strip():
+            raise serializers.ValidationError({"arrivo": "L'arrivo è obbligatorio."})
         if minima is None or massima is None:
             raise serializers.ValidationError("Distanza minima e massima sono obbligatorie.")
         if int(minima) < 1:
@@ -190,7 +194,8 @@ class PercorsoVoloSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"distanza_massima": "Deve essere almeno uguale alla distanza minima."}
             )
-        attrs["nome"] = str(nome).strip()
+        attrs["partenza"] = str(partenza).strip()
+        attrs["arrivo"] = str(arrivo).strip()
         return attrs
 
 

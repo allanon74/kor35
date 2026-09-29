@@ -339,8 +339,8 @@ export default function App() {
 
   if (IS_PREVIEW_LAYOUT && !IS_LAB && !IS_STATION) {
     const percorsiPreview = [
-      { id: 'bosco', nome: 'Bosco nord', distanza_minima: 800, distanza_massima: 1400 },
-      { id: 'lunga', nome: 'Rotta lunga', distanza_minima: 3000, distanza_massima: 6000 },
+      { id: 'bosco', partenza: 'Bosco nord', arrivo: 'Avamposto', distanza_minima: 800, distanza_massima: 1400 },
+      { id: 'lunga', partenza: 'Cittadella', arrivo: 'Frontiera', distanza_minima: 3000, distanza_massima: 6000 },
     ];
     return (
       <div className="app-shell">

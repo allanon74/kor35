@@ -4,6 +4,13 @@ import React, { useEffect, useState } from 'react';
  * Schermata "nave spenta": stato 0 (disattiva).
  * Il pilota preme decollo e avvia il viaggio.
  */
+function etichettaPercorso(p) {
+  const partenza = String(p?.partenza || '').trim();
+  const arrivo = String(p?.arrivo || '').trim();
+  if (partenza && arrivo) return `${partenza} → ${arrivo}`;
+  return p?.nome || partenza || arrivo || 'Rotta';
+}
+
 export default function IdleScreen({ percorsi = [], onStart, error, busy }) {
   const [percorsoId, setPercorsoId] = useState('');
 
@@ -20,13 +27,13 @@ export default function IdleScreen({ percorsi = [], onStart, error, busy }) {
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
         <label>
           <div className="banner" style={{ padding: 0, border: 0, marginBottom: '0.3rem' }}>
-            Percorso
+            Rotta
           </div>
           <select value={percorsoId} onChange={(ev) => setPercorsoId(ev.target.value)} style={{ width: '100%' }}>
             <option value="">--</option>
             {percorsi.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.nome} ({p.distanza_minima}–{p.distanza_massima})
+                {etichettaPercorso(p)} ({p.distanza_minima}–{p.distanza_massima})
               </option>
             ))}
           </select>
@@ -45,7 +52,7 @@ export default function IdleScreen({ percorsi = [], onStart, error, busy }) {
         <p className="note">
           {selezionato
             ? `La distanza del viaggio sarà un valore a caso tra ${selezionato.distanza_minima} e ${selezionato.distanza_massima}.`
-            : 'Nessun percorso disponibile: configuralo dalla dashboard staff, tab Pilotaggio → Percorsi.'}
+            : 'Nessuna rotta disponibile: configurala dalla dashboard staff, tab Pilotaggio → Rotte.'}
           {' '}Dalla plancia regola i sottosistemi, poi usa <strong>Decollo</strong> sul propulsore principale.
         </p>
       </div>

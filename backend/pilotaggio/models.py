@@ -569,7 +569,8 @@ class PercorsoVolo(SyncableModel, models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
-    nome = models.CharField(max_length=120)
+    partenza = models.CharField(max_length=120)
+    arrivo = models.CharField(max_length=120)
     distanza_minima = models.PositiveIntegerField(
         validators=[MinValueValidator(1)],
         help_text="Distanza minima del viaggio (inclusa).",
@@ -582,9 +583,9 @@ class PercorsoVolo(SyncableModel, models.Model):
     attivo = models.BooleanField(default=True, db_index=True)
 
     class Meta:
-        verbose_name = "Percorso di volo"
-        verbose_name_plural = "Percorsi di volo"
-        ordering = ["ordine", "nome"]
+        verbose_name = "Rotta"
+        verbose_name_plural = "Rotte"
+        ordering = ["ordine", "partenza", "arrivo"]
 
     def clean(self):
         super().clean()
@@ -595,8 +596,12 @@ class PercorsoVolo(SyncableModel, models.Model):
                 {"distanza_massima": "Deve essere almeno uguale alla distanza minima."}
             )
 
+    @property
+    def etichetta(self) -> str:
+        return f"{self.partenza} → {self.arrivo}"
+
     def __str__(self):
-        return f"{self.nome} ({self.distanza_minima}–{self.distanza_massima})"
+        return f"{self.etichetta} ({self.distanza_minima}–{self.distanza_massima})"
 
 
 class SessioneVolo(SyncableModel, models.Model):
