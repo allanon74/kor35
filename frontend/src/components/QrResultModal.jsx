@@ -1253,7 +1253,7 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             <p className="text-xs text-gray-500 mt-4">
               {giaRiscattato
                 ? (data.dati?.messaggio || data.messaggio || 'Hai già riscosso questo QR della serie.')
-                : "L'oggetto è stato aggiunto al tuo inventario."}
+                : "Il pezzo è stato aggiunto al tuo inventario serie."}
             </p>
             {typeof data.dati?.rimanenti === 'number' ? (
               <p className="text-xs text-gray-400 mt-2">Pezzi ancora disponibili: {data.dati.rimanenti}</p>

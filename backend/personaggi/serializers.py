@@ -2972,6 +2972,12 @@ class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
     immagini = SerieImmagineStaffSerializer(many=True, read_only=True)
     immagini_count = serializers.SerializerMethodField()
     campagna = serializers.PrimaryKeyRelatedField(read_only=True)
+    eventi = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=SerieCollezione._meta.get_field("eventi").related_model.objects.all(),
+        required=False,
+    )
+    eventi_dettaglio = serializers.SerializerMethodField()
 
     class Meta:
         model = SerieCollezione
@@ -2980,6 +2986,9 @@ class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
             "nome",
             "totale",
             "descrizione",
+            "ammetti_duplicati",
+            "eventi",
+            "eventi_dettaglio",
             "campagna",
             "pezzi_assegnati",
             "pezzi_rimanenti",
@@ -2996,6 +3005,7 @@ class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
             "pezzi_rimanenti",
             "immagini",
             "immagini_count",
+            "eventi_dettaglio",
         )
 
     def get_pezzi_assegnati(self, obj):
@@ -3005,6 +3015,8 @@ class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
         return obj.assegnazioni.count()
 
     def get_pezzi_rimanenti(self, obj):
+        if getattr(obj, "ammetti_duplicati", False):
+            return None
         return max(0, int(obj.totale or 0) - self.get_pezzi_assegnati(obj))
 
     def get_immagini_count(self, obj):
@@ -3012,6 +3024,19 @@ class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
         if annotated is not None:
             return int(annotated)
         return obj.immagini.count()
+
+    def get_eventi_dettaglio(self, obj):
+        out = []
+        for ev in obj.eventi.all():
+            out.append(
+                {
+                    "id": ev.pk,
+                    "titolo": ev.titolo,
+                    "ended_at": ev.ended_at.isoformat() if ev.ended_at else None,
+                    "chiuso": bool(ev.ended_at),
+                }
+            )
+        return out
 
 
 class TrappolaStaffSerializer(serializers.ModelSerializer):

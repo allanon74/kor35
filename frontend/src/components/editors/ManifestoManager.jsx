@@ -33,12 +33,15 @@ import {
   staffDeleteSerieCollezione,
   staffUploadSerieImmagini,
   staffDeleteSerieImmagine,
+  staffGetSerieStato,
+  staffResetSerieCollezione,
   staffGetSerieQr,
   staffCreateSerieQr,
   staffGetTrappole,
   staffCreateTrappola,
   staffUpdateTrappola,
   staffDeleteTrappola,
+  getEventi,
   resolveMediaUrl,
 } from '../../api';
 
@@ -74,10 +77,16 @@ const ManifestoManager = ({ onBack, onLogout }) => {
     nome: '',
     totale: 30,
     descrizione: '',
+    ammetti_duplicati: false,
+    eventi: [],
     immagini: [],
   });
   const [serieQrList, setSerieQrList] = useState([]);
   const [serieQrForm, setSerieQrForm] = useState({ nome: '', testo: '', serie: '' });
+  const [eventiOptions, setEventiOptions] = useState([]);
+  const [serieStato, setSerieStato] = useState(null);
+  const [serieStatoLoading, setSerieStatoLoading] = useState(false);
+  const [confirmResetSerie, setConfirmResetSerie] = useState(null);
   const [trappole, setTrappole] = useState([]);
   const [trappolaForm, setTrappolaForm] = useState({ id: null, nome: '', testo: '', durata_secondi: 60 });
 
@@ -95,14 +104,17 @@ const ManifestoManager = ({ onBack, onLogout }) => {
 
   const loadSerieTrappole = useCallback(async () => {
     try {
-      const [serie, sqr, traps] = await Promise.all([
+      const [serie, sqr, traps, eventi] = await Promise.all([
         staffGetSerieCollezioni(onLogout),
         staffGetSerieQr(onLogout),
         staffGetTrappole(onLogout),
+        getEventi(onLogout).catch(() => []),
       ]);
       setSerieList(Array.isArray(serie) ? serie : serie?.results || []);
       setSerieQrList(Array.isArray(sqr) ? sqr : sqr?.results || []);
       setTrappole(Array.isArray(traps) ? traps : traps?.results || []);
+      const evList = Array.isArray(eventi) ? eventi : eventi?.results || [];
+      setEventiOptions(evList);
     } catch (e) {
       setMsg(e.message || 'Errore caricamento serie/trappole');
     }
@@ -543,10 +555,20 @@ const ManifestoManager = ({ onBack, onLogout }) => {
         nome: serie.nome || '',
         totale: serie.totale || 1,
         descrizione: serie.descrizione || '',
+        ammetti_duplicati: Boolean(serie.ammetti_duplicati),
+        eventi: Array.isArray(serie.eventi) ? serie.eventi.map((x) => Number(x)) : [],
         immagini: Array.isArray(serie.immagini) ? serie.immagini : [],
       });
     } else {
-      setSerieForm({ id: null, nome: '', totale: 30, descrizione: '', immagini: [] });
+      setSerieForm({
+        id: null,
+        nome: '',
+        totale: 30,
+        descrizione: '',
+        ammetti_duplicati: false,
+        eventi: [],
+        immagini: [],
+      });
     }
     setSerieEditing(true);
   };
@@ -563,16 +585,32 @@ const ManifestoManager = ({ onBack, onLogout }) => {
         nome: updated.nome || '',
         totale: updated.totale || 1,
         descrizione: updated.descrizione || '',
+        ammetti_duplicati: Boolean(updated.ammetti_duplicati),
+        eventi: Array.isArray(updated.eventi) ? updated.eventi.map((x) => Number(x)) : [],
         immagini: Array.isArray(updated.immagini) ? updated.immagini : [],
       }));
     }
     return list;
   };
 
+  const openSerieStato = async (serie) => {
+    setSerieStato({ serie_id: serie.id, serie_nome: serie.nome, loading: true });
+    setSerieStatoLoading(true);
+    try {
+      const data = await staffGetSerieStato(serie.id, onLogout);
+      setSerieStato(data);
+    } catch (e) {
+      setMsg(e.message || 'Errore caricamento stato serie');
+      setSerieStato(null);
+    } finally {
+      setSerieStatoLoading(false);
+    }
+  };
+
   const renderSerie = () => (
     <div className="space-y-4">
       <div className="flex justify-between items-center gap-2">
-        <h2 className="text-xl font-bold">Serie (collezioni uniche)</h2>
+        <h2 className="text-xl font-bold">Serie (inventario collezione)</h2>
         <button
           type="button"
           className="px-3 py-2 bg-indigo-600 rounded text-sm"
@@ -582,26 +620,47 @@ const ManifestoManager = ({ onBack, onLogout }) => {
         </button>
       </div>
       <p className="text-sm text-gray-400">
-        Ogni pezzo («Nome X di N») viene assegnato una sola volta a livello globale. Usabile da QR standalone o come effetto di un pool randomico.
-        Opzionale: fino a N immagini (N = totale pezzi); in scansione vengono assegnate ai pezzi
-        (una diversa in ordine alfabetico se ne carichi esattamente N, altrimenti con ripetizioni random).
+        I pezzi («Nome X di N») vanno nell&apos;inventario serie del PG (non nello zaino).
+        Senza «ammetti duplicati» ogni indice esce una sola volta e ogni QR assegna al massimo un pezzo.
+        Opzionale: collega uno o più eventi — a evento chiuso i pezzi spariscono dall&apos;inventario serie giocatore.
+        Immagini: fino a N; ordine alfabetico se N esatte, altrimenti random con ripetizioni.
       </p>
       <ul className="space-y-2">
         {serieList.map((s) => (
-          <li key={s.id} className="flex items-center justify-between bg-gray-800/40 px-3 py-2 rounded text-sm gap-2">
+          <li key={s.id} className="flex items-center justify-between bg-gray-800/40 px-3 py-2 rounded text-sm gap-2 flex-wrap">
             <div className="min-w-0 flex-1">
               <div className="font-semibold">{s.nome}</div>
               <div className="text-xs text-gray-400">
-                Assegnati {s.pezzi_assegnati}/{s.totale} · restano {s.pezzi_rimanenti}
+                Assegnati {s.pezzi_assegnati}/{s.totale}
+                {s.ammetti_duplicati
+                  ? ' · duplicati OK'
+                  : ` · restano ${s.pezzi_rimanenti ?? 0}`}
                 {typeof s.immagini_count === 'number' ? ` · img ${s.immagini_count}` : ''}
+                {Array.isArray(s.eventi_dettaglio) && s.eventi_dettaglio.length
+                  ? ` · eventi: ${s.eventi_dettaglio.map((e) => e.titolo).join(', ')}`
+                  : ''}
               </div>
             </div>
+            <button
+              type="button"
+              className="text-xs px-2 py-1 bg-violet-800 rounded"
+              onClick={() => openSerieStato(s)}
+            >
+              Stato
+            </button>
             <button
               type="button"
               className="text-xs px-2 py-1 bg-gray-700 rounded"
               onClick={() => openSerieEditor(s)}
             >
               Modifica
+            </button>
+            <button
+              type="button"
+              className="text-amber-300 text-xs"
+              onClick={() => setConfirmResetSerie(s)}
+            >
+              Reset
             </button>
             <button
               type="button"
@@ -754,6 +813,8 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                 nome: serieForm.nome,
                 totale: Number(serieForm.totale) || 1,
                 descrizione: serieForm.descrizione || '',
+                ammetti_duplicati: Boolean(serieForm.ammetti_duplicati),
+                eventi: Array.isArray(serieForm.eventi) ? serieForm.eventi : [],
               };
               let serieId = serieForm.id;
               if (serieId) {
@@ -798,6 +859,44 @@ const ManifestoManager = ({ onBack, onLogout }) => {
               value={serieForm.descrizione}
               onChange={(e) => setSerieForm((f) => ({ ...f, descrizione: e.target.value }))}
             />
+            <label className="flex items-start gap-2 text-sm text-gray-200 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={Boolean(serieForm.ammetti_duplicati)}
+                onChange={(e) => setSerieForm((f) => ({ ...f, ammetti_duplicati: e.target.checked }))}
+              />
+              <span>
+                Ammetti duplicati
+                <span className="block text-xs text-gray-500">
+                  Se attivo, lo stesso indice può uscire più volte e lo stesso QR può essere
+                  riscosso da personaggi diversi (una volta ciascuno).
+                </span>
+              </span>
+            </label>
+            <div>
+              <div className="text-xs uppercase text-gray-400 font-semibold mb-1">Eventi (opzionale)</div>
+              <select
+                multiple
+                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm min-h-[6rem]"
+                value={(serieForm.eventi || []).map(String)}
+                onChange={(e) => {
+                  const selected = Array.from(e.target.selectedOptions).map((o) => Number(o.value));
+                  setSerieForm((f) => ({ ...f, eventi: selected }));
+                }}
+              >
+                {eventiOptions.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.titolo}
+                    {ev.ended_at ? ' (chiuso)' : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Ctrl/Cmd+click per selezione multipla. Se colleghi eventi, i pezzi spariscono
+                dall&apos;inventario serie giocatore quando tutti gli eventi sono chiusi.
+              </p>
+            </div>
             <div className="border border-violet-900/40 rounded-lg p-3 space-y-2 bg-violet-950/20">
               <div className="text-xs uppercase text-violet-300 font-semibold">
                 Immagini pezzi (opzionale)
@@ -1097,6 +1196,97 @@ const ManifestoManager = ({ onBack, onLogout }) => {
           }
         }}
       />
+
+      <ConfirmDialog
+        open={!!confirmResetSerie}
+        title="Reset serie"
+        message={
+          confirmResetSerie
+            ? `Sei sicuro di voler resettare la serie «${confirmResetSerie.nome}»? Tutti gli elementi negli inventari verranno rimossi e la consegna ripartirà da zero.`
+            : ''
+        }
+        confirmLabel="Resetta serie"
+        confirmTone="danger"
+        onCancel={() => setConfirmResetSerie(null)}
+        onConfirm={async () => {
+          const s = confirmResetSerie;
+          setConfirmResetSerie(null);
+          if (!s) return;
+          try {
+            const res = await staffResetSerieCollezione(s.id, onLogout);
+            setMsg(res?.messaggio || 'Serie resettata.');
+            await loadSerieTrappole();
+            if (serieStato?.serie_id === s.id) {
+              await openSerieStato(s);
+            }
+          } catch (e) {
+            setMsg(e.message || 'Reset fallito');
+          }
+        }}
+      />
+
+      {(serieStato || serieStatoLoading) && (
+        <StaffEditorModal
+          title={
+            serieStatoLoading
+              ? 'Stato serie…'
+              : `Stato: ${serieStato?.serie_nome || 'Serie'}`
+          }
+          size="lg"
+          onClose={() => setSerieStato(null)}
+          showSave={false}
+        >
+          {serieStatoLoading || !serieStato || serieStato.loading ? (
+            <p className="text-sm text-gray-400">Caricamento…</p>
+          ) : (
+            <div className="space-y-3 text-sm">
+              <p className="text-gray-300">
+                Assegnati <strong>{serieStato.pezzi_assegnati}</strong>
+                {serieStato.ammetti_duplicati
+                  ? ' (duplicati ammessi)'
+                  : ` / ${serieStato.totale} · restano ${serieStato.pezzi_rimanenti}`}
+              </p>
+              {(serieStato.per_personaggio || []).length === 0 ? (
+                <p className="text-gray-500 italic">Nessun pezzo in inventario.</p>
+              ) : (
+                <ul className="space-y-2 max-h-[50vh] overflow-y-auto">
+                  {serieStato.per_personaggio.map((pg) => (
+                    <li key={pg.personaggio_id} className="bg-gray-800/50 rounded px-3 py-2">
+                      <div className="font-semibold text-violet-200">
+                        {pg.personaggio_nome || `#${pg.personaggio_id}`}
+                        <span className="text-xs text-gray-400 font-normal ml-2">
+                          {pg.count} pezz{pg.count === 1 ? 'o' : 'i'}
+                        </span>
+                      </div>
+                      <ul className="mt-1 text-xs text-gray-400 space-y-0.5">
+                        {(pg.pezzi || []).map((p) => (
+                          <li key={p.id}>
+                            {p.etichetta}
+                            {p.qr_code_id ? ` · QR ${p.qr_code_id}` : ''}
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button
+                type="button"
+                className="px-3 py-1.5 text-xs rounded bg-amber-800 text-amber-50"
+                onClick={() =>
+                  setConfirmResetSerie({
+                    id: serieStato.serie_id,
+                    nome: serieStato.serie_nome,
+                  })
+                }
+              >
+                Reset serie…
+              </button>
+            </div>
+          )}
+        </StaffEditorModal>
+      )}
+
       {minigiocoModal}
     </StaffToolShell>
   );

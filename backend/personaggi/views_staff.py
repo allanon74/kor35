@@ -1539,7 +1539,7 @@ class SerieCollezioneStaffViewSet(viewsets.ModelViewSet):
                 _pezzi_assegnati=Count("assegnazioni", distinct=True),
                 _immagini_count=Count("immagini", distinct=True),
             )
-            .prefetch_related("immagini")
+            .prefetch_related("immagini", "eventi")
             .order_by("nome")
         )
         active = _get_active_campaign(self.request)
@@ -1553,6 +1553,75 @@ class SerieCollezioneStaffViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         camp = _get_active_campaign(self.request) or _get_default_campaign()
         serializer.save(campagna=camp)
+
+    @action(detail=True, methods=["get"], url_path="stato")
+    def stato(self, request, pk=None):
+        """Quanti pezzi usciti e chi li ha in inventario serie."""
+        from personaggi import qr_random_pool
+        from personaggi.models import SerieAssegnazione
+
+        serie = self.get_object()
+        assegnazioni = (
+            SerieAssegnazione.objects.filter(serie=serie)
+            .select_related("personaggio", "immagine", "serie")
+            .order_by("indice", "assegnato_at")
+        )
+        pezzi = [
+            qr_random_pool.serializza_assegnazione_serie(a, request=request)
+            for a in assegnazioni
+        ]
+        per_pg = {}
+        for p in pezzi:
+            key = p["personaggio_id"]
+            if key not in per_pg:
+                per_pg[key] = {
+                    "personaggio_id": key,
+                    "personaggio_nome": p.get("personaggio_nome"),
+                    "count": 0,
+                    "pezzi": [],
+                }
+            per_pg[key]["count"] += 1
+            per_pg[key]["pezzi"].append(p)
+        return Response(
+            {
+                "serie_id": str(serie.pk),
+                "serie_nome": serie.nome,
+                "totale": serie.totale,
+                "ammetti_duplicati": bool(serie.ammetti_duplicati),
+                "pezzi_assegnati": len(pezzi),
+                "pezzi_rimanenti": (
+                    None
+                    if serie.ammetti_duplicati
+                    else max(0, int(serie.totale or 0) - len(pezzi))
+                ),
+                "assegnazioni": pezzi,
+                "per_personaggio": list(per_pg.values()),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="reset")
+    def reset(self, request, pk=None):
+        """
+        Reset serie: rimuove tutti i pezzi dagli inventari e riparte da zero.
+        Richiede conferma esplicita nel body.
+        """
+        from personaggi import qr_random_pool
+
+        conferma = request.data.get("conferma")
+        if conferma not in (True, "true", "True", "1", 1):
+            return Response(
+                {
+                    "error": (
+                        "Conferma mancante. Invia {\"conferma\": true}. "
+                        "Sei sicuro di voler resettare la serie? "
+                        "Tutti gli elementi negli inventari verranno rimossi."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serie = self.get_object()
+        result = qr_random_pool.reset_serie_collezione(serie)
+        return Response({"status": "success", **result})
 
     @action(detail=True, methods=["post"], url_path="immagini")
     def upload_immagini(self, request, pk=None):

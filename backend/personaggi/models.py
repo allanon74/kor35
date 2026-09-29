@@ -5371,13 +5371,13 @@ class StatoTrappolaPersonaggio(SyncableModel, models.Model):
 
 
 class SerieCollezione(SyncableModel, models.Model):
-    """Collezione a pezzi unici globali (es. Pecora 1..30)."""
+    """Collezione a pezzi (es. Pecora 1..30) con inventario serie dedicato."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     nome = models.CharField(max_length=120)
     totale = models.PositiveIntegerField(
-        help_text="Numero totale di pezzi unici (N in 'X di N').",
+        help_text="Numero totale di pezzi (N in 'X di N').",
     )
     campagna = models.ForeignKey(
         "Campagna",
@@ -5387,6 +5387,24 @@ class SerieCollezione(SyncableModel, models.Model):
         db_index=True,
     )
     descrizione = models.TextField(blank=True, default="")
+    ammetti_duplicati = models.BooleanField(
+        default=False,
+        help_text=(
+            "Se disattivo (default), ogni indice 1..N viene consegnato una sola volta "
+            "e ogni QR fisico assegna al massimo un pezzo. Se attivo, gli indici possono "
+            "ripetersi e lo stesso QR può essere riscosso da personaggi diversi "
+            "(una volta ciascuno)."
+        ),
+    )
+    eventi = models.ManyToManyField(
+        "gestione_plot.Evento",
+        blank=True,
+        related_name="serie_collezioni",
+        help_text=(
+            "Opzionale: se valorizzato, i pezzi in inventario serie restano visibili "
+            "solo finché almeno un evento collegato non è chiuso (ended_at vuoto)."
+        ),
+    )
 
     class Meta:
         verbose_name = "Serie collezione"
@@ -5402,7 +5420,16 @@ class SerieCollezione(SyncableModel, models.Model):
 
     @property
     def pezzi_rimanenti(self):
+        if self.ammetti_duplicati:
+            return None
         return max(0, int(self.totale or 0) - self.pezzi_assegnati)
+
+    def inventario_visibile(self) -> bool:
+        """True se i pezzi di questa serie vanno mostrati nell'inventario serie giocatore."""
+        # Evita query se non prefetchato: exists() è sufficiente.
+        if not self.eventi.exists():
+            return True
+        return self.eventi.filter(ended_at__isnull=True).exists()
 
 
 class SerieImmagine(SyncableModel, models.Model):
@@ -5461,7 +5488,10 @@ class SerieImmagine(SyncableModel, models.Model):
 
 
 class SerieAssegnazione(SyncableModel, models.Model):
-    """Assegnazione unica globale di un indice di serie a un personaggio."""
+    """
+    Pezzo di serie nell'inventario serie del personaggio.
+    Ownership = `personaggio` (si aggiorna al trasferimento).
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -5482,6 +5512,7 @@ class SerieAssegnazione(SyncableModel, models.Model):
         null=True,
         blank=True,
         related_name="serie_assegnazioni",
+        help_text="Oggetto collegato (metadata); non va nello zaino generico.",
     )
     assegnato_at = models.DateTimeField(auto_now_add=True)
     qr_code = models.ForeignKey(
@@ -5503,13 +5534,13 @@ class SerieAssegnazione(SyncableModel, models.Model):
     class Meta:
         verbose_name = "Assegnazione serie"
         verbose_name_plural = "Assegnazioni serie"
-        unique_together = [("serie", "indice")]
         constraints = [
-            # Anti-farm: un QR fisico assegna al massimo un pezzo (pool/standalone).
+            # Unicità indice solo se la serie non ammette duplicati (enforce in applica_serie).
+            # Anti-farm per PG: stesso QR non si riscuote due volte dallo stesso personaggio.
             models.UniqueConstraint(
-                fields=["qr_code"],
+                fields=["qr_code", "personaggio"],
                 condition=models.Q(qr_code__isnull=False),
-                name="uq_serie_assegnazione_qr_code",
+                name="uq_serie_assegnazione_qr_personaggio",
             ),
         ]
         indexes = [
@@ -5519,6 +5550,10 @@ class SerieAssegnazione(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.serie.nome} {self.indice}/{self.serie.totale} → {self.personaggio_id}"
+
+    @property
+    def etichetta(self) -> str:
+        return f"{self.serie.nome} {self.indice} di {self.serie.totale}"
 
 
 class SerieQr(SyncableModel, models.Model):

@@ -1879,6 +1879,32 @@ export const staffUpdateSerieCollezione = (id, data, onLogout) =>
   );
 export const staffDeleteSerieCollezione = (id, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/serie-collezioni/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffGetSerieStato = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/serie-collezioni/${id}/stato/`, { method: 'GET' }, onLogout);
+export const staffResetSerieCollezione = (id, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/serie-collezioni/${id}/reset/`,
+    { method: 'POST', body: JSON.stringify({ conferma: true }) },
+    onLogout,
+  );
+export const getSerieInventario = (personaggioId, onLogout) => {
+  const q = personaggioId != null && personaggioId !== ''
+    ? `?personaggio_id=${encodeURIComponent(personaggioId)}`
+    : '';
+  return fetchAuthenticated(`/api/personaggi/api/serie-inventario/${q}`, { method: 'GET' }, onLogout);
+};
+export const trasferisciPezzoSerie = (assegnazioneId, personaggioId, destinatarioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/serie-inventario/${assegnazioneId}/trasferisci/`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        personaggio_id: personaggioId,
+        destinatario_personaggio_id: destinatarioId,
+      }),
+    },
+    onLogout,
+  );
 export const staffUploadSerieImmagini = (serieId, formData, onLogout) =>
   fetchAuthenticated(
     `/api/personaggi/api/staff/serie-collezioni/${serieId}/immagini/`,

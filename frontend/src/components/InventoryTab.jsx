@@ -8,6 +8,7 @@ import {
 import ShopModal from './ShopModal';
 import ItemAssemblyModal from './ItemAssemblyModal';
 import ModuloDetailModal from './ModuloDetailModal';
+import SerieInventarioPanel from './SerieInventarioPanel';
 import PunteggioDisplay from './PunteggioDisplay';
 import RichHtml from './RichHtml';
 import { useOptimisticEquip, useOptimisticRecharge, useOptimisticDamage, useOptimisticRepair, useOptimisticDiscard } from '../hooks/useGameData';
@@ -1116,6 +1117,8 @@ const InventoryTab = ({ onLogout }) => {
         heavyMax={heavyMax} 
         heavyConsumers={heavyConsumers}
       />
+
+      <SerieInventarioPanel onLogout={onLogout} />
 
       <section>
         <h3 className="text-sm font-bold text-indigo-300 mb-3 flex items-center gap-2 uppercase tracking-wider pl-1"><Activity size={16} /> Diagnostica Corporea</h3>
