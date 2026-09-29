@@ -4,8 +4,10 @@ import IdleScreen from './components/IdleScreen.jsx';
 import Cockpit from './components/Cockpit.jsx';
 import CompattatoreScreen from './components/CompattatoreScreen.jsx';
 import ScientificaScreen from './components/ScientificaScreen.jsx';
+import ComunicazioniScreen from './components/ComunicazioniScreen.jsx';
 import StationPicker from './components/StationPicker.jsx';
 import { api, getToken, setToken } from './api.js';
+import { speakAllarmeEquipaggio } from './pilotAlerts.js';
 import {
   flushOfflineQueue,
   loadCachedState,
@@ -23,6 +25,7 @@ const IS_CONTROL_ONLY = SCREEN_MODE === 'control';
 const IS_COMBINED = SCREEN_MODE === 'combined';
 const IS_COMPATTATORE = SCREEN_MODE === 'compattatore';
 const IS_SCIENTIFICA = SCREEN_MODE === 'scientifica';
+const IS_COMUNICAZIONI = SCREEN_MODE === 'comunicazioni';
 const IS_STATION = SCREEN_MODE === 'station';
 const IS_LAB = IS_COMPATTATORE || IS_SCIENTIFICA;
 const IS_PREVIEW_LAYOUT = PREVIEW === 'layout';
@@ -46,6 +49,8 @@ export default function App() {
   const [compact, setCompact] = useState(() => applyViewportClass());
 
   const pollTimerRef = useRef(null);
+  const alarmSpokenAtRef = useRef('');
+  const alarmAudioReadyRef = useRef(false);
 
   useEffect(() => {
     const apply = () => setCompact(applyViewportClass());
@@ -117,16 +122,19 @@ export default function App() {
       setConsoleChecked(true);
       return undefined;
     }
-    const loader = IS_SCIENTIFICA
-      ? api.scientificaConsoleEnabled
-      : IS_COMPATTATORE
-        ? api.compattatoreConsoleEnabled
-        : api.consoleEnabled;
+    const loader = IS_COMUNICAZIONI
+      ? api.comunicazioniConsoleEnabled
+      : IS_SCIENTIFICA
+        ? api.scientificaConsoleEnabled
+        : IS_COMPATTATORE
+          ? api.compattatoreConsoleEnabled
+          : api.consoleEnabled;
     loader()
       .then((res) => {
         setConsoleEnabled(!!res?.enabled);
         setLoginRequired(res?.login_required !== false);
-        const sigla = res?.scientifica_stat_accesso_sigla
+        const sigla = res?.comunicazioni_stat_accesso_sigla
+          || res?.scientifica_stat_accesso_sigla
           || res?.compattatore_stat_accesso_sigla
           || res?.navigazione_stat_accesso_sigla;
         if (sigla) {
@@ -141,11 +149,13 @@ export default function App() {
   useEffect(() => {
     if (IS_STATION || IS_PREVIEW_LAYOUT || IS_PREVIEW_LOGIN) return undefined;
     if (!consoleChecked || !consoleEnabled || loginRequired || authToken) return undefined;
-    const loginFn = IS_SCIENTIFICA
-      ? api.scientificaAutoLogin
-      : IS_COMPATTATORE
-        ? api.compattatoreAutoLogin
-        : api.autoLogin;
+    const loginFn = IS_COMUNICAZIONI
+      ? api.comunicazioniAutoLogin
+      : IS_SCIENTIFICA
+        ? api.scientificaAutoLogin
+        : IS_COMPATTATORE
+          ? api.compattatoreAutoLogin
+          : api.autoLogin;
     loginFn()
       .then((res) => {
         if (res?.token) {
@@ -160,13 +170,13 @@ export default function App() {
   }, [consoleChecked, consoleEnabled, loginRequired, authToken]);
 
   useEffect(() => {
-    if (!authToken || IS_LAB) return;
+    if (!authToken || IS_LAB || IS_COMUNICAZIONI) return;
     refreshState();
     api.percorsi().then(setPercorsi).catch(() => setPercorsi([]));
   }, [authToken, refreshState]);
 
   useEffect(() => {
-    if (!authToken || IS_LAB) return;
+    if (!authToken || IS_LAB || IS_COMUNICAZIONI) return;
     const id = setInterval(() => {
       refreshState();
       flushOfflineQueue(api).then(({ applicati }) => {
@@ -176,6 +186,27 @@ export default function App() {
     pollTimerRef.current = id;
     return () => clearInterval(id);
   }, [authToken, refreshState]);
+
+  useEffect(() => {
+    if (IS_COMUNICAZIONI || IS_LAB || IS_STATION) return;
+    if (state?.comunicazioni_console_abilitata !== true) return;
+    const at = state?.allarme_equipaggio_at || '';
+    if (!alarmAudioReadyRef.current) {
+      alarmAudioReadyRef.current = true;
+      alarmSpokenAtRef.current = at;
+      return;
+    }
+    if (!at || at === alarmSpokenAtRef.current) return;
+    alarmSpokenAtRef.current = at;
+    const testo = String(state?.allarme_annuncio || '').trim();
+    if (!testo) return;
+    speakAllarmeEquipaggio(testo, state?.allarme_equipaggio).catch(() => {});
+  }, [
+    state?.comunicazioni_console_abilitata,
+    state?.allarme_equipaggio_at,
+    state?.allarme_annuncio,
+    state?.allarme_equipaggio,
+  ]);
 
   const handleAuthorized = useCallback((token) => {
     setToken(token);
@@ -313,18 +344,28 @@ export default function App() {
     }
   }, []);
 
-  const consoleNome = IS_SCIENTIFICA ? 'scientifica' : IS_COMPATTATORE ? 'ingegneria' : 'pilotaggio';
-  const consoleTitolo = IS_SCIENTIFICA
-    ? 'CONSOLE SCIENTIFICA'
-    : IS_COMPATTATORE
-      ? 'CONSOLE INGEGNERIA'
-      : 'CONSOLE PILOTA';
-  const loginTitle = IS_SCIENTIFICA
-    ? 'KOR-35 // CONSOLE SCIENTIFICA'
-    : IS_COMPATTATORE
-      ? 'KOR-35 // CONSOLE INGEGNERIA'
-      : 'KOR-35 // CONSOLE PILOTA';
-  const loginRequisito = IS_LAB
+  const consoleNome = IS_COMUNICAZIONI
+    ? 'comunicazioni'
+    : IS_SCIENTIFICA
+      ? 'scientifica'
+      : IS_COMPATTATORE
+        ? 'ingegneria'
+        : 'pilotaggio';
+  const consoleTitolo = IS_COMUNICAZIONI
+    ? 'CONSOLE COMUNICAZIONI'
+    : IS_SCIENTIFICA
+      ? 'CONSOLE SCIENTIFICA'
+      : IS_COMPATTATORE
+        ? 'CONSOLE INGEGNERIA'
+        : 'CONSOLE PILOTA';
+  const loginTitle = IS_COMUNICAZIONI
+    ? 'KOR-35 // CONSOLE COMUNICAZIONI'
+    : IS_SCIENTIFICA
+      ? 'KOR-35 // CONSOLE SCIENTIFICA'
+      : IS_COMPATTATORE
+        ? 'KOR-35 // CONSOLE INGEGNERIA'
+        : 'KOR-35 // CONSOLE PILOTA';
+  const loginRequisito = (IS_LAB || IS_COMUNICAZIONI)
     ? `Requisito: statistica ${navigazioneStatSigla} > 0.`
     : null;
   const backToStation = fromStation() ? handleBackToStation : null;
@@ -337,7 +378,17 @@ export default function App() {
     );
   }
 
-  if (IS_PREVIEW_LAYOUT && !IS_LAB && !IS_STATION) {
+  if (IS_PREVIEW_LAYOUT && IS_COMUNICAZIONI) {
+    return (
+      <div className="app-shell app-shell-comunicazioni">
+        <main>
+          <ComunicazioniScreen preview onLogout={() => {}} onBack={backToStation} />
+        </main>
+      </div>
+    );
+  }
+
+  if (IS_PREVIEW_LAYOUT && !IS_LAB && !IS_STATION && !IS_COMUNICAZIONI) {
     const percorsiPreview = [
       { id: 'bosco', partenza: 'Bosco nord', arrivo: 'Avamposto', distanza_minima: 800, distanza_massima: 1400 },
       { id: 'lunga', partenza: 'Cittadella', arrivo: 'Frontiera', distanza_minima: 3000, distanza_massima: 6000 },
@@ -376,7 +427,7 @@ export default function App() {
     );
   }
 
-  if (IS_PREVIEW_LOGIN && IS_LAB) {
+  if (IS_PREVIEW_LOGIN && (IS_LAB || IS_COMUNICAZIONI)) {
     return (
       <div className="app-shell">
         <main>
@@ -384,9 +435,15 @@ export default function App() {
             createTicket={api.createConsoleTicket}
             pollTicket={api.ticketStatus}
             onAuthorized={handleAuthorized}
-            navigazioneStatSigla={IS_SCIENTIFICA ? '0SC' : '0IN'}
+            navigazioneStatSigla={IS_COMUNICAZIONI ? '0CO' : IS_SCIENTIFICA ? '0SC' : '0IN'}
             title={loginTitle}
-            requisito={IS_SCIENTIFICA ? 'Requisito: statistica 0SC > 0.' : 'Requisito: statistica 0IN > 0.'}
+            requisito={
+              IS_COMUNICAZIONI
+                ? 'Requisito: statistica 0CO > 0.'
+                : IS_SCIENTIFICA
+                  ? 'Requisito: statistica 0SC > 0.'
+                  : 'Requisito: statistica 0IN > 0.'
+            }
             onBack={backToStation}
             previewClaimUrl="https://www.kor35.it/api/pilot/auth/console-ticket/preview/claim/?c=DEMO"
           />
@@ -417,7 +474,7 @@ export default function App() {
     return (
       <div className="app-shell">
         <div className="banner">
-          <div className="ident">KOR-35 // {IS_SCIENTIFICA ? 'LAB CAMPO' : IS_COMPATTATORE ? 'NODO Z' : 'PILOT CONSOLE'}</div>
+          <div className="ident">KOR-35 // {IS_COMUNICAZIONI ? 'RADIO' : IS_SCIENTIFICA ? 'LAB CAMPO' : IS_COMPATTATORE ? 'NODO Z' : 'PILOT CONSOLE'}</div>
           <div className="right">
             <span className={online ? 'net-online' : 'net-offline'}>
               {online ? 'BACKEND ON' : 'BACKEND OFF'}
@@ -428,11 +485,13 @@ export default function App() {
           {loginRequired ? (
             <LoginQR
               createTicket={
-                IS_SCIENTIFICA
-                  ? api.createScientificaConsoleTicket
-                  : IS_COMPATTATORE
-                    ? api.createCompattatoreConsoleTicket
-                    : api.createConsoleTicket
+                IS_COMUNICAZIONI
+                  ? api.createComunicazioniConsoleTicket
+                  : IS_SCIENTIFICA
+                    ? api.createScientificaConsoleTicket
+                    : IS_COMPATTATORE
+                      ? api.createCompattatoreConsoleTicket
+                      : api.createConsoleTicket
               }
               pollTicket={api.ticketStatus}
               onAuthorized={handleAuthorized}
@@ -445,6 +504,19 @@ export default function App() {
           ) : (
             <div className="center-screen"><div className="card">Accesso automatico console in corso...</div></div>
           )}
+        </main>
+      </div>
+    );
+  }
+
+  if (IS_COMUNICAZIONI && authToken) {
+    return (
+      <div className="app-shell app-shell-comunicazioni">
+        <main>
+          <ComunicazioniScreen
+            onLogout={handleLogout}
+            onBack={backToStation}
+          />
         </main>
       </div>
     );

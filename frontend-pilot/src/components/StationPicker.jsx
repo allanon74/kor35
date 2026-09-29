@@ -18,6 +18,13 @@ const EMPTY = {
     requisito: '…',
     screen: 'scientifica',
   },
+  comunicazioni: {
+    nome: 'Console Comunicazioni',
+    enabled: false,
+    sigla: '…',
+    requisito: '…',
+    screen: 'comunicazioni',
+  },
 };
 
 export default function StationPicker({ preview = false }) {
@@ -65,6 +72,7 @@ export default function StationPicker({ preview = false }) {
 
   const ing = data?.ingegneria;
   const sci = data?.scientifica;
+  const com = data?.comunicazioni;
 
   return (
     <div className="station-picker">
@@ -88,6 +96,13 @@ export default function StationPicker({ preview = false }) {
           disabled={loading || (!error && sci && !sci.enabled)}
           offLabel={!error && sci && !sci.enabled ? 'Disabilitata nello staff' : ''}
           onClick={() => open('scientifica', !sci || sci.enabled || Boolean(error))}
+        />
+        <ConsoleButton
+          title="Comunicazioni"
+          detail={com ? `Accesso ${com.requisito || com.sigla}` : 'Accesso …'}
+          disabled={loading || (!error && com && !com.enabled)}
+          offLabel={!error && com && !com.enabled ? 'Disabilitata nello staff' : ''}
+          onClick={() => open('comunicazioni', !com || com.enabled || Boolean(error))}
         />
       </div>
       <footer className="station-picker-foot">

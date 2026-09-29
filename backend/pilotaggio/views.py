@@ -69,10 +69,12 @@ from .models import (
     CoppiaColoriComponente,
     DEFCON_MAX,
     EVENTO_ESITO_PENDING,
+    DipartimentoBordo,
     EventoAttivoSessione,
     EventoNave,
     IntensitaComando,
     PercorsoVolo,
+    ProtocolloComunicazione,
     PilotConsoleToken,
     PilotRuntimeConfig,
     PilotConsoleLoginTicket,
@@ -96,6 +98,8 @@ from .serializers import (
     ComandoCriticoGlobaleSerializer,
     ComandoNaveSerializer,
     CoppiaColoriComponenteSerializer,
+    DipartimentoBordoSerializer,
+    ProtocolloComunicazioneSerializer,
     EventoAttivoSerializer,
     EventoNaveListSerializer,
     EventoNaveSerializer,
@@ -119,6 +123,7 @@ from .serializers import (
 
 from .navigation_stats import (
     build_navigation_stats_payload,
+    comunicazioni_stat_sigla,
     ingegneria_stat_sigla,
     navigazione_stat_sigla,
     riparazione_stat_sigla,
@@ -448,6 +453,8 @@ def _tick_runtime_payload(sessione: Optional[SessioneVolo] = None) -> dict:
         "compattatore_quantico_abilitato": bool(cfg.compattatore_quantico_abilitato),
         "scientifica_console_abilitata": bool(cfg.scientifica_console_abilitata),
         "scientifica_stat_accesso_sigla": cfg.scientifica_stat_accesso_sigla or "0SC",
+        "comunicazioni_console_abilitata": bool(cfg.comunicazioni_console_abilitata),
+        "comunicazioni_stat_accesso_sigla": cfg.comunicazioni_stat_accesso_sigla or "0CO",
     }
 
 
@@ -463,11 +470,17 @@ def _login_required_compattatore() -> bool:
     return bool(PilotRuntimeConfig.get_solo().compattatore_login_richiesto)
 
 
+def _login_required_comunicazioni() -> bool:
+    return bool(PilotRuntimeConfig.get_solo().comunicazioni_login_richiesto)
+
+
 def _stat_accesso_per_ruolo_ticket(ruolo: str) -> str:
     if ruolo == "scientifica":
         return scientifica_stat_sigla()
     if ruolo == "ingegneria":
         return ingegneria_stat_sigla()
+    if ruolo == "comunicazioni":
+        return comunicazioni_stat_sigla()
     return navigazione_stat_sigla()
 
 
@@ -476,6 +489,8 @@ def _login_required_per_ruolo_ticket(ruolo: str) -> bool:
         return _login_required_scientifica()
     if ruolo == "ingegneria":
         return _login_required_compattatore()
+    if ruolo == "comunicazioni":
+        return _login_required_comunicazioni()
     return _login_required_console()
 
 
@@ -787,6 +802,7 @@ class PilotConsoleTicketClaimView(APIView):
         console_label = {
             "scientifica": "scientifica",
             "ingegneria": "ingegneria",
+            "comunicazioni": "comunicazioni",
         }.get(ruolo, "pilota")
         if wants_html:
             return render(
@@ -1011,6 +1027,17 @@ def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
         ),
         "allarme_equipaggio": (
             getattr(sessione, "allarme_equipaggio", "crociera") if sessione else "crociera"
+        ),
+        "allarme_equipaggio_at": (
+            sessione.allarme_equipaggio_at.isoformat()
+            if sessione is not None and sessione.allarme_equipaggio_at
+            else None
+        ),
+        "allarme_annuncio": (
+            getattr(sessione, "allarme_annuncio", "") if sessione else ""
+        ),
+        "comunicazioni_console_abilitata": bool(
+            PilotRuntimeConfig.get_solo().comunicazioni_console_abilitata
         ),
         "allarme_led": build_allarme_led_payload(sessione),
         "server_time": timezone.now().isoformat(),
@@ -1406,7 +1433,7 @@ class PilotSessionLandingView(APIView):
 class PilotSessionAllarmeEquipaggioView(APIView):
     """
     POST /api/pilot/session/allarme-equipaggio/
-    Body: { "allarme": "crociera"|"giallo"|"rosso"|"nero"|"blu" }
+    Body: { "allarme": "crociera"|"giallo"|"rosso"|"nero"|"blu"|"ambra"|"viola" }
     """
 
     authentication_classes = [PilotConsoleTokenAuthentication]
@@ -1418,13 +1445,26 @@ class PilotSessionAllarmeEquipaggioView(APIView):
         if sessione is None:
             return Response({"error": "Nessuna sessione attiva."}, status=status.HTTP_400_BAD_REQUEST)
         allarme = request.data.get("allarme")
+        cfg = PilotRuntimeConfig.get_solo()
+        extra = {}
         try:
-            annuncio = imposta_allarme_equipaggio_sessione(sessione, allarme)
+            if cfg.comunicazioni_console_abilitata:
+                from .comunicazioni import dichiara_allarme_comunicazioni
+
+                extra = dichiara_allarme_comunicazioni(sessione, allarme)
+                annuncio = extra.get("annuncio") or ""
+            else:
+                annuncio = imposta_allarme_equipaggio_sessione(sessione, allarme)
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         sessione.refresh_from_db()
         payload = _build_state_payload(sessione, pilota)
         payload["announcement"] = annuncio
+        if extra:
+            payload["messaggio_dipartimento"] = extra.get("testo") or ""
+            payload["dipartimento"] = extra.get("dipartimento") or ""
+            payload["inviati"] = int(extra.get("inviati") or 0)
+            payload["grazia_ca"] = bool(extra.get("grazia"))
         return Response(payload, status=status.HTTP_200_OK)
 
 
@@ -2631,6 +2671,7 @@ class StationConsolesView(APIView):
         pilot_on = _pilot_console_feature_enabled()
         ing_sigla = ingegneria_stat_sigla(cfg)
         sci_sigla = scientifica_stat_sigla(cfg)
+        com_sigla = comunicazioni_stat_sigla(cfg)
         return Response(
             {
                 "ingegneria": {
@@ -2650,6 +2691,15 @@ class StationConsolesView(APIView):
                     "sigla": sci_sigla,
                     "requisito": f"{sci_sigla} > 0",
                     "screen": "scientifica",
+                },
+                "comunicazioni": {
+                    "id": "comunicazioni",
+                    "nome": "Console Comunicazioni",
+                    "enabled": pilot_on and bool(cfg.comunicazioni_console_abilitata),
+                    "login_required": _login_required_comunicazioni(),
+                    "sigla": com_sigla,
+                    "requisito": f"{com_sigla} > 0",
+                    "screen": "comunicazioni",
                 },
             }
         )
@@ -2817,3 +2867,122 @@ class PilotScientificaInterventoView(APIView):
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(payload)
+
+
+class ComunicazioniConsoleEnabledView(APIView):
+    authentication_classes: list = []
+    permission_classes: list = [permissions.AllowAny]
+
+    def get(self, request):
+        cfg = PilotRuntimeConfig.get_solo()
+        sigla = comunicazioni_stat_sigla(cfg)
+        return Response(
+            {
+                "enabled": bool(cfg.comunicazioni_console_abilitata) and _pilot_console_feature_enabled(),
+                "login_required": _login_required_comunicazioni(),
+                "comunicazioni_stat_accesso_sigla": sigla,
+                "requisito": f"{sigla} > 0",
+            }
+        )
+
+
+class ComunicazioniConsoleAutoLoginView(APIView):
+    authentication_classes: list = []
+    permission_classes: list = [permissions.AllowAny]
+
+    def post(self, request):
+        if _login_required_comunicazioni():
+            return Response(
+                {"error": "Login obbligatorio: auto-login disabilitato."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        cfg = PilotRuntimeConfig.get_solo()
+        if not cfg.comunicazioni_console_abilitata:
+            return Response(
+                {"error": "Console comunicazioni disabilitata."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        issued = _auto_login_per_sigla(comunicazioni_stat_sigla(cfg))
+        if issued is None:
+            return Response(
+                {"error": "Nessun personaggio disponibile per auto-login."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        token_obj, mode, pilota = issued
+        return Response(
+            {
+                "token": token_obj.token,
+                "operatore": {"id": pilota.pk, "nome": getattr(pilota, "nome", str(pilota))},
+                "mode": mode,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ComunicazioniConsoleTicketCreateView(APIView):
+    authentication_classes: list = []
+    permission_classes: list = [permissions.AllowAny]
+
+    def post(self, request):
+        cfg = PilotRuntimeConfig.get_solo()
+        if not cfg.comunicazioni_console_abilitata:
+            return Response(
+                {"error": "Console comunicazioni disabilitata."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not _login_required_comunicazioni():
+            return Response(
+                {"error": "Login ticket disattivato (console senza login)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not _pilot_console_feature_enabled():
+            return Response(
+                {"error": "Console pilota disabilitata su questo ambiente."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return _create_role_login_ticket(request, "comunicazioni")
+
+
+class ComunicazioniQuadroView(APIView):
+    """GET /api/pilot/comunicazioni/quadro/ — evento senza codici, guasti, protocolli."""
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def get(self, request):
+        from .comunicazioni import quadro_comunicazioni
+
+        pilota = get_pilot_from_request(request)
+        sessione = _sessione_pilota_operativa(pilota)
+        return Response(quadro_comunicazioni(sessione))
+
+
+class StaffDipartimentoBordoViewSet(viewsets.ModelViewSet):
+    queryset = DipartimentoBordo.objects.all().order_by("ordine", "nome")
+    serializer_class = DipartimentoBordoSerializer
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
+
+    def get_queryset(self):
+        return DipartimentoBordo.objects.prefetch_related("membri").order_by("ordine", "nome")
+
+
+class StaffProtocolloComunicazioneViewSet(viewsets.ModelViewSet):
+    queryset = ProtocolloComunicazione.objects.select_related("dipartimento").order_by(
+        "ordine", "colore"
+    )
+    serializer_class = ProtocolloComunicazioneSerializer
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
+
+
+class StaffPersonaggiBreveView(APIView):
+    """Elenco id/nome per associare i membri di un dipartimento."""
+
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
+
+    def get(self, request):
+        q = str(request.query_params.get("q") or "").strip()
+        qs = Personaggio.objects.all().order_by("nome")
+        if q:
+            qs = qs.filter(nome__icontains=q)
+        rows = [{"id": p.pk, "nome": p.nome} for p in qs[:80]]
+        return Response(rows)

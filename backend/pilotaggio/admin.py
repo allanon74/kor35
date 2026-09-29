@@ -4,6 +4,8 @@ from .models import (
     ComandoCriticoGlobale,
     ComandoNave,
     CoppiaColoriComponente,
+    DipartimentoBordo,
+    ProtocolloComunicazione,
     EventoAttivoSessione,
     EventoNave,
     IntensitaComando,
@@ -197,6 +199,7 @@ class PilotRuntimeConfigAdmin(admin.ModelAdmin):
         "compattatore_console_abilitata",
         "scientifica_console_abilitata",
         "comunicazioni_console_abilitata",
+        "comunicazioni_login_richiesto",
         "compattatore_quantico_abilitato",
         "tick_enabled",
         "tick_interval_secondi",
@@ -220,3 +223,16 @@ class StivaComponenteNaveAdmin(admin.ModelAdmin):
 @admin.register(StivaCoppiaOppositiStato)
 class StivaCoppiaOppositiStatoAdmin(admin.ModelAdmin):
     list_display = ("coppia", "tick_coesistenza", "updated_at")
+
+
+@admin.register(DipartimentoBordo)
+class DipartimentoBordoAdmin(admin.ModelAdmin):
+    list_display = ("nome", "ordine", "attivo")
+    search_fields = ("nome",)
+    filter_horizontal = ("membri",)
+
+
+@admin.register(ProtocolloComunicazione)
+class ProtocolloComunicazioneAdmin(admin.ModelAdmin):
+    list_display = ("colore", "dipartimento", "attivo", "ordine")
+    list_filter = ("attivo", "colore")

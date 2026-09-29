@@ -63,11 +63,11 @@ export const NAVIGATION_STAT_FIELDS = [
   },
   {
     id: 'comunicazioni',
-    label: 'Console Comunicazioni (futuro)',
+    label: 'Console Comunicazioni',
     siglaField: 'comunicazioni_stat_accesso_sigla',
     defaultSigla: DEFAULT_COMUNICAZIONI_SIGLA,
     requisito: '> 0',
     url: '/pilot/?screen=comunicazioni',
-    future: true,
+    note: 'Se attiva, i pulsanti allarme escono dalla plancia.',
   },
 ];

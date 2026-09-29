@@ -166,7 +166,10 @@ def navigation_roles_catalog(
             "sigla": sigle["comunicazioni"],
             "requisito": f"{sigle['comunicazioni']} > 0",
             "url_console": "/pilot/?screen=comunicazioni",
-            "implementato": False,
-            "note": "Riservata — uso futuro (messaggistica di bordo / prefetture / equipaggio).",
+            "implementato": bool(getattr(cfg, "comunicazioni_console_abilitata", False)),
+            "note": (
+                "Allarmi cromatici, messaggio al dipartimento e audio sulla plancia. "
+                "Se attiva, i pulsanti allarme escono dalla console di navigazione."
+            ),
         },
     ]

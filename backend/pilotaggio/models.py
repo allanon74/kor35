@@ -370,6 +370,15 @@ class EventoNave(SyncableModel, models.Model):
         help_text="Se collegato, il guasto del sottosistema impatta su questo evento.",
     )
     attivo = models.BooleanField(default=True)
+    allarme_richiesto = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        help_text=(
+            "Colore che la console comunicazioni deve dichiarare durante la reazione "
+            "per sopprimere il primo controllo di catastrofe. Vuoto = nessun colore."
+        ),
+    )
     scadenza_critica = models.BooleanField(
         default=False,
         help_text=(
@@ -690,6 +699,11 @@ class SessioneVolo(SyncableModel, models.Model):
         blank=True,
         help_text="Ultimo cambio allarme equipaggio (sync LED WiFi).",
     )
+    allarme_annuncio = models.TextField(
+        blank=True,
+        default="",
+        help_text="Testo vocale dell'ultimo allarme, letto dalla console di pilotaggio.",
+    )
     scans_profondi_count = models.PositiveSmallIntegerField(
         default=0,
         help_text="Scan profondi eseguiti in questa sessione (max da runtime).",
@@ -823,6 +837,13 @@ class EventoAttivoSessione(SyncableModel, models.Model):
     ca_soppressa_scientifica = models.BooleanField(
         default=False,
         help_text="Prossima valutazione CA soppressa da gabbia dimensionale.",
+    )
+    ca_soppressa_comunicazioni = models.BooleanField(
+        default=False,
+        help_text=(
+            "Primo controllo CA soppresso perché la radio ha dichiarato "
+            "il colore richiesto durante la reazione."
+        ),
     )
     eco_parziale_attiva = models.BooleanField(
         default=False,
@@ -1092,6 +1113,7 @@ class PilotConsoleLoginTicket(SyncableModel, models.Model):
             ("navigazione", "Console Navigazione"),
             ("ingegneria", "Console Ingegneria"),
             ("scientifica", "Console Scientifica"),
+            ("comunicazioni", "Console Comunicazioni"),
         ],
         default="navigazione",
         help_text="Console destinataria del ticket login inverso.",
@@ -1188,6 +1210,70 @@ class StivaCoppiaOppositiStato(SyncableModel, models.Model):
         return f"{self.coppia} tick={self.tick_coesistenza}"
 
 
+class DipartimentoBordo(SyncableModel, models.Model):
+    """
+    Reparto di bordo che riceve i messaggi di un allarme cromatico
+    (ingegneria, sicurezza, …).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=80)
+    ordine = models.PositiveIntegerField(default=0)
+    attivo = models.BooleanField(default=True, db_index=True)
+    membri = models.ManyToManyField(
+        "personaggi.Personaggio",
+        blank=True,
+        related_name="dipartimenti_bordo",
+    )
+
+    class Meta:
+        verbose_name = "Dipartimento di bordo"
+        verbose_name_plural = "Dipartimenti di bordo"
+        ordering = ["ordine", "nome"]
+
+    def __str__(self):
+        return self.nome
+
+
+class ProtocolloComunicazione(SyncableModel, models.Model):
+    """
+    Colore di allarme, testo inviato al dipartimento e frase letta
+    dall'audio della console di pilotaggio.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    colore = models.CharField(max_length=16, unique=True)
+    dipartimento = models.ForeignKey(
+        DipartimentoBordo,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="protocolli",
+    )
+    testo = models.TextField(
+        blank=True,
+        default="",
+        help_text="Messaggio ai membri. Segnaposto: {sottosistema} {evento}.",
+    )
+    testo_audio = models.TextField(
+        blank=True,
+        default="",
+        help_text="Frase letta dalla plancia. Vuoto = annuncio standard del colore.",
+    )
+    ordine = models.PositiveIntegerField(default=0)
+    attivo = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Protocollo comunicazione"
+        verbose_name_plural = "Protocolli comunicazione"
+        ordering = ["ordine", "colore"]
+
+    def __str__(self):
+        return f"{self.colore} → {self.dipartimento or 'nessun dipartimento'}"
+
+
 class PilotRuntimeConfig(models.Model):
     """
     Config runtime singleton per worker tick.
@@ -1265,12 +1351,19 @@ class PilotRuntimeConfig(models.Model):
     )
     comunicazioni_console_abilitata = models.BooleanField(
         default=False,
-        help_text="Riservato: console comunicazioni (non ancora implementata).",
+        help_text=(
+            "Abilita console /pilot/?screen=comunicazioni. "
+            "Se attiva, gli allarmi cromatici escono dalla plancia."
+        ),
+    )
+    comunicazioni_login_richiesto = models.BooleanField(
+        default=True,
+        help_text="Richiede login alla console comunicazioni.",
     )
     comunicazioni_stat_accesso_sigla = models.CharField(
         max_length=3,
         default="0CO",
-        help_text="Sigla statistica futura console comunicazioni.",
+        help_text="Sigla statistica accesso console comunicazioni (es. 0CO>0).",
     )
     scientifica_scan_profondo_abilitato = models.BooleanField(
         default=True,

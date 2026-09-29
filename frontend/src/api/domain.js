@@ -2204,6 +2204,25 @@ export const staffUpdatePilotPercorso = (id, data, onLogout) =>
 export const staffDeletePilotPercorso = (id, onLogout) =>
   fetchAuthenticated(`/api/pilot/staff/percorsi/${id}/`, { method: 'DELETE' }, onLogout);
 
+export const staffGetPilotDipartimenti = (onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/dipartimenti/', { method: 'GET' }, onLogout);
+export const staffCreatePilotDipartimento = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/dipartimenti/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdatePilotDipartimento = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/dipartimenti/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeletePilotDipartimento = (id, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/dipartimenti/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffGetPilotProtocolli = (onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/protocolli-comunicazione/', { method: 'GET' }, onLogout);
+export const staffCreatePilotProtocollo = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/protocolli-comunicazione/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdatePilotProtocollo = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/protocolli-comunicazione/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeletePilotProtocollo = (id, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/protocolli-comunicazione/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffCercaPersonaggiBreve = (q, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/personaggi-breve/?q=${encodeURIComponent(q || '')}`, { method: 'GET' }, onLogout);
+
 export const staffGetPilotIntensita = (onLogout) =>
   fetchAuthenticated('/api/pilot/staff/intensita/', { method: 'GET' }, onLogout);
 export const staffGetPilotIntensitaById = (id, onLogout) =>

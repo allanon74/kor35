@@ -1502,6 +1502,11 @@ def valuta_evento_tick(sessione: SessioneVolo, istanza: EventoAttivoSessione) ->
                 istanza.save(update_fields=["ca_soppressa_scientifica", "updated_at"])
                 esito_diario = "ca_soppressa"
                 return "ca_soppressa", sessione.defcon
+            if getattr(istanza, "ca_soppressa_comunicazioni", False):
+                istanza.ca_soppressa_comunicazioni = False
+                istanza.save(update_fields=["ca_soppressa_comunicazioni", "updated_at"])
+                esito_diario = "ca_soppressa_comunicazioni"
+                return "ca_soppressa_comunicazioni", sessione.defcon
             esito_diario, defcon_out = _applica_esito_ca_da_regole(sessione, istanza, regole)
             return esito_diario, defcon_out
 

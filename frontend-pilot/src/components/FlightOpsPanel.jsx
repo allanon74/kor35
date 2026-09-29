@@ -25,6 +25,7 @@ export default function FlightOpsPanel({
   onEmergencyLanding,
   onSetAllarme,
   disabled = false,
+  showAllarmi = true,
 }) {
   const [busy, setBusy] = useState(false);
   const motoreOff = Number(motoreLivello || 0) === 0;
@@ -95,20 +96,22 @@ export default function FlightOpsPanel({
         )}
       </div>
 
-      <div className="flight-ops-alarm-row" role="group" aria-label="Allarme equipaggio">
-        {ALLARMI.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            className={`flight-ops-alarm-btn ${a.className} ${allarmeEquipaggio === a.id ? 'active' : ''}`}
-            disabled={disabled || busy}
-            title={a.title}
-            aria-label={a.title}
-            aria-pressed={allarmeEquipaggio === a.id}
-            onClick={() => handleAllarme(a.id)}
-          />
-        ))}
-      </div>
+      {showAllarmi ? (
+        <div className="flight-ops-alarm-row" role="group" aria-label="Allarme equipaggio">
+          {ALLARMI.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              className={`flight-ops-alarm-btn ${a.className} ${allarmeEquipaggio === a.id ? 'active' : ''}`}
+              disabled={disabled || busy}
+              title={a.title}
+              aria-label={a.title}
+              aria-pressed={allarmeEquipaggio === a.id}
+              onClick={() => handleAllarme(a.id)}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

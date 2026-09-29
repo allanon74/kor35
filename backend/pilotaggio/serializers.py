@@ -8,14 +8,18 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from personaggi.models import Personaggio
+
 from .models import (
     ComandoCriticoGlobale,
     ComandoNave,
     CoppiaColoriComponente,
+    DipartimentoBordo,
     EventoAttivoSessione,
     EventoNave,
     IntensitaComando,
     PercorsoVolo,
+    ProtocolloComunicazione,
     PilotConsoleToken,
     PilotRuntimeConfig,
     SequenzaVolo,
@@ -279,6 +283,7 @@ class EventoNaveSerializer(serializers.ModelSerializer):
             "sottosistema",
             "sottosistema_codice",
             "attivo",
+            "allarme_richiesto",
         ]
         read_only_fields = ["id", "sottosistema_codice"]
 
@@ -295,6 +300,16 @@ class EventoNaveSerializer(serializers.ModelSerializer):
         raise serializers.ValidationError(
             'Usa "N" (tick fissi) oppure "A-B" (random inclusivo tra A e B).'
         )
+
+    def validate_allarme_richiesto(self, value):
+        from .allarme_equipaggio import ALLARME_EQUIPAGGIO_CROCIERA, ALLARME_EQUIPAGGIO_VALIDI
+
+        key = str(value or "").strip().lower()
+        if not key or key == ALLARME_EQUIPAGGIO_CROCIERA:
+            return ""
+        if key not in ALLARME_EQUIPAGGIO_VALIDI:
+            raise serializers.ValidationError("Colore allarme non riconosciuto.")
+        return key
 
 
 class SequenzaVoloSerializer(serializers.ModelSerializer):
@@ -546,6 +561,7 @@ class PilotRuntimeConfigSerializer(serializers.ModelSerializer):
             "scientifica_login_richiesto",
             "scientifica_stat_accesso_sigla",
             "comunicazioni_console_abilitata",
+            "comunicazioni_login_richiesto",
             "comunicazioni_stat_accesso_sigla",
             "scientifica_scan_profondo_abilitato",
             "scientifica_scan_max_per_volo",
@@ -614,3 +630,65 @@ class StivaComponenteNaveSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "updated_at"]
+
+
+class DipartimentoBordoSerializer(serializers.ModelSerializer):
+    membri_ids = serializers.PrimaryKeyRelatedField(
+        source="membri",
+        many=True,
+        queryset=Personaggio.objects.all(),
+        required=False,
+    )
+    membri = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DipartimentoBordo
+        fields = ["id", "nome", "ordine", "attivo", "membri", "membri_ids"]
+        read_only_fields = ["id", "membri"]
+
+    def get_membri(self, obj):
+        return [
+            {"id": p.pk, "nome": getattr(p, "nome", str(p))}
+            for p in obj.membri.all().order_by("nome")
+        ]
+
+
+class ProtocolloComunicazioneSerializer(serializers.ModelSerializer):
+    dipartimento_nome = serializers.CharField(
+        source="dipartimento.nome", read_only=True, default=""
+    )
+
+    class Meta:
+        model = ProtocolloComunicazione
+        fields = [
+            "id",
+            "colore",
+            "dipartimento",
+            "dipartimento_nome",
+            "testo",
+            "testo_audio",
+            "ordine",
+            "attivo",
+        ]
+        read_only_fields = ["id", "dipartimento_nome"]
+
+    def validate_colore(self, value):
+        from .allarme_equipaggio import ALLARME_EQUIPAGGIO_CROCIERA, ALLARME_EQUIPAGGIO_VALIDI
+
+        key = str(value or "").strip().lower()
+        if key == ALLARME_EQUIPAGGIO_CROCIERA or key not in ALLARME_EQUIPAGGIO_VALIDI:
+            raise serializers.ValidationError(
+                "Scegli un colore di allarme (non la crociera)."
+            )
+        return key
+
+    def validate(self, attrs):
+        colore = attrs.get("colore", getattr(self.instance, "colore", ""))
+        qs = ProtocolloComunicazione.objects.filter(colore=colore)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                {"colore": "Esiste già un protocollo per questo colore."}
+            )
+        return attrs

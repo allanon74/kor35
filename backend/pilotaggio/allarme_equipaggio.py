@@ -15,6 +15,8 @@ ALLARME_EQUIPAGGIO_GIALLO = "giallo"
 ALLARME_EQUIPAGGIO_ROSSO = "rosso"
 ALLARME_EQUIPAGGIO_NERO = "nero"
 ALLARME_EQUIPAGGIO_BLU = "blu"
+ALLARME_EQUIPAGGIO_AMBRA = "ambra"
+ALLARME_EQUIPAGGIO_VIOLA = "viola"
 
 ALLARME_EQUIPAGGIO_CHOICES = [
     (ALLARME_EQUIPAGGIO_CROCIERA, "Crociera (nessun allarme)"),
@@ -22,6 +24,8 @@ ALLARME_EQUIPAGGIO_CHOICES = [
     (ALLARME_EQUIPAGGIO_ROSSO, "Allarme rosso"),
     (ALLARME_EQUIPAGGIO_NERO, "Allarme nero"),
     (ALLARME_EQUIPAGGIO_BLU, "Allarme blu"),
+    (ALLARME_EQUIPAGGIO_AMBRA, "Allarme ambra — riparazione"),
+    (ALLARME_EQUIPAGGIO_VIOLA, "Allarme viola — invasione"),
 ]
 
 ALLARME_EQUIPAGGIO_VALIDI = frozenset(
@@ -47,6 +51,12 @@ ANNUNCIO_VOCALE_ALLARME: Dict[str, str] = {
     ),
     ALLARME_EQUIPAGGIO_CROCIERA: (
         "Allarme Verde. Ripristino condizione di crociera. Nessun allarme attivo."
+    ),
+    ALLARME_EQUIPAGGIO_AMBRA: (
+        "Allarme Ambra. Squadra tecnica al sottosistema guasto."
+    ),
+    ALLARME_EQUIPAGGIO_VIOLA: (
+        "Allarme Viola. Sicurezza, intercettare gli invasori."
     ),
 }
 
@@ -88,6 +98,20 @@ LED_PROFILE_ALLARME: Dict[str, Dict[str, Any]] = {
         "luminosita": 1.0,
         "pulse_ms": 900,
     },
+    ALLARME_EQUIPAGGIO_AMBRA: {
+        "hex": "#FF8F00",
+        "rgb": [255, 143, 0],
+        "modalita": "pulse",
+        "luminosita": 1.0,
+        "pulse_ms": 800,
+    },
+    ALLARME_EQUIPAGGIO_VIOLA: {
+        "hex": "#8E24AA",
+        "rgb": [142, 36, 170],
+        "modalita": "pulse",
+        "luminosita": 1.0,
+        "pulse_ms": 500,
+    },
 }
 
 LED_API_SCHEMA_VERSION = 1
@@ -97,7 +121,7 @@ def normalizza_allarme_equipaggio(valore: Optional[str]) -> str:
     key = str(valore or ALLARME_EQUIPAGGIO_CROCIERA).strip().lower()
     if key not in ALLARME_EQUIPAGGIO_VALIDI:
         raise ValueError(
-            "Allarme non valido: usare crociera, giallo, rosso, nero o blu."
+            "Allarme non valido: usare crociera, giallo, rosso, nero, blu, ambra o viola."
         )
     return key
 
@@ -153,7 +177,9 @@ def build_allarme_led_payload(sessione=None) -> Dict[str, Any]:
     }
 
 
-def imposta_allarme_equipaggio_sessione(sessione, allarme: str) -> str:
+def imposta_allarme_equipaggio_sessione(
+    sessione, allarme: str, annuncio: Optional[str] = None
+) -> str:
     """Aggiorna allarme equipaggio sulla sessione; ritorna annuncio vocale."""
     from .models import SessioneVolo
 
@@ -163,13 +189,20 @@ def imposta_allarme_equipaggio_sessione(sessione, allarme: str) -> str:
         raise ValueError("Sessione terminata.")
 
     key = normalizza_allarme_equipaggio(allarme)
+    testo = str(annuncio or "").strip() or annuncio_vocale_allarme(key)
     now = timezone.now()
     sessione.allarme_equipaggio = key
     sessione.allarme_equipaggio_at = now
+    sessione.allarme_annuncio = testo
     sessione.save(
-        update_fields=["allarme_equipaggio", "allarme_equipaggio_at", "updated_at"]
+        update_fields=[
+            "allarme_equipaggio",
+            "allarme_equipaggio_at",
+            "allarme_annuncio",
+            "updated_at",
+        ]
     )
-    return annuncio_vocale_allarme(key)
+    return testo
 
 
 def reset_allarme_equipaggio_sessione(sessione) -> None:

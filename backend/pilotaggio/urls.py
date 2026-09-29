@@ -20,6 +20,16 @@ from . import views
 router = DefaultRouter()
 router.register(r"staff/sottosistemi", views.StaffSottosistemaViewSet, basename="pilot-staff-sottosistemi")
 router.register(r"staff/percorsi", views.StaffPercorsoViewSet, basename="pilot-staff-percorsi")
+router.register(
+    r"staff/dipartimenti",
+    views.StaffDipartimentoBordoViewSet,
+    basename="pilot-staff-dipartimenti",
+)
+router.register(
+    r"staff/protocolli-comunicazione",
+    views.StaffProtocolloComunicazioneViewSet,
+    basename="pilot-staff-protocolli-comunicazione",
+)
 router.register(r"staff/comandi", views.StaffComandoViewSet, basename="pilot-staff-comandi")
 router.register(
     r"staff/comandi-critici",
@@ -145,6 +155,31 @@ urlpatterns = [
         name="pilot-compattatore-energizza-minimo",
     ),
     path("scientifica/console-enabled/", views.ScientificaConsoleEnabledView.as_view(), name="scientifica-console-enabled"),
+    path(
+        "comunicazioni/console-enabled/",
+        views.ComunicazioniConsoleEnabledView.as_view(),
+        name="comunicazioni-console-enabled",
+    ),
+    path(
+        "comunicazioni/auth/auto-login/",
+        views.ComunicazioniConsoleAutoLoginView.as_view(),
+        name="comunicazioni-auto-login",
+    ),
+    path(
+        "comunicazioni/auth/console-ticket/",
+        views.ComunicazioniConsoleTicketCreateView.as_view(),
+        name="comunicazioni-ticket-create",
+    ),
+    path(
+        "comunicazioni/quadro/",
+        views.ComunicazioniQuadroView.as_view(),
+        name="comunicazioni-quadro",
+    ),
+    path(
+        "staff/personaggi-breve/",
+        views.StaffPersonaggiBreveView.as_view(),
+        name="pilot-staff-personaggi-breve",
+    ),
     path("scientifica/auth/auto-login/", views.ScientificaConsoleAutoLoginView.as_view(), name="scientifica-auto-login"),
     path(
         "scientifica/auth/console-ticket/",

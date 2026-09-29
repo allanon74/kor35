@@ -61,6 +61,7 @@ import {
   staffModificaPilotStiva,
   staffAggiornaCodiciEventiPilot,
 } from '../../api';
+import ComunicazioniStaffPanel from './ComunicazioniStaffPanel';
 
 const PILOT_EVENTI_WIKI_SLUG = 'staff-pilot-eventi';
 
@@ -73,7 +74,18 @@ const PILOT_TABS = [
   { id: 'stati_allerta', label: 'Stati allerta (DEFCON)' },
   { id: 'sessione_live', label: 'Sessione live' },
   { id: 'stiva', label: 'Stiva componenti' },
+  { id: 'comunicazioni', label: 'Comunicazioni' },
   { id: 'runtime', label: 'Console di bordo' },
+];
+
+const ALLARMI_RICHIESTI = [
+  { id: '', label: 'Nessuno — nessuna grazia' },
+  { id: 'giallo', label: 'Giallo' },
+  { id: 'rosso', label: 'Rosso' },
+  { id: 'nero', label: 'Nero' },
+  { id: 'blu', label: 'Blu' },
+  { id: 'ambra', label: 'Ambra — riparazione sottosistema' },
+  { id: 'viola', label: 'Viola — invasione' },
 ];
 
 const defaultEvento = {
@@ -85,6 +97,7 @@ const defaultEvento = {
   scadenza_critica: false,
   peso_random: 10,
   sottosistema: '',
+  allarme_richiesto: '',
   attivo: true,
 };
 
@@ -1034,6 +1047,7 @@ export default function PilotaggioManager({ onLogout }) {
           ...parseDurataTickToForm(e.durata_tick, e.scadenza_critica),
           peso_random: e.peso_random ?? 10,
           sottosistema: e.sottosistema || '',
+          allarme_richiesto: e.allarme_richiesto || '',
           attivo: e.attivo !== false,
         });
         setEditEventoId(e.id);
@@ -1106,6 +1120,7 @@ export default function PilotaggioManager({ onLogout }) {
       scadenza_critica: Boolean(editEvento.scadenza_critica),
       peso_random: Math.max(0, Number(editEvento.peso_random) || 0),
       sottosistema: editEvento.sottosistema || null,
+      allarme_richiesto: editEvento.allarme_richiesto || '',
       attivo: Boolean(editEvento.attivo),
     };
     if (!payload.nome) {
@@ -1272,6 +1287,7 @@ export default function PilotaggioManager({ onLogout }) {
           scientifica_login_richiesto: Boolean(runtimeConfig.scientifica_login_richiesto),
           scientifica_stat_accesso_sigla: String(runtimeConfig.scientifica_stat_accesso_sigla || '0SC').trim(),
           comunicazioni_console_abilitata: Boolean(runtimeConfig.comunicazioni_console_abilitata),
+          comunicazioni_login_richiesto: Boolean(runtimeConfig.comunicazioni_login_richiesto),
           comunicazioni_stat_accesso_sigla: String(runtimeConfig.comunicazioni_stat_accesso_sigla || '0CO').trim(),
           scientifica_scan_profondo_abilitato: Boolean(runtimeConfig.scientifica_scan_profondo_abilitato),
           scientifica_scan_max_per_volo: Number(runtimeConfig.scientifica_scan_max_per_volo || 2),
@@ -2302,6 +2318,10 @@ export default function PilotaggioManager({ onLogout }) {
       </section>
       ) : null}
 
+      {activeTab === 'comunicazioni' ? (
+        <ComunicazioniStaffPanel onLogout={onLogout} />
+      ) : null}
+
       {activeTab === 'runtime' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60 space-y-6">
         <div>
@@ -2541,19 +2561,30 @@ export default function PilotaggioManager({ onLogout }) {
               </label>
             </div>
 
-            <div className="rounded-lg border border-amber-900/40 bg-amber-950/10 p-4 space-y-2 opacity-80">
-              <h4 className="text-sm font-semibold text-amber-200/90">Console Comunicazioni (futuro)</h4>
-              <p className="text-xs text-gray-500">
-                Placeholder per messaggistica di bordo, prefetture o equipaggio — uso da definire.
+            <div className="rounded-lg border border-amber-900/40 bg-amber-950/20 p-4 space-y-3">
+              <h4 className="text-sm font-semibold text-amber-100">Console Comunicazioni</h4>
+              <p className="text-xs text-gray-400">
+                Radio di bordo su /pilot/?screen=comunicazioni. Se la accendi, i pulsanti
+                allarme spariscono dalla plancia: il colore lo dichiara la radio, l&apos;audio
+                esce dagli speaker della console di pilotaggio e il testo va al dipartimento.
+                Sigla di accesso nella tabella sopra (default 0CO). Dipartimenti e testi
+                nella scheda Comunicazioni.
               </p>
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  disabled
                   checked={Boolean(runtimeConfig.comunicazioni_console_abilitata)}
-                  readOnly
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, comunicazioni_console_abilitata: e.target.checked }))}
                 />
-                Abilita console (non ancora disponibile)
+                Abilita console e togli gli allarmi dalla plancia
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={runtimeConfig.comunicazioni_login_richiesto !== false}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, comunicazioni_login_richiesto: e.target.checked }))}
+                />
+                Login richiesto
               </label>
             </div>
 
@@ -2663,6 +2694,21 @@ export default function PilotaggioManager({ onLogout }) {
                   value={editEvento.nome}
                   onChange={(ev) => setEditEvento((p) => ({ ...p, nome: ev.target.value }))}
                 />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Colore richiesto alla radio</span>
+                <select
+                  className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none"
+                  value={editEvento.allarme_richiesto || ''}
+                  onChange={(ev) => setEditEvento((p) => ({ ...p, allarme_richiesto: ev.target.value }))}
+                >
+                  {ALLARMI_RICHIESTI.map((c) => (
+                    <option key={c.id || 'none'} value={c.id}>{c.label}</option>
+                  ))}
+                </select>
+                <span className="block text-[11px] text-gray-500 mt-1">
+                  Se la radio dichiara questo colore prima della fine della reazione, il primo controllo di catastrofe non scatta. La radio non vede il colore.
+                </span>
               </label>
               <label className="block">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Descrizione (pilota)</span>
@@ -2962,6 +3008,18 @@ export default function PilotaggioManager({ onLogout }) {
               <label className="block">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Descrizione</span>
                 <textarea className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 min-h-[72px]" value={nuovoEvento.descrizione} onChange={(e) => setNuovoEvento((p) => ({ ...p, descrizione: e.target.value }))} />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Colore richiesto alla radio</span>
+                <select
+                  className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600"
+                  value={nuovoEvento.allarme_richiesto || ''}
+                  onChange={(e) => setNuovoEvento((p) => ({ ...p, allarme_richiesto: e.target.value }))}
+                >
+                  {ALLARMI_RICHIESTI.map((c) => (
+                    <option key={`new-${c.id || 'none'}`} value={c.id}>{c.label}</option>
+                  ))}
+                </select>
               </label>
               <div className="grid sm:grid-cols-2 gap-4">
                 <label className="block">

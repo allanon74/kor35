@@ -18,6 +18,7 @@ function tokenStorageKey() {
   const screen = new URLSearchParams(window.location.search).get('screen') || '';
   if (screen === 'compattatore') return 'kor35_pilot_token_ingegneria';
   if (screen === 'scientifica') return 'kor35_pilot_token_scientifica';
+  if (screen === 'comunicazioni') return 'kor35_pilot_token_comunicazioni';
   return TOKEN_KEY;
 }
 
@@ -162,4 +163,10 @@ export const api = {
     method: 'POST',
     body: { tipo, componenti_scelti: componentiScelti },
   }),
+  comunicazioniConsoleEnabled: () => request('/api/pilot/comunicazioni/console-enabled/', { auth: false }),
+  comunicazioniAutoLogin: () => request('/api/pilot/comunicazioni/auth/auto-login/', { method: 'POST', body: {}, auth: false }),
+  createComunicazioniConsoleTicket: () => request('/api/pilot/comunicazioni/auth/console-ticket/', {
+    method: 'POST', body: {}, auth: false,
+  }),
+  comunicazioniQuadro: () => request('/api/pilot/comunicazioni/quadro/'),
 };

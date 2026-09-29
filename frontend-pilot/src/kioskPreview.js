@@ -154,4 +154,13 @@ export const PREVIEW_STATION = {
     requisito: '0SC > 0',
     screen: 'scientifica',
   },
+  comunicazioni: {
+    id: 'comunicazioni',
+    nome: 'Console Comunicazioni',
+    enabled: true,
+    login_required: true,
+    sigla: '0CO',
+    requisito: '0CO > 0',
+    screen: 'comunicazioni',
+  },
 };

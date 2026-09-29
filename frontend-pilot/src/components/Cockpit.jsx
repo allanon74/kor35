@@ -397,6 +397,7 @@ export default function Cockpit({
       onEmergencyLanding={onEmergencyLanding}
       onSetAllarme={onSetAllarme}
       disabled={!online}
+      showAllarmi={state.comunicazioni_console_abilitata !== true}
     />
   );
 
