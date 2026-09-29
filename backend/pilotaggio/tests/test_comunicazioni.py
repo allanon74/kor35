@@ -67,7 +67,12 @@ class ComunicazioniAllarmeTests(TestCase):
             carriera=korp,
             tipo_carriera=tipo,
         )
-        self.sotto = SottosistemaNave.objects.create(codice="P", nome="Propulsore")
+        self.sotto, _ = SottosistemaNave.objects.get_or_create(
+            codice="P", defaults={"nome": "Propulsore"}
+        )
+        if self.sotto.nome != "Propulsore":
+            self.sotto.nome = "Propulsore"
+            self.sotto.save(update_fields=["nome", "updated_at"])
         StatoSottosistemaSessione.objects.create(
             sessione=self.sessione, sottosistema=self.sotto, online=False
         )
@@ -123,8 +128,12 @@ class ComunicazioniAllarmeTests(TestCase):
             testo="Squadra tecnica in sala macchine.",
             testo_audio="Allarme Ambra.",
         )
-        SottosistemaNave.objects.create(codice="S", nome="Scudi")
-        scudi = SottosistemaNave.objects.get(codice="S")
+        scudi, _ = SottosistemaNave.objects.get_or_create(
+            codice="S", defaults={"nome": "Scudi"}
+        )
+        if scudi.nome != "Scudi":
+            scudi.nome = "Scudi"
+            scudi.save(update_fields=["nome", "updated_at"])
         StatoSottosistemaSessione.objects.create(
             sessione=self.sessione, sottosistema=scudi, online=False
         )
