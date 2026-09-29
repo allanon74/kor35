@@ -496,6 +496,9 @@ def applica_effetto_nodo_scan(personaggio, nodo) -> Dict[str, Any]:
     - Minore: reward base
     - Maggiore: reward x2
     Dopo la scansione imposta cooldown random 5..25 min e muta stato (10% MAG).
+
+    Il check cooldown è dentro `select_for_update` sul nodo per evitare doppia
+    ricompensa da scan concorrenti.
     """
     from .models import (
         NODO_REWARD_CREDITI,
@@ -504,17 +507,20 @@ def applica_effetto_nodo_scan(personaggio, nodo) -> Dict[str, Any]:
         TIPO_NODO_MINORE,
     )
 
-    now = timezone.now()
-    if nodo.disponibile_dal and now < nodo.disponibile_dal:
-        rem = int((nodo.disponibile_dal - now).total_seconds())
-        return {"ok": False, "error": "nodo_in_cooldown", "remaining_seconds": max(rem, 0)}
-
     abbr = _abbr_era(personaggio)
-    is_maggiore = nodo.tipo_nodo == TIPO_NODO_MAGGIORE
-    mult = 2 if is_maggiore else 1
-    rewards: Dict[str, Any] = {"era_abbreviazione": abbr, "tipo_nodo_pre": nodo.tipo_nodo}
+    rewards: Dict[str, Any] = {"era_abbreviazione": abbr}
 
     with transaction.atomic():
+        nodo = type(nodo).objects.select_for_update().get(pk=nodo.pk)
+        now = timezone.now()
+        if nodo.disponibile_dal and now < nodo.disponibile_dal:
+            rem = int((nodo.disponibile_dal - now).total_seconds())
+            return {"ok": False, "error": "nodo_in_cooldown", "remaining_seconds": max(rem, 0)}
+
+        is_maggiore = nodo.tipo_nodo == TIPO_NODO_MAGGIORE
+        mult = 2 if is_maggiore else 1
+        rewards["tipo_nodo_pre"] = nodo.tipo_nodo
+
         # Prima scelta: configurazione DB (reward_config) sul nodo.
         # Fallback legacy hardcoded mantenuto per i nodi preesistenti/non configurati.
         applied_from_config = False

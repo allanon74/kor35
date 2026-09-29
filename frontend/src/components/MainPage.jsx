@@ -853,8 +853,12 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
 
       try {
         const effect = await getQrCodeData(qrcodeId, onLogout, selectedCharacterId, sessionId);
-        if (messaggio && effect && !effect.messaggio) {
-          effect._minigioco_messaggio = messaggio;
+        if (effect) {
+          if (messaggio && !effect.messaggio) {
+            effect._minigioco_messaggio = messaggio;
+          }
+          // Serve a POST acquisisci quando il minigioco è "ogni scansione".
+          effect._minigioco_session_id = sessionId;
         }
         setQrResultData(effect);
       } catch (e) {

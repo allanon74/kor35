@@ -2972,6 +2972,12 @@ class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
     immagini = SerieImmagineStaffSerializer(many=True, read_only=True)
     immagini_count = serializers.SerializerMethodField()
     campagna = serializers.PrimaryKeyRelatedField(read_only=True)
+    eventi = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=SerieCollezione._meta.get_field("eventi").related_model.objects.all(),
+        required=False,
+    )
+    eventi_dettaglio = serializers.SerializerMethodField()
 
     class Meta:
         model = SerieCollezione
@@ -2980,6 +2986,9 @@ class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
             "nome",
             "totale",
             "descrizione",
+            "ammetti_duplicati",
+            "eventi",
+            "eventi_dettaglio",
             "campagna",
             "pezzi_assegnati",
             "pezzi_rimanenti",
@@ -2996,6 +3005,7 @@ class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
             "pezzi_rimanenti",
             "immagini",
             "immagini_count",
+            "eventi_dettaglio",
         )
 
     def get_pezzi_assegnati(self, obj):
@@ -3005,6 +3015,8 @@ class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
         return obj.assegnazioni.count()
 
     def get_pezzi_rimanenti(self, obj):
+        if getattr(obj, "ammetti_duplicati", False):
+            return None
         return max(0, int(obj.totale or 0) - self.get_pezzi_assegnati(obj))
 
     def get_immagini_count(self, obj):
@@ -3012,6 +3024,19 @@ class SerieCollezioneStaffSerializer(serializers.ModelSerializer):
         if annotated is not None:
             return int(annotated)
         return obj.immagini.count()
+
+    def get_eventi_dettaglio(self, obj):
+        out = []
+        for ev in obj.eventi.all():
+            out.append(
+                {
+                    "id": ev.pk,
+                    "titolo": ev.titolo,
+                    "ended_at": ev.ended_at.isoformat() if ev.ended_at else None,
+                    "chiuso": bool(ev.ended_at),
+                }
+            )
+        return out
 
 
 class TrappolaStaffSerializer(serializers.ModelSerializer):
@@ -4699,6 +4724,7 @@ class RubaSerializer(serializers.Serializer):
 
 class AcquisisciSerializer(serializers.Serializer):
     qrcode_id = serializers.CharField(max_length=20)
+    minigioco_session_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     def validate(self, data):
         try:
@@ -4722,6 +4748,17 @@ class AcquisisciSerializer(serializers.Serializer):
                     "Questo QR non supporta l'acquisizione da questa azione (es. manifesto, inventario, innesco timer)."
                 )
             self.context["item"] = item
+            # Non bypassare il gate minigioco: l'acquisizione è un POST separato dalla GET scan.
+            from personaggi import qr_minigioco
+
+            gate = qr_minigioco.check_gate_minigioco(
+                qr_code=qr,
+                personaggio=self.context.get("richiedente"),
+                bypass_session_id=data.get("minigioco_session_id") or None,
+            )
+            blocco = qr_minigioco.messaggio_blocco_gate_minigioco(gate)
+            if blocco:
+                raise serializers.ValidationError(blocco)
             if isinstance(item, Oggetto):
                 ok, msg = qr_logic.oggetto_puo_essere_acquisito_da_qr(self.context["richiedente"], item)
                 if not ok:

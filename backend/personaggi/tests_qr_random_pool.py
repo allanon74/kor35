@@ -11,6 +11,7 @@ from personaggi.models import (
     Personaggio,
     QrCode,
     RandomQrPool,
+    RandomQrPoolClaim,
     RandomQrPoolEffect,
     RandomQrPoolMembership,
     SerieAssegnazione,
@@ -101,6 +102,39 @@ class RandomQrPoolLogicTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["tipo_modello"], "pool_testo")
         self.assertIn("Ciao", r.data["dati"]["testo"])
+        self.assertTrue(
+            RandomQrPoolClaim.objects.filter(personaggio=self.pg, qr_code=self.qr).exists()
+        )
+
+    def test_pool_anti_farm_un_claim_per_qr(self):
+        RandomQrPoolEffect.objects.create(
+            pool=self.pool,
+            tipo=RandomQrPoolEffect.TIPO_TESTO,
+            frequenza=1,
+            titolo="Messaggio",
+            testo="<p>Ciao</p>",
+        )
+        client = APIClient()
+        client.force_authenticate(self.user)
+        with patch("personaggi.qr_random_pool.scegli_effetto") as mock_choose:
+            mock_choose.return_value = self.pool.effetti.first()
+            r1 = client.get(
+                f"/api/personaggi/api/qrcode/{self.qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+            r2 = client.get(
+                f"/api/personaggi/api/qrcode/{self.qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r1.data["tipo_modello"], "pool_testo")
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.data["tipo_modello"], "pool_errore")
+        self.assertTrue(r2.data["dati"].get("gia_usato"))
+        self.assertEqual(
+            RandomQrPoolClaim.objects.filter(personaggio=self.pg, qr_code=self.qr).count(),
+            1,
+        )
 
     def test_pool_has_priority_over_vista(self):
         m = Manifesto.objects.create(nome="M", testo="manifesto", requisiti_lettura=[])
@@ -175,12 +209,17 @@ class TrappolaSerieTests(TestCase):
         self.assertFalse(StatoTrappolaPersonaggio.objects.filter(personaggio=self.pg).exists())
 
     def test_serie_indici_unici_e_esaurimento(self):
+        """Ogni QR fisico assegna al massimo un pezzo (anti-farm)."""
         serie = SerieCollezione.objects.create(nome="Pecora", totale=2)
-        qr = QrCode.objects.create()
-        SerieQr.objects.create(nome="Serie Pecora", serie=serie, qr_code=qr)
+        qr1 = QrCode.objects.create()
+        qr2 = QrCode.objects.create()
+        qr3 = QrCode.objects.create()
+        SerieQr.objects.create(nome="Serie Pecora 1", serie=serie, qr_code=qr1)
+        SerieQr.objects.create(nome="Serie Pecora 2", serie=serie, qr_code=qr2)
+        SerieQr.objects.create(nome="Serie Pecora 3", serie=serie, qr_code=qr3)
 
         r1 = self.client.get(
-            f"/api/personaggi/api/qrcode/{qr.id}/",
+            f"/api/personaggi/api/qrcode/{qr1.id}/",
             {"personaggio_id": self.pg.id},
         )
         self.assertEqual(r1.status_code, 200)
@@ -189,9 +228,27 @@ class TrappolaSerieTests(TestCase):
         self.assertIn(idx1, (1, 2))
         self.assertEqual(SerieAssegnazione.objects.filter(serie=serie).count(), 1)
 
+        # Stesso QR + stesso PG: idempotente, non crea pezzi nuovi
+        r1b = self.client.get(
+            f"/api/personaggi/api/qrcode/{qr1.id}/",
+            {"personaggio_id": self.pg.id},
+        )
+        self.assertEqual(r1b.status_code, 200)
+        self.assertEqual(r1b.data["tipo_modello"], "serie")
+        self.assertTrue(r1b.data["dati"].get("gia_riscattato"))
+        self.assertEqual(SerieAssegnazione.objects.filter(serie=serie).count(), 1)
+
         pg2 = Personaggio.objects.create(nome="PG2", proprietario=self.user)
+        # Stesso QR + altro PG: bloccato (anti-farm)
+        r1_other = self.client.get(
+            f"/api/personaggi/api/qrcode/{qr1.id}/",
+            {"personaggio_id": pg2.id},
+        )
+        self.assertEqual(r1_other.status_code, 400)
+        self.assertIn("già stato riscosso", r1_other.data.get("error", "").lower())
+
         r2 = self.client.get(
-            f"/api/personaggi/api/qrcode/{qr.id}/",
+            f"/api/personaggi/api/qrcode/{qr2.id}/",
             {"personaggio_id": pg2.id},
         )
         self.assertEqual(r2.status_code, 200)
@@ -202,7 +259,7 @@ class TrappolaSerieTests(TestCase):
 
         pg3 = Personaggio.objects.create(nome="PG3", proprietario=self.user)
         r3 = self.client.get(
-            f"/api/personaggi/api/qrcode/{qr.id}/",
+            f"/api/personaggi/api/qrcode/{qr3.id}/",
             {"personaggio_id": pg3.id},
         )
         self.assertEqual(r3.status_code, 200)
@@ -459,13 +516,15 @@ class ManifestoCondizionaleEPoolLootTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["tipo_modello"], "pool_loot")
         self.assertTrue(self.pg.tessiture_possedute.filter(pk=t.pk).exists())
-        # Seconda scansione: già posseduta
+        # Seconda scansione: anti-farm claim (non un secondo roll)
         with patch("personaggi.qr_random_pool.scegli_effetto", return_value=eff):
             r2 = self.client.get(
                 f"/api/personaggi/api/qrcode/{qr.id}/",
                 {"personaggio_id": self.pg.id},
             )
-        self.assertTrue(r2.data["dati"].get("gia_posseduta"))
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.data["tipo_modello"], "pool_errore")
+        self.assertTrue(r2.data["dati"].get("gia_usato"))
 
     def test_pool_effetto_materia_da_infusione(self):
         from personaggi.models import AURA, Infusione, Oggetto, Punteggio, TIPO_OGGETTO_MATERIA

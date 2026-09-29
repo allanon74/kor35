@@ -1,7 +1,7 @@
 from django.urls import path, include
 # from rest_framework.authtoken.views import obtain_auth_token
 
-from . import views, views_staff, views_scommesse, views_carte, views_carte_platform, watch_views, views_economia, views_notifiche, chiamate_views, views_contratti
+from . import views, views_staff, views_serie, views_scommesse, views_carte, views_carte_platform, watch_views, views_economia, views_notifiche, chiamate_views, views_contratti
 from rest_framework import routers
 
 from rest_framework.routers import DefaultRouter
@@ -244,6 +244,12 @@ urlpatterns = [
     path('api/transazioni/<int:pk>/conferma/', views.TransazioneConfermaView.as_view(), name='api_transazioni_conferma'),
     path('api/transazioni/ruba/', views.RubaView.as_view(), name='api_ruba'),
     path('api/transazioni/acquisisci/', views.AcquisisciView.as_view(), name='api_acquisisci'),
+    path('api/serie-inventario/', views_serie.SerieInventarioView.as_view(), name='api_serie_inventario'),
+    path(
+        'api/serie-inventario/<uuid:assegnazione_id>/trasferisci/',
+        views_serie.SerieAssegnazioneTrasferisciView.as_view(),
+        name='api_serie_trasferisci',
+    ),
     # --- Viste API Transazioni Avanzate ---
     path('api/transazioni/avanzata/', views.TransazioneAvanzataCreateView.as_view(), name='api_transazioni_avanzata_create'),
     path('api/transazioni/<int:pk>/', views.TransazioneDetailView.as_view(), name='api_transazioni_detail'),

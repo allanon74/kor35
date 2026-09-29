@@ -234,6 +234,13 @@ def scegli_immagine_serie(*, serie, indice: int, totale: int):
     return random.choice(immagini)
 
 
+def _serie_rimanenti(serie, *, totale: Optional[int] = None) -> Optional[int]:
+    totale = int(totale if totale is not None else (serie.totale or 0))
+    if getattr(serie, "ammetti_duplicati", False):
+        return None
+    return max(0, totale - serie.assegnazioni.count())
+
+
 def applica_serie(
     *,
     personaggio,
@@ -241,9 +248,13 @@ def applica_serie(
     qr_code=None,
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str], Optional[str]]:
     """
-    Assegna un indice unico globale della serie e crea oggetto in inventario.
+    Assegna un pezzo della serie all'inventario serie del personaggio.
     Ritorna (payload, errore, tipo_modello_override).
-    tipo_modello_override = 'serie_esaurita' se non restano pezzi.
+    tipo_modello_override = 'serie_esaurita' se non restano pezzi (solo senza duplicati).
+
+    Senza `ammetti_duplicati`: indici unici 1..N; ogni QR fisico assegna al massimo
+    un pezzo (anti-farm globale sul QR).
+    Con `ammetti_duplicati`: indici ripetibili; stesso QR una volta per personaggio.
     """
     from .models import Oggetto, SerieAssegnazione, TIPO_OGGETTO_FISICO
 
@@ -259,27 +270,78 @@ def applica_serie(
     with transaction.atomic():
         # Lock sulla collezione per evitare doppie assegnazioni in race
         locked = type(serie).objects.select_for_update().get(pk=serie.pk)
-        presi = set(
-            SerieAssegnazione.objects.filter(serie=locked).values_list("indice", flat=True)
-        )
-        liberi = [i for i in range(1, totale + 1) if i not in presi]
-        if not liberi:
-            return {
-                "nome": locked.nome,
-                "totale": totale,
-                "rimanenti": 0,
-                "immagine_url": None,
-                "messaggio": f"La serie «{locked.nome}» è esaurita: tutti i {totale} pezzi sono stati trovati.",
-            }, None, "serie_esaurita"
+        ammetti_dup = bool(locked.ammetti_duplicati)
+
+        if qr_code is not None:
+            gia_stesso_pg = (
+                SerieAssegnazione.objects.select_for_update(of=("self",))
+                .filter(qr_code=qr_code, personaggio=personaggio)
+                .first()
+            )
+            if gia_stesso_pg is not None:
+                img = (
+                    gia_stesso_pg.immagine
+                    if gia_stesso_pg.immagine_id
+                    else None
+                )
+                return {
+                    "nome": locked.nome,
+                    "indice": gia_stesso_pg.indice,
+                    "totale": totale,
+                    "etichetta": f"{locked.nome} {gia_stesso_pg.indice} di {totale}",
+                    "rimanenti": _serie_rimanenti(locked, totale=totale),
+                    "oggetto_id": gia_stesso_pg.oggetto_id,
+                    "assegnazione_id": str(gia_stesso_pg.pk),
+                    "immagine_url": _serie_immagine_url(img),
+                    "messaggio": (
+                        f"Hai già riscosso questo QR: "
+                        f"{locked.nome} {gia_stesso_pg.indice} di {totale}."
+                    ),
+                    "gia_riscattato": True,
+                    "in_inventario_serie": True,
+                }, None, "serie"
+
+            if not ammetti_dup:
+                gia_altro = (
+                    SerieAssegnazione.objects.select_for_update(of=("self",))
+                    .filter(qr_code=qr_code)
+                    .exclude(personaggio=personaggio)
+                    .first()
+                )
+                if gia_altro is not None:
+                    return (
+                        None,
+                        "Questo QR della serie è già stato riscosso da un altro personaggio.",
+                        None,
+                    )
+
+        if ammetti_dup:
+            liberi = list(range(1, totale + 1))
+        else:
+            presi = set(
+                SerieAssegnazione.objects.filter(serie=locked).values_list("indice", flat=True)
+            )
+            liberi = [i for i in range(1, totale + 1) if i not in presi]
+            if not liberi:
+                return {
+                    "nome": locked.nome,
+                    "totale": totale,
+                    "rimanenti": 0,
+                    "immagine_url": None,
+                    "messaggio": (
+                        f"La serie «{locked.nome}» è esaurita: "
+                        f"tutti i {totale} pezzi sono stati trovati."
+                    ),
+                }, None, "serie_esaurita"
 
         indice = random.choice(liberi)
         nome_oggetto = f"{locked.nome} {indice} di {totale}"
+        # Metadata oggetto: resta fuori dallo zaino generico (inventario serie dedicato).
         oggetto = Oggetto.objects.create(
             nome=nome_oggetto,
             testo=locked.descrizione or f"Pezzo della serie «{locked.nome}».",
             tipo_oggetto=TIPO_OGGETTO_FISICO,
         )
-        oggetto.sposta_in_inventario(personaggio)
         img = scegli_immagine_serie(serie=locked, indice=indice, totale=totale)
         assegnazione = SerieAssegnazione.objects.create(
             serie=locked,
@@ -290,18 +352,149 @@ def applica_serie(
             immagine=img,
         )
 
-    rimanenti = totale - len(presi) - 1
     return {
         "nome": locked.nome,
         "indice": indice,
         "totale": totale,
         "etichetta": nome_oggetto,
-        "rimanenti": max(0, rimanenti),
+        "rimanenti": _serie_rimanenti(locked, totale=totale),
         "oggetto_id": oggetto.pk,
         "assegnazione_id": str(assegnazione.pk),
         "immagine_url": _serie_immagine_url(img),
-        "messaggio": f"Hai trovato: {nome_oggetto}",
+        "messaggio": f"Hai trovato: {nome_oggetto}. Aggiunto all'inventario serie.",
+        "in_inventario_serie": True,
     }, None, None
+
+
+def serializza_assegnazione_serie(ass, *, request=None) -> Dict[str, Any]:
+    """Payload pezzo per inventario serie / staff."""
+    img_url = _serie_immagine_url(ass.immagine)
+    if request is not None and img_url and img_url.startswith("/"):
+        try:
+            img_url = request.build_absolute_uri(img_url)
+        except Exception:
+            pass
+    return {
+        "id": str(ass.pk),
+        "serie_id": str(ass.serie_id),
+        "serie_nome": ass.serie.nome,
+        "indice": ass.indice,
+        "totale": ass.serie.totale,
+        "etichetta": ass.etichetta,
+        "immagine_url": img_url,
+        "assegnato_at": ass.assegnato_at.isoformat() if ass.assegnato_at else None,
+        "oggetto_id": ass.oggetto_id,
+        "personaggio_id": ass.personaggio_id,
+        "personaggio_nome": getattr(ass.personaggio, "nome", None),
+        "qr_code_id": str(ass.qr_code_id) if ass.qr_code_id else None,
+    }
+
+
+def inventario_serie_per_personaggio(personaggio, *, request=None) -> List[Dict[str, Any]]:
+    """
+    Pezzi nell'inventario serie del PG, raggruppati per serie.
+    Esclude serie legate solo a eventi chiusi.
+    """
+    from .models import SerieAssegnazione
+
+    qs = (
+        SerieAssegnazione.objects.filter(personaggio=personaggio)
+        .select_related("serie", "immagine", "personaggio")
+        .prefetch_related("serie__eventi")
+        .order_by("serie__nome", "indice", "assegnato_at")
+    )
+    by_serie: Dict[str, Dict[str, Any]] = {}
+    for ass in qs:
+        serie = ass.serie
+        if not serie.inventario_visibile():
+            continue
+        key = str(serie.pk)
+        if key not in by_serie:
+            by_serie[key] = {
+                "serie_id": key,
+                "serie_nome": serie.nome,
+                "totale": serie.totale,
+                "descrizione": serie.descrizione or "",
+                "ammetti_duplicati": bool(serie.ammetti_duplicati),
+                "pezzi": [],
+            }
+        by_serie[key]["pezzi"].append(serializza_assegnazione_serie(ass, request=request))
+    return list(by_serie.values())
+
+
+def trasferisci_assegnazione_serie(
+    *,
+    assegnazione,
+    destinatario,
+    mittente=None,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Sposta un pezzo di inventario serie a un altro personaggio."""
+    from .models import SerieAssegnazione
+
+    if destinatario is None:
+        return None, "Destinatario mancante."
+    if mittente is not None and assegnazione.personaggio_id != mittente.pk:
+        return None, "Questo pezzo non è nel tuo inventario serie."
+    if assegnazione.personaggio_id == destinatario.pk:
+        return None, "Il pezzo è già di questo personaggio."
+    if not assegnazione.serie.inventario_visibile():
+        return None, "Questa serie non è trasferibile (evento chiuso)."
+
+    with transaction.atomic():
+        locked = (
+            SerieAssegnazione.objects.select_for_update(of=("self",))
+            .select_related("serie", "personaggio", "oggetto")
+            .get(pk=assegnazione.pk)
+        )
+        if mittente is not None and locked.personaggio_id != mittente.pk:
+            return None, "Questo pezzo non è nel tuo inventario serie."
+        locked.personaggio = destinatario
+        locked.save(update_fields=["personaggio", "updated_at"])
+        # Pezzi legacy nello zaino: sposta l'oggetto al destinatario.
+        oggetto = locked.oggetto
+        if oggetto is not None:
+            try:
+                if oggetto.inventario_corrente is not None:
+                    oggetto.sposta_in_inventario(destinatario)
+            except Exception:
+                pass
+
+    locked.refresh_from_db()
+    locked = SerieAssegnazione.objects.select_related(
+        "serie", "immagine", "personaggio"
+    ).get(pk=locked.pk)
+    return serializza_assegnazione_serie(locked), None
+
+
+def reset_serie_collezione(serie) -> Dict[str, Any]:
+    """
+    Rimuove tutte le assegnazioni (inventario serie) e gli oggetti collegati.
+    La consegna riparte da zero; le immagini della collezione restano.
+    """
+    from .models import Oggetto, SerieAssegnazione
+
+    with transaction.atomic():
+        locked = type(serie).objects.select_for_update().get(pk=serie.pk)
+        # of=("self",) evita OUTER JOIN su FK nullable (oggetto/immagine).
+        assegnazioni = list(
+            SerieAssegnazione.objects.select_for_update(of=("self",)).filter(serie=locked)
+        )
+        oggetto_ids = [a.oggetto_id for a in assegnazioni if a.oggetto_id]
+        n = len(assegnazioni)
+        SerieAssegnazione.objects.filter(serie=locked).delete()
+        if oggetto_ids:
+            # Elimina oggetti orfani creati per i pezzi (anche se erano nello zaino).
+            Oggetto.objects.filter(pk__in=oggetto_ids).delete()
+
+    return {
+        "serie_id": str(locked.pk),
+        "serie_nome": locked.nome,
+        "assegnazioni_rimosse": n,
+        "messaggio": (
+            f"Serie «{locked.nome}» resettata: rimossi {n} pezzi dagli inventari. "
+            "La consegna riparte da zero."
+        ),
+    }
 
 
 def apply_pool_effect(
@@ -599,6 +792,23 @@ def handle_pool_qr_scan(
     if gate:
         return gate
 
+    from .models import RandomQrPoolClaim
+
+    # Anti-farm: un personaggio può ottenere un solo effetto da ciascun QR del pool.
+    if personaggio is not None and RandomQrPoolClaim.objects.filter(
+        personaggio=personaggio, qr_code=qr_code
+    ).exists():
+        return {
+            "tipo_modello": "pool_errore",
+            "messaggio": "Hai già usato questo QR del pool.",
+            "dati": {
+                "pool_id": str(pool.pk),
+                "pool_nome": pool.nome,
+                "gia_usato": True,
+            },
+            "qrcode_id": qr_code.id,
+        }
+
     effect = scegli_effetto(pool)
     if not effect:
         return {
@@ -616,6 +826,12 @@ def handle_pool_qr_scan(
     )
     if result.get("blocked"):
         return result
+    if personaggio is not None and result.get("tipo_modello") != "pool_errore":
+        RandomQrPoolClaim.objects.get_or_create(
+            personaggio=personaggio,
+            qr_code=qr_code,
+            defaults={"pool": pool},
+        )
     result.setdefault("qrcode_id", qr_code.id)
     return result
 
