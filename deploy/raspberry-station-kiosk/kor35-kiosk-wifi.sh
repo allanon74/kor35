@@ -5,6 +5,8 @@
 # All'avvio la rete di casa è spesso già associata, mentre le EAP Omada
 # compaiono dopo. ensure riprova kor35-larp prima di accettare la riserva.
 # prefer (chiamato a ciclo dal kiosk) passa alla rete evento appena è visibile.
+# Non riscrive la password di un profilo già salvato: la connessione manuale
+# funziona, e sovrascriverla fa fallire l'associazione e NetworkManager torna a casa.
 set -uo pipefail
 
 ENV_FILE="${KOR35_KIOSK_STATION_ENV:-/etc/kor35/kiosk-station.env}"
@@ -32,8 +34,9 @@ wifi_iface() {
     printf '%s\n' "$IFACE"
     return 0
   fi
+  # p2p-dev-wlan0 è virtuale: attivare un profilo lì fallisce e il Pi torna in casa.
   nmcli -t -f DEVICE,TYPE device 2>/dev/null \
-    | awk -F: '$2 == "wifi" { print $1; exit }'
+    | awk -F: '$2 == "wifi" && $1 !~ /^p2p/ { print $1; exit }'
 }
 
 current_ssid() {
@@ -64,18 +67,27 @@ connection_exists() {
   return 1
 }
 
-connection_for_ssid() {
-  local ssid="$1" name found
+connection_timestamp() {
+  local name="$1" ts
+  ts="$(nmcli -g connection.timestamp connection show "$name" 2>/dev/null || true)"
+  case "$ts" in
+    ''|*[!0-9]*) printf '%s\n' "0" ;;
+    *) printf '%s\n' "$ts" ;;
+  esac
+}
+
+# Profili di questo SSID, dal più usato (connessione manuale) al più vecchio.
+connections_for_ssid() {
+  local ssid="$1" name found ts
   [ -n "$ssid" ] || return 1
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     found="$(nmcli -g 802-11-wireless.ssid connection show "$name" 2>/dev/null || true)"
     if [ "$found" = "$ssid" ]; then
-      printf '%s\n' "$name"
-      return 0
+      ts="$(connection_timestamp "$name")"
+      printf '%s\t%s\n' "$ts" "$name"
     fi
   done < <(connection_names)
-  return 1
 }
 
 wifi_connection_names() {
@@ -150,8 +162,7 @@ bring_up() {
 }
 
 pin_primary() {
-  local name other
-  name="$(connection_for_ssid "$PRIMARY_SSID" || true)"
+  local name="$1" other
   [ -n "$name" ] || return 0
   nmcli connection modify "$name" \
     connection.autoconnect yes \
@@ -163,41 +174,53 @@ pin_primary() {
   done < <(wifi_connection_names)
 }
 
-ensure_profile() {
-  local ssid="$1" psk="$2" name iface
-  name="$(connection_for_ssid "$ssid" || true)"
-  if [ -z "$name" ]; then
-    [ -n "$psk" ] || return 1
-    name="$ssid"
-    iface="$(wifi_iface || true)"
-    if [ -n "$iface" ]; then
-      nmcli connection add type wifi ifname "$iface" con-name "$name" ssid "$ssid" \
-        wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$psk" >/dev/null
-    else
-      nmcli connection add type wifi con-name "$name" ssid "$ssid" \
-        wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$psk" >/dev/null
-    fi
-  elif [ -n "$psk" ]; then
-    nmcli connection modify "$name" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$psk" >/dev/null
+# Stesso gesto del menu WiFi del desktop. Solo se non esiste già un profilo.
+connect_new() {
+  local ssid="$1" psk="$2" iface
+  [ -n "$ssid" ] && [ -n "$psk" ] || return 1
+  iface="$(wifi_iface || true)"
+  log "Nuova connessione a ${ssid} (come dal desktop)"
+  if [ -n "$iface" ]; then
+    nmcli device wifi connect "$ssid" password "$psk" ifname "$iface"
+  else
+    nmcli device wifi connect "$ssid" password "$psk"
   fi
-  printf '%s\n' "$name"
+}
+
+try_saved_profiles() {
+  local ssid="$1" line name
+  while IFS=$'\t' read -r _ name; do
+    [ -n "$name" ] || continue
+    log "Profilo salvato ${name} (password non modificata)"
+    if bring_up "$name"; then
+      LAST_PROFILE="$name"
+      return 0
+    fi
+    log "Profilo ${name} non si è attivato"
+  done < <(connections_for_ssid "$ssid" | sort -nr)
+  return 1
 }
 
 try_ssid() {
-  local ssid="$1" psk="$2" name
+  local ssid="$1" psk="$2"
+  LAST_PROFILE=""
   [ -n "$ssid" ] || return 1
   if [ "$(current_ssid)" = "$ssid" ]; then
     log "Già connesso a ${ssid}"
+    LAST_PROFILE="$(connections_for_ssid "$ssid" | sort -nr | head -n 1 | cut -f2-)"
     return 0
   fi
   if ! ssid_visible "$ssid"; then
     log "SSID non in elenco: ${ssid}"
     return 1
   fi
-  name="$(ensure_profile "$ssid" "$psk" || true)"
-  [ -n "$name" ] || { log "Nessun profilo per ${ssid}"; return 1; }
-  log "Connessione a ${ssid} (${name})"
-  bring_up "$name"
+  if try_saved_profiles "$ssid"; then
+    return 0
+  fi
+  connect_new "$ssid" "$psk" || return 1
+  LAST_PROFILE="$(connections_for_ssid "$ssid" | sort -nr | head -n 1 | cut -f2-)"
+  [ -n "$LAST_PROFILE" ] || LAST_PROFILE="$ssid"
+  return 0
 }
 
 cmd_scan() {
@@ -222,7 +245,7 @@ cmd_ensure() {
   while [ "$attempt" -le "$PRIMARY_ATTEMPTS" ]; do
     refresh_scan
     if try_ssid "$PRIMARY_SSID" "$PRIMARY_PSK"; then
-      pin_primary
+      pin_primary "$LAST_PROFILE"
       exit 0
     fi
     log "Tentativo ${attempt}/${PRIMARY_ATTEMPTS}: ${PRIMARY_SSID} non pronta"
@@ -240,12 +263,13 @@ cmd_prefer() {
     exit 10
   fi
   if [ "$(current_ssid)" = "$PRIMARY_SSID" ]; then
-    pin_primary
+    try_ssid "$PRIMARY_SSID" "$PRIMARY_PSK" || true
+    pin_primary "$LAST_PROFILE"
     exit 0
   fi
   refresh_scan
   if try_ssid "$PRIMARY_SSID" "$PRIMARY_PSK"; then
-    pin_primary
+    pin_primary "$LAST_PROFILE"
     log "Passato a ${PRIMARY_SSID}"
     exit 0
   fi
