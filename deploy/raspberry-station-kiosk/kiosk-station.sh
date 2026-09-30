@@ -119,6 +119,18 @@ ensure_wifi() {
   fi
 }
 
+watch_event_wifi() {
+  [ "$KIOSK_WIFI_MANAGE" = "1" ] || return 0
+  [ -x "$WIFI_HELPER" ] || return 0
+  (
+    while true; do
+      sleep "${KIOSK_WIFI_WATCH_SECONDS:-20}"
+      sudo -n "$WIFI_HELPER" prefer || true
+    done
+  ) &
+  log "Controllo periodico della rete evento"
+}
+
 wait_for_x() {
   local _
   for _ in $(seq 1 60); do
@@ -203,6 +215,7 @@ main() {
   local base url
   wait_for_x || exit 1
   ensure_wifi
+  watch_event_wifi
   base="$(resolve_working_base)"
   PILOT_BASE_URL="$base"
   url="${base}${KIOSK_START_PATH}"

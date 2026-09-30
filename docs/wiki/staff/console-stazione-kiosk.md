@@ -36,7 +36,22 @@ Se nello staff il login della console è spento, dopo il pulsante l'accesso è a
 | 2 | SSID di riserva in `/etc/kor35/kiosk-station.env` | Il bosco non si vede (laboratorio, casa) |
 | 3 | Scelta a schermo (zenity) | Nessuna delle due risponde e `KIOSK_WIFI_PROMPT=1` |
 
+All'avvio la rete di casa è spesso già associata, e le antenne Omada compaiono dopo. Lo script riprova `kor35-larp` per alcuni secondi prima di accettare la riserva. Poi, ogni 20 secondi, se `kor35-larp` è in aria lascia la rete di casa e ci si aggancia. Il profilo evento resta con priorità più alta in NetworkManager, così al boot successivo vince lui quando entrambe le reti si vedono.
+
 Non usare `Pi_Emergenza` / `10.42.0.1` per questa console.
+
+### Pi già installato
+
+Non rilanciare `install-station-kiosk.sh`: riscrive `/etc/kor35/kiosk-station.env` e può svuotare la password. Copia solo gli script e riavvia:
+
+```bash
+sudo install -m 0755 kiosk-station.sh /usr/local/bin/kiosk-station.sh
+sudo install -m 0755 kor35-kiosk-wifi.sh /usr/local/sbin/kor35-kiosk-wifi.sh
+sudo systemctl restart kiosk-station.service
+journalctl -u kiosk-station.service -n 40 --no-pager
+```
+
+Nel log deve comparire `Connessione a kor35-larp` oppure `Già connesso a kor35-larp`. Se resta sulla rete di casa, controlla che la PSK in `/etc/kor35/kiosk-station.env` sia quella della WLAN Omada (WPA2-PSK, non WPA3-only).
 
 Il server resta `https://www.kor35.it`: in bosco il DNS del mirror lo risolve in locale.
 
