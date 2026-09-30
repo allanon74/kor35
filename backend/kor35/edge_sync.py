@@ -19,8 +19,9 @@ from rest_framework.views import APIView
 from kor35.syncing import (
     apply_natural_pk_precheck,
     build_model_sync_records,
-    can_align_sync_id_on_merge,
     ensure_qrcode_natural_pk_aligned,
+    find_pilot_catalog_counterpart,
+    lww_update_existing,
     pagina_regolamento_sync_field_allowed,
     touch_sync_updated_at,
     try_apply_mti_child_fields_when_skipped,
@@ -257,7 +258,8 @@ class EdgeSyncView(APIView):
                 pending.append(PendingRecord(model_key=model_key, model=model, payload=row))
 
         max_rounds = max(len(pending), 1)
-        for _ in range(max_rounds):
+        self._relax_nullable_fk = False
+        for _ in range(max_rounds + 1):
             if not pending:
                 break
             still_pending = []
@@ -270,6 +272,9 @@ class EdgeSyncView(APIView):
                     still_pending.append(item)
             pending = still_pending
             if progressed == 0:
+                if not self._relax_nullable_fk and pending:
+                    self._relax_nullable_fk = True
+                    continue
                 break
 
         if pending:
@@ -396,8 +401,16 @@ class EdgeSyncView(APIView):
             value = row.get(field.name)
             if isinstance(field, ForeignKey):
                 resolved = self._resolve_fk_value(field, value)
-                if resolved is None and not field.null and value not in (None, ""):
-                    return "defer"
+                if resolved is None and value not in (None, ""):
+                    if not field.null:
+                        return "defer"
+                    # Il sottosistema può arrivare nello stesso payload con un altro
+                    # sync_id: si aspetta il merge per codice prima di mollare il legame.
+                    if (
+                        not getattr(self, "_relax_nullable_fk", False)
+                        and field.related_model._meta.label_lower == "pilotaggio.sottosistemanave"
+                    ):
+                        return "defer"
                 update_data[field.name] = resolved
             else:
                 update_data[field.name] = value
@@ -421,6 +434,19 @@ class EdgeSyncView(APIView):
             if remote_updated_at:
                 model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
             return "applied"
+
+        catalog_hit = find_pilot_catalog_counterpart(model, sync_id, row)
+        if catalog_hit is not None:
+            outcome = lww_update_existing(
+                model, catalog_hit, update_data, sync_id, remote_updated_at
+            )
+            if outcome == "skipped":
+                return "skipped"
+            obj = model.objects.filter(pk=catalog_hit.pk).first()
+            if obj is not None:
+                for field_name, related_list in m2m_updates.items():
+                    getattr(obj, field_name).set(related_list)
+                return "applied"
 
         if model_label == "personaggi.minigiocoqrconfig":
             qr_code = update_data.get("qr_code")
@@ -478,6 +504,8 @@ class EdgeSyncView(APIView):
             ) or self._merge_by_natural_unique_key(
                 model, sync_id, row, update_data, remote_updated_at
             )
+            if merged == "skipped":
+                return "skipped"
             if merged:
                 obj = model.objects.filter(sync_id=sync_id).first()
                 if obj is None:
@@ -521,9 +549,9 @@ class EdgeSyncView(APIView):
         for field in model._meta.concrete_fields:
             if field.name in ("id", "sync_id"):
                 continue
-            if not getattr(field, "unique", False):
+            if isinstance(field, ForeignKey) and getattr(field.remote_field, "parent_link", False):
                 continue
-            if isinstance(field, ForeignKey):
+            if not getattr(field, "unique", False):
                 continue
             group = (field.name,)
             if group not in seen:
@@ -597,21 +625,9 @@ class EdgeSyncView(APIView):
             else:
                 existing = model.objects.filter(**kwargs).first()
                 if existing and str(existing.sync_id) != str(sync_id):
-                    patch = dict(update_data)
-                    if can_align_sync_id_on_merge(model):
-                        patch["sync_id"] = sync_id
-                    for f in model._meta.concrete_fields:
-                        if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
-                            patch.pop(f.name, None)
-                    if remote_updated_at:
-                        patch["updated_at"] = remote_updated_at
-                    try:
-                        with transaction.atomic():
-                            model.objects.filter(pk=existing.pk).update(**patch)
-                    except IntegrityError:
-                        if "updated_at" in patch:
-                            model.objects.filter(pk=existing.pk).update(updated_at=patch["updated_at"])
-                    return True
+                    return lww_update_existing(
+                        model, existing, update_data, sync_id, remote_updated_at
+                    )
         return False
 
     def _merge_social_profile_by_personaggio(self, model, update_data, remote_updated_at):
@@ -738,24 +754,9 @@ class EdgeSyncView(APIView):
             # Stessa chiave naturale = stesso record logico: i due nodi devono convergere
             # sulla stessa identità di sync, altrimenti tombstone e delete non si propagano.
             # Restano esclusi i figli MTI, dove sync_id appartiene alla tabella genitore.
-            patch = dict(update_data)
-            if can_align_sync_id_on_merge(model):
-                patch["sync_id"] = sync_id
-            # Never patch parent-link fields on existing rows.
-            for f in model._meta.concrete_fields:
-                if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
-                    patch.pop(f.name, None)
-            if remote_updated_at:
-                patch["updated_at"] = remote_updated_at
-            try:
-                # Use a savepoint so IntegrityError doesn't poison outer transaction.
-                with transaction.atomic():
-                    model.objects.filter(pk=existing.pk).update(**patch)
-            except IntegrityError:
-                # Last-resort fallback: apply only updated_at if payload still conflicts.
-                if "updated_at" in patch:
-                    model.objects.filter(pk=existing.pk).update(updated_at=patch["updated_at"])
-            return True
+            return lww_update_existing(
+                model, existing, update_data, sync_id, remote_updated_at
+            )
         return False
 
     def _resolve_fk_value(self, field, raw_value):

@@ -16,8 +16,9 @@ from django.utils.dateparse import parse_datetime
 from kor35.syncing import (
     apply_natural_pk_precheck,
     build_model_sync_records,
-    can_align_sync_id_on_merge,
     ensure_qrcode_natural_pk_aligned,
+    find_pilot_catalog_counterpart,
+    lww_update_existing,
     pagina_regolamento_sync_field_allowed,
     touch_sync_updated_at,
     try_apply_mti_child_fields_when_skipped,
@@ -192,9 +193,10 @@ class Command(BaseCommand):
 
         max_rounds = max(len(pending), 1)
         tombstone_rows = incoming_payload.get(TOMBSTONE_PAYLOAD_KEY, []) or []
+        self._relax_nullable_fk = False
         with transaction.atomic():
             with suppress_mention_notify():
-                for _ in range(max_rounds):
+                for _ in range(max_rounds + 1):
                     if not pending:
                         break
                     next_pending = []
@@ -212,6 +214,9 @@ class Command(BaseCommand):
 
                     pending = next_pending
                     if progressed == 0:
+                        if not self._relax_nullable_fk and pending:
+                            self._relax_nullable_fk = True
+                            continue
                         break
 
         apply_tombstone_rows(model_registry, tombstone_rows)
@@ -414,8 +419,14 @@ class Command(BaseCommand):
             value = row[field.name]
             if isinstance(field, ForeignKey):
                 resolved = self._resolve_fk_value(model, field.name, value)
-                if resolved is None and not field.null and value not in (None, ""):
-                    return "defer"
+                if resolved is None and value not in (None, ""):
+                    if not field.null:
+                        return "defer"
+                    if (
+                        not getattr(self, "_relax_nullable_fk", False)
+                        and field.related_model._meta.label_lower == "pilotaggio.sottosistemanave"
+                    ):
+                        return "defer"
                 update_data[field.name] = resolved
                 continue
             if field.name == "updated_at":
@@ -434,6 +445,24 @@ class Command(BaseCommand):
             err_key = f"{model_label}: natural_pk_mismatch"
             self._defer_errors[err_key] = self._defer_errors.get(err_key, 0) + 1
             return "defer"
+        catalog_hit = find_pilot_catalog_counterpart(model, sync_id, row)
+        if catalog_hit is not None:
+            outcome = lww_update_existing(
+                model, catalog_hit, update_data, sync_id, remote_updated_at
+            )
+            if outcome == "skipped":
+                return "skipped"
+            obj = model.objects.filter(pk=catalog_hit.pk).first()
+            if obj is not None:
+                for field_name, raw_values in m2m_updates.items():
+                    resolved_list, unresolved = self._resolve_m2m_values(
+                        model, field_name, raw_values
+                    )
+                    if unresolved:
+                        return "defer"
+                    getattr(obj, field_name).set(resolved_list)
+                return "applied"
+
         if pk_result == "applied" and local_obj is not None:
             obj = local_obj
             for field_name, raw_values in m2m_updates.items():
@@ -502,9 +531,12 @@ class Command(BaseCommand):
                         if remote_updated_at:
                             model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
                         return "applied"
-            if self._merge_after_integrity_error(
+            merged = self._merge_after_integrity_error(
                 model, sync_id, row, update_data, remote_updated_at
-            ):
+            )
+            if merged == "skipped":
+                return "skipped"
+            if merged:
                 obj = model.objects.filter(sync_id=sync_id).first()
                 if obj is None:
                     obj = self._find_existing_after_merge(model, row, update_data)
@@ -629,9 +661,9 @@ class Command(BaseCommand):
         for field in model._meta.concrete_fields:
             if field.name in ("id", "sync_id"):
                 continue
-            if not getattr(field, "unique", False):
+            if isinstance(field, ForeignKey) and getattr(field.remote_field, "parent_link", False):
                 continue
-            if isinstance(field, ForeignKey):
+            if not getattr(field, "unique", False):
                 continue
             group = (field.name,)
             if group not in seen:
@@ -677,26 +709,13 @@ class Command(BaseCommand):
             else:
                 existing = model.objects.filter(**kwargs).first()
                 if existing and str(existing.sync_id) != str(sync_id):
-                    patch = dict(update_data)
-                    # MTI (Tabella/Punteggio/Tier): non forzare sync_id — collide su tabella padre.
-                    if can_align_sync_id_on_merge(model):
-                        patch["sync_id"] = sync_id
-                    for f in model._meta.concrete_fields:
-                        if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
-                            patch.pop(f.name, None)
-                    if remote_updated_at:
-                        patch["updated_at"] = remote_updated_at
-                    try:
-                        with transaction.atomic():
-                            model.objects.filter(pk=existing.pk).update(**patch)
-                    except IntegrityError:
-                        if "updated_at" in patch:
-                            model.objects.filter(pk=existing.pk).update(updated_at=patch["updated_at"])
-                    return True
+                    return lww_update_existing(
+                        model, existing, update_data, sync_id, remote_updated_at
+                    )
 
-        if self._merge_by_natural_unique_key(model, sync_id, row, update_data, remote_updated_at):
-            return True
-        return False
+        return self._merge_by_natural_unique_key(
+            model, sync_id, row, update_data, remote_updated_at
+        )
 
     def _merge_social_profile_by_personaggio(self, model, update_data, remote_updated_at):
         personaggio = update_data.get("personaggio")
@@ -827,24 +846,9 @@ class Command(BaseCommand):
             # Stessa chiave naturale = stesso record logico: i due nodi devono convergere
             # sulla stessa identità di sync, altrimenti tombstone e delete non si propagano.
             # Restano esclusi i figli MTI, dove sync_id appartiene alla tabella genitore.
-            patch = dict(update_data)
-            if can_align_sync_id_on_merge(model):
-                patch["sync_id"] = sync_id
-            # Never patch parent-link fields on existing rows.
-            for f in model._meta.concrete_fields:
-                if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
-                    patch.pop(f.name, None)
-            if remote_updated_at:
-                patch["updated_at"] = remote_updated_at
-            try:
-                # Use a savepoint so IntegrityError doesn't poison outer transaction.
-                with transaction.atomic():
-                    model.objects.filter(pk=existing.pk).update(**patch)
-            except IntegrityError:
-                # Last-resort fallback: apply only updated_at if payload still conflicts.
-                if "updated_at" in patch:
-                    model.objects.filter(pk=existing.pk).update(updated_at=patch["updated_at"])
-            return True
+            return lww_update_existing(
+                model, existing, update_data, sync_id, remote_updated_at
+            )
         return False
 
     def _resolve_fk_value(self, model, field_name, raw_value):

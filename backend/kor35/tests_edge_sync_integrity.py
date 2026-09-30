@@ -398,6 +398,191 @@ class EdgeSyncMissioneEventoAttivaTests(TestCase):
         self.assertFalse(row["attiva"])
 
 
+class EdgeSyncPilotCatalogLwwTests(TestCase):
+    """Rotte ed eventi creati sui due nodi convergono; vince updated_at più recente."""
+
+    def test_evento_piu_vecchio_non_sovrascrive(self):
+        from pilotaggio.models import EventoNave
+
+        nome = f"Evento sync {uuid.uuid4().hex[:8]}"
+        local = EventoNave.objects.create(
+            nome=nome,
+            descrizione="versione locale",
+            codice_soluzione_esatta="Q1Z",
+        )
+        EventoNave.objects.filter(pk=local.pk).update(updated_at=timezone.now())
+        remote_id = uuid.uuid4()
+        view = EdgeSyncView()
+        result = view._try_apply_one(EventoNave, {
+            "sync_id": str(remote_id),
+            "updated_at": (timezone.now() - timedelta(hours=4)).isoformat(),
+            "nome": nome.lower(),
+            "descrizione": "versione remota vecchia",
+            "codice_soluzione_esatta": "Q9Z",
+            "attivo": True,
+        })
+        self.assertEqual(result, "skipped")
+        self.assertEqual(EventoNave.objects.filter(nome__iexact=nome).count(), 1)
+        local.refresh_from_db()
+        self.assertEqual(local.descrizione, "versione locale")
+
+    def test_evento_piu_recente_sostituisce_e_allinea_sync_id(self):
+        from pilotaggio.models import EventoNave
+
+        nome = f"Evento sync {uuid.uuid4().hex[:8]}"
+        local = EventoNave.objects.create(
+            nome=nome,
+            descrizione="versione locale",
+            codice_soluzione_esatta="Q1Z",
+        )
+        EventoNave.objects.filter(pk=local.pk).update(
+            updated_at=timezone.now() - timedelta(days=3)
+        )
+        remote_id = uuid.uuid4()
+        view = EdgeSyncView()
+        result = view._try_apply_one(EventoNave, {
+            "sync_id": str(remote_id),
+            "updated_at": timezone.now().isoformat(),
+            "nome": nome,
+            "descrizione": "versione remota nuova",
+            "codice_soluzione_esatta": "Q2Z",
+            "attivo": True,
+        })
+        self.assertEqual(result, "applied")
+        self.assertEqual(EventoNave.objects.filter(nome__iexact=nome).count(), 1)
+        local.refresh_from_db()
+        self.assertEqual(local.descrizione, "versione remota nuova")
+        self.assertEqual(str(local.sync_id), str(remote_id))
+
+    def test_evento_nuovo_viene_creato(self):
+        from pilotaggio.models import EventoNave
+
+        nome = f"Solo mirror {uuid.uuid4().hex[:8]}"
+        prima = EventoNave.objects.filter(nome=nome).count()
+        view = EdgeSyncView()
+        result = view._try_apply_one(EventoNave, {
+            "sync_id": str(uuid.uuid4()),
+            "updated_at": timezone.now().isoformat(),
+            "nome": nome,
+            "descrizione": "nato sul mirror",
+            "codice_soluzione_esatta": "M1R",
+            "attivo": True,
+        })
+        self.assertEqual(result, "applied")
+        self.assertEqual(EventoNave.objects.filter(nome=nome).count(), prima + 1)
+
+    def test_rotta_piu_recente_vince(self):
+        from pilotaggio.models import PercorsoVolo
+
+        partenza = f"Porto {uuid.uuid4().hex[:6]}"
+        arrivo = f"Baia {uuid.uuid4().hex[:6]}"
+        local = PercorsoVolo.objects.create(
+            partenza=partenza,
+            arrivo=arrivo,
+            distanza_minima=10,
+            distanza_massima=20,
+        )
+        PercorsoVolo.objects.filter(pk=local.pk).update(
+            updated_at=timezone.now() - timedelta(days=1)
+        )
+        remote_id = uuid.uuid4()
+        view = EdgeSyncView()
+        result = view._try_apply_one(PercorsoVolo, {
+            "sync_id": str(remote_id),
+            "updated_at": timezone.now().isoformat(),
+            "partenza": partenza,
+            "arrivo": arrivo,
+            "distanza_minima": 30,
+            "distanza_massima": 40,
+            "ordine": 2,
+            "attivo": True,
+        })
+        self.assertEqual(result, "applied")
+        self.assertEqual(
+            PercorsoVolo.objects.filter(partenza__iexact=partenza, arrivo__iexact=arrivo).count(),
+            1,
+        )
+        local.refresh_from_db()
+        self.assertEqual(local.distanza_minima, 30)
+        self.assertEqual(str(local.sync_id), str(remote_id))
+
+    def test_sottosistema_vecchio_non_sovrascrive_e_non_duplica(self):
+        SottosistemaNave.objects.filter(codice="9").delete()
+        local = SottosistemaNave.objects.create(codice="9", nome="Nome locale")
+        SottosistemaNave.objects.filter(pk=local.pk).update(updated_at=timezone.now())
+        view = EdgeSyncView()
+        result = view._try_apply_one(SottosistemaNave, {
+            "sync_id": str(uuid.uuid4()),
+            "updated_at": (timezone.now() - timedelta(hours=5)).isoformat(),
+            "codice": "9",
+            "nome": "Nome remoto vecchio",
+            "descrizione": "",
+            "attivo": True,
+        })
+        self.assertEqual(result, "skipped")
+        self.assertEqual(SottosistemaNave.objects.filter(codice="9").count(), 1)
+        local.refresh_from_db()
+        self.assertEqual(local.nome, "Nome locale")
+
+    def test_stato_nave_one_to_one_vecchio_non_rompe_il_batch(self):
+        from pilotaggio.models import StatoSottosistemaNave
+
+        SottosistemaNave.objects.filter(codice="8").delete()
+        sotto = SottosistemaNave.objects.create(codice="8", nome="Otto")
+        stato = StatoSottosistemaNave.objects.create(sottosistema=sotto, online=True)
+        StatoSottosistemaNave.objects.filter(pk=stato.pk).update(updated_at=timezone.now())
+        view = EdgeSyncView()
+        result = view._try_apply_one(StatoSottosistemaNave, {
+            "sync_id": str(uuid.uuid4()),
+            "updated_at": (timezone.now() - timedelta(hours=2)).isoformat(),
+            "sottosistema": str(sotto.sync_id),
+            "online": False,
+            "livello_target": 0,
+            "livello_attuale": 0,
+            "invertito": False,
+            "espulso": False,
+            "direzione": "avanti",
+        })
+        self.assertEqual(result, "skipped")
+        self.assertEqual(StatoSottosistemaNave.objects.filter(sottosistema=sotto).count(), 1)
+        stato.refresh_from_db()
+        self.assertTrue(stato.online)
+
+    def test_evento_si_aggancia_al_sottosistema_dopo_il_merge_codice(self):
+        from pilotaggio.models import EventoNave
+
+        SottosistemaNave.objects.filter(codice="7").delete()
+        local = SottosistemaNave.objects.create(codice="7", nome="Sette locale")
+        SottosistemaNave.objects.filter(pk=local.pk).update(updated_at=timezone.now())
+        remote_sub = uuid.uuid4()
+        nome = f"Evento legato {uuid.uuid4().hex[:8]}"
+        view = EdgeSyncView()
+        view._apply_sync_models({
+            "pilotaggio.eventonave": [{
+                "sync_id": str(uuid.uuid4()),
+                "updated_at": timezone.now().isoformat(),
+                "nome": nome,
+                "descrizione": "dal mirror",
+                "codice_soluzione_esatta": "S7S",
+                "attivo": True,
+                "sottosistema": str(remote_sub),
+            }],
+            "pilotaggio.sottosistemanave": [{
+                "sync_id": str(remote_sub),
+                "updated_at": (timezone.now() - timedelta(hours=6)).isoformat(),
+                "codice": "7",
+                "nome": "Sette remoto vecchio",
+                "descrizione": "",
+                "attivo": True,
+            }],
+        })
+        evento = EventoNave.objects.get(nome=nome)
+        local.refresh_from_db()
+        self.assertEqual(local.nome, "Sette locale")
+        self.assertEqual(str(local.sync_id), str(remote_sub))
+        self.assertEqual(evento.sottosistema_id, local.pk)
+
+
 class EdgeSyncRubricheRegistryTests(TestCase):
     def test_rubriche_models_in_registry(self):
         registry = get_sync_model_registry()

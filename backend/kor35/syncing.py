@@ -148,6 +148,84 @@ def touch_sync_updated_at(model: type[models.Model], pk) -> None:
     model.objects.filter(pk=pk).update(updated_at=timezone.now())
 
 
+# Stesso nome su due nodi (sync_id diversi) = lo stesso evento o la stessa rotta.
+_PILOT_CATALOG_NATURAL_KEYS = {
+    "pilotaggio.eventonave": ("nome",),
+    "pilotaggio.percorsovolo": ("partenza", "arrivo"),
+}
+
+
+def find_pilot_catalog_counterpart(model: type[models.Model], sync_id, row: dict[str, Any]):
+    """
+    Evento o rotta già presente sull'altro nodo con un altro sync_id.
+    Il confronto è sul nome (eventi) o sulla coppia partenza/arrivo (rotte).
+    """
+    fields = _PILOT_CATALOG_NATURAL_KEYS.get(model._meta.label_lower)
+    if not fields or not sync_id:
+        return None
+    lookup = {}
+    for fname in fields:
+        raw = row.get(fname)
+        text = str(raw or "").strip()
+        if not text:
+            return None
+        lookup[f"{fname}__iexact"] = text
+    return (
+        model.objects.filter(**lookup)
+        .exclude(sync_id=sync_id)
+        .order_by("-updated_at")
+        .first()
+    )
+
+
+def lww_update_existing(model, existing, update_data, remote_sync_id, remote_updated_at) -> str:
+    """
+    Conflitto sulla stessa riga logica. Vince `updated_at` più recente.
+
+    Se vince il locale, i campi restano i suoi. Il sync_id remoto viene adottato
+    quando è sicuro, e `updated_at` viene ripubblicato così il vincitore torna
+    nel delta verso l'altro nodo. Senza timestamp remoto il payload si applica.
+    """
+    patch = dict(update_data or {})
+    patch.pop("updated_at", None)
+    patch.pop("sync_id", None)
+    patch.pop("id", None)
+    for field in model._meta.concrete_fields:
+        if isinstance(field, models.ForeignKey) and getattr(field.remote_field, "parent_link", False):
+            patch.pop(field.name, None)
+
+    local_wins = bool(
+        remote_updated_at
+        and existing.updated_at
+        and remote_updated_at <= existing.updated_at
+    )
+    if local_wins:
+        if (
+            remote_sync_id
+            and str(existing.sync_id) != str(remote_sync_id)
+            and can_align_sync_id_on_merge(model)
+        ):
+            try:
+                with transaction.atomic():
+                    model.objects.filter(pk=existing.pk).update(sync_id=remote_sync_id)
+            except IntegrityError:
+                pass
+        touch_sync_updated_at(model, existing.pk)
+        return "skipped"
+
+    if can_align_sync_id_on_merge(model) and remote_sync_id:
+        patch["sync_id"] = remote_sync_id
+    if remote_updated_at is not None:
+        patch["updated_at"] = remote_updated_at
+    try:
+        with transaction.atomic():
+            model.objects.filter(pk=existing.pk).update(**patch)
+    except IntegrityError:
+        if remote_updated_at is not None:
+            model.objects.filter(pk=existing.pk).update(updated_at=remote_updated_at)
+    return "applied"
+
+
 def serialize_pagina_regolamento_menu_only(instance: models.Model) -> dict[str, Any]:
     """Antenati wiki nel delta: solo metadati menu, mai contenuto/immagine."""
     data = serialize_for_sync(instance)
