@@ -11,6 +11,7 @@ import {
   patchStaffListMinigiocoDefault,
 } from '../../utils/staffMinigiocoDefaults';
 import { NAVIGATION_STAT_FIELDS } from '../../lib/navigationStats.js';
+import { DEFAULT_RULE_EXPR, emptyRuleBuilder } from './pilotEventoRuleBuilder';
 import StaffMinigiocoUsaDefaultToggle from './StaffMinigiocoUsaDefaultToggle';
 import {
   StaffToolBody,
@@ -186,8 +187,6 @@ const defaultEffettiComandoCritico = () => ({
   target_codice: '',
 });
 
-const DEFAULT_RULE_EXPR = '(1)';
-
 function tokenizeRuleExpression(input) {
   const src = String(input || '').trim().toUpperCase();
   if (!src) return [];
@@ -356,7 +355,8 @@ function mergeCaAndRulesIntoRegole(baseJson, rb, caEffetto) {
   );
   out.usa_direzione_evento = usesDirectional;
   for (const k of ['st', 'sp', 'ca']) {
-    const ast = buildExpressionAst(rb[k].expression, rb[k].conditions);
+    const branch = rb?.[k] || { conditions: [], expression: DEFAULT_RULE_EXPR };
+    const ast = buildExpressionAst(branch.expression, branch.conditions);
     if (!ast) {
       return {
         ok: false,
@@ -367,8 +367,8 @@ function mergeCaAndRulesIntoRegole(baseJson, rb, caEffetto) {
     out[k] = {
       ...(out[k] && typeof out[k] === 'object' && !Array.isArray(out[k]) ? out[k] : {}),
       expression: ast,
-      _conditions: rb[k].conditions,
-      _expr: rb[k].expression,
+      _conditions: branch.conditions,
+      _expr: branch.expression,
     };
   }
   const ce = caEffetto && typeof caEffetto === 'object' ? caEffetto : defaultCaEffetto();
@@ -606,30 +606,22 @@ export default function PilotaggioManager({ onLogout }) {
   const [pilotEventiWikiOpen, setPilotEventiWikiOpen] = useState(false);
   const [editCaEffetto, setEditCaEffetto] = useState(defaultCaEffetto);
   const [createCaEffetto, setCreateCaEffetto] = useState(defaultCaEffetto);
-  const [editRuleBuilder, setEditRuleBuilder] = useState({
-    st: { conditions: [], expression: DEFAULT_RULE_EXPR },
-    sp: { conditions: [], expression: DEFAULT_RULE_EXPR },
-    ca: { conditions: [], expression: DEFAULT_RULE_EXPR },
-  });
-  const [ruleBuilder, setRuleBuilder] = useState({
-    st: { conditions: [], expression: DEFAULT_RULE_EXPR },
-    sp: { conditions: [], expression: DEFAULT_RULE_EXPR },
-    ca: { conditions: [], expression: DEFAULT_RULE_EXPR },
-  });
+  const [editRuleBuilder, setEditRuleBuilder] = useState(emptyRuleBuilder);
+  const [ruleBuilder, setRuleBuilder] = useState(emptyRuleBuilder);
   const [draftCondition, setDraftCondition] = useState(emptyCondition);
   const ruleValidation = useMemo(
     () => ({
-      st: validateRuleExpression(ruleBuilder.st.expression, ruleBuilder.st.conditions),
-      sp: validateRuleExpression(ruleBuilder.sp.expression, ruleBuilder.sp.conditions),
-      ca: validateRuleExpression(ruleBuilder.ca.expression, ruleBuilder.ca.conditions),
+      st: validateRuleExpression(ruleBuilder.st?.expression, ruleBuilder.st?.conditions),
+      sp: validateRuleExpression(ruleBuilder.sp?.expression, ruleBuilder.sp?.conditions),
+      ca: validateRuleExpression(ruleBuilder.ca?.expression, ruleBuilder.ca?.conditions),
     }),
     [ruleBuilder]
   );
   const editRuleValidation = useMemo(
     () => ({
-      st: validateRuleExpression(editRuleBuilder.st.expression, editRuleBuilder.st.conditions),
-      sp: validateRuleExpression(editRuleBuilder.sp.expression, editRuleBuilder.sp.conditions),
-      ca: validateRuleExpression(editRuleBuilder.ca.expression, editRuleBuilder.ca.conditions),
+      st: validateRuleExpression(editRuleBuilder.st?.expression, editRuleBuilder.st?.conditions),
+      sp: validateRuleExpression(editRuleBuilder.sp?.expression, editRuleBuilder.sp?.conditions),
+      ca: validateRuleExpression(editRuleBuilder.ca?.expression, editRuleBuilder.ca?.conditions),
     }),
     [editRuleBuilder]
   );
@@ -773,11 +765,7 @@ export default function PilotaggioManager({ onLogout }) {
     setCreateEventoModalOpen(false);
     setNuovoEvento(defaultEvento);
     setCreateCaEffetto(defaultCaEffetto());
-    setRuleBuilder({
-      st: { conditions: [], expression: DEFAULT_RULE_EXPR },
-      sp: { conditions: [], expression: DEFAULT_RULE_EXPR },
-      ca: { conditions: [], expression: DEFAULT_RULE_EXPR },
-    });
+    setRuleBuilder(emptyRuleBuilder());
     setError('');
   }, []);
 
@@ -1016,10 +1004,7 @@ export default function PilotaggioManager({ onLogout }) {
   const closeEditEventoModal = useCallback(() => {
     setEditEventoId(null);
     setEditEvento(emptyEditEventoModal());
-    setEditRuleBuilder({
-      sp: { conditions: [], expression: DEFAULT_RULE_EXPR },
-      ca: { conditions: [], expression: DEFAULT_RULE_EXPR },
-    });
+    setEditRuleBuilder(emptyRuleBuilder());
     setEditCaEffetto(defaultCaEffetto());
     setError('');
   }, []);
@@ -2879,14 +2864,14 @@ export default function PilotaggioManager({ onLogout }) {
                       <input
                         className="bg-gray-900 rounded px-2 py-1 text-xs w-full mb-2 font-mono border border-gray-700"
                         placeholder="(1 AND 2) OR 3"
-                        value={editRuleBuilder[k].expression || ''}
+                        value={editRuleBuilder[k]?.expression || ''}
                         onChange={(ev) => setEditRuleBuilder((p) => ({ ...p, [k]: { ...p[k], expression: ev.target.value } }))}
                       />
                       <div className={`text-[11px] mb-2 ${editRuleValidation[k].valid ? 'text-emerald-300' : 'text-amber-300'}`}>
                         {editRuleValidation[k].valid ? 'OK' : 'Errore'}: {editRuleValidation[k].message}
                       </div>
                       <div className="space-y-1 text-xs">
-                        {(editRuleBuilder[k].conditions || []).map((c, idx) => (
+                        {(editRuleBuilder[k]?.conditions || []).map((c, idx) => (
                           <div key={`${k}-edit-${idx}`} className="bg-gray-900 rounded px-2 py-1 flex justify-between gap-2">
                             <span>
                               {idx + 1}) {c.sottosistema} {c.op}{' '}
@@ -3098,9 +3083,9 @@ export default function PilotaggioManager({ onLogout }) {
                   {['st', 'sp', 'ca'].map((k) => (
                     <div key={`create-${k}`} className="border border-gray-700 rounded-lg p-2 bg-gray-950/40">
                       <strong className="text-xs">{k.toUpperCase()}</strong>
-                      <input className="bg-gray-900 rounded px-2 py-1 text-xs w-full mt-1 mb-1 font-mono border border-gray-700" placeholder="(1 AND 2)" value={ruleBuilder[k].expression || ''} onChange={(e) => setRuleBuilder((p) => ({ ...p, [k]: { ...p[k], expression: e.target.value } }))} />
+                      <input className="bg-gray-900 rounded px-2 py-1 text-xs w-full mt-1 mb-1 font-mono border border-gray-700" placeholder="(1 AND 2)" value={ruleBuilder[k]?.expression || ''} onChange={(e) => setRuleBuilder((p) => ({ ...p, [k]: { ...p[k], expression: e.target.value } }))} />
                       <div className={`text-[11px] mb-1 ${ruleValidation[k].valid ? 'text-emerald-300' : 'text-amber-300'}`}>{ruleValidation[k].message}</div>
-                      {(ruleBuilder[k].conditions || []).map((c, idx) => (
+                      {(ruleBuilder[k]?.conditions || []).map((c, idx) => (
                         <div key={`${k}-c-${idx}`} className="text-[11px] flex justify-between bg-gray-900 rounded px-1 py-0.5 mb-0.5">
                           <span>{idx + 1}) {c.sottosistema} {c.op}</span>
                           <button type="button" className="text-red-400" onClick={() => removeRuleCondition(k, idx)}>x</button>
