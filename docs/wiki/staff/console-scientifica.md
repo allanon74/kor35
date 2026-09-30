@@ -70,7 +70,7 @@ Se ci sono due o più fenomeni insieme, sulla scheda si sceglie quale leggere. L
 
 ## Scan profondo
 
-Consuma **1 componente di stiva** (o i requisiti in `scientifica_scan_requisiti_json`; lista vuota = 1 unità qualsiasi).
+Consuma **1 componente pescato a caso** dalla stiva (o, se `scientifica_scan_requisiti_json` non è vuoto, a caso tra i mattoni del vincolo). Lo stesso vale per dilatazione, gabbia di Faraday e correzione di paradosso: il pulsante non chiede quale pezzo usare.
 
 | Vincolo | Default |
 |---------|---------|

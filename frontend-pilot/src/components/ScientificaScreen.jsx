@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { PREVIEW_SCIENTIFICA } from '../kioskPreview.js';
 import { initialTab } from '../viewport.js';
@@ -247,7 +247,6 @@ export default function ScientificaScreen({
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [selectedMattone, setSelectedMattone] = useState('');
   const [tab, setTab] = useState(() => initialTab(KIOSK_TABS.map(([id]) => id), 'spettro'));
   const [eventoId, setEventoId] = useState('');
   const eventoIdRef = useRef('');
@@ -291,30 +290,16 @@ export default function ScientificaScreen({
   const scan = data?.scan_profondo || {};
   const matrice = data?.matrice;
   const interventi = data?.interventi;
-  const stivaRighe = scan.stiva?.righe || [];
-
-  const mattoneOptions = useMemo(
-    () => stivaRighe.filter((r) => (r.quantita || 0) > 0),
-    [stivaRighe],
-  );
-
   const runScan = async () => {
     if (preview) {
       setError('Anteprima layout: scan non inviato.');
       return;
     }
-    if (!selectedMattone) {
-      setError('Seleziona un componente dalla stiva.');
-      return;
-    }
     setBusy(true);
     setError('');
     try {
-      const res = await api.scientificaScanProfondo([
-        { mattone_id: selectedMattone, quantita: 1 },
-      ], eventoIdRef.current);
+      const res = await api.scientificaScanProfondo([], eventoIdRef.current);
       setData(res);
-      setSelectedMattone('');
     } catch (e) {
       setError(e.message || 'Scan profondo non riuscito.');
     } finally {
@@ -509,42 +494,21 @@ export default function ScientificaScreen({
             />
             <h2>Scan profondo{spettro.evento_nome ? ` — ${spettro.evento_nome}` : ''}</h2>
             <p className="sci-muted">
-              Consuma 1 componente stiva per rivelare la soluzione ST/SP di questo fenomeno (
+              Consuma 1 componente a caso dalla stiva e rivela la soluzione ST/SP di questo fenomeno (
               {scan.scans_rimanenti_volo ?? 0}
               {' '}
               rimanenti questo volo).
             </p>
             <SoluzioneAcquisita indizio={spettro.scan_profondo?.indizio} />
             {scan.disponibile ? (
-              <>
-                <label className="sci-select-wrap">
-                  <span>Campione stiva</span>
-                  <select
-                    value={selectedMattone}
-                    disabled={busy}
-                    onChange={(e) => setSelectedMattone(e.target.value)}
-                  >
-                    <option value="">— seleziona —</option>
-                    {mattoneOptions.map((r) => (
-                      <option key={r.mattone_id} value={r.mattone_id}>
-                        {r.nome || r.indice_componente}
-                        {' '}
-                        (×
-                        {r.quantita}
-                        )
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  className="sci-btn sci-btn--primary"
-                  disabled={busy || mattoneOptions.length === 0}
-                  onClick={runScan}
-                >
-                  Inietta campione — scan profondo
-                </button>
-              </>
+              <button
+                type="button"
+                className="sci-btn sci-btn--primary"
+                disabled={busy}
+                onClick={runScan}
+              >
+                Scan profondo — componente casuale
+              </button>
             ) : (
               <p className="sci-muted">
                 {!scan.abilitato

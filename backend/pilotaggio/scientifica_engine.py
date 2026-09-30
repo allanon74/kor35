@@ -170,11 +170,12 @@ def _selezione_casuale_per_requisiti(requisiti: list):
 
 
 def _valida_consumo_componenti(cfg, componenti_scelti: list, *, tipo: str, n_richiesti: int):
+    """Ignora la scelta del client: il pezzo esce sempre a caso dalla stiva."""
     from .componenti_riparazione import _requisiti_normalizzati_da_raw, valida_selezione_componenti
 
+    del componenti_scelti
     if n_richiesti <= 0:
         return True, "", []
-    selezione = [c for c in (componenti_scelti or []) if isinstance(c, dict)]
     requisiti_raw = _requisiti_intervento(cfg, tipo)
     if requisiti_raw:
         requisiti = _requisiti_normalizzati_da_raw(requisiti_raw, richiedi_ricarica=False)
@@ -183,31 +184,11 @@ def _valida_consumo_componenti(cfg, componenti_scelti: list, *, tipo: str, n_ric
                 requisiti_riparazione_json = requisiti
                 richiede_componenti_riparazione = True
 
+            selezione = _selezione_casuale_per_requisiti(requisiti) or []
             if not selezione:
-                selezione = _selezione_casuale_per_requisiti(requisiti) or []
-                if not selezione:
-                    return False, "In stiva non c'è un componente sufficiente per l'intervento.", []
+                return False, "In stiva non c'è un componente sufficiente per l'intervento.", []
             return valida_selezione_componenti(_FakeSS(), selezione)
-    if not selezione:
-        return _preleva_componente_casuale(n_richiesti)
-    tot = sum(int(c.get("quantita") or 0) for c in componenti_scelti if isinstance(c, dict))
-    if tot < n_richiesti:
-        return False, f"Servono {n_richiesti} componente/i (selezionati: {tot}).", []
-    alloc = []
-    rim = n_richiesti
-    for row in componenti_scelti:
-        if not isinstance(row, dict):
-            continue
-        q = min(rim, int(row.get("quantita") or 0))
-        if q <= 0:
-            continue
-        alloc.append({"mattone_id": row.get("mattone_id"), "quantita": q})
-        rim -= q
-        if rim <= 0:
-            break
-    if rim > 0:
-        return False, f"Servono {n_richiesti} componente/i dalla stiva.", []
-    return True, "", alloc
+    return _preleva_componente_casuale(n_richiesti)
 
 
 def build_matrice_payload(sessione) -> dict:

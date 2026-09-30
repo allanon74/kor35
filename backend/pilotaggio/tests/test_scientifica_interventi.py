@@ -141,6 +141,46 @@ class ScientificaInterventiTests(TestCase):
         staff_modifica_stiva(mattone_id=str(mattone.pk), delta=delta)
         return str(mattone.pk)
 
+    def test_la_selezione_inviata_non_decide_il_mattone(self):
+        from unittest.mock import patch
+
+        from personaggi.models import Mattone
+        from pilotaggio.componenti_nave_constants import AURA_COMPONENTI_SIGLA
+        from pilotaggio.models import StivaComponenteNave
+
+        mattoni = list(
+            Mattone.objects.filter(aura__sigla=AURA_COMPONENTI_SIGLA).order_by("pk")[:2]
+        )
+        self.assertGreaterEqual(len(mattoni), 2)
+        for mattone in mattoni:
+            staff_modifica_stiva(mattone_id=str(mattone.pk), delta=3)
+        primo, secondo = str(mattoni[0].pk), str(mattoni[1].pk)
+        prima = {
+            mid: int(StivaComponenteNave.objects.get(mattone_id=mid).quantita)
+            for mid in (primo, secondo)
+        }
+        self._set_coerenza(20)
+
+        def pick(seq):
+            for row in seq:
+                if str(row.get("mattone_id")) == secondo:
+                    return row
+            return seq[-1]
+
+        with patch("pilotaggio.scientifica_engine.random.choice", side_effect=pick):
+            esegui_intervento_scientifico(
+                tipo="dilatazione",
+                componenti_scelti=[{"mattone_id": primo, "quantita": 1}],
+            )
+        self.assertEqual(
+            int(StivaComponenteNave.objects.get(mattone_id=primo).quantita),
+            prima[primo],
+        )
+        self.assertEqual(
+            int(StivaComponenteNave.objects.get(mattone_id=secondo).quantita),
+            prima[secondo] - 1,
+        )
+
     def test_dilatazione_senza_selezione_pesca_un_componente(self):
         from pilotaggio.models import StivaComponenteNave
 

@@ -314,28 +314,21 @@ def _scan_requisiti_payload(cfg) -> dict:
 
 
 def _valida_consumo_scan(cfg, componenti_scelti: list) -> Tuple[bool, str, List[dict]]:
-    from .componenti_riparazione import _requisiti_normalizzati_da_raw, valida_selezione_componenti
-    from .componenti_stiva import mattoni_componente_qs
+    from .componenti_riparazione import _requisiti_normalizzati_da_raw
+    from .scientifica_engine import _preleva_componente_casuale, _selezione_casuale_per_requisiti
 
+    del componenti_scelti
     if not getattr(cfg, "scientifica_scan_profondo_abilitato", True):
         return False, "Scan profondo disabilitato in runtime.", []
 
     raw = getattr(cfg, "scientifica_scan_requisiti_json", None) or []
     requisiti = _requisiti_normalizzati_da_raw(raw, richiedi_ricarica=False)
-    if not requisiti:
-        if not isinstance(componenti_scelti, list) or len(componenti_scelti) != 1:
-            return False, "Seleziona un componente dalla stiva.", []
-        mid = str(componenti_scelti[0].get("mattone_id") or "").strip()
-        qty = int(componenti_scelti[0].get("quantita") or 0)
-        if not mid or qty != 1:
-            return False, "Scan profondo: 1 componente richiesto.", []
-        return True, "", [{"mattone_id": mid, "quantita": 1}]
-
-    class _FakeSS:
-        requisiti_riparazione_json = requisiti
-        richiede_componenti_riparazione = True
-
-    return valida_selezione_componenti(_FakeSS(), componenti_scelti)
+    if requisiti:
+        selezione = _selezione_casuale_per_requisiti(requisiti)
+        if not selezione:
+            return False, "In stiva non c'è un componente sufficiente per lo scan.", []
+        return True, "", selezione
+    return _preleva_componente_casuale(1)
 
 
 def _indizi_sistemi(
