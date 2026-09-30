@@ -10,8 +10,7 @@ import os
 
 from rest_framework import serializers
 
-from personaggi.models import Carriera
-
+from .comunicazioni import queryset_dipartimenti_bordo
 from .models import (
     ComandoCriticoGlobale,
     ComandoNave,
@@ -635,7 +634,7 @@ class StivaComponenteNaveSerializer(serializers.ModelSerializer):
 
 class ProtocolloComunicazioneSerializer(serializers.ModelSerializer):
     korp = serializers.PrimaryKeyRelatedField(
-        queryset=Carriera.objects.filter(tipo_carriera__codice="korp"),
+        queryset=queryset_dipartimenti_bordo(),
         allow_null=True,
         required=False,
     )
@@ -687,10 +686,11 @@ class ProtocolloComunicazioneSerializer(serializers.ModelSerializer):
     def validate_korp(self, value):
         if value is None:
             return value
-        codice = getattr(getattr(value, "tipo_carriera", None), "codice", "")
-        if codice != "korp":
+        from .comunicazioni import carriera_e_dipartimento_bordo
+
+        if not carriera_e_dipartimento_bordo(value):
             raise serializers.ValidationError(
-                "Scegli un dipartimento KORP (Carriere e KORP)."
+                "Scegli una KORP o un dipartimento dall'elenco Carriere e KORP."
             )
         return value
 

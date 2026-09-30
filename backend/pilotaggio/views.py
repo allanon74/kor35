@@ -2978,24 +2978,30 @@ class StaffProtocolloComunicazioneViewSet(viewsets.ModelViewSet):
 
 
 class StaffDipartimentiKorpView(APIView):
-    """KORP già gestite in Carriere e KORP: sono i dipartimenti della radio."""
+    """KORP e carriere di tipo dipartimento: destinatari della radio."""
 
     permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def get(self, request):
-        from personaggi.models import Korp, PersonaggioCarrieraMembership
+        from personaggi.models import PersonaggioCarrieraMembership
+
+        from .comunicazioni import queryset_dipartimenti_bordo
 
         rows = []
-        for korp in Korp.objects.order_by("nome"):
+        for korp in queryset_dipartimenti_bordo():
             membri = (
                 PersonaggioCarrieraMembership.objects.filter(
                     carriera=korp,
                     data_a__isnull=True,
-                    tipo_carriera__codice="korp",
                 )
                 .values("personaggio_id")
                 .distinct()
                 .count()
             )
-            rows.append({"id": korp.pk, "nome": korp.nome, "membri": membri})
+            rows.append({
+                "id": korp.pk,
+                "nome": korp.nome,
+                "tipo": getattr(korp.tipo_carriera, "codice", ""),
+                "membri": membri,
+            })
         return Response(rows)

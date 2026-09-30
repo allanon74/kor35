@@ -158,6 +158,50 @@ class ComunicazioniAllarmeTests(TestCase):
         testo = integra_elenco_guasti("Riparare Propulsore.", "Propulsore")
         self.assertEqual(testo, "Riparare Propulsore.")
 
+    def test_dipartimento_non_korp_riceve_il_messaggio(self):
+        tipo, _ = TipoCarriera.objects.get_or_create(
+            codice="dipartimento", defaults={"nome": "Dipartimento"}
+        )
+        medico = Carriera.objects.create(
+            nome="Medica", tipo="T3", tipo_carriera=tipo
+        )
+        PersonaggioCarrieraMembership.objects.create(
+            personaggio=self.pilota,
+            carriera=medico,
+            tipo_carriera=tipo,
+        )
+        ProtocolloComunicazione.objects.create(
+            colore="bianco",
+            korp=medico,
+            testo="Infermeria, intervento.",
+        )
+        with patch("personaggi.notify.notify_users", return_value=1) as notify:
+            res = self.client.post(
+                "/api/pilot/session/allarme-equipaggio/",
+                {"allarme": "bianco"},
+                format="json",
+            )
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertEqual(body["dipartimento"], "Medica")
+        self.assertEqual(body["inviati"], 1)
+        notify.assert_called_once()
+
+    def test_professione_non_e_un_destinatario(self):
+        tipo, _ = TipoCarriera.objects.get_or_create(
+            codice="professione", defaults={"nome": "Professione"}
+        )
+        mestiere = Carriera.objects.create(
+            nome="Cuoco", tipo="T3", tipo_carriera=tipo
+        )
+        ser = ProtocolloComunicazioneSerializer(data={
+            "colore": "blu",
+            "korp": str(mestiere.pk),
+            "testo": "no",
+        })
+        self.assertFalse(ser.is_valid())
+        self.assertIn("korp", ser.errors)
+
     def test_colore_sbagliato_non_arma_grazia(self):
         self.assertFalse(applica_grazia_colore(self.sessione, ALLARME_EQUIPAGGIO_ROSSO))
         self.istanza.refresh_from_db()

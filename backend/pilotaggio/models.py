@@ -1213,9 +1213,10 @@ class StivaCoppiaOppositiStato(SyncableModel, models.Model):
 
 class ProtocolloComunicazione(SyncableModel, models.Model):
     """
-    Colore di allarme, testo inviato ai membri della KORP
+    Colore di allarme, testo inviato ai membri del dipartimento
     e frase letta dall'audio della console di pilotaggio.
-    La KORP è il dipartimento gestito in Carriere e KORP.
+    Il dipartimento è una KORP, oppure una carriera di tipo dipartimento
+    nell'elenco Carriere e KORP.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

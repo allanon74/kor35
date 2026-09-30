@@ -96,7 +96,7 @@ export default function ComunicazioniStaffPanel({ onLogout }) {
             </select>
           </label>
           <label className="flex flex-col text-xs text-gray-400 gap-1 flex-1 min-w-[12rem]">
-            Dipartimento (KORP)
+            Dipartimento (KORP o dipartimento)
             <select className="bg-gray-800 rounded px-2 py-1 text-sm" value={protocollo.korp} onChange={(e) => setProtocollo((p) => ({ ...p, korp: e.target.value }))}>
               <option value="">— nessuno —</option>
               {dipartimenti.map((d) => (

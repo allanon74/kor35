@@ -114,8 +114,35 @@ def applica_grazia_colore(sessione, colore: str) -> bool:
     return granted
 
 
+def carriera_e_dipartimento_bordo(carriera) -> bool:
+    """KORP oppure tipo segnato come dipartimento nell'elenco Carriere e KORP."""
+    if carriera is None:
+        return False
+    tipo = getattr(carriera, "tipo_carriera", None)
+    if tipo is None:
+        return False
+    codice = str(getattr(tipo, "codice", "") or "").strip().lower()
+    nome = str(getattr(tipo, "nome", "") or "").strip().lower()
+    return codice in {"korp", "dipartimento"} or nome in {"dipartimento", "dipartimenti"}
+
+
+def queryset_dipartimenti_bordo():
+    from django.db.models import Q
+    from personaggi.models import Carriera
+
+    return (
+        Carriera.objects.filter(
+            Q(tipo_carriera__codice__in=["korp", "dipartimento"])
+            | Q(tipo_carriera__nome__iexact="dipartimento")
+            | Q(tipo_carriera__nome__iexact="dipartimenti")
+        )
+        .select_related("tipo_carriera")
+        .order_by("nome")
+    )
+
+
 def _personaggi_korp(korp) -> list:
-    """Membri attivi del dipartimento (appartenenza KORP ancora aperta)."""
+    """Membri attivi del dipartimento (appartenenza ancora aperta)."""
     if korp is None:
         return []
     from personaggi.models import PersonaggioCarrieraMembership
@@ -126,7 +153,6 @@ def _personaggi_korp(korp) -> list:
         PersonaggioCarrieraMembership.objects.filter(
             carriera=korp,
             data_a__isnull=True,
-            tipo_carriera__codice="korp",
         )
         .select_related("personaggio__proprietario")
         .order_by("personaggio__nome")

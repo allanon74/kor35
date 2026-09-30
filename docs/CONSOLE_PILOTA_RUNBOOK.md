@@ -70,11 +70,11 @@ Staff (richiede `is_staff`):
 
 Schermata `/pilot/?screen=comunicazioni` (statistica default `0CO`). Sul pannello Pi è la terza scelta di `/pilot/?screen=station&viewport=800x480`. Si accende da staff **Pilotaggio → Console di bordo**. Con il flag attivo i pulsanti allarme spariscono dalla plancia di navigazione.
 
-- Destinatari: una **KORP** già presente in **Carriere e KORP** (lì è il dipartimento). Il protocollo (testo e audio) si associa in **Pilotaggio → Comunicazioni**. Ogni colore ha un solo protocollo. Segnaposto `{sottosistema}` e `{evento}`.
+- Destinatari: una **KORP** oppure una carriera il cui tipo, in **Carriere e KORP**, è segnato come dipartimento (`codice` o nome `dipartimento`). Il protocollo (testo e audio) si associa in **Pilotaggio → Comunicazioni**. Ogni colore ha un solo protocollo. Segnaposto `{sottosistema}` e `{evento}`.
 - Colori aggiuntivi: **ambra** (riparazione), **viola** (invasione) e **bianco** (medico), oltre a giallo, rosso, nero, blu e crociera. Sull'ambra i sottosistemi offline vengono sempre nominati nel messaggio ai membri e nell'audio di plancia.
 - La frase audio di ogni colore si personalizza in **Pilotaggio → Allarmi**. Vuoto = annuncio standard. Il bianco avvisa la KORP scelta su quel colore (personale medico).
 - Il campione sonoro (mp3, wav, ogg, m4a, webm, max 8 MB) si carica nella stessa scheda, per tutti gli otto colori. Il file sta in `media/pilotaggio/allarmi/` e arriva sulle repliche con `make sync-media`. Senza file, giallo, rosso, nero, blu e crociera usano ancora `/pilot/sounds/allarmi/<colore>.mp3` se quel file statico è sul server; ambra, viola e bianco restano solo voce.
-- L'audio (`testo_audio`, o l'annuncio standard del colore) esce dagli speaker della console di pilotaggio. Il testo va agli utenti dei personaggi con appartenenza ancora attiva a quella KORP.
+- L'audio (`testo_audio`, o l'annuncio standard del colore) esce dagli speaker della console di pilotaggio. Il testo va agli utenti dei personaggi con appartenenza ancora attiva a quella KORP o a quel dipartimento.
 - Sull'evento, campo «colore richiesto»: se la radio lo dichiara prima della fine della reazione, il primo controllo di catastrofe non scatta. La radio non vede quel colore. Crociera non dà grazia.
 
 ## Comandi operativi (Docker-first)

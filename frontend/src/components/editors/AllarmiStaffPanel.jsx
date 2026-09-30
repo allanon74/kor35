@@ -178,7 +178,7 @@ export default function AllarmiStaffPanel({ onLogout }) {
               />
             </label>
             <label className="flex flex-col text-xs text-gray-400 gap-1">
-              Dipartimento (KORP)
+              Dipartimento (KORP o dipartimento)
               <select
                 className="bg-gray-800 rounded px-2 py-1 text-sm"
                 value={bozza.korp}
