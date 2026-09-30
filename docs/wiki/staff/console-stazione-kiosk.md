@@ -36,7 +36,7 @@ Se nello staff il login della console è spento, dopo il pulsante l'accesso è a
 | 2 | SSID di riserva in `/etc/kor35/kiosk-station.env` | Il bosco non si vede (laboratorio, casa) |
 | 3 | Scelta a schermo (zenity) | Nessuna delle due risponde e `KIOSK_WIFI_PROMPT=1` |
 
-All'avvio la rete di casa è spesso già associata, e le antenne Omada compaiono dopo. Lo script riprova `kor35-larp` per alcuni secondi prima di accettare la riserva. Poi, ogni 20 secondi, se `kor35-larp` è in aria lascia la rete di casa e ci si aggancia. Il profilo evento resta con priorità più alta in NetworkManager, così al boot successivo vince lui quando entrambe le reti si vedono.
+All'avvio la rete di casa è spesso già associata, e le antenne Omada compaiono dopo. Lo script riprova `kor35-larp` per alcuni secondi prima di accettare la riserva. Poi, ogni 20 secondi, se `kor35-larp` è in aria lascia la rete di casa e ci si aggancia. Usa il profilo già salvato dal desktop e non ne riscrive la password: se la riscrive, l'associazione fallisce e NetworkManager torna alla rete di casa. Il profilo evento resta con priorità più alta, così al boot successivo vince lui quando entrambe le reti si vedono.
 
 Non usare `Pi_Emergenza` / `10.42.0.1` per questa console.
 

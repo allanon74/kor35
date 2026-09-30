@@ -61,11 +61,12 @@ profile_field() {
   local name="$1" idx="$2" line
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    IFS='|' read -r pname pssid ptype prio <<<"$line"
+    IFS='|' read -r pname pssid ptype prio pts <<<"$line"
     if [ "$pname" = "$name" ]; then
       case "$idx" in
         2) printf '%s\n' "$pssid" ;;
         3) printf '%s\n' "$ptype" ;;
+        5) printf '%s\n' "${pts:-0}" ;;
       esac
       return 0
     fi
@@ -76,7 +77,13 @@ if [ "${1:-}" = "-t" ]; then
   case "${2:-}" in
     -f)
       case "${3:-}" in
-        DEVICE,TYPE) printf '%s\n' "wlan0:wifi" ;;
+        DEVICE,TYPE)
+          if [ -s "$STATE/devices" ]; then
+            cat "$STATE/devices"
+          else
+            printf '%s\n' "wlan0:wifi"
+          fi
+          ;;
         ACTIVE,SSID)
           printf 'yes:%s\n' "$(cat "$STATE/current")"
           ;;
@@ -96,12 +103,20 @@ if [ "${1:-}" = "-g" ]; then
   case "$field" in
     802-11-wireless.ssid) profile_field "$name" 2 ;;
     connection.type) profile_field "$name" 3 ;;
+    connection.timestamp) profile_field "$name" 5 ;;
   esac
   exit 0
 fi
 if [ "${1:-}" = "device" ] && [ "${2:-}" = "wifi" ] && [ "${3:-}" = "rescan" ]; then
   n="$(cat "$STATE/rescans")"
   printf '%s\n' "$((n + 1))" >"$STATE/rescans"
+  exit 0
+fi
+if [ "${1:-}" = "device" ] && [ "${2:-}" = "wifi" ] && [ "${3:-}" = "connect" ]; then
+  ssid="${4:-}"
+  printf '%s|%s|802-11-wireless|100|%s\n' "$ssid" "$ssid" "200" >>"$STATE/profiles"
+  printf '%s\n' "$ssid" >>"$STATE/ups"
+  printf '%s\n' "$ssid" >"$STATE/current"
   exit 0
 fi
 if [ "${1:-}" = "connection" ] && [ "${2:-}" = "add" ]; then
@@ -276,6 +291,56 @@ else
   fail "prefer doveva vedere kor35-larp via iw"; cat /tmp/kiosk-wifi-iw.log >&2 || true
 fi
 assert_last_up "$D" "kor35-larp"
+
+assert_no_psk_rewrite() {
+  local dir="$1"
+  if grep -q 'wifi-sec.psk' "$dir/state/calls"; then
+    fail "ha riscritto la password del profilo"
+  else
+    ok "password del profilo non toccata"
+  fi
+}
+
+# 6. Il profilo usato a mano vince su quello rotto, senza riscrivere la PSK.
+D="$TMP/manual"
+write_stubs "$D"
+new_case "$D"
+write_stubs "$D"
+printf '%s\n' "Casa|Casa|802-11-wireless|0|20" >"$D/state/profiles"
+printf '%s\n' "rotto|kor35-larp|802-11-wireless|0|1" >>"$D/state/profiles"
+printf '%s\n' "Desktop|kor35-larp|802-11-wireless|0|99" >>"$D/state/profiles"
+if run_helper "$D" ensure >/tmp/kiosk-wifi-manual.log 2>&1; then
+  ok "ensure usa il profilo del desktop"
+else
+  fail "ensure doveva usare il profilo manuale"; cat /tmp/kiosk-wifi-manual.log >&2 || true
+fi
+assert_last_up "$D" "Desktop"
+assert_not_up "$D" "rotto"
+assert_no_psk_rewrite "$D"
+
+# 7. Non attivare p2p-dev-wlan0: lì la connessione fallisce e si torna in casa.
+D="$TMP/p2p"
+write_stubs "$D"
+new_case "$D"
+write_stubs "$D"
+printf '%s\n' "p2p-dev-wlan0:wifi" >"$D/state/devices"
+printf '%s\n' "wlan0:wifi" >>"$D/state/devices"
+printf '%s\n' "Desktop|kor35-larp|802-11-wireless|0|99" >>"$D/state/profiles"
+if run_helper "$D" prefer >/tmp/kiosk-wifi-p2p.log 2>&1; then
+  ok "prefer ignora p2p"
+else
+  fail "prefer doveva usare wlan0"; cat /tmp/kiosk-wifi-p2p.log >&2 || true
+fi
+if grep -q 'ifname p2p-dev-wlan0' "$D/state/calls"; then
+  fail "ha usato p2p-dev-wlan0"
+else
+  ok "interfaccia p2p non usata"
+fi
+if grep -q 'connection up Desktop ifname wlan0' "$D/state/calls"; then
+  ok "attivato Desktop su wlan0"
+else
+  fail "manca connection up Desktop su wlan0"
+fi
 
 echo "--- ${PASS} ok, ${FAIL} fail ---"
 [ "$FAIL" -eq 0 ]
