@@ -4210,25 +4210,52 @@ select, input[type=text], input[type=number] {
 }
 
 .comms-color {
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 2px solid rgba(255, 255, 255, 0.38);
+  border-radius: 1.15rem;
   color: #fff;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: flex-start;
   gap: 0.15rem;
-  padding: 0.4rem 0.5rem;
+  padding: 0.45rem 0.7rem;
   text-align: left;
   min-height: 0;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 0.35rem 0 rgba(0, 0, 0, 0.38);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
+}
+
+.comms-color:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+.comms-color:active:not(:disabled) {
+  transform: translateY(0.2rem);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0.1rem 0 rgba(0, 0, 0, 0.38);
 }
 
 .comms-color:disabled {
   opacity: 0.55;
+  cursor: default;
 }
 
 .comms-color.active {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
-  filter: brightness(1.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 0 0 3px rgba(255, 255, 255, 0.88),
+    0 0.35rem 0 rgba(0, 0, 0, 0.38);
+  filter: brightness(1.1);
+}
+
+.comms-head-actions .btn,
+.comms-console .kiosk800-back {
+  border-radius: 999px;
 }
 
 .comms-color-label {
