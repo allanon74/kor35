@@ -12,14 +12,14 @@ import {
 } from '../../lib/pilotAlarmPreview';
 
 const ALLARMI = [
-  { id: 'giallo', label: 'Giallo — allerta', standard: 'Allarme Giallo. Condizione di allerta dell\'equipaggio.' },
-  { id: 'rosso', label: 'Rosso — combattimento', standard: 'Allarme Rosso. Tutti ai posti di combattimento. Questa non è un\'esercitazione.' },
-  { id: 'nero', label: 'Nero — esotico', standard: 'Allarme Nero. Sistema esotico in attivazione. Prepararsi a condizioni impreviste.' },
-  { id: 'blu', label: 'Blu — manovra', standard: 'Allarme Blu. Manovre atmosferiche in corso, prepararsi a scompensi nel volo.' },
-  { id: 'ambra', label: 'Ambra — riparazione', standard: 'Allarme Ambra. Squadra tecnica al sottosistema guasto.' },
-  { id: 'viola', label: 'Viola — invasione', standard: 'Allarme Viola. Sicurezza, intercettare gli invasori.' },
-  { id: 'bianco', label: 'Bianco — medico', standard: 'Allarme Bianco. Personale medico, pronto intervento.' },
-  { id: 'crociera', label: 'Verde — crociera', standard: 'Allarme Verde. Ripristino condizione di crociera. Nessun allarme attivo.' },
+  { id: 'giallo', label: 'Giallo — allerta', standard: 'Allarme Giallo. Condizione di allerta dell\'equipaggio.', ordine: 10 },
+  { id: 'rosso', label: 'Rosso — combattimento', standard: 'Allarme Rosso. Tutti ai posti di combattimento. Questa non è un\'esercitazione.', ordine: 20 },
+  { id: 'nero', label: 'Nero — esotico', standard: 'Allarme Nero. Sistema esotico in attivazione. Prepararsi a condizioni impreviste.', ordine: 30 },
+  { id: 'blu', label: 'Blu — manovra', standard: 'Allarme Blu. Manovre atmosferiche in corso, prepararsi a scompensi nel volo.', ordine: 40 },
+  { id: 'ambra', label: 'Ambra — riparazione', standard: 'Allarme Ambra. Squadra tecnica al sottosistema guasto.', ordine: 50 },
+  { id: 'viola', label: 'Viola — invasione', standard: 'Allarme Viola. Sicurezza, intercettare gli invasori.', ordine: 60 },
+  { id: 'bianco', label: 'Bianco — medico', standard: 'Allarme Bianco. Personale medico, pronto intervento.', ordine: 70 },
+  { id: 'crociera', label: 'Verde — crociera', standard: 'Allarme Verde. Ripristino condizione di crociera. Nessun allarme attivo.', ordine: 80 },
 ];
 
 function vuoto() {
@@ -28,6 +28,7 @@ function vuoto() {
     testo: '',
     korp: '',
     campione_url: '',
+    ordine: a.ordine,
   }]));
 }
 
@@ -63,11 +64,16 @@ export default function AllarmiStaffPanel({ onLogout }) {
     const next = vuoto();
     rows.forEach((row) => {
       if (!next[row.colore]) return;
+      const meta = ALLARMI.find((a) => a.id === row.colore);
+      const ordineRaw = Number(row.ordine);
       next[row.colore] = {
         testo_audio: row.testo_audio || '',
         testo: row.testo || '',
         korp: row.korp ? String(row.korp) : '',
         campione_url: row.campione_url || '',
+        ordine: Number.isFinite(ordineRaw) && ordineRaw > 0
+          ? ordineRaw
+          : (meta?.ordine ?? 0),
       };
     });
     setBozze(next);
@@ -135,11 +141,14 @@ export default function AllarmiStaffPanel({ onLogout }) {
   const salva = async (colore) => {
     setError('');
     setSalvo('');
-    const bozza = bozze[colore] || { testo_audio: '', testo: '', korp: '' };
+    const meta = ALLARMI.find((a) => a.id === colore);
+    const bozza = bozze[colore] || { testo_audio: '', testo: '', korp: '', ordine: meta?.ordine ?? 0 };
+    const ordineNum = Number(bozza.ordine);
     const payload = {
       testo_audio: bozza.testo_audio,
       testo: bozza.testo,
       korp: bozza.korp || null,
+      ordine: Number.isFinite(ordineNum) ? Math.max(0, Math.trunc(ordineNum)) : (meta?.ordine ?? 0),
       attivo: true,
     };
     const esistente = protocolli.find((row) => row.colore === colore);
@@ -194,6 +203,8 @@ export default function AllarmiStaffPanel({ onLogout }) {
           se non carichi nulla, quei cinque usano ancora il file statico
           {' '}/pilot/sounds/allarmi/&lt;colore&gt;.mp3 se è presente sul server.
           Ambra, viola e bianco restano solo voce finché non carichi un campione.
+          <strong className="font-semibold text-gray-300"> Ordine</strong> decide la posizione
+          del pulsante sulla console radio (numeri più bassi = più a sinistra / in alto).
           Usa <strong className="font-semibold text-gray-300">Anteprima</strong> per
           ascoltare campione + voce come sulla plancia (anche il file scelto ma non ancora salvato).
         </p>
@@ -202,12 +213,34 @@ export default function AllarmiStaffPanel({ onLogout }) {
       {dipartimenti.length === 0 ? (
         <p className="text-sm text-gray-500">Nessuna KORP. Creala in Carriere e KORP, poi assegna i personaggi.</p>
       ) : null}
-      {ALLARMI.map((allarme) => {
-        const bozza = bozze[allarme.id] || { testo_audio: '', testo: '', korp: '', campione_url: '' };
+      {[...ALLARMI]
+        .sort((a, b) => {
+          const oa = Number(bozze[a.id]?.ordine ?? a.ordine);
+          const ob = Number(bozze[b.id]?.ordine ?? b.ordine);
+          if (oa !== ob) return oa - ob;
+          return String(a.id).localeCompare(String(b.id));
+        })
+        .map((allarme) => {
+        const bozza = bozze[allarme.id] || {
+          testo_audio: '', testo: '', korp: '', campione_url: '', ordine: allarme.ordine,
+        };
         const isPreview = previewing === allarme.id;
         return (
           <div key={allarme.id} className="rounded-lg border border-gray-700 p-3 space-y-2">
-            <h4 className="text-sm font-semibold text-gray-100">{allarme.label}</h4>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold text-gray-100">{allarme.label}</h4>
+              <label className="flex items-center gap-2 text-xs text-gray-400">
+                Ordine layout
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  className="w-20 bg-gray-800 rounded px-2 py-1 text-sm text-gray-100 min-h-11"
+                  value={bozza.ordine}
+                  onChange={(e) => patch(allarme.id, 'ordine', e.target.value)}
+                />
+              </label>
+            </div>
             <p className="text-xs text-gray-500">Standard: {allarme.standard}</p>
             <div className="flex flex-col text-xs text-gray-400 gap-1">
               Campione audio

@@ -1,16 +1,31 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 
+/** Ordine di default se lo staff non ha ancora salvato un protocollo. */
 const COLORI = [
-  { id: 'giallo', label: 'Giallo', hint: 'Allerta', className: 'alarm-giallo' },
-  { id: 'rosso', label: 'Rosso', hint: 'Combattimento', className: 'alarm-rosso' },
-  { id: 'nero', label: 'Nero', hint: 'Esotico', className: 'alarm-nero' },
-  { id: 'blu', label: 'Blu', hint: 'Manovra', className: 'alarm-blu' },
-  { id: 'ambra', label: 'Ambra', hint: 'Riparazione', className: 'alarm-ambra' },
-  { id: 'viola', label: 'Viola', hint: 'Invasione', className: 'alarm-viola' },
-  { id: 'bianco', label: 'Bianco', hint: 'Medico', className: 'alarm-bianco' },
-  { id: 'crociera', label: 'Verde', hint: 'Crociera', className: 'alarm-verde' },
+  { id: 'giallo', label: 'Giallo', hint: 'Allerta', className: 'alarm-giallo', ordine: 10 },
+  { id: 'rosso', label: 'Rosso', hint: 'Combattimento', className: 'alarm-rosso', ordine: 20 },
+  { id: 'nero', label: 'Nero', hint: 'Esotico', className: 'alarm-nero', ordine: 30 },
+  { id: 'blu', label: 'Blu', hint: 'Manovra', className: 'alarm-blu', ordine: 40 },
+  { id: 'ambra', label: 'Ambra', hint: 'Riparazione', className: 'alarm-ambra', ordine: 50 },
+  { id: 'viola', label: 'Viola', hint: 'Invasione', className: 'alarm-viola', ordine: 60 },
+  { id: 'bianco', label: 'Bianco', hint: 'Medico', className: 'alarm-bianco', ordine: 70 },
+  { id: 'crociera', label: 'Verde', hint: 'Crociera', className: 'alarm-verde', ordine: 80 },
 ];
+
+function AlarmGlyph() {
+  return (
+    <svg className="comms-color-glyph" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <circle cx="32" cy="32" r="28" fill="rgba(0,0,0,0.22)" stroke="rgba(255,255,255,0.75)" strokeWidth="3" />
+      <path
+        d="M32 14c-7.2 0-13 5.8-13 13v8.2l-4.4 6.6c-.7 1-.1 2.4 1.1 2.4h32.6c1.2 0 1.8-1.4 1.1-2.4L46 35.2V27c0-7.2-5.8-13-13-13z"
+        fill="currentColor"
+        opacity="0.95"
+      />
+      <rect x="26" y="46" width="12" height="5" rx="2.5" fill="currentColor" />
+    </svg>
+  );
+}
 
 function secondiRimanenti(iso) {
   if (!iso) return null;
@@ -34,9 +49,9 @@ const PREVIEW_QUADRO = {
   },
   sottosistemi_guasti: ['Propulsore'],
   protocolli: [
-    { colore: 'ambra', dipartimento: 'Ingegneria', ha_testo: true },
-    { colore: 'viola', dipartimento: 'Sicurezza', ha_testo: true },
-    { colore: 'bianco', dipartimento: 'Medica', ha_testo: true },
+    { colore: 'ambra', dipartimento: 'Ingegneria', ha_testo: true, ordine: 50 },
+    { colore: 'viola', dipartimento: 'Sicurezza', ha_testo: true, ordine: 60 },
+    { colore: 'bianco', dipartimento: 'Medica', ha_testo: true, ordine: 70 },
   ],
 };
 
@@ -76,6 +91,19 @@ export default function ComunicazioniScreen({ onLogout, onBack, preview = false,
 
   const protocolli = quadro?.protocolli || [];
   const protocolloDi = (colore) => protocolli.find((p) => p.colore === colore);
+  const coloriOrdinati = useMemo(() => {
+    const ordineDi = (c) => {
+      const proto = protocolli.find((p) => p.colore === c.id);
+      const n = proto != null ? Number(proto.ordine) : NaN;
+      if (Number.isFinite(n) && n > 0) return n;
+      return c.ordine;
+    };
+    return COLORI.slice().sort((a, b) => {
+      const d = ordineDi(a) - ordineDi(b);
+      if (d !== 0) return d;
+      return String(a.id).localeCompare(String(b.id));
+    });
+  }, [protocolli]);
   const evento = quadro?.evento;
   const reazione = evento?.in_reazione ? secondiRimanenti(evento.reazione_fino_at) : null;
   void nowTick;
@@ -163,9 +191,10 @@ export default function ComunicazioniScreen({ onLogout, onBack, preview = false,
       </section>
 
       <div className="comms-grid" role="group" aria-label="Allarmi cromatici">
-        {COLORI.map((c) => {
+        {coloriOrdinati.map((c) => {
           const proto = protocolloDi(c.id);
           const attivo = quadro?.allarme === c.id;
+          const sotto = proto?.dipartimento || c.hint;
           return (
             <button
               key={c.id}
@@ -173,9 +202,11 @@ export default function ComunicazioniScreen({ onLogout, onBack, preview = false,
               className={`comms-color ${c.className} ${attivo ? 'active' : ''}`}
               disabled={busy}
               onClick={() => dichiara(c.id)}
+              aria-label={`Allarme ${c.label}${sotto ? `, ${sotto}` : ''}`}
             >
+              <AlarmGlyph />
               <span className="comms-color-label">{c.label}</span>
-              <span className="comms-color-hint">{proto?.dipartimento || c.hint}</span>
+              <span className="comms-color-hint">{sotto}</span>
             </button>
           );
         })}

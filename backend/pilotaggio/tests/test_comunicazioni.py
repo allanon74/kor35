@@ -340,6 +340,70 @@ class ComunicazioniAllarmeTests(TestCase):
             proto = ProtocolloComunicazione.objects.get(pk=proto_id)
             self.assertTrue(proto.campione.name.endswith("rosso.mp3"))
 
+    def test_quadro_espone_ordine_layout(self):
+        ProtocolloComunicazione.objects.filter(colore=ALLARME_EQUIPAGGIO_AMBRA).update(
+            ordine=5
+        )
+        ProtocolloComunicazione.objects.create(
+            colore=ALLARME_EQUIPAGGIO_ROSSO,
+            testo_audio="Rosso.",
+            ordine=90,
+            attivo=True,
+        )
+        res = self.client.get("/api/pilot/comunicazioni/quadro/")
+        self.assertEqual(res.status_code, 200, res.content)
+        by_colore = {row["colore"]: row for row in res.json()["protocolli"]}
+        self.assertEqual(by_colore[ALLARME_EQUIPAGGIO_AMBRA]["ordine"], 5)
+        self.assertEqual(by_colore[ALLARME_EQUIPAGGIO_ROSSO]["ordine"], 90)
+
+    def test_staff_salva_ordine_protocollo(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        staff = User.objects.create_user(
+            username="staff_ordine", password="x", is_staff=True, is_superuser=True
+        )
+        client = APIClient()
+        client.force_authenticate(user=staff)
+        proto = ProtocolloComunicazione.objects.get(colore=ALLARME_EQUIPAGGIO_AMBRA)
+        res = client.patch(
+            f"/api/pilot/staff/protocolli-comunicazione/{proto.pk}/",
+            {"ordine": 42},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(res.json()["ordine"], 42)
+        proto.refresh_from_db()
+        self.assertEqual(proto.ordine, 42)
+
+    def test_sync_serializza_campione_come_path(self):
+        """Config allarmi (incluso path audio) entra nel payload edge sync."""
+        from kor35.sync_tombstone import get_sync_model_registry
+        from kor35.syncing import serialize_for_sync
+
+        self.assertIn(
+            "pilotaggio.protocollocomunicazione",
+            get_sync_model_registry(),
+        )
+        media = tempfile.mkdtemp()
+        with override_settings(MEDIA_ROOT=media):
+            proto = ProtocolloComunicazione.objects.get(colore=ALLARME_EQUIPAGGIO_AMBRA)
+            proto.ordine = 33
+            audio = SimpleUploadedFile(
+                "sirena.mp3", b"ID3fake", content_type="audio/mpeg"
+            )
+            ser = ProtocolloComunicazioneSerializer(
+                proto, data={"campione": audio, "ordine": 33}, partial=True
+            )
+            self.assertTrue(ser.is_valid(), ser.errors)
+            ser.save()
+            proto.refresh_from_db()
+            row = serialize_for_sync(proto)
+            self.assertEqual(row["ordine"], 33)
+            self.assertEqual(row["campione"], "pilotaggio/allarmi/ambra.mp3")
+            self.assertTrue(row["sync_id"])
+            self.assertTrue(row["updated_at"])
+
     def test_senza_campione_lo_stato_non_ha_url(self):
         with patch("personaggi.notify.notify_users", return_value=0):
             res = self.client.post(
