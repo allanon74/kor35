@@ -1376,6 +1376,41 @@ class QrCodeDetailView(APIView):
         if risposta_contratto is not None:
             return risposta_contratto
 
+        # Pool QR randomico: priorità su negozio/carte/timer/trappola/serie/vista.
+        # Un QR aggiunto al pool deve estrarre effetti dal pool, anche se era
+        # collegato a un negozio mercante o ad altre associazioni.
+        from personaggi import qr_random_pool
+
+        scanner_pg_early = None
+        raw_pid_early = request.query_params.get("personaggio_id")
+        if raw_pid_early not in (None, ""):
+            try:
+                pid_early = int(raw_pid_early)
+            except (TypeError, ValueError):
+                pid_early = None
+            if pid_early is not None and request.user.is_authenticated:
+                scanner_pg_early = Personaggio.objects.filter(
+                    pk=pid_early, proprietario=request.user
+                ).first()
+        bypass_sid_early = request.query_params.get("minigioco_session_id")
+
+        if qr_random_pool.get_active_pool_for_qr(qr_code) is not None:
+            pool_result = qr_random_pool.handle_pool_qr_scan(
+                qr_code=qr_code,
+                personaggio=scanner_pg_early,
+                request=request,
+                bypass_session_id=bypass_sid_early,
+            )
+            if pool_result:
+                if pool_result.get("tipo_modello") == "minigioco_bloccato":
+                    return Response(pool_result, status=status.HTTP_200_OK)
+                if pool_result.get("blocked"):
+                    return Response(
+                        {"error": pool_result.get("error", "Accesso negato.")},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                return Response(pool_result, status=status.HTTP_200_OK)
+
         from personaggi.negozio_mercante_avista import negozio_da_vista_pk
         from personaggi.negozio_mercante_models import NegozioMercante
         from personaggi.negozio_mercante_service import build_listino
@@ -1552,23 +1587,7 @@ class QrCodeDetailView(APIView):
                 )
             return Response(serie_result, status=status.HTTP_200_OK)
 
-        # Pool QR randomico: ha priorità sul vista collegato
-        if qr_random_pool.get_active_pool_for_qr(qr_code) is not None:
-            pool_result = qr_random_pool.handle_pool_qr_scan(
-                qr_code=qr_code,
-                personaggio=scanner_pg,
-                request=request,
-                bypass_session_id=bypass_sid,
-            )
-            if pool_result:
-                if pool_result.get("tipo_modello") == "minigioco_bloccato":
-                    return Response(pool_result, status=status.HTTP_200_OK)
-                if pool_result.get("blocked"):
-                    return Response(
-                        {"error": pool_result.get("error", "Accesso negato.")},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                return Response(pool_result, status=status.HTTP_200_OK)
+        # Pool già gestito sopra (priorità su mercante/carte/timer/trappola/serie)
 
         vista_obj = qr_code.vista
         if vista_obj is None:

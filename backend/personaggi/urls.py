@@ -250,6 +250,26 @@ urlpatterns = [
         views_serie.SerieAssegnazioneTrasferisciView.as_view(),
         name='api_serie_trasferisci',
     ),
+    path(
+        'api/serie-inventario/<uuid:assegnazione_id>/',
+        views_serie.SerieAssegnazioneEliminaView.as_view(),
+        name='api_serie_elimina',
+    ),
+    path(
+        'api/archivio-documenti/salva/',
+        views_serie.DocumentoArchiviatoSalvaView.as_view(),
+        name='api_archivio_documenti_salva',
+    ),
+    path(
+        'api/archivio-documenti/<uuid:documento_id>/trasferisci/',
+        views_serie.DocumentoArchiviatoTrasferisciView.as_view(),
+        name='api_archivio_documenti_trasferisci',
+    ),
+    path(
+        'api/archivio-documenti/<uuid:documento_id>/',
+        views_serie.DocumentoArchiviatoEliminaView.as_view(),
+        name='api_archivio_documenti_elimina',
+    ),
     # --- Viste API Transazioni Avanzate ---
     path('api/transazioni/avanzata/', views.TransazioneAvanzataCreateView.as_view(), name='api_transazioni_avanzata_create'),
     path('api/transazioni/<int:pk>/', views.TransazioneDetailView.as_view(), name='api_transazioni_detail'),

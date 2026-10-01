@@ -157,6 +157,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
           : [],
         testo_condizionato: editingRow.testo_condizionato || '',
         condizioni_testo: editingRow.condizioni_testo || emptyCondizioni(),
+        non_salvabile: Boolean(editingRow.non_salvabile),
       };
     }
 
@@ -174,6 +175,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
       'condizioni_testo',
       JSON.stringify(editingRow.condizioni_testo || emptyCondizioni()),
     );
+    fd.append('non_salvabile', editingRow.non_salvabile ? 'true' : 'false');
     if (hasNewAudio) fd.append('audio_file', editingRow.audio_file);
     if (hasNewVideo) fd.append('video_file', editingRow.video_file);
     if (hasNewImmagine) fd.append('immagine_file', editingRow.immagine_file);
@@ -233,6 +235,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                   requisiti_lettura: [],
                   testo_condizionato: '',
                   condizioni_testo: emptyCondizioni(),
+                  non_salvabile: false,
                   audio_url: null,
                   video_url: null,
                   immagine_url: null,
@@ -353,6 +356,14 @@ const ManifestoManager = ({ onBack, onLogout }) => {
               value={editing.nome}
               onChange={(e) => setEditing({ ...editing, nome: e.target.value })}
             />
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={Boolean(editing.non_salvabile)}
+              onChange={(e) => setEditing({ ...editing, non_salvabile: e.target.checked })}
+            />
+            Non salvabile (il giocatore non può archiviare questo manifesto in Serie e testi)
           </label>
           <RichTextEditor
             label="Contenuto base"

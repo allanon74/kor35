@@ -1948,6 +1948,36 @@ export const trasferisciPezzoSerie = (assegnazioneId, personaggioId, destinatari
     },
     onLogout,
   );
+export const eliminaPezzoSerie = (assegnazioneId, personaggioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/serie-inventario/${assegnazioneId}/?personaggio_id=${encodeURIComponent(personaggioId)}`,
+    { method: 'DELETE' },
+    onLogout,
+  );
+export const salvaDocumentoArchivio = (data, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/archivio-documenti/salva/',
+    { method: 'POST', body: JSON.stringify(data) },
+    onLogout,
+  );
+export const trasferisciDocumentoArchivio = (documentoId, personaggioId, destinatarioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/archivio-documenti/${documentoId}/trasferisci/`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        personaggio_id: personaggioId,
+        destinatario_personaggio_id: destinatarioId,
+      }),
+    },
+    onLogout,
+  );
+export const eliminaDocumentoArchivio = (documentoId, personaggioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/archivio-documenti/${documentoId}/?personaggio_id=${encodeURIComponent(personaggioId)}`,
+    { method: 'DELETE' },
+    onLogout,
+  );
 export const staffUploadSerieImmagini = (serieId, formData, onLogout) =>
   fetchAuthenticated(
     `/api/personaggi/api/staff/serie-collezioni/${serieId}/immagini/`,

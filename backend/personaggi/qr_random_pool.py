@@ -49,6 +49,7 @@ class PoolMinigiocoConfigAdapter:
         self.tipi_abilitati = pool.minigioco_tipi_abilitati or []
         self.difficolta = int(pool.minigioco_difficolta or 4)
         self.difficolta_min = 1
+        self.pesi_difficolta = getattr(pool, "minigioco_pesi_difficolta", None) or {}
         self.requisiti_attivazione = pool.minigioco_requisiti_attivazione or []
         self.messaggio_accesso_negato = pool.minigioco_messaggio_accesso_negato or ""
         self.esclusioni_minigioco = pool.minigioco_esclusioni or []
@@ -526,6 +527,7 @@ def apply_pool_effect(
                 "nome": titolo,
                 "testo": effect.testo or "",
                 "puo_leggere": True,
+                "salvabile": True,
             },
         }
 
@@ -626,11 +628,44 @@ def apply_pool_effect(
                 "dati": {},
             }
         dati = qr_logic.risolvi_payload_manifesto(effect.manifesto, personaggio)
+        dati["non_salvabile"] = bool(getattr(effect.manifesto, "non_salvabile", False))
+        dati["salvabile"] = not dati["non_salvabile"]
         return {
             **base,
             "tipo_modello": "manifesto",
             "messaggio": dati.get("nome") or "Manifesto",
             "dati": dati,
+        }
+
+    if tipo == RandomQrPoolEffect.TIPO_NEGOZIO_MERCANTE:
+        if not effect.negozio_mercante_id:
+            return {
+                **base,
+                "tipo_modello": "pool_errore",
+                "messaggio": "Effetto negozio senza mercante collegato.",
+                "dati": {},
+            }
+        if not personaggio:
+            return {
+                "blocked": True,
+                "error": "Parametro personaggio_id richiesto per il negozio mercante.",
+            }
+        negozio = effect.negozio_mercante
+        if not negozio or not negozio.attivo:
+            return {
+                **base,
+                "tipo_modello": "pool_errore",
+                "messaggio": "Negozio mercante non disponibile.",
+                "dati": {},
+            }
+        from personaggi.negozio_mercante_service import build_listino
+
+        listino = build_listino(negozio, personaggio)
+        return {
+            **base,
+            "tipo_modello": "negozio_mercante",
+            "messaggio": listino.get("messaggio_accesso") or f"Negozio: {negozio.nome}",
+            "dati": listino,
         }
 
     if tipo == RandomQrPoolEffect.TIPO_OGGETTO_BASE:
@@ -765,6 +800,24 @@ def apply_pool_effect(
     }
 
 
+def _apply_pool_qr_cooldown(*, membership, pool):
+    """
+    Spegnimento QR fisico stilizzato come i nodi: range minuti sul pool → disponibile_dal.
+    Ritorna il datetime di riattivazione, o None se cooldown disattivo.
+    """
+    if not getattr(pool, "cooldown_attivo", False):
+        return None
+    cd_min = max(1, int(pool.cooldown_minuti_min or 5))
+    cd_max = max(cd_min, int(pool.cooldown_minuti_max or 25))
+    cd_minutes = random.randint(cd_min, cd_max)
+    now = timezone.now()
+    until = now + timedelta(minutes=cd_minutes)
+    membership.ultima_scansione_at = now
+    membership.disponibile_dal = until
+    membership.save(update_fields=["ultima_scansione_at", "disponibile_dal", "updated_at"])
+    return until
+
+
 def handle_pool_qr_scan(
     *,
     qr_code,
@@ -777,10 +830,28 @@ def handle_pool_qr_scan(
     Ritorna None se il QR non è in un pool (flusso legacy).
     """
     from . import qr_minigioco
+    from .models import RandomQrPoolClaim, RandomQrPoolMembership
 
-    pool = get_active_pool_for_qr(qr_code)
-    if not pool:
+    membership = get_pool_membership(qr_code)
+    if not membership or not membership.pool.attivo:
         return None
+    pool = membership.pool
+
+    # Spegnimento globale del QR fisico (prima del claim per-PG).
+    now = timezone.now()
+    if membership.disponibile_dal and now < membership.disponibile_dal:
+        rem = int((membership.disponibile_dal - now).total_seconds())
+        return {
+            "tipo_modello": "pool_cooldown",
+            "messaggio": "Questo QR è temporaneamente spento. Riprova più tardi.",
+            "dati": {
+                "pool_id": str(pool.pk),
+                "pool_nome": pool.nome,
+                "cooldown_until": membership.disponibile_dal,
+                "remaining_seconds": max(rem, 0),
+            },
+            "qrcode_id": qr_code.id,
+        }
 
     gate = qr_minigioco.check_gate_minigioco(
         qr_code=qr_code,
@@ -791,8 +862,6 @@ def handle_pool_qr_scan(
     )
     if gate:
         return gate
-
-    from .models import RandomQrPoolClaim
 
     # Anti-farm: un personaggio può ottenere un solo effetto da ciascun QR del pool.
     if personaggio is not None and RandomQrPoolClaim.objects.filter(
@@ -827,11 +896,23 @@ def handle_pool_qr_scan(
     if result.get("blocked"):
         return result
     if personaggio is not None and result.get("tipo_modello") != "pool_errore":
-        RandomQrPoolClaim.objects.get_or_create(
-            personaggio=personaggio,
-            qr_code=qr_code,
-            defaults={"pool": pool},
-        )
+        with transaction.atomic():
+            RandomQrPoolClaim.objects.get_or_create(
+                personaggio=personaggio,
+                qr_code=qr_code,
+                defaults={"pool": pool},
+            )
+            locked = (
+                RandomQrPoolMembership.objects.select_for_update()
+                .select_related("pool")
+                .get(pk=membership.pk)
+            )
+            until = _apply_pool_qr_cooldown(membership=locked, pool=locked.pool)
+            if until is not None:
+                result.setdefault("dati", {})
+                if isinstance(result.get("dati"), dict):
+                    result["dati"]["cooldown_until"] = until
+                    result["dati"]["pool_cooldown"] = True
     result.setdefault("qrcode_id", qr_code.id)
     return result
 
@@ -991,3 +1072,180 @@ def scollega_qr_da_serie_qr(serie_qr) -> None:
     if serie_qr.qr_code_id:
         serie_qr.qr_code = None
         serie_qr.save(update_fields=["qr_code", "updated_at"])
+
+
+def _media_relpath(field_file) -> str:
+    if not field_file:
+        return ""
+    try:
+        name = getattr(field_file, "name", None) or ""
+    except (ValueError, AttributeError):
+        return ""
+    return str(name)
+
+
+def serializza_documento_archiviato(doc, *, request=None) -> Dict[str, Any]:
+    """Payload lettura per «Serie e testi» (senza minigioco)."""
+
+    def _url(rel: str) -> Optional[str]:
+        if not rel:
+            return None
+        # Path relativo tipo /media/... per il frontend
+        if str(rel).startswith("/"):
+            return str(rel)
+        return f"/media/{rel.lstrip('/')}"
+
+    testo_cond = (doc.testo_condizionato or "").strip()
+    return {
+        "id": str(doc.pk),
+        "kind": "documento",
+        "tipo": doc.tipo,
+        "titolo": doc.titolo,
+        "etichetta": doc.titolo,
+        "testo": doc.testo or "",
+        "testo_condizionato": testo_cond or None,
+        "mostra_testo_condizionato": bool(testo_cond),
+        "immagine_url": _url(doc.immagine_path),
+        "audio_url": _url(doc.audio_path),
+        "video_url": _url(doc.video_path),
+        "puo_leggere": True,
+        "salvato_at": doc.salvato_at.isoformat() if doc.salvato_at else None,
+        "manifesto_id": doc.manifesto_id,
+        "personaggio_id": doc.personaggio_id,
+    }
+
+
+def salva_documento_da_scan(
+    *,
+    personaggio,
+    tipo: str,
+    titolo: str,
+    testo: str = "",
+    testo_condizionato: str = "",
+    manifesto=None,
+    immagine_url: str = "",
+    audio_url: str = "",
+    video_url: str = "",
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """
+    Archivia snapshot manifesto/testo nell'inventario «Serie e testi».
+    """
+    from .models import DocumentoArchiviato, Manifesto
+
+    tipo = (tipo or "").strip().lower()
+    if tipo not in (DocumentoArchiviato.TIPO_MANIFESTO, DocumentoArchiviato.TIPO_TESTO):
+        return None, "Tipo non valido (manifesto|testo)."
+    if personaggio is None:
+        return None, "Personaggio mancante."
+    titolo = (titolo or "").strip() or ("Manifesto" if tipo == "manifesto" else "Testo")
+    testo = testo or ""
+
+    if tipo == DocumentoArchiviato.TIPO_MANIFESTO:
+        if manifesto is not None and getattr(manifesto, "non_salvabile", False):
+            return None, "Questo manifesto non è salvabile."
+        if manifesto is None and not testo.strip():
+            return None, "Contenuto manifesto vuoto."
+
+    def _strip_media(url: str) -> str:
+        u = (url or "").strip()
+        if not u:
+            return ""
+        if u.startswith("/media/"):
+            return u[len("/media/") :]
+        if u.startswith("media/"):
+            return u[len("media/") :]
+        # Absolute URL → path after /media/
+        idx = u.find("/media/")
+        if idx >= 0:
+            return u[idx + len("/media/") :]
+        return u.lstrip("/")
+
+    img = _strip_media(immagine_url)
+    aud = _strip_media(audio_url)
+    vid = _strip_media(video_url)
+
+    if manifesto is not None and isinstance(manifesto, Manifesto):
+        if not img:
+            img = _media_relpath(getattr(manifesto, "immagine_file", None))
+        if not aud:
+            aud = _media_relpath(getattr(manifesto, "audio_file", None))
+        if not vid:
+            vid = _media_relpath(getattr(manifesto, "video_file", None))
+        if not testo and manifesto.testo:
+            testo = manifesto.testo
+
+    with transaction.atomic():
+        doc = DocumentoArchiviato.objects.create(
+            personaggio=personaggio,
+            tipo=tipo,
+            titolo=titolo[:200],
+            testo=testo,
+            testo_condizionato=testo_condizionato or "",
+            manifesto=manifesto if tipo == DocumentoArchiviato.TIPO_MANIFESTO else None,
+            immagine_path=img[:500],
+            audio_path=aud[:500],
+            video_path=vid[:500],
+        )
+    return serializza_documento_archiviato(doc), None
+
+
+def inventario_documenti_per_personaggio(personaggio, *, request=None) -> List[Dict[str, Any]]:
+    from .models import DocumentoArchiviato
+
+    qs = DocumentoArchiviato.objects.filter(personaggio=personaggio).order_by(
+        "-salvato_at", "-created_at"
+    )
+    return [serializza_documento_archiviato(d, request=request) for d in qs]
+
+
+def trasferisci_documento_archiviato(
+    *,
+    documento,
+    destinatario,
+    mittente=None,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    from .models import DocumentoArchiviato
+
+    if destinatario is None:
+        return None, "Destinatario mancante."
+    if mittente is not None and documento.personaggio_id != mittente.pk:
+        return None, "Questo documento non è nel tuo archivio."
+    if documento.personaggio_id == destinatario.pk:
+        return None, "Il documento è già di questo personaggio."
+
+    with transaction.atomic():
+        locked = DocumentoArchiviato.objects.select_for_update().get(pk=documento.pk)
+        if mittente is not None and locked.personaggio_id != mittente.pk:
+            return None, "Questo documento non è nel tuo archivio."
+        locked.personaggio = destinatario
+        locked.save(update_fields=["personaggio", "updated_at"])
+    locked.refresh_from_db()
+    return serializza_documento_archiviato(locked), None
+
+
+def elimina_documento_archiviato(*, documento, personaggio) -> Optional[str]:
+    if documento.personaggio_id != personaggio.pk:
+        return "Questo documento non è nel tuo archivio."
+    documento.delete()
+    return None
+
+
+def elimina_assegnazione_serie(*, assegnazione, personaggio) -> Optional[str]:
+    """Il giocatore elimina un pezzo serie dal proprio inventario."""
+    from .models import Oggetto, SerieAssegnazione
+
+    if assegnazione.personaggio_id != personaggio.pk:
+        return "Questo pezzo non è nel tuo inventario serie."
+    with transaction.atomic():
+        locked = (
+            SerieAssegnazione.objects.select_for_update(of=("self",))
+            .select_related("oggetto")
+            .get(pk=assegnazione.pk)
+        )
+        if locked.personaggio_id != personaggio.pk:
+            return "Questo pezzo non è nel tuo inventario serie."
+        oggetto_id = locked.oggetto_id
+        locked.delete()
+        if oggetto_id:
+            Oggetto.objects.filter(pk=oggetto_id).delete()
+    return None

@@ -1367,17 +1367,38 @@ class RandomQrPoolStaffViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         membership, created = RandomQrPoolMembership.objects.get_or_create(pool=pool, qr_code=qr)
-        warn = bool(qr.vista_id)
+        warn_vista = bool(qr.vista_id)
+        warn_mercante = False
+        try:
+            from personaggi.negozio_mercante_avista import negozio_da_vista_pk
+            from personaggi.negozio_mercante_models import NegozioMercante
+
+            if NegozioMercante.objects.filter(qr_code=qr).exists():
+                warn_mercante = True
+            elif qr.vista_id:
+                candidato = negozio_da_vista_pk(qr.vista_id)
+                warn_mercante = candidato is not None
+        except Exception:
+            warn_mercante = False
+
+        notes = []
+        if warn_mercante:
+            notes.append(
+                "era collegato a un negozio mercante; finché resta nel pool la scansione "
+                "estrae dal pool (il negozio non si apre da questo QR)"
+            )
+        elif warn_vista:
+            notes.append("ha già una vista collegata; il pool ha priorità alla scansione")
+        message = "QR aggiunto al pool."
+        if notes:
+            message = "QR aggiunto. Nota: " + "; ".join(notes) + "."
         return Response(
             {
                 "created": created,
                 "membership": RandomQrPoolMembershipStaffSerializer(membership).data,
-                "warning_has_vista": warn,
-                "message": (
-                    "QR aggiunto. Nota: ha già una vista collegata; il pool ha priorità alla scansione."
-                    if warn
-                    else "QR aggiunto al pool."
-                ),
+                "warning_has_vista": warn_vista,
+                "warning_has_negozio_mercante": warn_mercante,
+                "message": message,
             },
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
@@ -1416,6 +1437,7 @@ class RandomQrPoolEffectStaffViewSet(viewsets.ModelViewSet):
             "infusione",
             "cerimoniale",
             "attivata",
+            "negozio_mercante",
         ).order_by("ordine", "id")
         pool_id = self.request.query_params.get("pool")
         if pool_id:

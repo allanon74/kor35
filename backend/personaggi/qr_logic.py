@@ -112,6 +112,8 @@ def risolvi_payload_manifesto(manifesto, personaggio=None) -> Dict[str, Any]:
         "audio_url": None,
         "video_url": None,
         "immagine_url": None,
+        "non_salvabile": bool(getattr(manifesto, "non_salvabile", False)),
+        "salvabile": not bool(getattr(manifesto, "non_salvabile", False)),
     }
 
     def _attach_media(target: Dict[str, Any]) -> None:

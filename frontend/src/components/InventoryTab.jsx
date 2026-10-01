@@ -3,7 +3,7 @@ import { useCharacter } from './CharacterContext';
 import { 
     ShoppingBag, Box, Shield, Zap, Loader2, Wrench, 
     Info, ChevronUp, ChevronDown, Activity, Power, Battery, 
-    Clock, RefreshCw, Sparkles, Swords, Lock, User, Backpack, Weight, X, Trash2
+    Clock, RefreshCw, Sparkles, Swords, Lock, User, Backpack, Weight, X, Trash2, Layers
 } from 'lucide-react';
 import ShopModal from './ShopModal';
 import ItemAssemblyModal from './ItemAssemblyModal';
@@ -1118,11 +1118,9 @@ const InventoryTab = ({ onLogout }) => {
         heavyConsumers={heavyConsumers}
       />
 
-      <SerieInventarioPanel onLogout={onLogout} />
-
       <section>
         <h3 className="text-sm font-bold text-indigo-300 mb-3 flex items-center gap-2 uppercase tracking-wider pl-1"><Activity size={16} /> Diagnostica Corporea</h3>
-        <div className="flex gap-2 mb-3">
+        <div className="flex flex-wrap gap-2 mb-3">
             <button
                 type="button"
                 onClick={() => setBodyViewTab('physical')}
@@ -1137,7 +1135,19 @@ const InventoryTab = ({ onLogout }) => {
             >
                 Innesti e Mutazioni
             </button>
+            <button
+                type="button"
+                onClick={() => setBodyViewTab('serie')}
+                className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors inline-flex items-center gap-1.5 ${bodyViewTab === 'serie' ? 'bg-violet-700 border-violet-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'}`}
+            >
+                <Layers size={14} /> Serie e testi
+            </button>
         </div>
+        {bodyViewTab === 'serie' ? (
+            <div className="bg-gray-900/50 p-3 sm:p-4 rounded-xl border border-violet-900/40 mb-6">
+                <SerieInventarioPanel onLogout={onLogout} />
+            </div>
+        ) : null}
         {bodyViewTab === 'grafts' && corpoItems.length > 0 ? (
             <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-700 mb-6 flex flex-col md:flex-row items-center md:items-start gap-6">
                 <div className="w-full md:w-1/3 flex flex-col items-center">

@@ -570,3 +570,288 @@ class ManifestoCondizionaleEPoolLootTests(TestCase):
             self.assertEqual(oggetto.tipo_oggetto, "MOD")
         else:
             self.assertEqual(oggetto.tipo_oggetto, TIPO_OGGETTO_MATERIA)
+
+
+class RandomQrPoolPriorityAndCooldownTests(TestCase):
+    """Priorità pool su negozio mercante + spegnimento QR stile nodi."""
+
+    def setUp(self):
+        from decimal import Decimal
+
+        from personaggi.models import Campagna
+
+        self.campagna, _ = Campagna.objects.get_or_create(
+            slug="kor35",
+            defaults={
+                "nome": "KOR35",
+                "is_default": True,
+                "is_base": True,
+                "attiva": True,
+            },
+        )
+        self.user = User.objects.create_user(username="poolprio", password="pass")
+        self.pg = Personaggio.objects.create(
+            nome="PG Prio", proprietario=self.user, campagna=self.campagna
+        )
+        self.other = User.objects.create_user(username="poolprio2", password="pass")
+        self.pg2 = Personaggio.objects.create(
+            nome="PG Prio 2", proprietario=self.other, campagna=self.campagna
+        )
+        self.pool = RandomQrPool.objects.create(nome="Pool Prio", attivo=True)
+        self.qr = QrCode.objects.create()
+        self.membership = RandomQrPoolMembership.objects.create(
+            pool=self.pool, qr_code=self.qr
+        )
+        RandomQrPoolEffect.objects.create(
+            pool=self.pool,
+            tipo=RandomQrPoolEffect.TIPO_TESTO,
+            frequenza=1,
+            titolo="Dal pool",
+            testo="<p>effetto pool</p>",
+        )
+        from personaggi.negozio_mercante_models import NegozioMercante
+
+        self.negozio = NegozioMercante.objects.create(
+            nome="Banco test",
+            campagna=self.campagna,
+            saldo_crediti=Decimal("100"),
+            regole_apertura={"modalita": "sempre_aperto"},
+            qr_code=self.qr,
+            attivo=True,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_pool_has_priority_over_negozio_mercante(self):
+        with patch("personaggi.qr_random_pool.scegli_effetto") as mock_choose:
+            mock_choose.return_value = self.pool.effetti.first()
+            r = self.client.get(
+                f"/api/personaggi/api/qrcode/{self.qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+        self.assertEqual(r.status_code, 200, getattr(r, "data", r.content))
+        self.assertEqual(r.data["tipo_modello"], "pool_testo")
+        self.assertNotEqual(r.data["tipo_modello"], "negozio_mercante")
+
+    def test_cooldown_spegne_qr_per_tutti(self):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        self.pool.cooldown_attivo = True
+        self.pool.cooldown_minuti_min = 10
+        self.pool.cooldown_minuti_max = 10
+        self.pool.save(
+            update_fields=[
+                "cooldown_attivo",
+                "cooldown_minuti_min",
+                "cooldown_minuti_max",
+                "updated_at",
+            ]
+        )
+        with patch("personaggi.qr_random_pool.scegli_effetto") as mock_choose:
+            mock_choose.return_value = self.pool.effetti.first()
+            r1 = self.client.get(
+                f"/api/personaggi/api/qrcode/{self.qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r1.data["tipo_modello"], "pool_testo")
+        self.membership.refresh_from_db()
+        self.assertIsNotNone(self.membership.disponibile_dal)
+        self.assertGreater(self.membership.disponibile_dal, timezone.now())
+
+        client2 = APIClient()
+        client2.force_authenticate(self.other)
+        r2 = client2.get(
+            f"/api/personaggi/api/qrcode/{self.qr.id}/",
+            {"personaggio_id": self.pg2.id},
+        )
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.data["tipo_modello"], "pool_cooldown")
+        self.assertTrue(r2.data["dati"].get("remaining_seconds", 0) > 0)
+
+        # Fine cooldown: altro PG può usare (anti-farm è per PG, non globale)
+        self.membership.disponibile_dal = timezone.now() - timedelta(seconds=5)
+        self.membership.save(update_fields=["disponibile_dal", "updated_at"])
+        with patch("personaggi.qr_random_pool.scegli_effetto") as mock_choose:
+            mock_choose.return_value = self.pool.effetti.first()
+            r3 = client2.get(
+                f"/api/personaggi/api/qrcode/{self.qr.id}/",
+                {"personaggio_id": self.pg2.id},
+            )
+        self.assertEqual(r3.status_code, 200)
+        self.assertEqual(r3.data["tipo_modello"], "pool_testo")
+
+
+class RandomQrPoolMercanteEffectTests(TestCase):
+    """Effetto pool di tipo negozio mercante."""
+
+    def setUp(self):
+        from decimal import Decimal
+
+        from personaggi.models import Campagna
+        from personaggi.negozio_mercante_models import NegozioMercante
+
+        self.campagna, _ = Campagna.objects.get_or_create(
+            slug="kor35",
+            defaults={
+                "nome": "KOR35",
+                "is_default": True,
+                "is_base": True,
+                "attiva": True,
+            },
+        )
+        self.user = User.objects.create_user(username="poolmerc", password="pass")
+        self.pg = Personaggio.objects.create(
+            nome="PG Merc", proprietario=self.user, campagna=self.campagna
+        )
+        self.pool = RandomQrPool.objects.create(nome="Pool Merc", attivo=True)
+        self.qr = QrCode.objects.create()
+        RandomQrPoolMembership.objects.create(pool=self.pool, qr_code=self.qr)
+        self.negozio = NegozioMercante.objects.create(
+            nome="Banco pool",
+            campagna=self.campagna,
+            saldo_crediti=Decimal("100"),
+            regole_apertura={"modalita": "sempre_aperto"},
+            attivo=True,
+        )
+        self.eff = RandomQrPoolEffect.objects.create(
+            pool=self.pool,
+            tipo=RandomQrPoolEffect.TIPO_NEGOZIO_MERCANTE,
+            frequenza=1,
+            negozio_mercante=self.negozio,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_effetto_negozio_mercante(self):
+        with patch("personaggi.qr_random_pool.scegli_effetto", return_value=self.eff):
+            r = self.client.get(
+                f"/api/personaggi/api/qrcode/{self.qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+        self.assertEqual(r.status_code, 200, getattr(r, "data", r.content))
+        self.assertEqual(r.data["tipo_modello"], "negozio_mercante")
+        self.assertEqual(str(r.data["dati"].get("negozio_id")), str(self.negozio.pk))
+
+
+class ArchivioDocumentiTests(TestCase):
+    """Salva / trasferisci / elimina manifesto e testo in Serie e testi."""
+
+    def setUp(self):
+        from personaggi.models import Campagna, DocumentoArchiviato
+
+        self.DocumentoArchiviato = DocumentoArchiviato
+        self.campagna, _ = Campagna.objects.get_or_create(
+            slug="kor35",
+            defaults={
+                "nome": "KOR35",
+                "is_default": True,
+                "is_base": True,
+                "attiva": True,
+            },
+        )
+        self.user = User.objects.create_user(username="archuser", password="pass")
+        self.pg = Personaggio.objects.create(
+            nome="PG Arch", proprietario=self.user, campagna=self.campagna
+        )
+        self.other = User.objects.create_user(username="archuser2", password="pass")
+        self.pg2 = Personaggio.objects.create(
+            nome="PG Arch 2", proprietario=self.other, campagna=self.campagna
+        )
+        self.manifesto = Manifesto.objects.create(
+            nome="Avviso", testo="<p>Contenuto</p>", requisiti_lettura=[]
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_salva_manifesto_e_lista(self):
+        r = self.client.post(
+            "/api/personaggi/api/archivio-documenti/salva/",
+            {
+                "personaggio_id": self.pg.id,
+                "tipo": "manifesto",
+                "manifesto_id": self.manifesto.id,
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201, getattr(r, "data", r.content))
+        self.assertEqual(r.data["documento"]["tipo"], "manifesto")
+        inv = self.client.get(
+            "/api/personaggi/api/serie-inventario/",
+            {"personaggio_id": self.pg.id},
+        )
+        self.assertEqual(inv.status_code, 200)
+        self.assertEqual(len(inv.data.get("documenti") or []), 1)
+
+    def test_manifesto_non_salvabile(self):
+        self.manifesto.non_salvabile = True
+        self.manifesto.save(update_fields=["non_salvabile"])
+        r = self.client.post(
+            "/api/personaggi/api/archivio-documenti/salva/",
+            {
+                "personaggio_id": self.pg.id,
+                "tipo": "manifesto",
+                "manifesto_id": self.manifesto.id,
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_trasferisci_ed_elimina_testo(self):
+        r = self.client.post(
+            "/api/personaggi/api/archivio-documenti/salva/",
+            {
+                "personaggio_id": self.pg.id,
+                "tipo": "testo",
+                "titolo": "Nota",
+                "testo": "<p>Hello</p>",
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        doc_id = r.data["documento"]["id"]
+        tr = self.client.post(
+            f"/api/personaggi/api/archivio-documenti/{doc_id}/trasferisci/",
+            {
+                "personaggio_id": self.pg.id,
+                "destinatario_personaggio_id": self.pg2.id,
+            },
+            format="json",
+        )
+        self.assertEqual(tr.status_code, 200, getattr(tr, "data", tr.content))
+        self.assertEqual(
+            self.DocumentoArchiviato.objects.get(pk=doc_id).personaggio_id, self.pg2.id
+        )
+        client2 = APIClient()
+        client2.force_authenticate(self.other)
+        dele = client2.delete(
+            f"/api/personaggi/api/archivio-documenti/{doc_id}/?personaggio_id={self.pg2.id}",
+        )
+        self.assertEqual(dele.status_code, 200)
+        self.assertFalse(self.DocumentoArchiviato.objects.filter(pk=doc_id).exists())
+
+
+class MinigiocoPesiDifficoltaTests(TestCase):
+    def test_scegli_difficolta_da_pesi(self):
+        from personaggi import qr_minigioco
+        from personaggi.qr_random_pool import PoolMinigiocoConfigAdapter
+
+        pool = RandomQrPool.objects.create(
+            nome="Pool Diff",
+            attivo=True,
+            minigioco_pesi_difficolta={"1": 0, "2": 0, "3": 100, "4": 0},
+            minigioco_difficolta=1,
+        )
+        cfg = PoolMinigiocoConfigAdapter(pool)
+
+        class Rng:
+            def choices(self, population, weights=None, k=1):
+                # deve scegliere 3
+                for p, w in zip(population, weights or []):
+                    if w == 100:
+                        return [p]
+                return [population[0]]
+
+        d = qr_minigioco.scegli_difficolta_da_pesi(cfg, Rng())
+        self.assertEqual(d, 3)

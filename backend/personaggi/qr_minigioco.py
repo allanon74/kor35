@@ -636,6 +636,32 @@ def _base_diff_entry(entry, config) -> int:
         return difficolta_default(config)
 
 
+def _pesi_difficolta_list(config) -> list[int]:
+    """Pesi [d1,d2,d3,d4] da config.pesi_difficolta (JSON o dict)."""
+    raw = getattr(config, "pesi_difficolta", None) or {}
+    if not isinstance(raw, dict):
+        return [0, 0, 0, 0]
+    out = []
+    for d in (1, 2, 3, 4):
+        try:
+            w = int(raw.get(str(d), raw.get(d, 0)) or 0)
+        except (TypeError, ValueError):
+            w = 0
+        out.append(max(0, w))
+    return out
+
+
+def scegli_difficolta_da_pesi(config, rng) -> int:
+    """
+    Estrae difficoltà 1–4 dai pesi relativi sul pool/config.
+    Se tutti zero → fallback a difficolta_default (legacy).
+    """
+    weights = _pesi_difficolta_list(config)
+    if sum(weights) <= 0:
+        return difficolta_default(config)
+    return rng.choices([1, 2, 3, 4], weights=weights, k=1)[0]
+
+
 def difficolta_effettiva_massima(personaggio, config) -> int:
     """
     Massima difficoltà effettiva tra le opzioni giocabili (dopo regole + RDM).
@@ -652,6 +678,11 @@ def difficolta_effettiva_massima(personaggio, config) -> int:
                 risolvi_difficolta(personaggio, config, base=_base_diff_entry(e, config))
                 for e in entries
             )
+    weights = _pesi_difficolta_list(config)
+    if sum(weights) > 0:
+        bases = [d for d, w in zip((1, 2, 3, 4), weights) if w > 0]
+        if bases:
+            return max(risolvi_difficolta(personaggio, config, base=b) for b in bases)
     return risolvi_difficolta(personaggio, config)
 
 
@@ -689,10 +720,11 @@ def scegli_tipo_e_difficolta(config, seed: int, personaggio=None) -> Tuple[str, 
     if not pool:
         pool = list(MINIGIOCO_TIPI_SENZA_IMMAGINE)
     tipo = rng.choice(pool)
+    base_diff = scegli_difficolta_da_pesi(config, rng)
     if personaggio is not None:
-        difficolta = risolvi_difficolta(personaggio, config)
+        difficolta = risolvi_difficolta(personaggio, config, base=base_diff)
     else:
-        difficolta = difficolta_default(config)
+        difficolta = base_diff
     return tipo, difficolta
 
 
