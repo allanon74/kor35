@@ -300,6 +300,7 @@ def quadro_comunicazioni(sessione) -> Dict[str, Any]:
                 "etichetta": etichetta_colore(row.colore),
                 "dipartimento": row.korp.nome if row.korp_id else "",
                 "ha_testo": bool(str(row.testo or "").strip()),
+                "ordine": int(row.ordine or 0),
             }
         )
     guasti = []
