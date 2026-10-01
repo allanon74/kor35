@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
-import { QrCode, RefreshCw, Package } from 'lucide-react';
+import { Camera, QrCode, RefreshCw, Package } from 'lucide-react';
 import { StaffToolShell, StaffToolHeader, staffSecondaryBtnClass } from '../../staff/StaffToolShell';
 import { StaffModalTabs } from '../../staff/StaffCrudUi';
 import StaffEditorModal from './StaffEditorModal';
 import MasterGenericList from './MasterGenericList';
+import StaffQrTab from '../StaffQrTab';
 import {
   staffGetRandomQrPools,
   staffCreateRandomQrPool,
@@ -27,6 +28,9 @@ import {
 const emptyPool = () => ({
   nome: '',
   attivo: true,
+  cooldown_attivo: false,
+  cooldown_minuti_min: 5,
+  cooldown_minuti_max: 25,
   minigioco_sezione_attiva: false,
   minigioco_attivo: false,
   minigioco_difficolta: 4,
@@ -36,6 +40,31 @@ const emptyPool = () => ({
   minigioco_pattern: '',
 });
 
+const formFromPool = (p) => ({
+  nome: p?.nome || '',
+  attivo: !!p?.attivo,
+  cooldown_attivo: !!p?.cooldown_attivo,
+  cooldown_minuti_min: p?.cooldown_minuti_min ?? 5,
+  cooldown_minuti_max: p?.cooldown_minuti_max ?? 25,
+  minigioco_sezione_attiva: !!p?.minigioco_sezione_attiva,
+  minigioco_attivo: !!p?.minigioco_attivo,
+  minigioco_difficolta: p?.minigioco_difficolta ?? 4,
+  minigioco_messaggio_pre: p?.minigioco_messaggio_pre || '',
+  minigioco_messaggio_vittoria: p?.minigioco_messaggio_vittoria || '',
+  minigioco_modalita_sblocco: p?.minigioco_modalita_sblocco || 'permanente',
+  minigioco_pattern: p?.minigioco_pattern || '',
+});
+
+const membershipNote = (m) => {
+  const parts = [];
+  if (m.has_negozio_mercante) parts.push('negozio mercante');
+  else if (m.has_vista) parts.push('ha vista');
+  if (m.in_cooldown) {
+    const until = m.disponibile_dal ? new Date(m.disponibile_dal).toLocaleString() : '';
+    parts.push(until ? `spento fino ${until}` : 'in cooldown');
+  }
+  return parts.length ? parts.join(' · ') : '—';
+};
 const emptyEffect = () => ({
   tipo: 'testo',
   frequenza: 1,
@@ -109,6 +138,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
   const [modalTab, setModalTab] = useState('dati');
   const [effectForm, setEffectForm] = useState(emptyEffect());
   const [qrIdInput, setQrIdInput] = useState('');
+  const [scanningQr, setScanningQr] = useState(false);
   const [serieList, setSerieList] = useState([]);
   const [nodi, setNodi] = useState([]);
   const [patterns, setPatterns] = useState([]);
@@ -185,17 +215,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
 
   const openEditor = (p) => {
     if (p?.id) {
-      const next = {
-        nome: p.nome || '',
-        attivo: !!p.attivo,
-        minigioco_sezione_attiva: !!p.minigioco_sezione_attiva,
-        minigioco_attivo: !!p.minigioco_attivo,
-        minigioco_difficolta: p.minigioco_difficolta ?? 4,
-        minigioco_messaggio_pre: p.minigioco_messaggio_pre || '',
-        minigioco_messaggio_vittoria: p.minigioco_messaggio_vittoria || '',
-        minigioco_modalita_sblocco: p.minigioco_modalita_sblocco || 'permanente',
-        minigioco_pattern: p.minigioco_pattern || '',
-      };
+      const next = formFromPool(p);
       setSelectedId(p.id);
       setForm(next);
       setFormSnapshot(JSON.stringify(next));
@@ -209,6 +229,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
     }
     setEffectForm(emptyEffect());
     setQrIdInput('');
+    setScanningQr(false);
     setError('');
     setEditorOpen(true);
   };
@@ -218,6 +239,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
     setSelectedId(null);
     setForm(emptyPool());
     setFormSnapshot(null);
+    setScanningQr(false);
     setError('');
   };
 
@@ -241,17 +263,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
       const list = await reloadPools();
       const updated = list.find((p) => p.id === id);
       if (updated) {
-        const next = {
-          nome: updated.nome || '',
-          attivo: !!updated.attivo,
-          minigioco_sezione_attiva: !!updated.minigioco_sezione_attiva,
-          minigioco_attivo: !!updated.minigioco_attivo,
-          minigioco_difficolta: updated.minigioco_difficolta ?? 4,
-          minigioco_messaggio_pre: updated.minigioco_messaggio_pre || '',
-          minigioco_messaggio_vittoria: updated.minigioco_messaggio_vittoria || '',
-          minigioco_modalita_sblocco: updated.minigioco_modalita_sblocco || 'permanente',
-          minigioco_pattern: updated.minigioco_pattern || '',
-        };
+        const next = formFromPool(updated);
         setForm(next);
         setFormSnapshot(JSON.stringify(next));
       }
@@ -264,16 +276,18 @@ const RandomQrPoolManager = ({ onLogout }) => {
     }
   };
 
-  const addQr = async () => {
-    if (!selectedId || !qrIdInput.trim()) return;
+  const addQrById = async (rawId, { fromScan = false } = {}) => {
+    const qrId = (rawId || '').trim();
+    if (!selectedId || !qrId) return;
     try {
       setBusy(true);
       setError('');
-      const res = await staffRandomQrPoolAddQr(selectedId, qrIdInput.trim(), onLogout);
-      if (res?.warning_has_vista) {
-        setError(res.message || 'QR ha già una vista; il pool ha priorità.');
+      const res = await staffRandomQrPoolAddQr(selectedId, qrId, onLogout);
+      if (res?.warning_has_negozio_mercante || res?.warning_has_vista) {
+        setError(res.message || 'QR aggiunto con nota: il pool ha priorità alla scansione.');
       }
       setQrIdInput('');
+      if (fromScan) setScanningQr(false);
       await reloadPools();
     } catch (e) {
       setError(e.message || 'Associazione QR fallita');
@@ -282,6 +296,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
     }
   };
 
+  const addQr = async () => addQrById(qrIdInput);
   const removeQr = async (qrCodeId) => {
     try {
       setBusy(true);
@@ -428,6 +443,52 @@ const RandomQrPoolManager = ({ onLogout }) => {
                 Pool attivo
               </label>
               <div className="border border-gray-700 rounded-lg p-3 space-y-2">
+                <div className="text-xs uppercase text-gray-400">Spegnimento QR (stile nodi)</div>
+                <p className="text-[11px] text-gray-500 leading-snug">
+                  Dopo una scansione riuscita il QR fisico si spegne per tutti per un intervallo
+                  casuale (min–max). Separato dall&apos;anti-farm: ogni PG può comunque usare ogni QR
+                  una sola volta.
+                </p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.cooldown_attivo}
+                    onChange={(e) => setForm((f) => ({ ...f, cooldown_attivo: e.target.checked }))}
+                  />
+                  Attiva cooldown / spegnimento
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-xs text-gray-400">
+                    Minuti min
+                    <input
+                      type="number"
+                      min={1}
+                      className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
+                      value={form.cooldown_minuti_min}
+                      onChange={(e) => setForm((f) => ({
+                        ...f,
+                        cooldown_minuti_min: Number(e.target.value),
+                      }))}
+                      disabled={!form.cooldown_attivo}
+                    />
+                  </label>
+                  <label className="text-xs text-gray-400">
+                    Minuti max
+                    <input
+                      type="number"
+                      min={1}
+                      className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
+                      value={form.cooldown_minuti_max}
+                      onChange={(e) => setForm((f) => ({
+                        ...f,
+                        cooldown_minuti_max: Number(e.target.value),
+                      }))}
+                      disabled={!form.cooldown_attivo}
+                    />
+                  </label>
+                </div>
+              </div>
+              <div className="border border-gray-700 rounded-lg p-3 space-y-2">
                 <div className="text-xs uppercase text-gray-400">Minigioco a monte (tutti i QR del pool)</div>
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -446,18 +507,23 @@ const RandomQrPoolManager = ({ onLogout }) => {
                   Richiedi minigioco
                 </label>
                 <label className="block text-xs text-gray-400">
-                  Pattern estrazione
+                  Pattern estrazione minigioco
                   <select
                     className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm mt-0.5"
                     value={form.minigioco_pattern || ''}
                     onChange={(e) => setForm((f) => ({ ...f, minigioco_pattern: e.target.value }))}
                   >
-                    <option value="">— Legacy (tipi/diff sul pool) —</option>
+                    <option value="">— Senza pattern: tipi/difficoltà sul pool (legacy) —</option>
                     {patterns.map((p) => (
                       <option key={p.id} value={p.id}>{p.nome}</option>
                     ))}
                   </select>
                 </label>
+                <p className="text-[11px] text-gray-500 leading-snug">
+                  Controlla quale puzzle (tipo + difficoltà) viene estratto prima dell&apos;effetto,
+                  non la tabella effetti pesati del pool. I pattern si creano nel tool «Pattern
+                  minigioco». Legacy = usa la difficoltà sotto (e i tipi abilitati sul pool).
+                </p>
                 <div className="grid grid-cols-2 gap-2">
                   <label className="text-xs text-gray-400">
                     Difficoltà
@@ -510,19 +576,47 @@ const RandomQrPoolManager = ({ onLogout }) => {
                 </div>
               ) : (
                 <>
-                  <div className="flex gap-2">
+                  <p className="text-[11px] text-gray-500 leading-snug">
+                    Aggiungi i QR fisici del pool: incolla l&apos;ID oppure scansiona con la fotocamera.
+                    Se il QR era un negozio mercante, resta nel pool e alla scansione estrae gli effetti
+                    (il negozio non si apre finché è membership).
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input
-                      className="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm font-mono"
+                      className="flex-1 min-w-0 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm font-mono"
                       placeholder="ID QR fisico"
                       value={qrIdInput}
                       onChange={(e) => setQrIdInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addQr();
+                        }
+                      }}
                     />
-                    <button type="button" onClick={addQr} className="px-3 py-1.5 bg-emerald-700 rounded text-sm font-bold">
-                      Aggiungi
-                    </button>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={addQr}
+                        disabled={busy || !qrIdInput.trim()}
+                        className="flex-1 sm:flex-none px-3 py-1.5 bg-emerald-700 rounded text-sm font-bold disabled:opacity-50"
+                      >
+                        Aggiungi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setScanningQr(true)}
+                        disabled={busy}
+                        className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-sky-700 rounded text-sm font-bold disabled:opacity-50"
+                        title="Scansiona QR fisico"
+                      >
+                        <Camera size={16} />
+                        Scansiona
+                      </button>
+                    </div>
                   </div>
-                  <div className="rounded-lg border border-gray-700 overflow-hidden">
-                    <table className="w-full text-sm">
+                  <div className="rounded-lg border border-gray-700 overflow-x-auto">
+                    <table className="w-full text-sm min-w-[280px]">
                       <thead className="bg-gray-950 text-[10px] uppercase tracking-wider text-gray-500">
                         <tr>
                           <th className="text-left px-3 py-2">QR</th>
@@ -533,8 +627,10 @@ const RandomQrPoolManager = ({ onLogout }) => {
                       <tbody className="divide-y divide-gray-800">
                         {(selected?.memberships || []).map((m) => (
                           <tr key={m.id} className="bg-gray-900/40">
-                            <td className="px-3 py-2 font-mono text-xs">{m.qr_code_id || m.qr_code}</td>
-                            <td className="px-3 py-2 text-amber-400 text-xs">{m.has_vista ? 'ha vista' : '—'}</td>
+                            <td className="px-3 py-2 font-mono text-xs break-all">{m.qr_code_id || m.qr_code}</td>
+                            <td className={`px-3 py-2 text-xs ${m.in_cooldown || m.has_negozio_mercante ? 'text-amber-400' : 'text-gray-400'}`}>
+                              {membershipNote(m)}
+                            </td>
                             <td className="px-3 py-2 text-right">
                               <button
                                 type="button"
@@ -549,7 +645,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
                         {!(selected?.memberships || []).length && (
                           <tr>
                             <td colSpan={3} className="px-3 py-6 text-center text-gray-500 text-sm">
-                              Nessun QR. Aggiungine uno dal campo sopra.
+                              Nessun QR. Aggiungine uno dal campo o con Scansiona.
                             </td>
                           </tr>
                         )}
@@ -771,6 +867,31 @@ const RandomQrPoolManager = ({ onLogout }) => {
             </div>
           )}
         </StaffEditorModal>
+      )}
+
+      {scanningQr && (
+        <div className="fixed inset-0 z-[60] bg-black flex flex-col">
+          <div className="p-4 flex justify-between items-center gap-3 bg-gray-900 border-b border-gray-800">
+            <span className="font-bold text-white text-sm sm:text-base">
+              Scansiona QR da aggiungere al pool
+            </span>
+            <button
+              type="button"
+              onClick={() => setScanningQr(false)}
+              className="px-4 py-2 bg-red-600 rounded shrink-0"
+            >
+              Chiudi
+            </button>
+          </div>
+          <div className="flex-1 min-h-0">
+            <StaffQrTab
+              onLogout={onLogout}
+              onScanSuccess={async (qr_id) => {
+                await addQrById(qr_id, { fromScan: true });
+              }}
+            />
+          </div>
+        </div>
       )}
     </StaffToolShell>
   );

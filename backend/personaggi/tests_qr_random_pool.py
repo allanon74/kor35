@@ -570,3 +570,114 @@ class ManifestoCondizionaleEPoolLootTests(TestCase):
             self.assertEqual(oggetto.tipo_oggetto, "MOD")
         else:
             self.assertEqual(oggetto.tipo_oggetto, TIPO_OGGETTO_MATERIA)
+
+
+class RandomQrPoolPriorityAndCooldownTests(TestCase):
+    """Priorità pool su negozio mercante + spegnimento QR stile nodi."""
+
+    def setUp(self):
+        from decimal import Decimal
+
+        from personaggi.models import Campagna
+
+        self.campagna, _ = Campagna.objects.get_or_create(
+            slug="kor35",
+            defaults={
+                "nome": "KOR35",
+                "is_default": True,
+                "is_base": True,
+                "attiva": True,
+            },
+        )
+        self.user = User.objects.create_user(username="poolprio", password="pass")
+        self.pg = Personaggio.objects.create(
+            nome="PG Prio", proprietario=self.user, campagna=self.campagna
+        )
+        self.other = User.objects.create_user(username="poolprio2", password="pass")
+        self.pg2 = Personaggio.objects.create(
+            nome="PG Prio 2", proprietario=self.other, campagna=self.campagna
+        )
+        self.pool = RandomQrPool.objects.create(nome="Pool Prio", attivo=True)
+        self.qr = QrCode.objects.create()
+        self.membership = RandomQrPoolMembership.objects.create(
+            pool=self.pool, qr_code=self.qr
+        )
+        RandomQrPoolEffect.objects.create(
+            pool=self.pool,
+            tipo=RandomQrPoolEffect.TIPO_TESTO,
+            frequenza=1,
+            titolo="Dal pool",
+            testo="<p>effetto pool</p>",
+        )
+        from personaggi.negozio_mercante_models import NegozioMercante
+
+        self.negozio = NegozioMercante.objects.create(
+            nome="Banco test",
+            campagna=self.campagna,
+            saldo_crediti=Decimal("100"),
+            regole_apertura={"modalita": "sempre_aperto"},
+            qr_code=self.qr,
+            attivo=True,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_pool_has_priority_over_negozio_mercante(self):
+        with patch("personaggi.qr_random_pool.scegli_effetto") as mock_choose:
+            mock_choose.return_value = self.pool.effetti.first()
+            r = self.client.get(
+                f"/api/personaggi/api/qrcode/{self.qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+        self.assertEqual(r.status_code, 200, getattr(r, "data", r.content))
+        self.assertEqual(r.data["tipo_modello"], "pool_testo")
+        self.assertNotEqual(r.data["tipo_modello"], "negozio_mercante")
+
+    def test_cooldown_spegne_qr_per_tutti(self):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        self.pool.cooldown_attivo = True
+        self.pool.cooldown_minuti_min = 10
+        self.pool.cooldown_minuti_max = 10
+        self.pool.save(
+            update_fields=[
+                "cooldown_attivo",
+                "cooldown_minuti_min",
+                "cooldown_minuti_max",
+                "updated_at",
+            ]
+        )
+        with patch("personaggi.qr_random_pool.scegli_effetto") as mock_choose:
+            mock_choose.return_value = self.pool.effetti.first()
+            r1 = self.client.get(
+                f"/api/personaggi/api/qrcode/{self.qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r1.data["tipo_modello"], "pool_testo")
+        self.membership.refresh_from_db()
+        self.assertIsNotNone(self.membership.disponibile_dal)
+        self.assertGreater(self.membership.disponibile_dal, timezone.now())
+
+        client2 = APIClient()
+        client2.force_authenticate(self.other)
+        r2 = client2.get(
+            f"/api/personaggi/api/qrcode/{self.qr.id}/",
+            {"personaggio_id": self.pg2.id},
+        )
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.data["tipo_modello"], "pool_cooldown")
+        self.assertTrue(r2.data["dati"].get("remaining_seconds", 0) > 0)
+
+        # Fine cooldown: altro PG può usare (anti-farm è per PG, non globale)
+        self.membership.disponibile_dal = timezone.now() - timedelta(seconds=5)
+        self.membership.save(update_fields=["disponibile_dal", "updated_at"])
+        with patch("personaggi.qr_random_pool.scegli_effetto") as mock_choose:
+            mock_choose.return_value = self.pool.effetti.first()
+            r3 = client2.get(
+                f"/api/personaggi/api/qrcode/{self.qr.id}/",
+                {"personaggio_id": self.pg2.id},
+            )
+        self.assertEqual(r3.status_code, 200)
+        self.assertEqual(r3.data["tipo_modello"], "pool_testo")

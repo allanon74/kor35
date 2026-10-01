@@ -2766,14 +2766,47 @@ class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
 class RandomQrPoolMembershipStaffSerializer(serializers.ModelSerializer):
     qr_code_id = serializers.CharField(source="qr_code.id", read_only=True)
     has_vista = serializers.SerializerMethodField()
+    has_negozio_mercante = serializers.SerializerMethodField()
+    in_cooldown = serializers.SerializerMethodField()
 
     class Meta:
         model = RandomQrPoolMembership
-        fields = ("id", "pool", "qr_code", "qr_code_id", "has_vista", "created_at")
-        read_only_fields = ("id", "created_at")
+        fields = (
+            "id",
+            "pool",
+            "qr_code",
+            "qr_code_id",
+            "has_vista",
+            "has_negozio_mercante",
+            "disponibile_dal",
+            "ultima_scansione_at",
+            "in_cooldown",
+            "created_at",
+        )
+        read_only_fields = ("id", "created_at", "disponibile_dal", "ultima_scansione_at")
 
     def get_has_vista(self, obj):
         return bool(getattr(obj.qr_code, "vista_id", None))
+
+    def get_has_negozio_mercante(self, obj):
+        from .negozio_mercante_avista import negozio_da_vista_pk
+        from .negozio_mercante_models import NegozioMercante
+
+        qr = obj.qr_code
+        if NegozioMercante.objects.filter(qr_code=qr).exists():
+            return True
+        if qr.vista_id:
+            candidato = negozio_da_vista_pk(qr.vista_id)
+            if candidato is not None:
+                return True
+        return False
+
+    def get_in_cooldown(self, obj):
+        from django.utils import timezone
+
+        if not obj.disponibile_dal:
+            return False
+        return obj.disponibile_dal > timezone.now()
 
 
 class RandomQrPoolStaffSerializer(serializers.ModelSerializer):
@@ -2794,6 +2827,9 @@ class RandomQrPoolStaffSerializer(serializers.ModelSerializer):
             "effetti_count",
             "effetti",
             "memberships",
+            "cooldown_attivo",
+            "cooldown_minuti_min",
+            "cooldown_minuti_max",
             "minigioco_sezione_attiva",
             "minigioco_attivo",
             "minigioco_tipi_abilitati",
@@ -2814,6 +2850,29 @@ class RandomQrPoolStaffSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = ("campagna", "created_at", "updated_at")
+
+    def validate(self, attrs):
+        attivo = attrs.get("cooldown_attivo")
+        if attivo is None and self.instance is not None:
+            attivo = self.instance.cooldown_attivo
+        if attivo:
+            cd_min = attrs.get("cooldown_minuti_min")
+            if cd_min is None and self.instance is not None:
+                cd_min = self.instance.cooldown_minuti_min
+            cd_max = attrs.get("cooldown_minuti_max")
+            if cd_max is None and self.instance is not None:
+                cd_max = self.instance.cooldown_minuti_max
+            cd_min = int(cd_min or 0)
+            cd_max = int(cd_max or 0)
+            if cd_min < 1:
+                raise serializers.ValidationError(
+                    {"cooldown_minuti_min": "Con cooldown attivo il minimo deve essere almeno 1."}
+                )
+            if cd_max < cd_min:
+                raise serializers.ValidationError(
+                    {"cooldown_minuti_max": "Deve essere >= cooldown minimo."}
+                )
+        return attrs
 
     def get_qr_count(self, obj):
         return obj.memberships.count()

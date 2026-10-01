@@ -765,6 +765,24 @@ def apply_pool_effect(
     }
 
 
+def _apply_pool_qr_cooldown(*, membership, pool):
+    """
+    Spegnimento QR fisico stilizzato come i nodi: range minuti sul pool → disponibile_dal.
+    Ritorna il datetime di riattivazione, o None se cooldown disattivo.
+    """
+    if not getattr(pool, "cooldown_attivo", False):
+        return None
+    cd_min = max(1, int(pool.cooldown_minuti_min or 5))
+    cd_max = max(cd_min, int(pool.cooldown_minuti_max or 25))
+    cd_minutes = random.randint(cd_min, cd_max)
+    now = timezone.now()
+    until = now + timedelta(minutes=cd_minutes)
+    membership.ultima_scansione_at = now
+    membership.disponibile_dal = until
+    membership.save(update_fields=["ultima_scansione_at", "disponibile_dal", "updated_at"])
+    return until
+
+
 def handle_pool_qr_scan(
     *,
     qr_code,
@@ -777,10 +795,28 @@ def handle_pool_qr_scan(
     Ritorna None se il QR non è in un pool (flusso legacy).
     """
     from . import qr_minigioco
+    from .models import RandomQrPoolClaim, RandomQrPoolMembership
 
-    pool = get_active_pool_for_qr(qr_code)
-    if not pool:
+    membership = get_pool_membership(qr_code)
+    if not membership or not membership.pool.attivo:
         return None
+    pool = membership.pool
+
+    # Spegnimento globale del QR fisico (prima del claim per-PG).
+    now = timezone.now()
+    if membership.disponibile_dal and now < membership.disponibile_dal:
+        rem = int((membership.disponibile_dal - now).total_seconds())
+        return {
+            "tipo_modello": "pool_cooldown",
+            "messaggio": "Questo QR è temporaneamente spento. Riprova più tardi.",
+            "dati": {
+                "pool_id": str(pool.pk),
+                "pool_nome": pool.nome,
+                "cooldown_until": membership.disponibile_dal,
+                "remaining_seconds": max(rem, 0),
+            },
+            "qrcode_id": qr_code.id,
+        }
 
     gate = qr_minigioco.check_gate_minigioco(
         qr_code=qr_code,
@@ -791,8 +827,6 @@ def handle_pool_qr_scan(
     )
     if gate:
         return gate
-
-    from .models import RandomQrPoolClaim
 
     # Anti-farm: un personaggio può ottenere un solo effetto da ciascun QR del pool.
     if personaggio is not None and RandomQrPoolClaim.objects.filter(
@@ -827,11 +861,23 @@ def handle_pool_qr_scan(
     if result.get("blocked"):
         return result
     if personaggio is not None and result.get("tipo_modello") != "pool_errore":
-        RandomQrPoolClaim.objects.get_or_create(
-            personaggio=personaggio,
-            qr_code=qr_code,
-            defaults={"pool": pool},
-        )
+        with transaction.atomic():
+            RandomQrPoolClaim.objects.get_or_create(
+                personaggio=personaggio,
+                qr_code=qr_code,
+                defaults={"pool": pool},
+            )
+            locked = (
+                RandomQrPoolMembership.objects.select_for_update()
+                .select_related("pool")
+                .get(pk=membership.pk)
+            )
+            until = _apply_pool_qr_cooldown(membership=locked, pool=locked.pool)
+            if until is not None:
+                result.setdefault("dati", {})
+                if isinstance(result.get("dati"), dict):
+                    result["dati"]["cooldown_until"] = until
+                    result["dati"]["pool_cooldown"] = True
     result.setdefault("qrcode_id", qr_code.id)
     return result
 

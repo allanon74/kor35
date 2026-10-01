@@ -1315,6 +1315,21 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
           </div>
         );
 
+      case 'pool_cooldown':
+        return (
+          <div className="text-center py-8">
+            <h3 className="text-2xl font-bold text-amber-300 mb-2">QR spento</h3>
+            <p className="text-gray-300">
+              {data.messaggio || 'Questo QR è temporaneamente spento. Riprova più tardi.'}
+            </p>
+            {data.dati?.cooldown_until ? (
+              <p className="text-xs text-gray-500 mt-3">
+                Disponibile da {new Date(data.dati.cooldown_until).toLocaleString()}
+              </p>
+            ) : null}
+          </div>
+        );
+
       case 'nodo':
         return (
           <div className="text-center py-8">

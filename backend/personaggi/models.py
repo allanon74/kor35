@@ -5107,7 +5107,28 @@ class RandomQrPool(SyncableModel, models.Model):
         null=True,
         blank=True,
         related_name="random_qr_pools",
-        help_text="Pattern estrazione minigioco a monte del pool (override per-QR via MinigiocoQrConfig).",
+        help_text=(
+            "Pattern estrazione minigioco a monte del pool (quale tipo/difficoltà di puzzle "
+            "giocare prima dell'effetto). Non riguarda la tabella effetti pesati. "
+            "Vuoto = legacy: tipi abilitati + difficoltà sul pool. Override per-QR via MinigiocoQrConfig."
+        ),
+    )
+
+    # Spegnimento QR fisico dopo scansione riuscita (stile nodi)
+    cooldown_attivo = models.BooleanField(
+        default=False,
+        help_text=(
+            "Se True, dopo una scansione riuscita il QR fisico del pool si spegne per tutti "
+            "fino a disponibile_dal (range minuti sotto). Indipendente dall'anti-farm per PG."
+        ),
+    )
+    cooldown_minuti_min = models.PositiveSmallIntegerField(
+        default=5,
+        help_text="Cooldown minimo (minuti) di spegnimento QR dopo scansione (se cooldown attivo).",
+    )
+    cooldown_minuti_max = models.PositiveSmallIntegerField(
+        default=25,
+        help_text="Cooldown massimo (minuti) di spegnimento QR dopo scansione (se cooldown attivo).",
     )
 
     class Meta:
@@ -5117,6 +5138,19 @@ class RandomQrPool(SyncableModel, models.Model):
 
     def __str__(self):
         return self.nome
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if self.cooldown_attivo:
+            if int(self.cooldown_minuti_min or 0) < 1:
+                raise ValidationError(
+                    {"cooldown_minuti_min": "Con cooldown attivo il minimo deve essere almeno 1."}
+                )
+            if int(self.cooldown_minuti_max or 0) < int(self.cooldown_minuti_min or 0):
+                raise ValidationError(
+                    {"cooldown_minuti_max": "cooldown_minuti_max deve essere >= cooldown_minuti_min."}
+                )
 
 
 class RandomQrPoolMembership(SyncableModel, models.Model):
@@ -5134,6 +5168,13 @@ class RandomQrPoolMembership(SyncableModel, models.Model):
         on_delete=models.CASCADE,
         related_name="random_pool_membership",
     )
+    disponibile_dal = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Se valorizzato e nel futuro, il QR è spento (cooldown pool) per tutti.",
+    )
+    ultima_scansione_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Membership pool QR"
