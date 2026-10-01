@@ -826,8 +826,7 @@ class ArchivioDocumentiTests(TestCase):
         client2 = APIClient()
         client2.force_authenticate(self.other)
         dele = client2.delete(
-            f"/api/personaggi/api/archivio-documenti/{doc_id}/",
-            {"personaggio_id": self.pg2.id},
+            f"/api/personaggi/api/archivio-documenti/{doc_id}/?personaggio_id={self.pg2.id}",
         )
         self.assertEqual(dele.status_code, 200)
         self.assertFalse(self.DocumentoArchiviato.objects.filter(pk=doc_id).exists())
