@@ -9,8 +9,8 @@ User=__KIOSK_USER__
 Group=__KIOSK_USER__
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/__KIOSK_USER__/.Xauthority
+Environment=XDG_RUNTIME_DIR=/run/user/%U
 EnvironmentFile=-/etc/kor35/kiosk-station.env
-ExecStartPre=/bin/sleep 8
 ExecStart=/usr/local/bin/kiosk-station.sh
 Restart=on-failure
 RestartSec=8
