@@ -147,7 +147,7 @@ const PersonaggiEliminatiManager = ({ onLogout }) => {
 
       {confirm && (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[70] overflow-y-auto overscroll-contain flex items-end sm:items-center justify-center bg-black/75 p-0 sm:p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
         >

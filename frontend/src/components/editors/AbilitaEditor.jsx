@@ -1226,7 +1226,7 @@ function FormulaRuleModal({ open, onClose, onSave, punteggi, semanticMattoniOpti
     const previewText = buildFormulaRulePreview(draft, punteggi);
 
     return (
-        <div className="fixed inset-0 z-10000 bg-black/70 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[10000] overflow-y-auto overscroll-contain bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4">
             <div className="w-full max-w-2xl bg-gray-900 border border-gray-700 rounded-xl shadow-2xl">
                 <div className="p-4 border-b border-gray-700 flex justify-between items-center">
                     <h3 className="text-white font-bold">Nuova regola semantica</h3>

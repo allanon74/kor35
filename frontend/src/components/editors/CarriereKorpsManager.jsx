@@ -107,7 +107,7 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="w-full max-w-xl bg-gray-900 border border-gray-700 rounded-xl">
         <div className="p-4 border-b border-gray-700 flex justify-between items-center">
           <h3 className="text-lg font-bold text-white">{form?.id ? 'Modifica' : 'Nuova'} carriera</h3>
@@ -321,7 +321,7 @@ function CaricaModal({ isOpen, onClose, onSave, value, carriereOptions, statusMe
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="w-full max-w-lg bg-gray-900 border border-gray-700 rounded-xl max-h-[90vh] overflow-y-auto">
         <div className="p-4 border-b border-gray-700 flex justify-between">
           <h3 className="text-lg font-bold text-white">{form?.id ? 'Modifica' : 'Nuova'} carica</h3>
@@ -476,7 +476,7 @@ function MembershipModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="w-full max-w-xl bg-gray-900 border border-gray-700 rounded-xl max-h-[90vh] overflow-y-auto">
         <div className="p-4 border-b border-gray-700 flex justify-between">
           <h3 className="text-lg font-bold text-white">{form?.id ? 'Modifica' : 'Nuova'} appartenenza</h3>

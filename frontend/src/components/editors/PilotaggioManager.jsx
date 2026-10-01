@@ -2645,7 +2645,7 @@ export default function PilotaggioManager({ onLogout }) {
 
       {editEventoId ? (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
           role="presentation"
           onClick={closeEditEventoModal}
         >
@@ -2970,7 +2970,7 @@ export default function PilotaggioManager({ onLogout }) {
 
       {createEventoModalOpen ? (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
           role="presentation"
           onClick={closeCreateEventoModal}
         >

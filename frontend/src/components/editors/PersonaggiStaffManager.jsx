@@ -723,7 +723,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
       </div>
 
       {selected && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-2 md:p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="w-full max-w-5xl max-h-[95vh] bg-gray-900 border border-gray-700 rounded-xl flex flex-col">
             <div className="p-4 border-b border-gray-700 flex justify-between items-start gap-3">
               <div>

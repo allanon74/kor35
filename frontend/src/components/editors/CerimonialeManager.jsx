@@ -6,7 +6,7 @@ import { associaQrDiretto, staffGetCerimonialeDetail } from '../../api';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
-import { StaffToolShell } from '../../staff/StaffToolShell';
+import { StaffToolShell, scrollStaffMainToTop } from '../../staff/StaffToolShell';
 
 const CerimonialeManager = ({ onBack, onLogout }) => {
   const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
@@ -21,6 +21,7 @@ const CerimonialeManager = ({ onBack, onLogout }) => {
   const handleAdd = useCallback(() => {
     setEditingItem(null);
     setView('edit');
+    scrollStaffMainToTop();
   }, []);
 
   const handleEdit = useCallback(async (item) => {
@@ -29,6 +30,7 @@ const CerimonialeManager = ({ onBack, onLogout }) => {
       const fullItem = await staffGetCerimonialeDetail(item.id, onLogout);
       setEditingItem(fullItem || item);
       setView('edit');
+      scrollStaffMainToTop();
     } catch (error) {
       setQrStatus({ type: 'error', message: `Errore caricamento cerimoniale: ${error.message || 'Errore sconosciuto'}` });
     } finally {

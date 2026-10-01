@@ -59,4 +59,23 @@ describe('StaffEditorHeader', () => {
     expect(staffEditorShellClass).not.toContain('max-h-');
     expect(staffEditorShellClass).not.toContain('overflow-y-auto');
   });
+
+  it('all\'apertura riporta lo scroll del main staff in cima', () => {
+    const main = document.createElement('main');
+    main.setAttribute('data-staff-main', '');
+    main.className = 'overflow-y-auto';
+    Object.defineProperty(main, 'scrollTop', { value: 420, writable: true });
+    document.body.appendChild(main);
+
+    const { unmount } = mount(
+      createElement(StaffEditorHeader, {
+        title: 'Editing: prova',
+        actions: createElement('button', { type: 'button' }, 'Salva'),
+      }),
+    );
+
+    expect(main.scrollTop).toBe(0);
+    unmount();
+    main.remove();
+  });
 });

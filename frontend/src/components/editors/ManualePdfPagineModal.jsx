@@ -122,7 +122,7 @@ const ManualePdfPagineModal = ({ manuale, onClose, onSaved, onLogout }) => {
   if (!manuale) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70">
       <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl">
         <div className="flex items-start justify-between gap-4 p-4 border-b border-gray-800">
           <div>
