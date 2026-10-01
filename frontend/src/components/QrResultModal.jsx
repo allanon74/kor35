@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft, Wrench, CheckCircle2, AlertTriangle, Zap, BatteryCharging, Package, Volume2 } from 'lucide-react';
-import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvanzata, resolveMediaUrl } from '../api'; 
+import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvanzata, resolveMediaUrl, salvaDocumentoArchivio } from '../api'; 
 import { useCharacter } from './CharacterContext';
 import { useTimers } from '../hooks/useTimers';
 import PropostaEditorModal from './PropostaEditorModal';
 import RichHtml from './RichHtml';
+import { emitToast } from '../utils/toastBus';
 
 const PersonaggioDuelloQrView = React.lazy(() => import('./PersonaggioDuelloQrView'));
 import ComponentiRiparazionePicker, {
@@ -181,7 +182,19 @@ const manifestoHasVisibleText = (html) => {
   return plain.length > 0;
 };
 
-const ManifestoView = ({ data }) => {
+const SalvaInArchivioButton = ({ disabled, onClick, busy }) => (
+  <button
+    type="button"
+    disabled={disabled || busy}
+    onClick={onClick}
+    className="mt-4 w-full sm:w-auto px-4 py-2 rounded-lg bg-violet-700 hover:bg-violet-600 disabled:opacity-50 font-bold text-sm"
+  >
+    {busy ? 'Salvataggio…' : 'Salva in Serie e testi'}
+  </button>
+);
+
+const ManifestoView = ({ data, onSalva, canSalva }) => {
+  const [busy, setBusy] = useState(false);
   const canRead = data.puo_leggere !== false;
   const blockMsg = data.messaggio_accesso;
   const showCond = canRead && data.mostra_testo_condizionato && data.testo_condizionato;
@@ -293,6 +306,24 @@ const ManifestoView = ({ data }) => {
       ) : (
         <p className="text-center text-gray-400 py-12">Manifesto non leggibile con questo personaggio.</p>
       )}
+      {canRead && canSalva && onSalva ? (
+        <div className="text-center">
+          <SalvaInArchivioButton
+            busy={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await onSalva();
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        </div>
+      ) : null}
+      {canRead && data.non_salvabile ? (
+        <p className="text-center text-xs text-gray-500 mt-3">Questo manifesto non è salvabile.</p>
+      ) : null}
     </div>
   );
 };
@@ -1003,7 +1034,66 @@ const PilotSottosistemaView = ({
 const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara, onPilotRicarica, onPilotSabota, pilotRepairing, pilotRecharging, pilotSaboting }) => {
   
   const { addTimer } = useTimers(); // <--- Accediamo alla logica dei timer
+  const { selectedCharacterId } = useCharacter();
+  const [salvaBusy, setSalvaBusy] = useState(false);
   const lastProcessedQr = useRef(null); // Per evitare che il timer scatti multipli in caso di re-render
+
+  const salvaManifestoInArchivio = async (dati) => {
+    if (!selectedCharacterId || !dati) return;
+    try {
+      await salvaDocumentoArchivio(
+        {
+          personaggio_id: selectedCharacterId,
+          tipo: 'manifesto',
+          titolo: dati.nome || 'Manifesto',
+          testo: dati.testo || '',
+          testo_condizionato: dati.mostra_testo_condizionato ? (dati.testo_condizionato || '') : '',
+          manifesto_id: dati.id,
+          immagine_url: dati.immagine_url || '',
+          audio_url: dati.audio_url || '',
+          video_url: dati.video_url || '',
+        },
+        onLogout,
+      );
+      emitToast({
+        type: 'success',
+        title: 'Salvato',
+        message: 'Manifesto archiviato in Serie e testi.',
+      });
+    } catch (e) {
+      emitToast({
+        type: 'error',
+        title: 'Salvataggio fallito',
+        message: e.message || 'Operazione non riuscita.',
+      });
+    }
+  };
+
+  const salvaTestoInArchivio = async (dati) => {
+    if (!selectedCharacterId || !dati) return;
+    try {
+      await salvaDocumentoArchivio(
+        {
+          personaggio_id: selectedCharacterId,
+          tipo: 'testo',
+          titolo: dati.nome || 'Testo',
+          testo: dati.testo || '',
+        },
+        onLogout,
+      );
+      emitToast({
+        type: 'success',
+        title: 'Salvato',
+        message: 'Testo archiviato in Serie e testi.',
+      });
+    } catch (e) {
+      emitToast({
+        type: 'error',
+        title: 'Salvataggio fallito',
+        message: e.message || 'Operazione non riuscita.',
+      });
+    }
+  };
 
   useEffect(() => {
     if (!data) return;
@@ -1124,7 +1214,18 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
 
       case 'manifesto':
       case 'a_vista':
-        return <ManifestoView data={data.dati} />;
+        return (
+          <ManifestoView
+            data={data.dati}
+            canSalva={
+              Boolean(selectedCharacterId)
+              && data.dati?.puo_leggere !== false
+              && data.dati?.salvabile !== false
+              && !data.dati?.non_salvabile
+            }
+            onSalva={() => salvaManifestoInArchivio(data.dati)}
+          />
+        );
 
       case 'inventario_attesa_conferma':
         return <InventarioAttesaConfermaView data={data.dati} />;
@@ -1280,6 +1381,19 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
               <RichHtml
                 content={data.dati.testo}
                 className="text-left text-gray-200 prose prose-invert prose-sm max-w-none"
+              />
+            ) : null}
+            {selectedCharacterId && data.dati?.salvabile !== false ? (
+              <SalvaInArchivioButton
+                busy={salvaBusy}
+                onClick={async () => {
+                  setSalvaBusy(true);
+                  try {
+                    await salvaTestoInArchivio(data.dati);
+                  } finally {
+                    setSalvaBusy(false);
+                  }
+                }}
               />
             ) : null}
           </div>

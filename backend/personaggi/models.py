@@ -3644,12 +3644,18 @@ class Manifesto(A_vista):
     Opzionale: `audio_file` / `video_file` / `immagine_file` riprodotti sul telefono
     alla scansione (oltre o al posto del testo). Nel DB resta solo il path relativo;
     i file fisici viaggiano con rsync (`make sync-media`). Il gate minigioco resta su QrCode.
+
+    `non_salvabile`: se True il giocatore non può archiviare il contenuto in «Serie e testi».
     """
 
     requisiti_lettura = models.JSONField(
         default=list,
         blank=True,
         help_text="Requisiti opzionali (statistica per sigla o abilità per id). Vuoto = accesso libero.",
+    )
+    non_salvabile = models.BooleanField(
+        default=False,
+        help_text="Se True, il giocatore non può salvare questo manifesto nell'archivio Serie e testi.",
     )
     testo_condizionato = models.TextField(
         blank=True,
@@ -5076,7 +5082,19 @@ class RandomQrPool(SyncableModel, models.Model):
         help_text="Se True (con sezione attiva), richiede il minigioco prima dell'effetto pool.",
     )
     minigioco_tipi_abilitati = models.JSONField(default=_default_tipi_minigioco_pool, blank=True)
-    minigioco_difficolta = models.PositiveSmallIntegerField(default=4)
+    minigioco_difficolta = models.PositiveSmallIntegerField(
+        default=4,
+        help_text="Fallback legacy se i pesi difficoltà sono tutti zero.",
+    )
+    minigioco_pesi_difficolta = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            'Pesi relativi per difficoltà 1–4 del minigioco a monte, es. '
+            '{"1":20,"2":20,"3":50,"4":10} oppure {"1":2,"2":2,"3":5,"4":1}. '
+            "Vuoto/tutti zero = usa minigioco_difficolta."
+        ),
+    )
     minigioco_requisiti_attivazione = models.JSONField(default=list, blank=True)
     minigioco_messaggio_accesso_negato = models.TextField(blank=True, default="")
     minigioco_esclusioni = models.JSONField(default=list, blank=True)
@@ -5238,6 +5256,7 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
     TIPO_INFUSIONE = "infusione"
     TIPO_CERIMONIALE = "cerimoniale"
     TIPO_ATTIVATA = "attivata"
+    TIPO_NEGOZIO_MERCANTE = "negozio_mercante"
     TIPO_CHOICES = (
         (TIPO_TESTO, "Testo"),
         (TIPO_NODO, "Nodo"),
@@ -5250,6 +5269,7 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
         (TIPO_INFUSIONE, "Infusione (ricetta)"),
         (TIPO_CERIMONIALE, "Cerimoniale"),
         (TIPO_ATTIVATA, "Attivata"),
+        (TIPO_NEGOZIO_MERCANTE, "Negozio mercante"),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -5259,7 +5279,7 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
         on_delete=models.CASCADE,
         related_name="effetti",
     )
-    tipo = models.CharField(max_length=16, choices=TIPO_CHOICES, db_index=True)
+    tipo = models.CharField(max_length=32, choices=TIPO_CHOICES, db_index=True)
     frequenza = models.PositiveIntegerField(
         default=1,
         help_text="Peso relativo: più alto = più comune (es. 10 vs 1 → ~10:1).",
@@ -5333,6 +5353,14 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
         blank=True,
         related_name="pool_effetti",
     )
+    negozio_mercante = models.ForeignKey(
+        "NegozioMercante",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+        help_text="Effetto: apre il listino del negozio mercante scelto.",
+    )
 
     class Meta:
         verbose_name = "Effetto pool QR"
@@ -5341,6 +5369,61 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.pool_id}:{self.tipo}×{self.frequenza}"
+
+
+class DocumentoArchiviato(SyncableModel, models.Model):
+    """
+    Snapshot di manifesto o testo salvato dal giocatore in «Serie e testi».
+    Contenuto indipendente dalla fonte (riapribile senza minigioco).
+    """
+
+    TIPO_MANIFESTO = "manifesto"
+    TIPO_TESTO = "testo"
+    TIPO_CHOICES = (
+        (TIPO_MANIFESTO, "Manifesto"),
+        (TIPO_TESTO, "Testo"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="documenti_archiviati",
+        db_index=True,
+    )
+    tipo = models.CharField(max_length=16, choices=TIPO_CHOICES, db_index=True)
+    titolo = models.CharField(max_length=200)
+    testo = models.TextField(blank=True, default="")
+    testo_condizionato = models.TextField(
+        blank=True,
+        default="",
+        help_text="Snapshot del testo condizionale visibile al momento del salvataggio.",
+    )
+    manifesto = models.ForeignKey(
+        "Manifesto",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="documenti_archiviati",
+        help_text="Riferimento opzionale al manifesto originale (il contenuto è comunque in snapshot).",
+    )
+    # Path relativi media (copia del path al salvataggio; file via rsync)
+    immagine_path = models.CharField(max_length=500, blank=True, default="")
+    audio_path = models.CharField(max_length=500, blank=True, default="")
+    video_path = models.CharField(max_length=500, blank=True, default="")
+    salvato_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Documento archiviato"
+        verbose_name_plural = "Documenti archiviati"
+        ordering = ["-salvato_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["personaggio", "tipo"]),
+        ]
+
+    def __str__(self):
+        return f"{self.tipo}:{self.titolo} → {self.personaggio_id}"
 
 
 class Trappola(SyncableModel, models.Model):

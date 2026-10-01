@@ -1437,8 +1437,8 @@ class RandomQrPoolEffectStaffViewSet(viewsets.ModelViewSet):
             "infusione",
             "cerimoniale",
             "attivata",
-        ).order_by("ordine", "id")
-        pool_id = self.request.query_params.get("pool")
+            "negozio_mercante",
+        ).order_by("ordine", "id")        pool_id = self.request.query_params.get("pool")
         if pool_id:
             qs = qs.filter(pool_id=pool_id)
         return qs

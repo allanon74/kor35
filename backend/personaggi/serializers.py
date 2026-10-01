@@ -2493,6 +2493,7 @@ class ManifestoSerializer(serializers.ModelSerializer):
             "requisiti_lettura",
             "testo_condizionato",
             "condizioni_testo",
+            "non_salvabile",
             "audio_file",
             "video_file",
             "immagine_file",
@@ -2562,6 +2563,7 @@ class ManifestoStaffSerializer(serializers.ModelSerializer):
             "requisiti_lettura",
             "testo_condizionato",
             "condizioni_testo",
+            "non_salvabile",
             "audio_file",
             "video_file",
             "immagine_file",
@@ -2699,6 +2701,9 @@ class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
         source="cerimoniale.nome", read_only=True, allow_null=True
     )
     attivata_nome = serializers.CharField(source="attivata.nome", read_only=True, allow_null=True)
+    negozio_mercante_nome = serializers.CharField(
+        source="negozio_mercante.nome", read_only=True, allow_null=True
+    )
 
     class Meta:
         model = RandomQrPoolEffect
@@ -2728,6 +2733,8 @@ class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
             "cerimoniale_nome",
             "attivata",
             "attivata_nome",
+            "negozio_mercante",
+            "negozio_mercante_nome",
         )
         read_only_fields = ("id",)
 
@@ -2745,6 +2752,7 @@ class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
             E.TIPO_INFUSIONE: ("infusione", "Infusione"),
             E.TIPO_CERIMONIALE: ("cerimoniale", "Cerimoniale"),
             E.TIPO_ATTIVATA: ("attivata", "Attivata"),
+            E.TIPO_NEGOZIO_MERCANTE: ("negozio_mercante", "Negozio mercante"),
         }
         if tipo in required:
             field, label = required[tipo]
@@ -2834,6 +2842,7 @@ class RandomQrPoolStaffSerializer(serializers.ModelSerializer):
             "minigioco_attivo",
             "minigioco_tipi_abilitati",
             "minigioco_difficolta",
+            "minigioco_pesi_difficolta",
             "minigioco_requisiti_attivazione",
             "minigioco_messaggio_accesso_negato",
             "minigioco_esclusioni",

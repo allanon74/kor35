@@ -23,7 +23,29 @@ import {
   staffGetTessiture,
   staffGetInfusioni,
   staffGetCerimoniali,
+  staffGetNegoziMercante,
 } from '../../api';
+
+const defaultPesiDiff = () => ({ 1: 0, 2: 0, 3: 0, 4: 1 });
+
+const normalizePesiDiff = (raw, fallbackDiff = 4) => {
+  const base = defaultPesiDiff();
+  if (raw && typeof raw === 'object') {
+    [1, 2, 3, 4].forEach((d) => {
+      const v = raw[d] ?? raw[String(d)];
+      const n = Number(v);
+      base[d] = Number.isFinite(n) && n >= 0 ? n : 0;
+    });
+  } else {
+    const fd = Math.max(1, Math.min(4, Number(fallbackDiff) || 4));
+    base[1] = 0;
+    base[2] = 0;
+    base[3] = 0;
+    base[4] = 0;
+    base[fd] = 1;
+  }
+  return base;
+};
 
 const emptyPool = () => ({
   nome: '',
@@ -34,6 +56,7 @@ const emptyPool = () => ({
   minigioco_sezione_attiva: false,
   minigioco_attivo: false,
   minigioco_difficolta: 4,
+  minigioco_pesi_difficolta: defaultPesiDiff(),
   minigioco_messaggio_pre: '',
   minigioco_messaggio_vittoria: '',
   minigioco_modalita_sblocco: 'permanente',
@@ -49,6 +72,10 @@ const formFromPool = (p) => ({
   minigioco_sezione_attiva: !!p?.minigioco_sezione_attiva,
   minigioco_attivo: !!p?.minigioco_attivo,
   minigioco_difficolta: p?.minigioco_difficolta ?? 4,
+  minigioco_pesi_difficolta: normalizePesiDiff(
+    p?.minigioco_pesi_difficolta,
+    p?.minigioco_difficolta ?? 4,
+  ),
   minigioco_messaggio_pre: p?.minigioco_messaggio_pre || '',
   minigioco_messaggio_vittoria: p?.minigioco_messaggio_vittoria || '',
   minigioco_modalita_sblocco: p?.minigioco_modalita_sblocco || 'permanente',
@@ -81,6 +108,7 @@ const emptyEffect = () => ({
   infusione: '',
   cerimoniale: '',
   attivata: '',
+  negozio_mercante: '',
 });
 
 const effectDetailLabel = (eff) =>
@@ -88,6 +116,7 @@ const effectDetailLabel = (eff) =>
   || eff.nodo_nome
   || eff.serie_nome
   || eff.manifesto_nome
+  || eff.negozio_mercante_nome
   || eff.oggetto_base_nome
   || eff.tessitura_nome
   || eff.infusione_nome
@@ -147,6 +176,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
   const [tessiture, setTessiture] = useState([]);
   const [infusioni, setInfusioni] = useState([]);
   const [cerimoniali, setCerimoniali] = useState([]);
+  const [negozi, setNegozi] = useState([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -171,6 +201,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
       tessData,
       infData,
       cerData,
+      negoziData,
     ] = await Promise.all([
       staffGetSerieCollezioni(onLogout),
       staffGetNodi(onLogout),
@@ -180,6 +211,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
       staffGetTessiture(onLogout, { page_size: 500 }),
       staffGetInfusioni(onLogout, { page_size: 500 }),
       staffGetCerimoniali(onLogout, { page_size: 500 }),
+      staffGetNegoziMercante(onLogout),
     ]);
     setSerieList(Array.isArray(serie) ? serie : serie?.results || []);
     setNodi(Array.isArray(nodiData) ? nodiData : nodiData?.results || []);
@@ -198,6 +230,8 @@ const RandomQrPoolManager = ({ onLogout }) => {
     setCerimoniali(
       (Array.isArray(cerData) ? cerData : cerData?.results || []).filter((t) => !t.non_vendibile),
     );
+    const negList = Array.isArray(negoziData) ? negoziData : negoziData?.results || [];
+    setNegozi(negList.filter((n) => n.attivo !== false));
   }, [onLogout]);
 
   useEffect(() => {
@@ -250,6 +284,12 @@ const RandomQrPoolManager = ({ onLogout }) => {
       const payload = {
         ...form,
         minigioco_pattern: form.minigioco_pattern || null,
+        minigioco_pesi_difficolta: {
+          1: Number(form.minigioco_pesi_difficolta?.[1] ?? 0) || 0,
+          2: Number(form.minigioco_pesi_difficolta?.[2] ?? 0) || 0,
+          3: Number(form.minigioco_pesi_difficolta?.[3] ?? 0) || 0,
+          4: Number(form.minigioco_pesi_difficolta?.[4] ?? 0) || 0,
+        },
       };
       const wasNew = !selectedId;
       let id = selectedId;
@@ -339,6 +379,10 @@ const RandomQrPoolManager = ({ onLogout }) => {
         cerimoniale:
           tipo === 'cerimoniale' && effectForm.cerimoniale ? Number(effectForm.cerimoniale) : null,
         attivata: tipo === 'attivata' && effectForm.attivata ? Number(effectForm.attivata) : null,
+        negozio_mercante:
+          tipo === 'negozio_mercante' && effectForm.negozio_mercante
+            ? effectForm.negozio_mercante
+            : null,
       };
       await staffCreateRandomQrPoolEffect(selectedId, payload, onLogout);
       setEffectForm(emptyEffect());
@@ -522,11 +566,43 @@ const RandomQrPoolManager = ({ onLogout }) => {
                 <p className="text-[11px] text-gray-500 leading-snug">
                   Controlla quale puzzle (tipo + difficoltà) viene estratto prima dell&apos;effetto,
                   non la tabella effetti pesati del pool. I pattern si creano nel tool «Pattern
-                  minigioco». Legacy = usa la difficoltà sotto (e i tipi abilitati sul pool).
+                  minigioco». Senza pattern: usa i pesi difficoltà sotto (e i tipi abilitati sul pool).
                 </p>
+                {!form.minigioco_pattern ? (
+                  <div className="space-y-1">
+                    <div className="text-xs text-gray-400">Frequenza difficoltà minigioco (pesi relativi)</div>
+                    <p className="text-[11px] text-gray-500 leading-snug">
+                      Es. 20-20-50-10 oppure 2-2-5-1: probabilità proporzionali alla somma dei pesi.
+                      Tutti zero → fallback alla difficoltà legacy sotto.
+                    </p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[1, 2, 3, 4].map((d) => (
+                        <label key={d} className="text-xs text-gray-400">
+                          Diff. {d}
+                          <input
+                            type="number"
+                            min={0}
+                            className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
+                            value={form.minigioco_pesi_difficolta?.[d] ?? 0}
+                            onChange={(e) => {
+                              const n = Number(e.target.value);
+                              setForm((f) => ({
+                                ...f,
+                                minigioco_pesi_difficolta: {
+                                  ...f.minigioco_pesi_difficolta,
+                                  [d]: Number.isFinite(n) ? Math.max(0, n) : 0,
+                                },
+                              }));
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="grid grid-cols-2 gap-2">
                   <label className="text-xs text-gray-400">
-                    Difficoltà
+                    Difficoltà fallback
                     <input
                       type="number"
                       min={1}
@@ -679,6 +755,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
                         <option value="trappola">Trappola</option>
                         <option value="serie">Serie</option>
                         <option value="manifesto">Manifesto (anche condizionale)</option>
+                        <option value="negozio_mercante">Negozio mercante</option>
                         <option value="oggetto_base">Oggetto (listino Accademia)</option>
                         <option value="da_infusione">Materia/Mod (da Infusione)</option>
                         <option value="tessitura">Tessitura</option>
@@ -755,6 +832,18 @@ const RandomQrPoolManager = ({ onLogout }) => {
                           <option value="">Seleziona manifesto…</option>
                           {manifesti.map((m) => (
                             <option key={m.id} value={m.id}>{m.nome}</option>
+                          ))}
+                        </select>
+                      )}
+                      {effectForm.tipo === 'negozio_mercante' && (
+                        <select
+                          className="sm:col-span-2 bg-gray-900 border border-gray-600 rounded p-2"
+                          value={effectForm.negozio_mercante}
+                          onChange={(e) => setEffectForm((f) => ({ ...f, negozio_mercante: e.target.value }))}
+                        >
+                          <option value="">Seleziona negozio mercante…</option>
+                          {negozi.map((n) => (
+                            <option key={n.id} value={n.id}>{n.nome}</option>
                           ))}
                         </select>
                       )}
