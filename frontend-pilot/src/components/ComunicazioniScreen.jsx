@@ -13,18 +13,100 @@ const COLORI = [
   { id: 'crociera', label: 'Verde', hint: 'Crociera', className: 'alarm-verde', ordine: 80 },
 ];
 
-function AlarmGlyph() {
+function GlyphFrame({ children }) {
   return (
     <svg className="comms-color-glyph" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-      <circle cx="32" cy="32" r="28" fill="rgba(0,0,0,0.22)" stroke="rgba(255,255,255,0.75)" strokeWidth="3" />
-      <path
-        d="M32 14c-7.2 0-13 5.8-13 13v8.2l-4.4 6.6c-.7 1-.1 2.4 1.1 2.4h32.6c1.2 0 1.8-1.4 1.1-2.4L46 35.2V27c0-7.2-5.8-13-13-13z"
-        fill="currentColor"
-        opacity="0.95"
-      />
-      <rect x="26" y="46" width="12" height="5" rx="2.5" fill="currentColor" />
+      <circle cx="32" cy="32" r="29" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.85)" strokeWidth="2.5" />
+      {children}
     </svg>
   );
+}
+
+/** Icona distinta per colore: leggibile a distanza sulla console radio. */
+function AlarmGlyph({ id }) {
+  const ink = 'currentColor';
+  switch (id) {
+    case 'giallo':
+      // Triangolo allerta
+      return (
+        <GlyphFrame>
+          <path fill={ink} d="M32 11L53 51H11L32 11z" />
+          <rect x="29" y="26" width="6" height="14" rx="2" fill="#0b0f16" />
+          <circle cx="32" cy="45.5" r="3.2" fill="#0b0f16" />
+        </GlyphFrame>
+      );
+    case 'rosso':
+      // Mirino combattimento
+      return (
+        <GlyphFrame>
+          <path
+            fill={ink}
+            fillRule="evenodd"
+            d="M32 14a18 18 0 1 1 0 36 18 18 0 0 1 0-36zm0 7a11 11 0 1 0 0 22 11 11 0 0 0 0-22zm0 6a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"
+          />
+          <rect x="29.5" y="8" width="5" height="9" rx="1.5" fill={ink} />
+          <rect x="29.5" y="47" width="5" height="9" rx="1.5" fill={ink} />
+          <rect x="8" y="29.5" width="9" height="5" rx="1.5" fill={ink} />
+          <rect x="47" y="29.5" width="9" height="5" rx="1.5" fill={ink} />
+        </GlyphFrame>
+      );
+    case 'nero':
+      // Stella esotica / anomalia
+      return (
+        <GlyphFrame>
+          <path
+            fill={ink}
+            d="M32 9l5.2 15.2H53l-12.5 9.2 4.8 15.2L32 39.8 18.7 48.6l4.8-15.2L11 24.2h15.8L32 9z"
+          />
+        </GlyphFrame>
+      );
+    case 'blu':
+      // Freccia manovra / rotta
+      return (
+        <GlyphFrame>
+          <path fill={ink} d="M32 10l17 29H39v15H25V39h-10L32 10z" />
+        </GlyphFrame>
+      );
+    case 'ambra':
+      // Chiave inglese riparazione
+      return (
+        <GlyphFrame>
+          <path
+            fill={ink}
+            d="M44 13.2a10 10 0 0 0-14.1 0l-2 2 7 7-3.6 3.6-7-7-1.6 1.6 7 7-10.2 10.2a4.6 4.6 0 0 0 0 6.5l1.7 1.7a4.6 4.6 0 0 0 6.5 0L38 35.6l7 7 1.6-1.6-7-7 3.6-3.6 7 7 2-2a10 10 0 0 0 0-14.1l-4.2 4.2a4.4 4.4 0 1 1-6.2-6.2L44 13.2z"
+          />
+        </GlyphFrame>
+      );
+    case 'viola':
+      // Scudo sicurezza / invasione
+      return (
+        <GlyphFrame>
+          <path
+            fill={ink}
+            d="M32 9c9 5 17.5 6 17.5 6V30c0 13.5-9.5 22-17.5 25.5C24 52 14.5 43.5 14.5 30V15S23 14 32 9z"
+          />
+          <path
+            fill="#0b0f16"
+            d="M29.2 22h5.6v7.2H42v5.6h-7.2V42h-5.6v-7.2H22v-5.6h7.2V22z"
+          />
+        </GlyphFrame>
+      );
+    case 'bianco':
+      // Croce medica
+      return (
+        <GlyphFrame>
+          <path fill={ink} d="M25 13h14v12h12v14H39v12H25V39H13V25h12V13z" />
+        </GlyphFrame>
+      );
+    case 'crociera':
+    default:
+      // Check crociera / ok
+      return (
+        <GlyphFrame>
+          <path fill={ink} d="M16 33.5l10.2 10.2L49.5 18l-5.4-4.8L26 33.2l-4.8-4.8L16 33.5z" />
+        </GlyphFrame>
+      );
+  }
 }
 
 function secondiRimanenti(iso) {
@@ -204,7 +286,7 @@ export default function ComunicazioniScreen({ onLogout, onBack, preview = false,
               onClick={() => dichiara(c.id)}
               aria-label={`Allarme ${c.label}${sotto ? `, ${sotto}` : ''}`}
             >
-              <AlarmGlyph />
+              <AlarmGlyph id={c.id} />
               <span className="comms-color-label">{c.label}</span>
               <span className="comms-color-hint">{sotto}</span>
             </button>
