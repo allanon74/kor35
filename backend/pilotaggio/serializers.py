@@ -641,7 +641,8 @@ class ProtocolloComunicazioneSerializer(serializers.ModelSerializer):
     korp_nome = serializers.CharField(source="korp.nome", read_only=True, default="")
     campione = serializers.FileField(required=False, allow_null=True)
     campione_url = serializers.SerializerMethodField()
-    rimuovi_campione = serializers.BooleanField(required=False, write_only=True, default=False)
+    # write_only senza default: altrimenti create() riceve rimuovi_campione=False e scoppia
+    rimuovi_campione = serializers.BooleanField(required=False, write_only=True)
 
     class Meta:
         model = ProtocolloComunicazione
@@ -673,6 +674,10 @@ class ProtocolloComunicazioneSerializer(serializers.ModelSerializer):
         if size > 8 * 1024 * 1024:
             raise serializers.ValidationError("Il campione supera 8 MB.")
         return value
+
+    def create(self, validated_data):
+        validated_data.pop("rimuovi_campione", None)
+        return super().create(validated_data)
 
     def update(self, instance, validated_data):
         rimuovi = validated_data.pop("rimuovi_campione", False)
