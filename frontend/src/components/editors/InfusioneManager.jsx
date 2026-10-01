@@ -1,5 +1,5 @@
 import React, { useState, useCallback, memo } from 'react';
-import { StaffToolShell, scrollStaffMainToTop } from '../../staff/StaffToolShell';
+import { StaffToolShell, StaffFullscreenEditor, scrollStaffMainToTop } from '../../staff/StaffToolShell';
 import InfusioneList from './InfusioneList';
 import InfusioneEditor from './InfusioneEditor';
 import StaffQrTab from '../StaffQrTab';
@@ -49,60 +49,55 @@ const InfusioneManager = ({ onBack, onLogout }) => {
 
   return (
     <StaffToolShell maxWidth="6xl">
-      {(view === 'edit' || qrStatus.message) && (
-        <div className="mb-4">
-          {view === 'edit' && (
-            <button onClick={handleEditorBack} className="text-amber-500 hover:text-amber-400 text-sm font-bold flex items-center gap-1 mb-2 min-h-11">
-              ← Torna alla lista
-            </button>
-          )}
-          {qrStatus.message && (
-            <div className={`mt-3 text-xs border rounded-md px-3 py-1 inline-block ${
-              qrStatus.type === 'error'
-                ? 'text-red-200 bg-red-900/20 border-red-700/40'
-                : 'text-emerald-300 bg-emerald-900/20 border-emerald-700/40'
-            }`}>
-              {qrStatus.message}
-            </div>
-          )}
+      {qrStatus.message ? (
+        <div className={`mb-4 text-xs border rounded-md px-3 py-1 inline-block ${
+          qrStatus.type === 'error'
+            ? 'text-red-200 bg-red-900/20 border-red-700/40'
+            : 'text-emerald-300 bg-emerald-900/20 border-emerald-700/40'
+        }`}
+        >
+          {qrStatus.message}
         </div>
-      )}
+      ) : null}
 
       {view === 'list' ? (
         <>
-          <InfusioneList 
-            onSelect={handleEdit} 
-            onNew={handleNew} 
+          <InfusioneList
+            onSelect={handleEdit}
+            onNew={handleNew}
             onScanQr={handleScanQr}
             onMinigioco={(item) => openMinigioco(item.qrcode_id, item.nome)}
             onLogout={onLogout}
             listVersion={listVersion}
           />
-          {isLoadingEditorData && (
+          {isLoadingEditorData ? (
             <div className="text-xs text-gray-400 mt-2">Caricamento dettaglio infusione...</div>
-          )}
+          ) : null}
         </>
       ) : (
-        <InfusioneEditor 
-          initialData={selectedItem} 
-          onBack={handleEditorBack} 
-          onLogout={onLogout} 
-        />
+        <StaffFullscreenEditor open onBack={handleEditorBack}>
+          <InfusioneEditor
+            initialData={selectedItem}
+            onBack={handleEditorBack}
+            onLogout={onLogout}
+          />
+        </StaffFullscreenEditor>
       )}
 
-      {scanningForElement && (
+      {scanningForElement ? (
         <div className="fixed inset-0 z-50 bg-black flex flex-col">
           <div className="p-4 flex justify-between items-center bg-gray-900 border-b border-gray-800">
             <span className="font-bold text-white">Associa QR a Infusione</span>
-            <button 
-              onClick={() => setScanningForElement(null)} 
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded transition-colors"
+            <button
+              type="button"
+              onClick={() => setScanningForElement(null)}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded transition-colors min-h-11"
             >
               Annulla
             </button>
           </div>
-          <div className="flex-1">
-            <StaffQrTab 
+          <div className="flex-1 min-h-0">
+            <StaffQrTab
               onScanSuccess={async (qr_id) => {
                 try {
                   await associaQrDiretto(scanningForElement, qr_id, onLogout);
@@ -121,12 +116,12 @@ const InfusioneManager = ({ onBack, onLogout }) => {
                     setQrStatus({ type: 'error', message: `Errore: ${error.message || 'Errore sconosciuto'}` });
                   }
                 }
-              }} 
-              onLogout={onLogout} 
+              }}
+              onLogout={onLogout}
             />
           </div>
         </div>
-      )}
+      ) : null}
       <ConfirmDialog
         open={Boolean(pendingQrConflict)}
         title="QR già associato"

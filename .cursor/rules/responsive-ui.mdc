@@ -19,7 +19,7 @@ Prima di considerare completa una modifica UI:
 |------|-------------------|
 | Layout | `flex-col` → `sm/md/lg:flex-row`; griglie `grid-cols-1` di default |
 | Tabelle larghe | Card / stack sotto `lg` (vedi `StaffDataTable`); niente sola tabella orizzontale tagliata |
-| Editor staff | `StaffEditorHeader` + `staffEditorShellClass` (`pb-36` su mobile per barra Salva); `scrollStaffMainToTop()` all'apertura (lista lunga → edit altrimenti fuori schermo) |
+| Editor staff | `StaffFullscreenEditor` (portal full-viewport) per lista→edit catalogo; `StaffEditorHeader` + `staffEditorShellClass` (`pb-40` mobile); `scrollStaffMainToTop()` |
 | Select lunghe | `SearchableSelect`: menu in portal, position `fixed` **senza** `scrollY`/`scrollX` |
 | Modali | Sheet dal basso su mobile (`items-end sm:items-center`), backdrop `overflow-y-auto`, portal su `body` dove possibile (`StaffEditorModal`, `ConfirmDialog`) |
 | URL API | Sempre relativi in produzione (già in `.cursorrules` §3) |
