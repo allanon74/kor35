@@ -13,7 +13,7 @@ All'avvio il browser apre `/pilot/?screen=station&viewport=800x480` (riquadro fi
 2. Dopo il tocco compare il QR. Il telefono del giocatore deve avere la statistica impostata nello staff (default ingegneria `0IN > 0`, scientifica `0SC > 0`, comunicazioni `0CO > 0`).
 3. La console entra nel layout compatto, pensato per 800×480. Ingegneria e scientifica usano le schede; comunicazioni mostra i colori di allarme.
 
-Il WiFi prova prima **`kor35-larp`** (mesh Omada, modalità evento / bosco). Se quella rete non c'è, usa l'SSID di riserva salvato oppure chiede a schermo quale rete usare.
+Il WiFi prova prima **`kor35-larp`** (mesh Omada, modalità evento / bosco) e la ripete per alcuni secondi: all'accensione la rete di casa è spesso già connessa mentre le EAP non sono ancora in elenco. Se il bosco non compare, usa l'SSID di riserva oppure chiede a schermo quale rete usare. A regime un controllo ogni 20 secondi passa a `kor35-larp` appena quella rete è visibile. Il kiosk riusa il profilo salvato dal desktop e non ne cambia la password: altrimenti l'associazione fallisce e il Pi torna sulla rete di casa.
 
 ## Installazione
 
@@ -53,6 +53,14 @@ sudo ./install-station-kiosk.sh --user giorgio --base-url https://www.kor35.it
 | `/etc/kor35/NO_KIOSK` | Se esiste, il kiosk non parte |
 
 La PSK non va nel git. Il file di esempio è `kiosk-station.env.example`.
+
+Su un Pi già installato non rilanciare l'installer (riscrive l'env e può cancellare la PSK). Aggiorna solo gli script:
+
+```bash
+sudo install -m 0755 kiosk-station.sh /usr/local/bin/kiosk-station.sh
+sudo install -m 0755 kor35-kiosk-wifi.sh /usr/local/sbin/kor35-kiosk-wifi.sh
+sudo systemctl restart kiosk-station.service
+```
 
 ## Verifica
 
