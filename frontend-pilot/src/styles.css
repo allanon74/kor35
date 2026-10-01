@@ -4291,8 +4291,11 @@ select, input[type=text], input[type=number] {
   text-align: center;
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  word-break: break-word;
   padding: 0 0.15rem;
 }
 
