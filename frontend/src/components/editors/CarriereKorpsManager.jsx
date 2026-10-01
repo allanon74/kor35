@@ -454,8 +454,22 @@ function MembershipModal({
   }, [carriereOptions, tipoId]);
 
   const caricheOptions = useMemo(() => {
-    if (!carrieraId) return cariche;
-    return cariche.filter((c) => caricaIncludesCarriera(c, carrieraId));
+    const base = !carrieraId
+      ? cariche
+      : cariche.filter((c) => caricaIncludesCarriera(c, carrieraId));
+    // Preferisci cariche attive in cima; etichetta le disattive così non sembrano
+    // «scomparse» se il backend le rifiutasse o se lo staff non se ne accorge.
+    return [...base]
+      .map((c) => ({
+        ...c,
+        nome: c.attiva === false ? `${c.nome} (disattiva)` : c.nome,
+      }))
+      .sort((a, b) => {
+        const aInactive = a.attiva === false ? 1 : 0;
+        const bInactive = b.attiva === false ? 1 : 0;
+        if (aInactive !== bInactive) return aInactive - bInactive;
+        return String(a.nome || '').localeCompare(String(b.nome || ''));
+      });
   }, [carrieraId, cariche]);
 
   const selectedCarica = useMemo(
@@ -504,6 +518,12 @@ function MembershipModal({
             onChange={(v) => setForm({ ...form, carica: v, carriera: null, carriera_id: null })}
             placeholder="Carica militare…"
           />
+          {selectedCarica && selectedCarica.attiva === false ? (
+            <p className="text-xs text-amber-200/90 rounded-lg border border-amber-700/40 bg-amber-950/25 px-3 py-2">
+              Questa carica è <strong>disattiva</strong> nel catalogo. Puoi comunque assegnarla;
+              se deve restare usabile in gioco, riattivala dalla scheda Cariche.
+            </p>
+          ) : null}
           {selectedCarica && carriereDaCarica.length > 0 ? (
             <p className="text-xs text-gray-500">
               Dipartimenti di questa carica:{' '}

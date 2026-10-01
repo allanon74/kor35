@@ -101,3 +101,25 @@ class CaricaCarriereM2mTests(TestCase):
             ).values_list("carriera_id", flat=True)
         )
         self.assertEqual(carriere_ids, {self.korp_a.pk, self.korp_b.pk})
+
+    def test_create_membership_allows_inactive_carica(self):
+        """Staff deve poter assegnare una carica disattivata (niente 400 «Pk non valido»)."""
+        self.carica.attiva = False
+        self.carica.save(update_fields=["attiva", "updated_at"])
+        resp = self.client.post(
+            self.membership_url,
+            {
+                "personaggio": self.personaggio.pk,
+                "carriera": self.korp_a.pk,
+                "tipo_carriera": str(self.tipo_korp.pk),
+                "carica": self.carica.pk,
+                "chiudi_korp_precedenti": True,
+            },
+            format="json",
+            **self.headers,
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["carica"], self.carica.pk)
+        m = PersonaggioCarrieraMembership.objects.get(pk=resp.data["id"])
+        self.assertEqual(m.carica_id, self.carica.pk)
+        self.assertIsNone(m.data_a)
