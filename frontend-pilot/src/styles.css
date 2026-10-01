@@ -4265,12 +4265,12 @@ select, input[type=text], input[type=number] {
 }
 
 .comms-color-glyph {
-  width: min(72%, 8.5rem);
+  width: min(82%, 12rem);
   height: auto;
   aspect-ratio: 1;
-  max-height: 58%;
+  max-height: 68%;
   flex: 1 1 auto;
-  min-height: 3.6rem;
+  min-height: 4.2rem;
   display: block;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
 }
@@ -4586,9 +4586,9 @@ html.viewport-800 .comms-statusline {
 }
 
 html.viewport-800 .comms-console.is-kiosk800 .comms-color-glyph {
-  width: min(68%, 4.2rem);
-  min-height: 2.8rem;
-  max-height: 52%;
+  width: min(74%, 5rem);
+  min-height: 3.2rem;
+  max-height: 58%;
 }
 
 html.viewport-800 .comms-console.is-kiosk800 .comms-color-label {
