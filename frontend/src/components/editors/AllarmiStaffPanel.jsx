@@ -198,7 +198,7 @@ export default function AllarmiStaffPanel({ onLogout }) {
           Il testo, con {'{sottosistema}'} e {'{evento}'}, arriva ai membri della KORP.
           Il bianco è l&apos;allarme medico: scegli la KORP del personale medico.
           Sull&apos;ambra i sottosistemi offline vengono aggiunti anche se non usi il segnaposto.
-          Il campione (mp3, wav, ogg, m4a o webm, fino a 8 MB) parte prima della voce.
+          Il campione (mp3, wav, ogg, m4a o webm, fino a 8 MB) parte subito; la frase entra dopo un secondo e mezzo, sopra il suono. Se il campione finisce prima resta solo la voce. Se la frase finisce prima, il suono resta due secondi e poi sfuma in due secondi.
           Vale per tutti i colori, anche giallo, rosso, nero, blu e crociera:
           se non carichi nulla, quei cinque usano ancora il file statico
           {' '}/pilot/sounds/allarmi/&lt;colore&gt;.mp3 se è presente sul server.
@@ -267,7 +267,7 @@ export default function AllarmiStaffPanel({ onLogout }) {
               ) : null}
             </div>
             <label className="flex flex-col text-xs text-gray-400 gap-1">
-              Frase letta dopo il campione
+              Frase letta sopra il campione
               <textarea
                 className="bg-gray-800 rounded px-2 py-1 text-sm text-gray-100 min-h-[3rem]"
                 value={bozza.testo_audio}

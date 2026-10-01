@@ -1,8 +1,15 @@
+import {
+  bindHtmlAlarmSample,
+  delayUnlessCancelled,
+  mixAlarmWithSpeech,
+} from '../../frontend/src/lib/alarmMix.js';
+
 /** Audio campionati + sintesi vocale per alert console pilota. */
 
 let voicesReadyPromise = null;
 let activeAlarmBedStop = null;
 let sharedCtx = null;
+let playbackToken = 0;
 
 const ALARM_SAMPLE_IDS = ['giallo', 'rosso', 'nero', 'blu', 'crociera'];
 const MIST_GLIDER_RE = /mist\s+g[li]d[e]?r/i;
@@ -97,15 +104,16 @@ async function pickEnglishFemaleVoice() {
   return pickVoice(voices, 'en', { female: true });
 }
 
-/** Ferma sirena / lettore MP3 allarme in sottofondo. */
+/** Ferma il campione di allarme in corso. */
 export function stopRedAlertSiren() {
-  if (activeAlarmBedStop) {
-    activeAlarmBedStop();
-    activeAlarmBedStop = null;
-  }
+  if (!activeAlarmBedStop) return;
+  const stop = activeAlarmBedStop;
+  activeAlarmBedStop = null;
+  stop();
 }
 
 function stopAnnouncementPlayback() {
+  playbackToken += 1;
   if (typeof window !== 'undefined' && window.speechSynthesis) {
     window.speechSynthesis.cancel();
   }
@@ -138,7 +146,7 @@ export function playAlarmSampleOnce(allarmeId, { volume = 1, url = '' } = {}) {
 }
 
 /**
- * Loop del campione MP3 in sottofondo (allarme rosso durante la voce).
+ * Loop del campione MP3. Gli annunci usano il mix una-tantum in mixAlarmWithSpeech.
  * @returns {() => void} stop
  */
 export function startAlarmSampleBed(allarmeId, { volume = 0.52, url = '' } = {}) {
@@ -276,9 +284,12 @@ function speakSegment(text, { lang = 'it-IT', rate = 0.84, pitch = 1.08, voice =
 }
 
 /**
- * Campione MP3 dell'allarme + annuncio vocale femminile accodato.
+ * Campione e voce in sovrapposizione.
+ * Il file parte subito; il parlato entra dopo 1,5 s.
+ * Se il campione finisce prima, resta solo la frase.
+ * Se la frase finisce prima, il suono resta 2 s e poi sfuma in 2 s.
  * @param {string} text
- * @param {{ allarme?: string, playSample?: boolean, pauseMs?: number }} [options]
+ * @param {{ allarme?: string, playSample?: boolean, pauseMs?: number, campioneUrl?: string }} [options]
  */
 export async function speakItalianAnnouncement(text, options = {}) {
   if (typeof window === 'undefined' || !text) return;
@@ -290,38 +301,30 @@ export async function speakItalianAnnouncement(text, options = {}) {
     campioneUrl = '',
   } = options;
   const alarmId = String(allarme || '').toLowerCase();
-  const isRedAlert = alarmId === 'rosso';
-  const sampleUrl = resolveAlarmSampleUrl(alarmId, campioneUrl);
+  const sampleUrl = playSample ? resolveAlarmSampleUrl(alarmId, campioneUrl) : '';
 
   stopAnnouncementPlayback();
+  const token = playbackToken;
+  const cancelled = () => token !== playbackToken;
 
-  let stopBed = null;
-
-  if (playSample && sampleUrl) {
-    if (isRedAlert) {
-      stopBed = startAlarmSampleBed('rosso', { volume: 0.5, url: sampleUrl });
-      await delay(280);
-    } else {
-      await playAlarmSampleOnce(alarmId, { url: sampleUrl });
-      await delay(120);
-    }
-  }
-
-  if (!window.speechSynthesis) {
-    if (stopBed) stopBed();
+  if (sampleUrl && !window.speechSynthesis) {
+    await playAlarmSampleOnce(alarmId, { url: sampleUrl });
     return;
   }
 
-  const [italianVoice, englishVoice] = await Promise.all([
-    pickItalianFemaleVoice(),
-    pickEnglishFemaleVoice(),
-  ]);
+  const speakAll = async () => {
+    if (cancelled() || !window.speechSynthesis) return;
+    const [italianVoice, englishVoice] = await Promise.all([
+      pickItalianFemaleVoice(),
+      pickEnglishFemaleVoice(),
+    ]);
+    if (cancelled()) return;
 
-  const segments = splitAnnouncementSegments(text);
-  const alarmRate = allarme && allarme !== 'crociera' ? 0.8 : 0.84;
+    const segments = splitAnnouncementSegments(text);
+    const alarmRate = allarme && allarme !== 'crociera' ? 0.8 : 0.84;
 
-  try {
     for (let i = 0; i < segments.length; i += 1) {
+      if (cancelled()) return;
       const seg = segments[i];
       const isEnglish = seg.lang === 'en-US';
       await speakSegment(seg.text, {
@@ -330,14 +333,33 @@ export async function speakItalianAnnouncement(text, options = {}) {
         pitch: isEnglish ? 1.02 : 1.1,
         voice: isEnglish ? englishVoice : italianVoice,
       });
+      if (cancelled()) return;
       if (i < segments.length - 1) {
-        await delay(pauseMs);
+        await delayUnlessCancelled(pauseMs, cancelled);
       }
     }
-  } finally {
-    if (stopBed) {
-      stopBed();
-    }
+  };
+
+  if (!sampleUrl) {
+    await speakAll();
+    return;
+  }
+
+  let localStop = null;
+  await mixAlarmWithSpeech({
+    startSample: () => bindHtmlAlarmSample(sampleUrl, {
+      volume: 1,
+      onRegisterStop: (stop) => {
+        localStop = stop;
+        activeAlarmBedStop = stop;
+      },
+    }),
+    speak: speakAll,
+    delay: (ms) => delayUnlessCancelled(ms, cancelled),
+    cancelled,
+  });
+  if (localStop && activeAlarmBedStop === localStop) {
+    activeAlarmBedStop = null;
   }
 }
 

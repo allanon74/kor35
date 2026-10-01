@@ -1,7 +1,13 @@
 /**
- * Anteprima allarme staff: stesso schema della plancia (campione + voce TTS).
+ * Anteprima allarme staff: stesso mix della plancia (campione + voce TTS).
  * Logica allineata a frontend-pilot/src/pilotAlerts.js (speakAllarmeEquipaggio).
  */
+
+import {
+  bindHtmlAlarmSample,
+  delayUnlessCancelled,
+  mixAlarmWithSpeech,
+} from './alarmMix';
 
 const ALARM_SAMPLE_IDS = ['giallo', 'rosso', 'nero', 'blu', 'crociera'];
 const MIST_GLIDER_RE = /mist\s+g[li]d[e]?r/i;
@@ -11,12 +17,6 @@ const MALE_VOICE_HINTS = /male|masch|diego|luca|cosimo|risto|marco|andrea|james|
 let voicesReadyPromise = null;
 let activeBedStop = null;
 let previewGeneration = 0;
-
-function delay(ms) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
 
 /** URL campione: remoto staff, oppure statico storico per i cinque colori. */
 export function resolveStaffAlarmSampleUrl(allarmeId, remoteUrl = '') {
@@ -67,10 +67,10 @@ function pickVoice(voices, langPrefix, { female = true } = {}) {
 }
 
 function stopBed() {
-  if (activeBedStop) {
-    activeBedStop();
-    activeBedStop = null;
-  }
+  if (!activeBedStop) return;
+  const stop = activeBedStop;
+  activeBedStop = null;
+  stop();
 }
 
 /** Ferma anteprima in corso (voce + campione). */
@@ -80,51 +80,6 @@ export function stopAlarmPreview() {
     window.speechSynthesis.cancel();
   }
   stopBed();
-}
-
-function playSampleOnce(url, volume = 1) {
-  if (!url || typeof window === 'undefined') return Promise.resolve();
-  const audio = new Audio(url);
-  audio.preload = 'auto';
-  audio.loop = false;
-  audio.volume = Math.max(0, Math.min(1, volume));
-  return new Promise((resolve) => {
-    const finish = () => {
-      audio.onended = null;
-      audio.onerror = null;
-      try {
-        audio.pause();
-      } catch (_) {
-        /* ignore */
-      }
-      resolve();
-    };
-    audio.onended = finish;
-    audio.onerror = finish;
-    audio.play().catch(finish);
-  });
-}
-
-function startSampleBed(url, volume = 0.5) {
-  if (!url || typeof window === 'undefined') return () => {};
-  stopBed();
-  const audio = new Audio(url);
-  audio.preload = 'auto';
-  audio.loop = true;
-  audio.volume = Math.max(0, Math.min(1, volume));
-  const stop = () => {
-    try {
-      audio.pause();
-      audio.currentTime = 0;
-      audio.loop = false;
-    } catch (_) {
-      /* ignore */
-    }
-    if (activeBedStop === stop) activeBedStop = null;
-  };
-  audio.play().catch(() => {});
-  activeBedStop = stop;
-  return stop;
 }
 
 function splitAnnouncementSegments(text) {
@@ -169,7 +124,8 @@ function speakSegment(text, { lang = 'it-IT', rate = 0.84, pitch = 1.08, voice =
 }
 
 /**
- * Anteprima: campione (se c'è) poi voce, come sulla plancia.
+ * Anteprima: stesso mix della plancia.
+ * Il campione parte subito, la voce entra dopo 1,5 s.
  * @param {{ allarmeId: string, testo: string, campioneUrl?: string }} opts
  */
 export async function previewAlarmAnnouncement({
@@ -184,27 +140,15 @@ export async function previewAlarmAnnouncement({
   const gen = ++previewGeneration;
   stopBed();
   if (window.speechSynthesis) window.speechSynthesis.cancel();
+  const cancelled = () => gen !== previewGeneration;
 
   const alarmId = String(allarmeId || '').toLowerCase();
-  const isRed = alarmId === 'rosso';
   const sampleUrl = resolveStaffAlarmSampleUrl(alarmId, campioneUrl);
 
-  let stopLocalBed = null;
-  try {
-    if (sampleUrl) {
-      if (isRed) {
-        stopLocalBed = startSampleBed(sampleUrl, 0.5);
-        await delay(280);
-      } else {
-        await playSampleOnce(sampleUrl);
-        await delay(120);
-      }
-    }
-    if (gen !== previewGeneration) return;
-    if (!window.speechSynthesis) return;
-
+  const speakAll = async () => {
+    if (cancelled() || !window.speechSynthesis) return;
     const voices = await ensureVoices();
-    if (gen !== previewGeneration) return;
+    if (cancelled()) return;
     const italianVoice = pickVoice(voices, 'it', { female: true });
     const englishVoice = pickVoice(voices, 'en', { female: true });
     const segments = splitAnnouncementSegments(text);
@@ -212,7 +156,7 @@ export async function previewAlarmAnnouncement({
     const pauseMs = alarmId ? 480 : 360;
 
     for (let i = 0; i < segments.length; i += 1) {
-      if (gen !== previewGeneration) return;
+      if (cancelled()) return;
       const seg = segments[i];
       const isEnglish = seg.lang === 'en-US';
       await speakSegment(seg.text, {
@@ -221,9 +165,43 @@ export async function previewAlarmAnnouncement({
         pitch: isEnglish ? 1.02 : 1.1,
         voice: isEnglish ? englishVoice : italianVoice,
       });
-      if (i < segments.length - 1) await delay(pauseMs);
+      if (cancelled()) return;
+      if (i < segments.length - 1) {
+        await delayUnlessCancelled(pauseMs, cancelled);
+      }
     }
-  } finally {
-    if (stopLocalBed) stopLocalBed();
+  };
+
+  if (!sampleUrl) {
+    await speakAll();
+    return;
+  }
+
+  if (!window.speechSynthesis) {
+    const audio = new Audio(sampleUrl);
+    audio.preload = 'auto';
+    await new Promise((resolve) => {
+      audio.onended = resolve;
+      audio.onerror = resolve;
+      audio.play().catch(resolve);
+    });
+    return;
+  }
+
+  let localStop = null;
+  await mixAlarmWithSpeech({
+    startSample: () => bindHtmlAlarmSample(sampleUrl, {
+      volume: 1,
+      onRegisterStop: (stop) => {
+        localStop = stop;
+        activeBedStop = stop;
+      },
+    }),
+    speak: speakAll,
+    delay: (ms) => delayUnlessCancelled(ms, cancelled),
+    cancelled,
+  });
+  if (localStop && activeBedStop === localStop) {
+    activeBedStop = null;
   }
 }
