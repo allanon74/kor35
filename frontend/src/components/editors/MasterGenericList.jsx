@@ -396,7 +396,7 @@ const MasterGenericList = ({
       </div>
 
       {pendingDeleteItem && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-xl shadow-2xl">
             <div className="p-4 border-b border-gray-700">
               <h3 className="text-white font-bold text-lg">Conferma eliminazione</h3>

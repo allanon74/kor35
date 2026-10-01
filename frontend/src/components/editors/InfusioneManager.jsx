@@ -1,5 +1,5 @@
 import React, { useState, useCallback, memo } from 'react';
-import { StaffToolShell } from '../../staff/StaffToolShell';
+import { StaffToolShell, scrollStaffMainToTop } from '../../staff/StaffToolShell';
 import InfusioneList from './InfusioneList';
 import InfusioneEditor from './InfusioneEditor';
 import StaffQrTab from '../StaffQrTab';
@@ -24,6 +24,7 @@ const InfusioneManager = ({ onBack, onLogout }) => {
       const fullItem = await staffGetInfusioneDetail(item.id, onLogout);
       setSelectedItem(fullItem || item);
       setView('edit');
+      scrollStaffMainToTop();
     } catch (error) {
       setQrStatus({ type: 'error', message: `Errore caricamento infusione: ${error.message || 'Errore sconosciuto'}` });
     } finally {
@@ -34,6 +35,7 @@ const InfusioneManager = ({ onBack, onLogout }) => {
   const handleNew = useCallback(() => {
     setSelectedItem(null);
     setView('edit');
+    scrollStaffMainToTop();
   }, []);
 
   const handleEditorBack = useCallback(() => {

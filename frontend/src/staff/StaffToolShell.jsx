@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 
 /**
@@ -21,6 +21,35 @@ export const staffSecondaryBtnClass =
   'inline-flex items-center gap-1.5 rounded-lg border border-gray-600 bg-gray-800 hover:bg-gray-700 px-3 py-1.5 text-sm font-semibold text-gray-200 transition-colors';
 export const staffDangerBtnClass =
   'inline-flex items-center gap-1.5 rounded-lg bg-red-900/80 hover:bg-red-800 px-3 py-1.5 text-sm font-bold text-red-100 transition-colors';
+
+/**
+ * Backdrop overlay staff/mobile-safe:
+ * scroll sul backdrop + sheet dal basso su telefono (evita modali centrati tagliati).
+ */
+export const staffModalBackdropClass =
+  'fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-black/80 backdrop-blur-sm';
+export const staffModalCenterClass =
+  'flex min-h-full items-end sm:items-center justify-center p-0 sm:p-4';
+export const staffModalPanelClass =
+  'w-full max-h-[min(94vh,100dvh)] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-gray-600 bg-gray-900 shadow-2xl min-w-0';
+
+/**
+ * Dopo lista lunga → edit: il main staff resta scrollato e l'editor "finisce fuori schermo".
+ * Chiamare all'apertura di editor/modali (StaffEditorHeader / StaffEditorModal lo fanno già).
+ */
+export function scrollStaffMainToTop() {
+  if (typeof document === 'undefined') return;
+  const main = document.querySelector('[data-staff-main]');
+  if (main) {
+    main.scrollTop = 0;
+  }
+  document.querySelectorAll('main.overflow-y-auto').forEach((el) => {
+    el.scrollTop = 0;
+  });
+  if (typeof window !== 'undefined') {
+    window.scrollTo(0, 0);
+  }
+}
 
 export function StaffToolShell({
   children,
@@ -62,6 +91,7 @@ export const staffEditorShellClass =
  * Header editor: su telefono solo il titolo; Salva/Annulla restano in barra fissa in basso
  * (portale su document.body: evita clipping da overflow/transform degli antenati staff).
  * Su desktop titolo e azioni restano sulla stessa riga.
+ * All'apertura riporta lo scroll del main staff in cima (lista → edit).
  */
 export function StaffEditorHeader({
   title,
@@ -69,6 +99,10 @@ export function StaffEditorHeader({
   actions,
   sticky = false,
 }) {
+  useLayoutEffect(() => {
+    scrollStaffMainToTop();
+  }, []);
+
   const mobileFooter =
     actions && typeof document !== 'undefined'
       ? createPortal(
@@ -85,6 +119,7 @@ export function StaffEditorHeader({
   return (
     <>
       <div
+        data-staff-editor-header
         className={[
           'flex min-w-0 flex-col gap-3 border-b border-gray-700 pb-4 lg:flex-row lg:items-start lg:justify-between',
           sticky ? 'sticky top-0 z-10 bg-gray-800 pt-1' : '',

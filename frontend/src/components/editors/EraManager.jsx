@@ -22,7 +22,7 @@ const EraFormModal = ({ isOpen, onClose, onSave, value, statusMessage = '', stat
   useEffect(() => setForm(value || {}), [value]);
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="w-full max-w-xl bg-gray-900 border border-gray-700 rounded-xl">
         <div className="p-4 border-b border-gray-700 flex items-center justify-between">
           <h3 className="text-lg font-bold text-white">{form?.id ? 'Modifica Era' : 'Nuova Era'}</h3>
@@ -63,7 +63,7 @@ const RegioneFormModal = ({ isOpen, onClose, onSave, value, statusMessage = '', 
   useEffect(() => setForm(value || {}), [value]);
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="w-full max-w-xl bg-gray-900 border border-gray-700 rounded-xl">
         <div className="p-4 border-b border-gray-700 flex items-center justify-between">
           <h3 className="text-lg font-bold text-white">{form?.id ? 'Modifica Regione' : 'Nuova Regione'}</h3>
@@ -103,7 +103,7 @@ const PrefetturaFormModal = ({ isOpen, onClose, onSave, value, ere, regioni, sta
   useEffect(() => setForm(value || {}), [value]);
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="w-full max-w-xl bg-gray-900 border border-gray-700 rounded-xl">
         <div className="p-4 border-b border-gray-700 flex items-center justify-between">
           <h3 className="text-lg font-bold text-white">{form?.id ? 'Modifica Prefettura' : 'Nuova Prefettura'}</h3>

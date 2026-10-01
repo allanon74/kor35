@@ -617,7 +617,7 @@ const ScommesseManager = ({ onBack, onLogout }) => {
       </StaffToolBody>
 
       {(formSport || formSquadra || formCalendario || formProgrammazione) && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4">
           <div className="w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-4 shadow-xl">
             <h3 className="mb-3 font-bold">
               {formSport && (formSport.id ? 'Modifica sport' : 'Nuovo sport')}
