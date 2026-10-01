@@ -5,6 +5,11 @@ import {
   staffGetPilotProtocolli,
   staffUpdatePilotProtocollo,
 } from '../../api';
+import {
+  previewAlarmAnnouncement,
+  resolveStaffAlarmSampleUrl,
+  stopAlarmPreview,
+} from '../../lib/pilotAlarmPreview';
 
 const ALLARMI = [
   { id: 'giallo', label: 'Giallo — allerta', standard: 'Allarme Giallo. Condizione di allerta dell\'equipaggio.' },
@@ -36,7 +41,16 @@ export default function AllarmiStaffPanel({ onLogout }) {
   const [bozze, setBozze] = useState(vuoto);
   const [error, setError] = useState('');
   const [salvo, setSalvo] = useState('');
+  const [previewing, setPreviewing] = useState('');
   const fileRefs = useRef({});
+  const objectUrlRef = useRef('');
+
+  const revokeObjectUrl = useCallback(() => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = '';
+    }
+  }, []);
 
   const load = useCallback(async () => {
     const [prot, dip] = await Promise.all([
@@ -63,11 +77,59 @@ export default function AllarmiStaffPanel({ onLogout }) {
     load().catch((err) => setError(err?.message || 'Caricamento allarmi non riuscito.'));
   }, [load]);
 
+  useEffect(() => () => {
+    stopAlarmPreview();
+    revokeObjectUrl();
+  }, [revokeObjectUrl]);
+
   const patch = (colore, campo, valore) => {
     setBozze((prev) => ({
       ...prev,
       [colore]: { ...prev[colore], [campo]: valore },
     }));
+  };
+
+  const resolveCampionePerAnteprima = (colore) => {
+    revokeObjectUrl();
+    const file = fileRefs.current[colore]?.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      objectUrlRef.current = url;
+      return url;
+    }
+    const bozza = bozze[colore] || {};
+    return resolveStaffAlarmSampleUrl(colore, bozza.campione_url || '');
+  };
+
+  const anteprima = async (colore) => {
+    setError('');
+    const meta = ALLARMI.find((a) => a.id === colore);
+    const bozza = bozze[colore] || {};
+    const frase = String(bozza.testo_audio || '').trim() || (meta?.standard || '');
+    if (!frase) {
+      setError('Nessuna frase da leggere per questo allarme.');
+      return;
+    }
+    const campioneUrl = resolveCampionePerAnteprima(colore);
+    setPreviewing(colore);
+    try {
+      await previewAlarmAnnouncement({
+        allarmeId: colore,
+        testo: frase,
+        campioneUrl,
+      });
+    } catch (err) {
+      setError(err?.message || 'Anteprima non riuscita.');
+    } finally {
+      setPreviewing((cur) => (cur === colore ? '' : cur));
+      revokeObjectUrl();
+    }
+  };
+
+  const fermaAnteprima = () => {
+    stopAlarmPreview();
+    setPreviewing('');
+    revokeObjectUrl();
   };
 
   const salva = async (colore) => {
@@ -132,6 +194,8 @@ export default function AllarmiStaffPanel({ onLogout }) {
           se non carichi nulla, quei cinque usano ancora il file statico
           {' '}/pilot/sounds/allarmi/&lt;colore&gt;.mp3 se è presente sul server.
           Ambra, viola e bianco restano solo voce finché non carichi un campione.
+          Usa <strong className="font-semibold text-gray-300">Anteprima</strong> per
+          ascoltare campione + voce come sulla plancia (anche il file scelto ma non ancora salvato).
         </p>
       </div>
       {error ? <p className="text-sm text-red-300">{error}</p> : null}
@@ -140,6 +204,7 @@ export default function AllarmiStaffPanel({ onLogout }) {
       ) : null}
       {ALLARMI.map((allarme) => {
         const bozza = bozze[allarme.id] || { testo_audio: '', testo: '', korp: '', campione_url: '' };
+        const isPreview = previewing === allarme.id;
         return (
           <div key={allarme.id} className="rounded-lg border border-gray-700 p-3 space-y-2">
             <h4 className="text-sm font-semibold text-gray-100">{allarme.label}</h4>
@@ -161,7 +226,7 @@ export default function AllarmiStaffPanel({ onLogout }) {
               {bozza.campione_url ? (
                 <button
                   type="button"
-                  className="self-start px-2 py-1 rounded border border-gray-600 text-xs"
+                  className="self-start min-h-11 px-3 py-2 rounded border border-gray-600 text-xs"
                   onClick={() => rimuoviCampione(allarme.id)}
                 >
                   Rimuovi campione
@@ -180,7 +245,7 @@ export default function AllarmiStaffPanel({ onLogout }) {
             <label className="flex flex-col text-xs text-gray-400 gap-1">
               Dipartimento (KORP o dipartimento)
               <select
-                className="bg-gray-800 rounded px-2 py-1 text-sm"
+                className="bg-gray-800 rounded px-2 py-1 text-sm min-h-11"
                 value={bozza.korp}
                 onChange={(e) => patch(allarme.id, 'korp', e.target.value)}
               >
@@ -198,10 +263,25 @@ export default function AllarmiStaffPanel({ onLogout }) {
                 onChange={(e) => patch(allarme.id, 'testo', e.target.value)}
               />
             </label>
-            <button type="button" className="px-3 py-1 rounded bg-indigo-600 text-sm" onClick={() => salva(allarme.id)}>
-              Salva {allarme.label.split(' — ')[0]}
-            </button>
-            {salvo === allarme.id ? <span className="ml-2 text-xs text-emerald-300">Salvato.</span> : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="min-h-11 px-3 py-2 rounded bg-indigo-600 text-sm font-semibold"
+                onClick={() => salva(allarme.id)}
+              >
+                Salva {allarme.label.split(' — ')[0]}
+              </button>
+              <button
+                type="button"
+                className="min-h-11 px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600 text-sm font-semibold disabled:opacity-60"
+                disabled={Boolean(previewing) && !isPreview}
+                onClick={() => (isPreview ? fermaAnteprima() : anteprima(allarme.id))}
+              >
+                {isPreview ? 'Ferma anteprima' : 'Anteprima audio'}
+              </button>
+              {salvo === allarme.id ? <span className="text-xs text-emerald-300">Salvato.</span> : null}
+              {isPreview ? <span className="text-xs text-amber-300">In riproduzione…</span> : null}
+            </div>
           </div>
         );
       })}
