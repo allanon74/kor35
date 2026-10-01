@@ -16,7 +16,7 @@ const COLORI = [
 function GlyphFrame({ children }) {
   return (
     <svg className="comms-color-glyph" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-      <circle cx="32" cy="32" r="29" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.85)" strokeWidth="2.5" />
+      <circle cx="32" cy="32" r="30" fill="rgba(0,0,0,0.34)" stroke="rgba(255,255,255,0.9)" strokeWidth="2.25" />
       {children}
     </svg>
   );
@@ -24,15 +24,16 @@ function GlyphFrame({ children }) {
 
 /** Icona distinta per colore: leggibile a distanza sulla console radio. */
 function AlarmGlyph({ id }) {
-  const ink = 'currentColor';
+  const ink = '#f4f7fb';
+  const mark = '#0b0f16';
   switch (id) {
     case 'giallo':
       // Triangolo allerta
       return (
         <GlyphFrame>
           <path fill={ink} d="M32 11L53 51H11L32 11z" />
-          <rect x="29" y="26" width="6" height="14" rx="2" fill="#0b0f16" />
-          <circle cx="32" cy="45.5" r="3.2" fill="#0b0f16" />
+          <rect x="29" y="26" width="6" height="14" rx="2" fill={mark} />
+          <circle cx="32" cy="45.5" r="3.2" fill={mark} />
         </GlyphFrame>
       );
     case 'rosso':
@@ -86,7 +87,7 @@ function AlarmGlyph({ id }) {
             d="M32 9c9 5 17.5 6 17.5 6V30c0 13.5-9.5 22-17.5 25.5C24 52 14.5 43.5 14.5 30V15S23 14 32 9z"
           />
           <path
-            fill="#0b0f16"
+            fill={mark}
             d="M29.2 22h5.6v7.2H42v5.6h-7.2V42h-5.6v-7.2H22v-5.6h7.2V22z"
           />
         </GlyphFrame>
