@@ -1,6 +1,5 @@
 import React, { useState, useCallback, memo } from 'react';
-import { ArrowLeft } from 'lucide-react';
-import { StaffToolShell } from '../../staff/StaffToolShell';
+import { StaffToolShell, StaffFullscreenEditor, scrollStaffMainToTop } from '../../staff/StaffToolShell';
 import OggettoBaseList from './OggettoBaseList';
 import OggettoBaseEditor from './OggettoBaseEditor';
 import StaffQrTab from '../StaffQrTab';
@@ -20,11 +19,13 @@ const OggettoBaseManager = ({ onBack, onLogout }) => {
   const handleAdd = useCallback(() => {
     setSelectedItem(null);
     setView('editor');
+    scrollStaffMainToTop();
   }, []);
 
   const handleEdit = useCallback((item) => {
     setSelectedItem(item);
     setView('editor');
+    scrollStaffMainToTop();
   }, []);
 
   const handleBackToList = useCallback(() => {
@@ -38,15 +39,6 @@ const OggettoBaseManager = ({ onBack, onLogout }) => {
 
   return (
     <StaffToolShell className="space-y-4">
-      {view !== 'list' && (
-        <button
-          onClick={handleBackToList}
-          className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm font-bold uppercase"
-        >
-          <ArrowLeft size={16} />
-          Annulla e Torna alla Lista
-        </button>
-      )}
       {qrStatus.message && (
           <div className={`mt-3 text-xs border rounded-md px-3 py-1 inline-block ${
             qrStatus.type === 'error'
@@ -66,11 +58,12 @@ const OggettoBaseManager = ({ onBack, onLogout }) => {
           onLogout={onLogout} 
         />
       ) : (
-        <OggettoBaseEditor 
+        <StaffFullscreenEditor open onBack={handleBackToList}>
+          <OggettoBaseEditor 
           initialData={selectedItem} 
           onBack={handleBackToList} 
-          onLogout={onLogout} 
-        />
+          onLogout={onLogout} />
+        </StaffFullscreenEditor>
       )}
 
       {scanningForElement && (

@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
-import { StaffEditorHeader, staffEditorShellClass } from './StaffToolShell';
+import { StaffEditorHeader, StaffFullscreenEditor, staffEditorShellClass } from './StaffToolShell';
 
 function mount(element) {
   const host = document.createElement('div');
@@ -54,7 +54,7 @@ describe('StaffEditorHeader', () => {
 
   it('lo shell editor lascia spazio in basso per la barra Salva su telefono', () => {
     expect(staffEditorShellClass).toContain('min-w-0');
-    expect(staffEditorShellClass).toContain('pb-36');
+    expect(staffEditorShellClass).toContain('pb-40');
     expect(staffEditorShellClass).toContain('overflow-x-hidden');
     expect(staffEditorShellClass).not.toContain('max-h-');
     expect(staffEditorShellClass).not.toContain('overflow-y-auto');
@@ -77,5 +77,25 @@ describe('StaffEditorHeader', () => {
     expect(main.scrollTop).toBe(0);
     unmount();
     main.remove();
+  });
+
+  it('StaffFullscreenEditor monta un overlay a schermo intero su body', () => {
+    const { unmount } = mount(
+      createElement(StaffFullscreenEditor, {
+        open: true,
+        onBack: () => {},
+        children: createElement('div', null, 'contenuto editor'),
+      }),
+    );
+    const overlay = document.body.querySelector('[data-testid="staff-fullscreen-editor"]');
+    expect(overlay).toBeTruthy();
+    expect(overlay.className).toContain('fixed');
+    expect(overlay.className).toContain('inset-0');
+    expect(overlay.textContent).toContain('contenuto editor');
+    expect(overlay.textContent).toContain('Torna alla lista');
+    const scroller = overlay.querySelector('[data-staff-fullscreen-scroll]');
+    expect(scroller).toBeTruthy();
+    unmount();
+    expect(document.body.querySelector('[data-testid="staff-fullscreen-editor"]')).toBeNull();
   });
 });

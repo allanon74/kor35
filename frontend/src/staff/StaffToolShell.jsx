@@ -46,9 +46,65 @@ export function scrollStaffMainToTop() {
   document.querySelectorAll('main.overflow-y-auto').forEach((el) => {
     el.scrollTop = 0;
   });
+  document.querySelectorAll('[data-staff-fullscreen-scroll]').forEach((el) => {
+    el.scrollTop = 0;
+  });
   if (typeof window !== 'undefined') {
     window.scrollTo(0, 0);
   }
+}
+
+/**
+ * Editor catalogo a schermo intero (portal su body).
+ * Su telefono evita che Infusioni/Tessiture/… restino imprigionati nello scroll del main staff.
+ */
+export function StaffFullscreenEditor({
+  open = true,
+  onBack,
+  backLabel = 'Torna alla lista',
+  children,
+  className = '',
+}) {
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    scrollStaffMainToTop();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  if (!open || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      data-testid="staff-fullscreen-editor"
+      className={`fixed inset-0 z-[110] flex flex-col bg-gray-950 text-gray-100 ${className}`.trim()}
+      style={{ height: '100dvh', maxHeight: '100dvh' }}
+      role="dialog"
+      aria-modal="true"
+    >
+      {onBack ? (
+        <div className="shrink-0 flex items-center gap-2 border-b border-gray-800 bg-gray-950/95 px-3 py-2 pt-[max(0.5rem,var(--kor-safe-top))]">
+          <button
+            type="button"
+            onClick={onBack}
+            className="min-h-11 px-3 rounded-lg text-sm font-bold text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+          >
+            ← {backLabel}
+          </button>
+        </div>
+      ) : null}
+      <div
+        data-staff-fullscreen-scroll
+        className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain px-2 sm:px-4 py-3"
+      >
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
 }
 
 export function StaffToolShell({
@@ -85,7 +141,7 @@ export function StaffToolShell({
 
 /** Pannello form staff: niente max-height interno (su telefono combatte con lo scroll della dashboard). */
 export const staffEditorShellClass =
-  'bg-gray-800 p-3 sm:p-5 lg:p-6 rounded-xl space-y-4 sm:space-y-6 mx-auto min-w-0 w-full max-w-full overflow-x-hidden text-white shadow-2xl border border-gray-700 pb-36 lg:pb-6';
+  'bg-gray-800 p-3 sm:p-5 lg:p-6 rounded-xl space-y-4 sm:space-y-6 mx-auto min-w-0 w-full max-w-full overflow-x-hidden text-white shadow-2xl border border-gray-700 pb-40 lg:pb-6';
 
 /**
  * Header editor: su telefono solo il titolo; Salva/Annulla restano in barra fissa in basso
@@ -108,7 +164,7 @@ export function StaffEditorHeader({
       ? createPortal(
           <div
             data-testid="staff-editor-mobile-footer"
-            className="lg:hidden fixed inset-x-0 bottom-0 z-[120] border-t border-gray-700 bg-gray-950/95 px-3 pt-2 backdrop-blur-sm pb-[max(0.75rem,var(--kor-safe-bottom))]"
+            className="lg:hidden fixed inset-x-0 bottom-0 z-[130] border-t border-gray-700 bg-gray-950/95 px-3 pt-2 backdrop-blur-sm pb-[max(0.75rem,var(--kor-safe-bottom))]"
           >
             {actions}
           </div>,

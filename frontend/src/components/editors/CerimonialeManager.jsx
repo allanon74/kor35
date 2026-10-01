@@ -6,7 +6,7 @@ import { associaQrDiretto, staffGetCerimonialeDetail } from '../../api';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
-import { StaffToolShell, scrollStaffMainToTop } from '../../staff/StaffToolShell';
+import { StaffToolShell, StaffFullscreenEditor, scrollStaffMainToTop } from '../../staff/StaffToolShell';
 
 const CerimonialeManager = ({ onBack, onLogout }) => {
   const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
@@ -47,16 +47,6 @@ const CerimonialeManager = ({ onBack, onLogout }) => {
     setScanningForElement(elementId);
   }, []);
 
-  if (view === 'edit') {
-    return (
-      <CerimonialeEditor 
-        initialData={editingItem} 
-        onBack={handleBackToList} 
-        onLogout={onLogout} 
-      />
-    );
-  }
-
   return (
     <StaffToolShell>
       {qrStatus.message && (
@@ -69,16 +59,28 @@ const CerimonialeManager = ({ onBack, onLogout }) => {
           </div>
         )}
       
-      <CerimonialeList 
-        onAdd={handleAdd} 
-        onEdit={handleEdit} 
-        onScanQr={handleScanQr}
-        onMinigioco={(item) => openMinigioco(item.qrcode_id, item.nome)}
-        onLogout={onLogout}
-        listVersion={listVersion}
-      />
-      {isLoadingEditorData && (
-        <div className="text-xs text-gray-400">Caricamento dettaglio cerimoniale...</div>
+      {view === 'list' ? (
+        <>
+          <CerimonialeList
+            onAdd={handleAdd}
+            onEdit={handleEdit}
+            onScanQr={handleScanQr}
+            onMinigioco={(item) => openMinigioco(item.qrcode_id, item.nome)}
+            onLogout={onLogout}
+            listVersion={listVersion}
+          />
+          {isLoadingEditorData ? (
+            <div className="text-xs text-gray-400">Caricamento dettaglio cerimoniale...</div>
+          ) : null}
+        </>
+      ) : (
+        <StaffFullscreenEditor open onBack={handleBackToList}>
+          <CerimonialeEditor
+            initialData={editingItem}
+            onBack={handleBackToList}
+            onLogout={onLogout}
+          />
+        </StaffFullscreenEditor>
       )}
 
       {scanningForElement && (

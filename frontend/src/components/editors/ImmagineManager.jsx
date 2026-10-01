@@ -1,6 +1,5 @@
 import React, { useState, useCallback, memo } from 'react';
-import { ArrowLeft } from 'lucide-react';
-import { StaffToolShell } from '../../staff/StaffToolShell';
+import { StaffToolShell, StaffFullscreenEditor, scrollStaffMainToTop } from '../../staff/StaffToolShell';
 import ImmagineList from './ImmagineList';
 import ImmagineEditor from './ImmagineEditor';
 
@@ -11,11 +10,13 @@ const ImmagineManager = ({ onBack, onLogout }) => {
   const handleAdd = useCallback(() => {
     setSelectedItem(null);
     setView('editor');
+    scrollStaffMainToTop();
   }, []);
 
   const handleEdit = useCallback((item) => {
     setSelectedItem(item);
     setView('editor');
+    scrollStaffMainToTop();
   }, []);
 
   const handleBackToList = useCallback(() => {
@@ -25,15 +26,6 @@ const ImmagineManager = ({ onBack, onLogout }) => {
 
   return (
     <StaffToolShell className="space-y-4">
-      {view !== 'list' && (
-      <button 
-        onClick={handleBackToList}
-        className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm font-bold uppercase"
-      >
-        <ArrowLeft size={16} />
-        Annulla e Torna alla Lista
-      </button>
-      )}
 
       {view === 'list' ? (
         <ImmagineList 
@@ -42,11 +34,12 @@ const ImmagineManager = ({ onBack, onLogout }) => {
           onLogout={onLogout} 
         />
       ) : (
-        <ImmagineEditor 
+        <StaffFullscreenEditor open onBack={handleBackToList}>
+          <ImmagineEditor 
           initialData={selectedItem} 
           onBack={handleBackToList} 
-          onLogout={onLogout} 
-        />
+          onLogout={onLogout} />
+        </StaffFullscreenEditor>
       )}
     </StaffToolShell>
   );
