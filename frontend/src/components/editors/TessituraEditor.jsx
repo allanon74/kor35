@@ -104,6 +104,14 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
           mergeAbilitaTemporaneaOption(rows, initialData?.abilita_temporanea)
         );
         setElementoMattoniOptions(semantic?.elementi_mattoni || []);
+        // Record nuovo (anche quello creato da una proposta) senza formula: mostriamo
+        // il template di default invece di salvare una tessitura senza formula.
+        const defaultTemplate = (semantic?.formula_default_template || '').trim();
+        if (defaultTemplate) {
+          setFormData((prev) =>
+            prev.id || (prev.formula || '').trim() ? prev : { ...prev, formula: defaultTemplate }
+          );
+        }
       } catch (e) {
         console.error('Errore caricamento risorse tessitura:', e);
       }
@@ -119,9 +127,16 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     );
   }, [formData.abilita_temporanea]);
 
+  // Ri-idrata solo quando cambia il record, non a ogni nuova identità dell'oggetto
+  // `initialData`: in «Valutazione proposte» il padre lo ricostruisce a ogni render e
+  // un reset qui cancellerebbe la formula e gli altri campi appena scritti dallo staff.
+  const initialRecordId = initialData?.id ?? null;
+  const hydratedRecordIdRef = useRef(initialRecordId);
   useEffect(() => {
+    if (hydratedRecordIdRef.current === initialRecordId) return;
+    hydratedRecordIdRef.current = initialRecordId;
     setFormData(hydrateForm(initialData));
-  }, [initialData]);
+  }, [initialData, initialRecordId]);
 
   // Calcolo livello property (numero componenti)
   const calculatedLevel = (formData.componenti || []).reduce((acc, curr) => acc + (parseInt(curr.valore) || 0), 0);
