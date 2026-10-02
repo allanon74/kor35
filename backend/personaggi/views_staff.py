@@ -28,6 +28,7 @@ from .models import (
     Era, Prefettura, Regione, Korp, Carriera, TipoCarriera, Carica,
     PersonaggioCarrieraMembership, CarrieraTierSblocco,
     Dichiarazione,
+    DEFAULT_WEAVE_FORMULA_TEMPLATE,
     Campagna, CampagnaFeaturePolicy,
     RegolaTransazioneCategoria,
     PersonaggioLog,
@@ -705,7 +706,15 @@ class ApprovaPropostaView(APIView):
                 data['campagna'] = proposta.personaggio.campagna_id
                 if not proposta.permetti_vendita:
                     data['escluso_negozio_ufficiale'] = True
-                
+
+                # La proposta del giocatore non contiene una formula: l'editor staff
+                # invia comunque il campo vuoto. Rimuoverlo lascia valere il template
+                # di default del modello, altrimenti la tecnica nasce senza formula.
+                for campo_formula in ('formula', 'formula_attacco'):
+                    if campo_formula in data and not str(data.get(campo_formula) or '').strip():
+                        data.pop(campo_formula)
+
+
                 # Serializer Selection (Usiamo i FullEditor per abilitare la scrittura)
                 serializer = None
                 
@@ -1898,7 +1907,14 @@ class FormulaSemanticOptionsView(APIView):
             }
             for m in mattoni
         ]
-        return Response({"elementi_mattoni": data})
+        # Il template di default serve agli editor per precompilare la formula dei
+        # nuovi record invece di salvarli con la formula vuota.
+        return Response(
+            {
+                "elementi_mattoni": data,
+                "formula_default_template": DEFAULT_WEAVE_FORMULA_TEMPLATE,
+            }
+        )
 
 
 class StaffMinigiocoQrConfigView(APIView):

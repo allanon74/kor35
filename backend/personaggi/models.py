@@ -5945,6 +5945,24 @@ class Oggetto(A_vista):
         return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
 
     @property
+    def formula_attacco_effettiva(self):
+        """
+        Formula d'attacco da mostrare al giocatore.
+
+        Vuota (= nessuna formula nel rendering) se l'oggetto non ha formula
+        oppure se l'infusione che l'ha generato ha la formula svuotata dallo
+        staff: in quel caso il template di default sull'istanza non deve
+        produrre una riga «Formula:» fantasma.
+        """
+        formula = (self.attacco_base or "").strip()
+        if not formula:
+            return ""
+        infusione = self.infusione_generatrice
+        if infusione is not None and not (infusione.formula_attacco or "").strip():
+            return ""
+        return formula
+
+    @property
     def TestoFormattato(self): 
         from .sezioni_condizionali import html_sezioni_append, statistiche_base_per_item
         stats = statistiche_base_per_item(self, personaggio=None)
@@ -5953,7 +5971,7 @@ class Oggetto(A_vista):
             'aura': self.aura,
             'item_modifiers': raccogli_modificatori_solo_oggetto(self),
             'formula_builder_selezioni': self.formula_builder_selezioni or {},
-            'attack_formula_template': self.attacco_base,
+            'attack_formula_template': self.formula_attacco_effettiva,
             'formula_kind': FORMULA_SCOPE_ATTACK,
         }
         base_text = formatta_testo_generico(
@@ -8264,18 +8282,19 @@ class Personaggio(Inventario):
         if isinstance(item, Oggetto):
             stats = statistiche_base_per_item(item, self)
             item_mods = raccogli_modificatori_solo_oggetto(item, personaggio=self)
+            formula_oggetto = item.formula_attacco_effettiva
             ctx = {
                 'livello': item.livello,
                 'aura': item.aura,
                 'item_modifiers': item_mods,
                 'formula_kind': FORMULA_SCOPE_ATTACK,
-                'attack_formula_template': item.attacco_base,
+                'attack_formula_template': formula_oggetto,
                 'classe_oggetto': item.classe_oggetto.nome if item.classe_oggetto else '',
                 'formula_builder_selezioni': getattr(item, 'formula_builder_selezioni', None) or {},
             }
             testo_finale = formatta_testo_generico(
                 item.testo,
-                formula=item.attacco_base,
+                formula=formula_oggetto,
                 statistiche_base=stats,
                 personaggio=self,
                 context=ctx,

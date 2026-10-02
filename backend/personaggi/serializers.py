@@ -1472,6 +1472,7 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
     is_active = serializers.BooleanField(read_only=True)
     spegne_a_zero_cariche = serializers.SerializerMethodField()
     attacco_base = serializers.CharField(read_only=True)
+    attacco_base_effettivo = serializers.SerializerMethodField()
     attacco_formattato = serializers.SerializerMethodField()
     costi_attivazione = serializers.SerializerMethodField()
     
@@ -1496,7 +1497,7 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
             'is_active', 'spegne_a_zero_cariche', 
             'costi_attivazione',
             'statistiche', 'componenti', 
-            'attacco_base', 'attacco_formattato',
+            'attacco_base', 'attacco_base_effettivo', 'attacco_formattato',
         ]
     
     def get_spegne_a_zero_cariche(self, obj):
@@ -1539,8 +1540,13 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
         
         return valore_base
     
+    def get_attacco_base_effettivo(self, obj):
+        # Formula «effettiva»: vuota se oggetto o infusione generatrice non ne hanno una.
+        return obj.formula_attacco_effettiva or None
+
     def get_attacco_formattato(self, obj):
-        if not obj.attacco_base: return None
+        formula = obj.formula_attacco_effettiva
+        if not formula: return None
         personaggio = self.context.get('personaggio')
         # Se l'oggetto è montato su un host, il proprietario è quello dell'host
         if not personaggio and obj.ospitato_su:
@@ -1552,11 +1558,11 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
         if personaggio:
             return formatta_testo_generico(
                 None, 
-                formula=obj.attacco_base, 
+                formula=formula, 
                 personaggio=personaggio, 
                 solo_formula=True
             ).replace("<strong>Formula:</strong>", "").strip()
-        return obj.attacco_base
+        return formula
 
     def get_durata_totale(self, obj):
         return obj.infusione_generatrice.durata_attivazione if obj.infusione_generatrice else 0
@@ -1638,6 +1644,7 @@ class OggettoSerializer(serializers.ModelSerializer):
     costo_ricarica = serializers.SerializerMethodField()
     testo_ricarica = serializers.SerializerMethodField()
     
+    attacco_base_effettivo = serializers.SerializerMethodField()
     attacco_formattato = serializers.SerializerMethodField()
     spegne_a_zero_cariche = serializers.SerializerMethodField()
     deve_essere_attivato = serializers.SerializerMethodField()
@@ -1681,6 +1688,7 @@ class OggettoSerializer(serializers.ModelSerializer):
             'slot_equip',
             'slot_fisici_possibili',
             'attacco_base',
+            'attacco_base_effettivo',
             'attacco_formattato',
 
             # Gestione Cariche e Origine
@@ -1752,8 +1760,13 @@ class OggettoSerializer(serializers.ModelSerializer):
             many=True,
         ).data
 
+    def get_attacco_base_effettivo(self, obj):
+        # Formula «effettiva»: vuota se oggetto o infusione generatrice non ne hanno una.
+        return obj.formula_attacco_effettiva or None
+
     def get_attacco_formattato(self, obj):
-        if not obj.attacco_base:
+        formula = obj.formula_attacco_effettiva
+        if not formula:
             return None
         
         from .sezioni_condizionali import statistiche_base_per_item
@@ -1768,7 +1781,7 @@ class OggettoSerializer(serializers.ModelSerializer):
             'aura': obj.aura,
             'item_modifiers': item_mods,
             'formula_kind': FORMULA_SCOPE_ATTACK,
-            'attack_formula_template': obj.attacco_base,
+            'attack_formula_template': formula,
             'classe_oggetto': obj.classe_oggetto.nome if obj.classe_oggetto else '',
             'formula_builder_selezioni': getattr(obj, 'formula_builder_selezioni', None) or {},
         }
@@ -1778,7 +1791,7 @@ class OggettoSerializer(serializers.ModelSerializer):
             # Passiamo l'attacco come "formula" con statistiche_base e modificatori del personaggio
             return formatta_testo_generico(
                 None, 
-                formula=obj.attacco_base, 
+                formula=formula, 
                 statistiche_base=statistiche_base,
                 personaggio=personaggio,
                 context=context,
@@ -1788,7 +1801,7 @@ class OggettoSerializer(serializers.ModelSerializer):
         # Senza personaggio, formatta comunque con le statistiche_base
         return formatta_testo_generico(
             None, 
-            formula=obj.attacco_base, 
+            formula=formula, 
             statistiche_base=statistiche_base,
             context=context,
             solo_formula=True
