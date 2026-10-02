@@ -3,6 +3,8 @@ import { Dialog } from '@headlessui/react';
 import { X, Store, Loader2, Search } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import { RichTextViewer } from './RichTextDisplay';
+import NegozioVoceRow from './negozio/NegozioVoceRow';
+import NegozioVoceDetailModal from './negozio/NegozioVoceDetailModal';
 import {
   fetchNegozioMercanteListino,
   acquistaNegozioMercante,
@@ -32,6 +34,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
   const [sellPreview, setSellPreview] = useState(null);
   const [sellItemId, setSellItemId] = useState(null);
   const [checkout, setCheckout] = useState(null);
+  const [voceAperta, setVoceAperta] = useState(null);
   const [destQuery, setDestQuery] = useState('');
   const [destResults, setDestResults] = useState([]);
   const [destLoading, setDestLoading] = useState(false);
@@ -283,45 +286,64 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
     return `${v.prezzo_crediti} CR`;
   };
 
+  const handleBuyDaScheda = (voce) => {
+    setVoceAperta(null);
+    handleBuy(voce);
+  };
+
   const aperto = listino?.aperto !== false;
   const isPrestitoNegozio = !!listino?.negozio_prestiti;
   const testoImmersivo =
     (listino?.descrizione_immersiva || listino?.descrizione || '').trim();
   const prestitiMiei = listino?.prestiti_attivi || [];
 
+  // Dopo un reload del listino la scheda aperta deve mostrare i dati freschi.
+  const voceApertaAggiornata = useMemo(() => {
+    if (!voceAperta) return null;
+    const key = `${voceAperta.tipo}-${voceAperta.id}`;
+    return (listino?.voci || []).find((v) => `${v.tipo}-${v.id}` === key) || voceAperta;
+  }, [voceAperta, listino?.voci]);
+
   return (
     <Dialog open onClose={onClose} className="relative z-50">
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" aria-hidden="true" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="w-full max-w-2xl max-h-[90vh] flex flex-col bg-gray-900 border border-amber-700/40 rounded-xl shadow-2xl">
-          <div className="flex justify-between items-center p-4 border-b border-gray-700">
-            <Dialog.Title className="text-lg font-bold text-amber-400 flex items-center gap-2">
-              <Store size={22} />
-              {listino?.nome || 'Negozio'}
-            </Dialog.Title>
-            <div className="flex items-center gap-3 text-sm">
-              {duale ? (
-                <span className="font-mono text-xs">
-                  <span className="text-emerald-300">{fmtCr(creditiCorrente)} corr.</span>
-                  <span className="text-gray-500"> · </span>
-                  <span className="text-amber-300">{fmtCr(creditiDeposito)} dep.</span>
-                </span>
-              ) : (
-                <span className="text-yellow-400 font-mono">{char?.crediti ?? 0} CR</span>
-              )}
-              <span className="text-gray-500">|</span>
-              <span className="text-gray-400">Cassa: {listino?.saldo_crediti ?? '—'} CR</span>
-              <button type="button" onClick={onClose} className="text-gray-400 hover:text-white">
-                <X size={22} />
-              </button>
+      <div className="fixed inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <Dialog.Panel className="w-full sm:max-w-2xl h-[96dvh] sm:h-auto sm:max-h-[90vh] flex flex-col bg-gray-900 border border-amber-700/40 rounded-t-xl sm:rounded-xl shadow-2xl min-w-0">
+          <div className="flex items-start justify-between gap-2 p-3 sm:p-4 border-b border-gray-700 shrink-0">
+            <div className="min-w-0">
+              <Dialog.Title className="text-base sm:text-lg font-bold text-amber-400 flex items-center gap-2 min-w-0">
+                <Store size={20} className="shrink-0" />
+                <span className="break-words">{listino?.nome || 'Negozio'}</span>
+              </Dialog.Title>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-xs">
+                {duale ? (
+                  <span className="font-mono">
+                    <span className="text-emerald-300">{fmtCr(creditiCorrente)} corr.</span>
+                    <span className="text-gray-500"> · </span>
+                    <span className="text-amber-300">{fmtCr(creditiDeposito)} dep.</span>
+                  </span>
+                ) : (
+                  <span className="text-yellow-400 font-mono">{char?.crediti ?? 0} CR</span>
+                )}
+                <span className="text-gray-600">|</span>
+                <span className="text-gray-400">Cassa: {listino?.saldo_crediti ?? '—'} CR</span>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Chiudi negozio"
+              className="shrink-0 min-h-11 min-w-11 flex items-center justify-center text-gray-400 hover:text-white"
+            >
+              <X size={22} />
+            </button>
           </div>
 
           {aperto && (
-            <div className="flex border-b border-gray-700 text-sm">
+            <div className="flex border-b border-gray-700 text-sm shrink-0">
               <button
                 type="button"
-                className={`flex-1 py-2 ${tab === 'acquista' ? 'text-amber-400 border-b-2 border-amber-500' : 'text-gray-400'}`}
+                className={`flex-1 min-h-11 ${tab === 'acquista' ? 'text-amber-400 border-b-2 border-amber-500' : 'text-gray-400'}`}
                 onClick={() => setTab('acquista')}
               >
                 {isPrestitoNegozio ? 'Prendi in prestito' : 'Acquista'}
@@ -329,7 +351,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
               {isPrestitoNegozio ? (
                 <button
                   type="button"
-                  className={`flex-1 py-2 ${tab === 'restituisci' ? 'text-sky-400 border-b-2 border-sky-500' : 'text-gray-400'}`}
+                  className={`flex-1 min-h-11 ${tab === 'restituisci' ? 'text-sky-400 border-b-2 border-sky-500' : 'text-gray-400'}`}
                   onClick={() => setTab('restituisci')}
                 >
                   Restituisci
@@ -338,7 +360,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
               ) : (
                 <button
                   type="button"
-                  className={`flex-1 py-2 ${tab === 'vendi' ? 'text-amber-400 border-b-2 border-amber-500' : 'text-gray-400'}`}
+                  className={`flex-1 min-h-11 ${tab === 'vendi' ? 'text-amber-400 border-b-2 border-amber-500' : 'text-gray-400'}`}
                   onClick={() => setTab('vendi')}
                 >
                   Vendi
@@ -347,7 +369,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
             </div>
           )}
 
-          <div className="p-4 overflow-y-auto flex-1 space-y-4">
+          <div className="p-3 sm:p-4 overflow-y-auto flex-1 space-y-4 min-w-0">
             {isPrestitoNegozio && (
               <p className="text-xs text-sky-300/90 bg-sky-950/40 border border-sky-800/60 rounded-lg px-3 py-2">
                 Negozio di prestiti · max {listino?.limite_prestiti_per_personaggio || 1} oggetto
@@ -381,68 +403,17 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
             ) : tab === 'acquista' || !aperto ? (
               <div className="grid gap-2">
                 {(listino?.voci || []).map((v) => (
-                  <div
+                  <NegozioVoceRow
                     key={`${v.tipo}-${v.id}`}
-                    className="flex justify-between items-start gap-2 p-3 rounded-lg border border-gray-700 bg-gray-800/80"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-semibold text-white truncate">{v.nome}</div>
-                      {v.tipo === 'bundle' && (
-                        <div className="text-[10px] uppercase tracking-wide text-violet-300 mt-0.5">
-                          Pacchetto
-                        </div>
-                      )}
-                      {(v.testo_formattato || v.descrizione) ? (
-                        <div className="text-xs text-gray-400 mt-1 leading-relaxed prose prose-invert prose-sm max-w-none line-clamp-4">
-                          {v.tipo === 'bundle' && !v.testo_formattato ? (
-                            v.descrizione
-                          ) : (
-                            <RichTextViewer content={v.testo_formattato || v.descrizione} />
-                          )}
-                        </div>
-                      ) : null}
-                      {v.tipo === 'bundle' && Array.isArray(v.componenti) && v.componenti.length > 0 && (
-                        <ul className="mt-1 text-xs text-gray-400 list-disc list-inside">
-                          {v.componenti.map((c) => (
-                            <li key={`${c.voce_id}-${c.nome}`}>
-                              {c.nome}
-                              {c.quantita > 1 ? ` ×${c.quantita}` : ''}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {v.richiede_montaggio && (
-                        <div className="text-[10px] uppercase tracking-wide text-fuchsia-300 mt-0.5">
-                          Innesto / mutazione · montaggio in locazione
-                        </div>
-                      )}
-                      {v.messaggio_usabilita && (
-                        <div
-                          className={`text-xs mt-1 ${v.acquistabile ? 'text-gray-400' : 'text-amber-300'}`}
-                        >
-                          {v.messaggio_usabilita}
-                        </div>
-                      )}
-                      {v.quantita_residua != null && (
-                        <div className="text-xs text-gray-500">Disponibili: {v.quantita_residua}</div>
-                      )}
-                      {v.usato && <div className="text-xs text-emerald-500">Usato</div>}
-                    </div>
-                    <button
-                      type="button"
-                      disabled={!aperto || !v.acquistabile || busy}
-                      onClick={() => handleBuy(v)}
-                      className={`shrink-0 px-3 py-1.5 rounded disabled:opacity-40 text-white text-sm font-bold ${
-                        v.tipo === 'bundle'
-                          ? 'bg-violet-700 hover:bg-violet-600'
-                          : isPrestitoNegozio
-                            ? 'bg-sky-700 hover:bg-sky-600'
-                            : 'bg-amber-700 hover:bg-amber-600'
-                      }`}
-                    >
-                      {prezzoVoce(v)}
-                    </button>
-                  </div>
+                    voce={v}
+                    prezzoLabel={prezzoVoce(v)}
+                    onOpen={() => setVoceAperta(v)}
+                    onBuy={() => handleBuy(v)}
+                    buyDisabled={!aperto || !v.acquistabile || busy}
+                    buyTone={
+                      v.tipo === 'bundle' ? 'violet' : isPrestitoNegozio ? 'sky' : 'amber'
+                    }
+                  />
                 ))}
                 {aperto && (listino?.voci || []).length === 0 && (
                   <p className="text-gray-500 text-center py-6">
@@ -462,10 +433,10 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                   prestitiMiei.map((p) => (
                     <div
                       key={p.id}
-                      className="flex justify-between items-center gap-2 p-3 rounded-lg border border-sky-800/50 bg-sky-950/30"
+                      className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 p-3 rounded-lg border border-sky-800/50 bg-sky-950/30 min-w-0"
                     >
                       <div className="min-w-0">
-                        <div className="font-semibold text-white truncate">{p.oggetto_nome}</div>
+                        <div className="font-semibold text-white break-words">{p.oggetto_nome}</div>
                         <div className="text-xs text-gray-400">
                           {p.costo_noleggio
                             ? `Noleggio pagato: ${p.costo_noleggio} CR`
@@ -476,7 +447,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                         type="button"
                         disabled={busy}
                         onClick={() => handleRestituisci(p)}
-                        className="shrink-0 px-3 py-1.5 rounded bg-sky-700 hover:bg-sky-600 text-white text-sm font-bold disabled:opacity-40"
+                        className="w-full sm:w-auto shrink-0 min-h-11 px-3 rounded bg-sky-700 hover:bg-sky-600 text-white text-sm font-bold disabled:opacity-40"
                       >
                         Restituisci
                       </button>
@@ -489,7 +460,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                 <div className="relative">
                   <Search className="absolute left-2 top-2.5 text-gray-500" size={16} />
                   <input
-                    className="w-full pl-8 pr-2 py-2 bg-gray-800 border border-gray-600 rounded text-sm"
+                    className="w-full pl-8 pr-2 min-h-11 bg-gray-800 border border-gray-600 rounded text-sm"
                     placeholder="Cerca nel tuo inventario…"
                     value={sellSearch}
                     onChange={(e) => setSellSearch(e.target.value)}
@@ -501,7 +472,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                       <button
                         type="button"
                         onClick={() => setSellItemId(o.id)}
-                        className={`w-full text-left px-3 py-2 rounded text-sm ${
+                        className={`w-full text-left px-3 min-h-11 rounded text-sm ${
                           String(sellItemId) === String(o.id)
                             ? 'bg-amber-900/60 border border-amber-600'
                             : 'bg-gray-800 hover:bg-gray-700 border border-transparent'
@@ -547,7 +518,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
                   type="button"
                   disabled={!sellItemId || busy || sellPreview?.error}
                   onClick={handleSellConfirm}
-                  className="w-full py-2 rounded-lg bg-emerald-800 hover:bg-emerald-700 disabled:opacity-40 font-semibold text-sm"
+                  className="w-full min-h-11 rounded-lg bg-emerald-800 hover:bg-emerald-700 disabled:opacity-40 font-semibold text-sm"
                 >
                   Conferma vendita
                 </button>
@@ -556,12 +527,12 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
           </div>
 
           {aperto && (
-            <div className="p-4 border-t border-gray-700">
+            <div className="p-3 sm:p-4 border-t border-gray-700 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <button
                 type="button"
                 onClick={reload}
                 disabled={busy}
-                className="w-full py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm"
+                className="w-full min-h-11 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm"
               >
                 Aggiorna listino
               </button>
@@ -570,11 +541,33 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
         </Dialog.Panel>
       </div>
 
+      {voceApertaAggiornata && (
+        <NegozioVoceDetailModal
+          voce={voceApertaAggiornata}
+          prezzoLabel={prezzoVoce(voceApertaAggiornata)}
+          onClose={() => setVoceAperta(null)}
+          onAction={
+            aperto && voceApertaAggiornata.acquistabile
+              ? () => handleBuyDaScheda(voceApertaAggiornata)
+              : undefined
+          }
+          actionLabel={isPrestitoNegozio ? 'Prendi in prestito' : 'Acquista'}
+          actionDisabled={busy}
+          actionTone={
+            voceApertaAggiornata.tipo === 'bundle'
+              ? 'violet'
+              : isPrestitoNegozio
+                ? 'sky'
+                : 'amber'
+          }
+        />
+      )}
+
       {checkout && (
         <Dialog open onClose={() => !busy && setCheckout(null)} className="relative z-[60]">
           <div className="fixed inset-0 bg-black/80" />
-          <div className="fixed inset-0 flex items-center justify-center p-4">
-            <Dialog.Panel className="bg-gray-900 border border-gray-600 rounded-xl p-4 max-w-md w-full space-y-3">
+          <div className="fixed inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
+            <Dialog.Panel className="bg-gray-900 border border-gray-600 rounded-t-xl sm:rounded-xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:max-w-md w-full max-h-[92dvh] overflow-y-auto space-y-3 min-w-0">
               <Dialog.Title className="font-bold text-white">
                 Acquisto: {checkout.voce.nome}
               </Dialog.Title>

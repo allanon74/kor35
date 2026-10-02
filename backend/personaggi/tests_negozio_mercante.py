@@ -97,6 +97,104 @@ class NegozioMercanteServiceTests(TestCase):
         self.assertIn("Scudo tattico", nomi["Scudo NNT"]["descrizione"])
 
 
+class NegozioMercanteAnteprimaStaffTests(TestCase):
+    """Anteprima staff della vetrina: nomi/descrizioni/prezzi senza personaggio."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from personaggi.negozio_mercante_models import (
+            STOCK_DISPONIBILE,
+            VOCE_OGGETTO,
+            NegozioMercanteStock,
+            NegozioMercanteVoce,
+        )
+
+        cls.campagna, _ = Campagna.objects.get_or_create(
+            slug="kor35",
+            defaults={
+                "nome": "KOR35",
+                "is_default": True,
+                "is_base": True,
+                "attiva": True,
+            },
+        )
+        cls.staff = User.objects.create_superuser(
+            username="staff_anteprima",
+            password="test",
+            email="anteprima@test.local",
+        )
+        cls.negozio = NegozioMercante.objects.create(
+            nome="Vetrina test",
+            campagna=cls.campagna,
+            descrizione_immersiva="<p>Il bancone è ingombro di cavi.</p>",
+            saldo_crediti=Decimal("100"),
+            regole_apertura={"modalita": "sempre_aperto"},
+        )
+        og = Oggetto.objects.create(
+            nome="Torcia tattica",
+            testo="<p>Illumina 20 metri.</p>",
+            costo_acquisto=30,
+        )
+        NegozioMercanteVoce.objects.create(
+            negozio=cls.negozio,
+            tipo_voce=VOCE_OGGETTO,
+            oggetto=og,
+            prezzo_crediti=30,
+            attivo=True,
+        )
+        og_stock = Oggetto.objects.create(
+            nome="Casco usato",
+            testo="<p>Ammaccato ma funzionante.</p>",
+            costo_acquisto=20,
+        )
+        og_stock.sposta_in_inventario(cls.negozio.inventario)
+        NegozioMercanteStock.objects.create(
+            negozio=cls.negozio,
+            oggetto=og_stock,
+            stato=STOCK_DISPONIBILE,
+            prezzo_rivendita=15,
+            valore_riferimento=20,
+        )
+
+    def test_anteprima_service_senza_personaggio(self):
+        from personaggi.negozio_mercante_service import build_listino_anteprima
+
+        payload = build_listino_anteprima(self.negozio)
+        self.assertTrue(payload["anteprima"])
+        self.assertIn("bancone", payload["descrizione_immersiva"])
+        voci = {v["nome"]: v for v in payload["voci"]}
+        self.assertIn("Torcia tattica", voci)
+        self.assertIn("Illumina 20 metri", voci["Torcia tattica"]["testo_formattato"])
+        self.assertEqual(voci["Torcia tattica"]["prezzo_crediti"], 30)
+        self.assertFalse(voci["Torcia tattica"]["acquistabile"])
+        self.assertIn("Casco usato", voci)
+        self.assertTrue(voci["Casco usato"]["usato"])
+
+    def test_endpoint_staff_anteprima(self):
+        client = APIClient()
+        client.force_authenticate(user=self.staff)
+        res = client.get(
+            f"/api/personaggi/api/staff/negozi-mercante/{self.negozio.id}/anteprima/",
+            HTTP_X_CAMPAGNA="kor35",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["anteprima"])
+        self.assertEqual(
+            {v["nome"] for v in res.data["voci"]},
+            {"Torcia tattica", "Casco usato"},
+        )
+
+    def test_endpoint_anteprima_richiede_staff(self):
+        user = User.objects.create_user(username="pg_curioso", password="test")
+        client = APIClient()
+        client.force_authenticate(user=user)
+        res = client.get(
+            f"/api/personaggi/api/staff/negozi-mercante/{self.negozio.id}/anteprima/",
+            HTTP_X_CAMPAGNA="kor35",
+        )
+        self.assertIn(res.status_code, (401, 403))
+
+
 class NegozioMercanteAssociaQrApiTests(TestCase):
     @classmethod
     def setUpTestData(cls):

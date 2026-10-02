@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { staffGetProposteInValutazione, staffRifiutaProposta, staffApprovaProposta, getEventi } from '../../api';
 import GenericHeader from '../GenericHeader';
 import { Eye, X, Check, ClipboardCheck, AlertCircle } from 'lucide-react';
@@ -91,7 +91,9 @@ const StaffProposalTab = ({ onLogout }) => {
 
     // Prepara i dati per l'editor.
     // FIX: Mappiamo correttamente i dati per evitare errori 'undefined map'
-    const getInitialEditorData = () => {
+    // Memoizzato: gli editor ri-idratano il form quando cambia `initialData`, quindi un
+    // oggetto nuovo a ogni render cancellerebbe quanto digitato dallo staff.
+    const editorInitialData = useMemo(() => {
         if (!selectedProposal) return {};
         const p = selectedProposal;
         
@@ -123,7 +125,7 @@ const StaffProposalTab = ({ onLogout }) => {
             
             note_staff: staffNotes
         };
-    };
+    }, [selectedProposal, staffNotes]);
 
     const handleFinalizeApproval = async (finalData) => {
         try {
@@ -148,6 +150,9 @@ const StaffProposalTab = ({ onLogout }) => {
             // Gestione sicura dell'errore (evita variabili non definite come 't')
             const errorMsg = err.response?.data?.error || err.message || "Errore sconosciuto";
             setFeedback({ type: 'error', message: `Errore durante l'approvazione: ${errorMsg}` });
+            // Rilanciamo: l'editor resta aperto e mostra l'errore accanto al pulsante di
+            // salvataggio, altrimenti il click sembra non fare nulla.
+            throw err;
         }
     };
 
@@ -257,7 +262,7 @@ const StaffProposalTab = ({ onLogout }) => {
     // --- RENDER: EDITOR DI APPROVAZIONE ---
     if (viewMode === 'approve_edit') {
         const commonProps = {
-            initialData: getInitialEditorData(),
+            initialData: editorInitialData,
             onSave: handleFinalizeApproval,
             onCancel: () => setViewMode('detail'),
             onLogout: onLogout, 
@@ -279,7 +284,13 @@ const StaffProposalTab = ({ onLogout }) => {
                         </div>
                         <button onClick={() => setViewMode('detail')} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-bold text-sm">Annulla</button>
                     </div>
-                    
+
+                    {feedback.type === 'error' && feedback.message && (
+                        <div className="mb-4 text-xs border rounded-md px-3 py-2 text-red-200 bg-red-900/20 border-red-700/40 break-words">
+                            {feedback.message}
+                        </div>
+                    )}
+
                     <div className="bg-gray-900 rounded-xl border border-gray-700 overflow-hidden min-h-[80vh]">
                         {selectedProposal.tipo === 'INF' && <InfusioneEditor {...commonProps} />}
                         {selectedProposal.tipo === 'TES' && <TessituraEditor {...commonProps} />}

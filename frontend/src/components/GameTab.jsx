@@ -17,6 +17,7 @@ import { gameComaControl } from '../api';
 import { getOfflineGameStateSnapshot } from '../lib/offlineGameStateDb';
 import { getTacticalPoolCurrent, risorsePoolVisibiliInGame } from '../lib/gamePoolUtils';
 import { evaluateActivationCosts } from '../lib/activationCostUtils';
+import { formulaAttaccoOggetto } from '../lib/oggettoFormula';
 import ActivationCostPreview from './ActivationCostPreview';
 
 import ActiveItemWidget from './ActiveItemWidget';
@@ -552,7 +553,7 @@ const GameTab = ({ onNavigate }) => {
 
             activeHosts.forEach(host => {
                 // A. Aggiungi l'Host se ha attacco ed è attivo
-                if (host.attacco_base && isObjectActive(host)) {
+                if (formulaAttaccoOggetto(host) && isObjectActive(host)) {
                     attacks.push({
                         type: 'oggetto',
                         source: host,
@@ -564,7 +565,7 @@ const GameTab = ({ onNavigate }) => {
                 // B. Aggiungi i Potenziamenti (Mod/Materia) installati nell'Host che hanno attacco
                 if (host.potenziamenti_installati && host.potenziamenti_installati.length > 0) {
                     host.potenziamenti_installati.forEach(mod => {
-                        if (mod.attacco_base && isObjectActive(mod)) {
+                        if (formulaAttaccoOggetto(mod) && isObjectActive(mod)) {
                             attacks.push({
                                 type: 'modulo',
                                 source: mod,
@@ -887,7 +888,7 @@ const GameTab = ({ onNavigate }) => {
                                             </div>
                                             <div className="text-right">
                                                 <div className="text-lg font-mono font-bold text-red-400 drop-shadow-sm">
-                                                    {group.host.attacco_formattato || group.host.attacco_base}
+                                                    {group.host.attacco_formattato || formulaAttaccoOggetto(group.host)}
                                                 </div>
                                             </div>
                                         </div>
@@ -909,7 +910,7 @@ const GameTab = ({ onNavigate }) => {
                                                         <span className="text-[9px] text-gray-500">({mod.tipo_oggetto_display})</span>
                                                     </div>
                                                     <span className="font-mono text-xs font-bold text-yellow-100">
-                                                        {mod.attacco_formattato || mod.attacco_base}
+                                                        {mod.attacco_formattato || formulaAttaccoOggetto(mod)}
                                                     </span>
                                                 </div>
                                             ))}

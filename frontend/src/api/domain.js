@@ -1602,6 +1602,13 @@ export const staffGetNegozioMercanteReadiness = (negozioId, onLogout) =>
     onLogout,
   );
 
+export const staffGetNegozioMercanteAnteprima = (negozioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante/${negozioId}/anteprima/`,
+    { method: 'GET' },
+    onLogout,
+  );
+
 export const staffGetNegozioMercanteMovimenti = (negozioId, onLogout) =>
   fetchAuthenticated(
     `/api/personaggi/api/staff/negozi-mercante/${negozioId}/movimenti/`,

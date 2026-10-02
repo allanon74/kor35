@@ -22,6 +22,7 @@ from personaggi.negozio_mercante_service import (
     acquista_stock,
     acquista_voce,
     build_listino,
+    build_listino_anteprima,
     negozi_corporativi_per_personaggio,
     preview_vendita_oggetto,
     restituisci_prestito,
@@ -267,6 +268,12 @@ class NegozioMercanteStaffViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
     def readiness(self, request, pk=None):
         negozio = self.get_object()
         return Response(valuta_prontezza_negozio(negozio))
+
+    @action(detail=True, methods=["get"], url_path="anteprima")
+    def anteprima(self, request, pk=None):
+        """Vetrina del negozio come la vedrebbe un giocatore (sola lettura)."""
+        negozio = self.get_object()
+        return Response(build_listino_anteprima(negozio))
 
     @action(detail=True, methods=["get"], url_path="movimenti")
     def movimenti(self, request, pk=None):
