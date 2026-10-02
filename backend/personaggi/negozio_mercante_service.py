@@ -1296,6 +1296,126 @@ def build_listino(negozio: NegozioMercante, personaggio) -> dict:
     }
 
 
+def _voce_anteprima_staff(voce: NegozioMercanteVoce) -> dict | None:
+    """Voce di listino senza personaggio: solo dati vetrina (nessun check PG)."""
+    ent = _voce_entita(voce)
+    if voce.tipo_voce != VOCE_CONSUMABILE and ent is None:
+        return None
+    desc = _descrizione_entita_listino(ent)
+    quantita = (
+        _quantita_effettiva_serie(voce)
+        if voce.tipo_voce == VOCE_SERIE
+        else voce.quantita_residua
+    )
+    return {
+        "id": str(voce.id),
+        "tipo": "voce",
+        "tipo_voce": voce.tipo_voce,
+        "nome": getattr(ent, "nome", None) or voce.consumabile_nome or "Consumabile",
+        "descrizione": desc["descrizione"],
+        "testo_formattato": desc["testo_formattato"],
+        "prezzo_crediti": voce.prezzo_crediti,
+        "quantita_residua": quantita,
+        "non_vendibile": bool(voce.non_vendibile),
+        "richiede_montaggio": _voce_richiede_montaggio(voce),
+        "consegna_istanza": _voce_consegna_istanza(voce),
+        "prestabile": voce_e_prestabile(voce),
+        "acquistabile": False,
+    }
+
+
+def build_listino_anteprima(negozio: NegozioMercante) -> dict:
+    """
+    Vetrina del negozio senza personaggio: anteprima staff.
+
+    Mostra gli stessi nomi/descrizioni/prezzi base che vedrebbe un giocatore, ma
+    senza regole di apertura, visibilità, prezzi duali o disponibilità legate a
+    un PG: nulla è acquistabile da qui.
+    """
+    voci = []
+    for voce in negozio.voci.filter(attivo=True).select_related(
+        "negozio",
+        "oggetto_base",
+        "oggetto",
+        "oggetto__infusione_generatrice",
+        "abilita",
+        "infusione",
+        "tessitura",
+        "cerimoniale",
+        "consumabile_tessitura",
+        "serie",
+    ):
+        payload = _voce_anteprima_staff(voce)
+        if payload is not None:
+            voci.append(payload)
+
+    for bundle in (
+        NegozioMercanteBundle.objects.filter(negozio=negozio, attivo=True)
+        .prefetch_related("righe__voce")
+        .order_by("ordine", "created_at")
+    ):
+        righe = list(_righe_bundle_qs(bundle))
+        if not righe:
+            continue
+        voci.append(
+            {
+                "id": str(bundle.id),
+                "tipo": "bundle",
+                "tipo_voce": "BND",
+                "nome": bundle.nome,
+                "descrizione": bundle.descrizione or "",
+                "testo_formattato": "",
+                "prezzo_crediti": bundle.prezzo_crediti,
+                "quantita_residua": None,
+                "componenti": [
+                    {
+                        "voce_id": str(riga.voce_id),
+                        "nome": _nome_voce_catalogo(riga.voce),
+                        "tipo_voce": riga.voce.tipo_voce,
+                        "quantita": riga.quantita,
+                    }
+                    for riga in righe
+                ],
+                "acquistabile": False,
+            }
+        )
+
+    for stock in negozio.stock.filter(stato=STOCK_DISPONIBILE).select_related(
+        "oggetto", "oggetto__infusione_generatrice"
+    ):
+        desc = _descrizione_entita_listino(stock.oggetto)
+        voci.append(
+            {
+                "id": str(stock.id),
+                "tipo": "stock",
+                "tipo_voce": VOCE_OGGETTO,
+                "nome": stock.oggetto.nome,
+                "descrizione": desc["descrizione"],
+                "testo_formattato": desc["testo_formattato"],
+                "prezzo_crediti": stock.prezzo_rivendita,
+                "quantita_residua": 1,
+                "usato": True,
+                "messaggio_usabilita": MSG_USATO_LISTINO,
+                "acquistabile": False,
+            }
+        )
+
+    return {
+        "negozio_id": str(negozio.id),
+        "nome": negozio.nome,
+        "descrizione": negozio.descrizione,
+        "descrizione_immersiva": negozio.descrizione_immersiva or negozio.descrizione or "",
+        "tipo_negozio": negozio.tipo_negozio,
+        "negozio_prestiti": bool(negozio.negozio_prestiti),
+        "limite_prestiti_per_personaggio": int(negozio.limite_prestiti_per_personaggio or 1),
+        "aperto": bool(negozio.attivo),
+        "messaggio_accesso": "" if negozio.attivo else "Negozio non attivo.",
+        "saldo_crediti": float(negozio.saldo_crediti or 0),
+        "anteprima": True,
+        "voci": voci,
+    }
+
+
 def slot_innesto_disponibili(personaggio, oggetto) -> list:
     """Alias storico: slot liberi per un oggetto innesto/mutazione già esistente."""
     return slot_aumento_disponibili(personaggio, oggetto=oggetto)

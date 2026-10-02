@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Store, RefreshCw, QrCode, Pencil, Trash2, Package } from 'lucide-react';
+import { Store, RefreshCw, QrCode, Pencil, Trash2, Package, Eye } from 'lucide-react';
 import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import { RegoleAperturaEditor, RegoleVisibilitaEditor } from './RequisitiAccessoEditor';
 import NegozioConfigEconomiaEditor from './NegozioConfigEconomiaEditor';
+import NegozioAnteprimaModal from './NegozioAnteprimaModal';
 import NegozioReadinessBadge from '../NegozioReadinessBadge';
 import RichTextEditor from '../RichTextEditor';
 import StaffEditorModal from './StaffEditorModal';
@@ -252,6 +253,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
   const [bundleBusy, setBundleBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [scanningId, setScanningId] = useState(null);
+  const [anteprimaNegozio, setAnteprimaNegozio] = useState(null);
   const [pendingQrConflict, setPendingQrConflict] = useState(null);
   const [readiness, setReadiness] = useState(null);
   const [movimenti, setMovimenti] = useState([]);
@@ -723,6 +725,16 @@ const NegozioMercanteManager = ({ onLogout }) => {
           onEdit={openEditor}
           onDelete={deleteNegozio}
           onRowClick={openEditor}
+          extraRowActions={(negozio) => (
+            <button
+              type="button"
+              onClick={() => setAnteprimaNegozio(negozio)}
+              className="p-2.5 lg:p-2 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-lg transition-all"
+              title="Anteprima vetrina (come la vede un giocatore)"
+            >
+              <Eye size={16} />
+            </button>
+          )}
           columns={NEGOZIO_COLUMNS}
           filterConfig={NEGOZIO_FILTERS}
           searchPlaceholder="Cerca negozio…"
@@ -1476,6 +1488,14 @@ const NegozioMercanteManager = ({ onLogout }) => {
             </div>
           )}
         </StaffEditorModal>
+      )}
+
+      {anteprimaNegozio && (
+        <NegozioAnteprimaModal
+          negozio={anteprimaNegozio}
+          onClose={() => setAnteprimaNegozio(null)}
+          onLogout={onLogout}
+        />
       )}
 
       {scanningId && (
