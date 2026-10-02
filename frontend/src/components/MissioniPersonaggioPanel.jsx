@@ -102,7 +102,7 @@ export default function MissioniPersonaggioPanel({
                   ) : null}
                   {korpBonus ? (
                     <span className="rounded bg-violet-800/60 px-1.5 py-0.5 text-[10px] uppercase text-violet-100">
-                      Sovrapagata ×{m.fattore_applicato}
+                      Sovrapagata ×{m.fattore_crediti_applicato} Cr · ×{m.fattore_prestigio_applicato} Pr
                     </span>
                   ) : null}
                   {m.svolta ? (

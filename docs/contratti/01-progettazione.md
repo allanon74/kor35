@@ -31,7 +31,7 @@ Uno **slot di contratto** è la capacità del proponente di tenere aperta una pr
 
 ### Perché statistica + dati su Korp/Carica
 
-La statistica dà alle abilità, agli oggetti e allo staff lo stesso canale già usato per RCT, RCO e gli altri modificatori (`AbilitaStatistica` → `get_valore_statistica`). I «3 in ingresso» e il «+1 per carica» restano dati di Korp e Carica, come oggi `bonus_crediti_evento` e `bonus_peso_influencer`: lo staff li cambia senza fabbricare un'abilità per ogni grado.
+La statistica dà alle abilità, agli oggetti e allo staff lo stesso canale già usato per RCT, RCO e gli altri modificatori (`AbilitaStatistica` → `get_valore_statistica`). I «3 in ingresso» e il «+1 per carica» restano dati di Korp e Carica, come oggi `bonus_crediti_evento` e `bonus_slot_contratto`: lo staff li cambia senza fabbricare un'abilità per ogni grado.
 
 Formula effettiva, ricalcolata a ogni lettura (niente valore derivato salvato sul personaggio):
 

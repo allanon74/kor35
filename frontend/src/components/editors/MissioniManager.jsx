@@ -140,10 +140,15 @@ export default function MissioniManager({ onLogout }) {
   // SearchableSelect usa di default valueKey=id / labelKey=nome (non value/label).
   const korpOptions = useMemo(
     () =>
-      korps.map((k) => ({
-        id: k.id,
-        nome: `${k.nome || `KORP #${k.id}`}${k.fattore_task != null ? ` (×${k.fattore_task})` : ''}`,
-      })),
+      korps.map((k) => {
+        const fattori = [];
+        if (k.fattore_task_crediti != null) fattori.push(`×${k.fattore_task_crediti} Cr`);
+        if (k.fattore_task_prestigio != null) fattori.push(`×${k.fattore_task_prestigio} Pr`);
+        return {
+          id: k.id,
+          nome: `${k.nome || `KORP #${k.id}`}${fattori.length ? ` (${fattori.join(' · ')})` : ''}`,
+        };
+      }),
     [korps],
   );
 
