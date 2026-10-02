@@ -19,6 +19,7 @@ from personaggi.carte_collezionabili_models import (
     SCAMBIO_STATO_APERTA,
     SCAMBIO_STATO_ANNULLATA,
 )
+from personaggi.economia_crediti import saldo_deposito
 from personaggi.carte_mercato_service import (
     accetta_offerta_scambio,
     annulla_offerta_scambio,
@@ -105,10 +106,12 @@ class CarteMercatoServiceTests(TestCase):
         )
         offerta = OffertaScambioCarte.objects.get()
         crediti_b_prima = self.pg_b.crediti
-        crediti_a_prima = self.pg_a.crediti
+        deposito_a_prima = saldo_deposito(self.pg_a)
         accetta_offerta_scambio(self.pg_b, offerta.id)
+        self.pg_a.refresh_from_db()
+        # L'acquirente paga dal conto corrente, il venditore incassa sul deposito.
         self.assertEqual(self.pg_b.crediti, crediti_b_prima - Decimal("100"))
-        self.assertEqual(self.pg_a.crediti, crediti_a_prima + Decimal("90"))
+        self.assertEqual(saldo_deposito(self.pg_a), deposito_a_prima + Decimal("90"))
         offerta.refresh_from_db()
         self.assertEqual(offerta.commissione_crediti, Decimal("10.00"))
 

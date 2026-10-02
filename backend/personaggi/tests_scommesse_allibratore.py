@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from gestione_plot.models import Evento
+from personaggi.economia_crediti import saldo_deposito
 from personaggi.models import Personaggio
 from personaggi.scommesse_logic import applica_bonus_quota_allibratore
 from personaggi.scommesse_models import (
@@ -113,7 +114,8 @@ class ScommesseAllibratoreTests(TestCase):
 
     def test_commissione_solo_su_vincita_in_liquidazione(self):
         codice = CodiceScommessa.objects.create(allibratore=self.allibratore, codice="WIN01")
-        crediti_all_prima = self.allibratore.crediti
+        # La commissione viene accreditata sul conto deposito dell'allibratore.
+        deposito_all_prima = saldo_deposito(self.allibratore)
 
         piazza_puntata(
             self.giocatore,
@@ -123,7 +125,7 @@ class ScommesseAllibratoreTests(TestCase):
             codice_str=codice.codice,
         )
         self.allibratore.refresh_from_db()
-        self.assertEqual(self.allibratore.crediti, crediti_all_prima)
+        self.assertEqual(saldo_deposito(self.allibratore), deposito_all_prima)
 
         self.calendario.data_risoluzione = timezone.now() - timezone.timedelta(minutes=5)
         self.calendario.save(update_fields=["data_risoluzione", "updated_at"])
@@ -133,12 +135,12 @@ class ScommesseAllibratoreTests(TestCase):
         self.allibratore.refresh_from_db()
         self.assertEqual(puntata.stato, PuntataScommessa.STATO_WON)
         self.assertEqual(puntata.vincita, Decimal("22.00"))
-        delta = self.allibratore.crediti - crediti_all_prima
+        delta = saldo_deposito(self.allibratore) - deposito_all_prima
         self.assertEqual(delta, Decimal("1.76"))
 
     def test_commissione_non_su_puntata_persa(self):
         codice = CodiceScommessa.objects.create(allibratore=self.allibratore, codice="LOSE1")
-        crediti_all_prima = self.allibratore.crediti
+        deposito_all_prima = saldo_deposito(self.allibratore)
 
         piazza_puntata(
             self.giocatore,
@@ -153,4 +155,4 @@ class ScommesseAllibratoreTests(TestCase):
         _liquida_calendario(self.calendario)
 
         self.allibratore.refresh_from_db()
-        self.assertEqual(self.allibratore.crediti, crediti_all_prima)
+        self.assertEqual(saldo_deposito(self.allibratore), deposito_all_prima)
