@@ -146,15 +146,31 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
             value={form.bonus_crediti_evento ?? 0}
             onChange={(e) => setForm({ ...form, bonus_crediti_evento: e.target.value })}
           />
+          <label className="block text-xs text-gray-400 mb-1">Fattore task Crediti (KORP)</label>
           <input
             type="number"
             step="0.01"
-            min="0.01"
+            min="0"
             className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            placeholder="Fattore task KORP (es. 2 = doppie ricompense)"
-            value={form.fattore_task ?? 1}
-            onChange={(e) => setForm({ ...form, fattore_task: e.target.value })}
+            placeholder="Fattore task Crediti (es. 2 = Crediti doppi)"
+            value={form.fattore_task_crediti ?? 1}
+            onChange={(e) => setForm({ ...form, fattore_task_crediti: e.target.value })}
           />
+          <label className="block text-xs text-gray-400 mb-1">Fattore task Prestigio (KORP)</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
+            placeholder="Fattore task Prestigio (es. 3 = Prestigio triplo, 0 = nessun Prestigio)"
+            value={form.fattore_task_prestigio ?? 1}
+            onChange={(e) => setForm({ ...form, fattore_task_prestigio: e.target.value })}
+          />
+          <p className="text-xs text-gray-500">
+            Moltiplicatori indipendenti applicati alle ricompense delle task di questa KORP
+            per i suoi membri attivi. Il Prestigio arriva solo da staff, eventi e task:
+            cariche e carriere non lo assegnano.
+          </p>
           <label className="flex items-center gap-2 text-sm text-gray-300">
             <input
               type="checkbox"
@@ -378,14 +394,6 @@ function CaricaModal({ isOpen, onClose, onSave, value, carriereOptions, statusMe
             placeholder="Bonus crediti evento (carica)"
             value={form.bonus_crediti_evento ?? 0}
             onChange={(e) => setForm({ ...form, bonus_crediti_evento: e.target.value })}
-          />
-          <input
-            type="number"
-            min={0}
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            placeholder="Bonus Prestigio"
-            value={form.bonus_peso_influencer ?? 0}
-            onChange={(e) => setForm({ ...form, bonus_peso_influencer: e.target.value })}
           />
           <input
             type="number"
@@ -735,14 +743,6 @@ export default function CarriereKorpsManager({ onLogout }) {
         align: 'center',
         width: 100,
       },
-      {
-        key: 'bonus_prestigio',
-        header: 'Prestigio',
-        getSortValue: (x) => Number(x.bonus_peso_influencer || 0),
-        render: (x) => Number(x.bonus_peso_influencer || 0),
-        align: 'center',
-        width: 90,
-      },
       { key: 'ordine', header: 'Ordine', getSortValue: (x) => x.ordine ?? 0, render: (x) => x.ordine ?? 0, align: 'center', width: 80 },
       {
         key: 'attiva',
@@ -888,7 +888,8 @@ export default function CarriereKorpsManager({ onLogout }) {
         tipo: form.tipo || 'T3',
         tipo_carriera: form.tipo_carriera || form.tipo_carriera_id,
         bonus_crediti_evento: form.bonus_crediti_evento ?? 0,
-        fattore_task: form.fattore_task ?? 1,
+        fattore_task_crediti: form.fattore_task_crediti ?? 1,
+        fattore_task_prestigio: form.fattore_task_prestigio ?? 1,
         sottoscrive_contratti: !!form.sottoscrive_contratti,
         slot_contratto_base: form.slot_contratto_base ?? 3,
         tiers_sblocco_ids: form.tiers_sblocco_ids || [],
@@ -920,7 +921,6 @@ export default function CarriereKorpsManager({ onLogout }) {
         nome: form.nome,
         bonus_stipendio_evento: form.bonus_stipendio_evento ?? 0,
         bonus_crediti_evento: form.bonus_crediti_evento ?? 0,
-        bonus_peso_influencer: form.bonus_peso_influencer ?? 0,
         bonus_slot_contratto: form.bonus_slot_contratto ?? 0,
         ordine: form.ordine ?? 0,
         attiva: form.attiva !== false,

@@ -73,8 +73,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     /** Conferme azioni staff in modale React (window.confirm è soppresso in alcuni browser di test / automazione). */
     const [staffConfirm, setStaffConfirm] = useState(null);
     const [staffFeedback, setStaffFeedback] = useState(null);
-    const [originalPesoInfluencer, setOriginalPesoInfluencer] = useState(1);
-    const [pesoInfluencerEffettivo, setPesoInfluencerEffettivo] = useState(null);
+    const [originalPrestigio, setOriginalPrestigio] = useState(0);
     const [rigeneraLikeLoading, setRigeneraLikeLoading] = useState(false);
 
     useEffect(() => {
@@ -156,19 +155,15 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
             }
         }
 
-        let peso = Number(char.peso_influencer);
-        let pesoEffettivo = Number(char.peso_influencer_effettivo);
+        let prestigio = Number(char.prestigio);
         let badgeInstafame = char.badge_instafame || '';
         let fotoTruccoUrl = char.foto_trucco_url || null;
         let fotoOutfitUrl = char.foto_outfit_url || null;
         if (isCampaignStaffer) {
             try {
                 const fresh = await getGestionePersonaggio(char.id, onLogout);
-                if (Number.isFinite(Number(fresh?.peso_influencer)) && Number(fresh.peso_influencer) >= 1) {
-                    peso = Number(fresh.peso_influencer);
-                }
-                if (Number.isFinite(Number(fresh?.peso_influencer_effettivo)) && Number(fresh.peso_influencer_effettivo) >= 1) {
-                    pesoEffettivo = Number(fresh.peso_influencer_effettivo);
+                if (Number.isFinite(Number(fresh?.prestigio)) && Number(fresh.prestigio) >= 0) {
+                    prestigio = Number(fresh.prestigio);
                 }
                 if (fresh?.badge_instafame != null) {
                     badgeInstafame = fresh.badge_instafame;
@@ -179,8 +174,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                 // fallback su lista in cache
             }
         }
-        if (!Number.isFinite(peso) || peso < 1) peso = 1;
-        if (!Number.isFinite(pesoEffettivo) || pesoEffettivo < 1) pesoEffettivo = peso;
+        if (!Number.isFinite(prestigio) || prestigio < 0) prestigio = 0;
 
         setFormData({
             id: char.id,
@@ -189,7 +183,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
             testo: char.testo || '',
             costume: char.costume || '',
             watch_enabled: !!char.watch_enabled,
-            peso_influencer: peso,
+            prestigio,
             badge_instafame: badgeInstafame || '',
             campagna: char.campagna || '',
             era: typeof char.era === 'object' ? (char.era?.id || '') : (char.era || ''),
@@ -198,8 +192,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
             foto_trucco_url: fotoTruccoUrl,
             foto_outfit_url: fotoOutfitUrl,
         });
-        setOriginalPesoInfluencer(peso);
-        setPesoInfluencerEffettivo(pesoEffettivo);
+        setOriginalPrestigio(prestigio);
         setShowModal(true);
     };
 
@@ -211,7 +204,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         if (payload.era === '') payload.era = null;
         if (payload.prefettura === '') payload.prefettura = null;
         payload.prefettura_esterna = !!payload.prefettura_esterna;
-        payload.peso_influencer = Math.max(1, parseInt(payload.peso_influencer, 10) || 1);
+        payload.prestigio = Math.max(0, parseInt(payload.prestigio, 10) || 0);
         payload.badge_instafame = String(payload.badge_instafame || '').trim().toUpperCase();
         if (!['GOLD', 'DIAMOND', 'PREMIUM'].includes(payload.badge_instafame)) {
             payload.badge_instafame = '';
@@ -290,15 +283,15 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     };
 
     const handleSaveClick = () => {
-        const nextPeso = Math.max(1, parseInt(formData.peso_influencer, 10) || 1);
-        if (editMode && isCampaignStaffer && nextPeso !== Number(originalPesoInfluencer || 1)) {
-            setStaffConfirm({ kind: 'peso_influencer' });
+        const nextPrestigio = Math.max(0, parseInt(formData.prestigio, 10) || 0);
+        if (editMode && isCampaignStaffer && nextPrestigio !== Number(originalPrestigio || 0)) {
+            setStaffConfirm({ kind: 'prestigio' });
             return;
         }
         void handleSaveOptimistic();
     };
 
-    const handlePesoInfluencerConfirm = async (rigenera) => {
+    const handlePrestigioConfirm = async (rigenera) => {
         setStaffConfirm(null);
         await handleSaveOptimistic({ rigeneraLikeInfluencer: rigenera });
     };
@@ -641,23 +634,14 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                         CR: {char.crediti} | PC: {char.punti_caratteristica}
                                     </div>
                                 )}
-                                {isCampaignStaffer && (() => {
-                                    const base = Math.max(1, Number(char.peso_influencer) || 1);
-                                    const effettivo = Math.max(
-                                        base,
-                                        Number(char.peso_influencer_effettivo) || base
-                                    );
-                                    const bonusCariche = Math.max(0, effettivo - base);
-                                    return (
-                                        <div
-                                            className="mt-1 font-mono text-[10px] text-fuchsia-300/90"
-                                            title="Prestigio (base + bonus cariche attive)"
-                                        >
-                                            Prestigio: {base}
-                                            {bonusCariche > 0 ? ` + ${bonusCariche} cariche` : ''} = {effettivo}
-                                        </div>
-                                    );
-                                })()}
+                                {isCampaignStaffer && (
+                                    <div
+                                        className="mt-1 font-mono text-[10px] text-fuchsia-300/90"
+                                        title="Punteggio Prestigio (peso social)"
+                                    >
+                                        Prestigio: {Math.max(0, Number(char.prestigio) || 0)}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -757,7 +741,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                             {staffConfirm.kind === 'kill' && 'Segnare come morto'}
                             {staffConfirm.kind === 'revive' && 'Rivivere personaggio'}
                             {staffConfirm.kind === 'delete' && 'Archiviare personaggio'}
-                            {staffConfirm.kind === 'peso_influencer' && 'Prestigio'}
+                            {staffConfirm.kind === 'prestigio' && 'Prestigio'}
                         </h3>
                         <p className="mt-3 text-sm leading-relaxed text-gray-300">
                             {staffConfirm.kind === 'reset' && (
@@ -783,7 +767,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                     Solo lo staff master può ripristinarlo o eliminarlo definitivamente.
                                 </>
                             )}
-                            {staffConfirm.kind === 'peso_influencer' && (
+                            {staffConfirm.kind === 'prestigio' && (
                                 <>
                                     Hai modificato il Prestigio di <strong className="text-white">«{formData.nome}»</strong>.
                                     Vuoi rigenerare anche i like già messi da questo personaggio con il nuovo valore?
@@ -791,7 +775,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                             )}
                         </p>
                         <div className="mt-6 flex flex-wrap justify-end gap-2">
-                            {staffConfirm.kind === 'peso_influencer' ? (
+                            {staffConfirm.kind === 'prestigio' ? (
                                 <>
                                     <button
                                         type="button"
@@ -802,14 +786,14 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => void handlePesoInfluencerConfirm(false)}
+                                        onClick={() => void handlePrestigioConfirm(false)}
                                         className="rounded-lg border border-indigo-500/50 bg-indigo-900/40 px-4 py-2.5 text-sm font-bold text-indigo-100 hover:bg-indigo-800/50"
                                     >
                                         Solo futuro
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => void handlePesoInfluencerConfirm(true)}
+                                        onClick={() => void handlePrestigioConfirm(true)}
                                         className="rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-500"
                                     >
                                         Rigenera passato
@@ -959,18 +943,14 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                         <label className="block text-xs text-gray-500 mb-1">Prestigio</label>
                                         <input
                                             type="number"
-                                            min={1}
+                                            min={0}
                                             className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white"
-                                            value={formData.peso_influencer ?? 1}
-                                            onChange={(e) => setFormData({ ...formData, peso_influencer: e.target.value })}
+                                            value={formData.prestigio ?? 0}
+                                            onChange={(e) => setFormData({ ...formData, prestigio: e.target.value })}
                                         />
                                         <p className="text-[11px] text-gray-500 mt-1">
-                                            Influenza like simulati su post e commenti. Le cariche attive possono aumentarlo.
-                                            {pesoInfluencerEffettivo != null && Number(pesoInfluencerEffettivo) !== Number(formData.peso_influencer || 1) && (
-                                                <span className="block text-amber-400/90 mt-0.5">
-                                                    Peso effettivo attuale (con cariche): {pesoInfluencerEffettivo}
-                                                </span>
-                                            )}
+                                            Peso social su post, commenti e like. Si assegna qui, con la partecipazione
+                                            agli eventi e con le task: cariche, carriere e KORP non lo modificano.
                                         </p>
                                         {editMode && (
                                             <button

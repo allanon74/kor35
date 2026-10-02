@@ -562,6 +562,14 @@ const PersonaggiStaffManager = ({ onLogout }) => {
         align: 'right',
       },
       {
+        key: 'prestigio',
+        header: 'Prestigio',
+        getSortValue: (row) => Number(row.prestigio || 0),
+        render: (row) => <span className="text-fuchsia-300">{row.prestigio ?? 0}</span>,
+        align: 'right',
+        width: 90,
+      },
+      {
         key: 'allineamento',
         header: 'L/O/G',
         getSortValue: (row) =>
@@ -1515,17 +1523,21 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                       </div>
 
                       <div className="rounded-lg border border-gray-700 bg-gray-900/40 p-4 space-y-4">
-                        <h3 className="text-sm font-bold uppercase tracking-wider text-violet-300">Impostazioni influencer</h3>
+                        <h3 className="text-sm font-bold uppercase tracking-wider text-violet-300">Prestigio e InstaFame</h3>
                       <label className="flex items-center gap-2">
                         <span className="text-gray-400 w-32">Prestigio</span>
                         <input
                           type="number"
-                          min={1}
+                          min={0}
                           className="bg-gray-800 border border-gray-700 rounded px-2 py-1 w-24"
-                          value={detail.peso_influencer ?? 1}
-                          onChange={(e) => setDetail((d) => ({ ...d, peso_influencer: e.target.value }))}
+                          value={detail.prestigio ?? 0}
+                          onChange={(e) => setDetail((d) => ({ ...d, prestigio: e.target.value }))}
                         />
                       </label>
+                      <p className="text-[11px] text-gray-500">
+                        Punteggio di peso social (post, commenti, like). Si assegna qui, con la partecipazione
+                        agli eventi e con le task; cariche, carriere e KORP non lo modificano.
+                      </p>
                       <label className="flex items-center gap-2">
                         <span className="text-gray-400 w-32">Badge</span>
                         <select
@@ -1544,12 +1556,12 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                           type="button"
                           disabled={saving}
                           onClick={() => handleSaveFields({
-                            peso_influencer: Math.max(1, parseInt(detail.peso_influencer, 10) || 1),
+                            prestigio: Math.max(0, parseInt(detail.prestigio, 10) || 0),
                             badge_instafame: detail.badge_instafame || '',
                           })}
                           className="px-4 py-2 bg-teal-700 rounded font-bold text-sm disabled:opacity-50"
                         >
-                          Salva InstaFame
+                          Salva Prestigio e badge
                         </button>
                         <button
                           type="button"

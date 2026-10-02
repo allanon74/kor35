@@ -1,12 +1,10 @@
-"""Logica peso influencer InstaFame (like simulati su popolazione ampia)."""
+"""Peso social InstaFame derivato dal Prestigio (like simulati su popolazione ampia)."""
 
 import logging
 import random
 
 from django.db.models import Sum
 from django.db.utils import ProgrammingError
-
-from personaggi.models import PersonaggioCarrieraMembership
 
 logger = logging.getLogger(__name__)
 
@@ -15,23 +13,17 @@ class RigeneraLikeInfluencerError(Exception):
     """Errore durante la rigenerazione dei like storici di un personaggio."""
 
 
-def get_effective_peso_influencer(personaggio):
-    """Peso base del personaggio + bonus dalle cariche attive."""
-    base = max(1, int(getattr(personaggio, "peso_influencer", None) or 1))
-    bonus = 0
-    memberships = PersonaggioCarrieraMembership.objects.filter(
-        personaggio=personaggio,
-        data_a__isnull=True,
-    ).select_related("carica")
-    for membership in memberships:
-        carica = membership.carica
-        if carica:
-            bonus += int(getattr(carica, "bonus_peso_influencer", None) or 0)
-    return max(1, base + bonus)
+def get_peso_social(personaggio):
+    """Peso social usato per i like: il Prestigio del personaggio, minimo 1.
+
+    Cariche, carriere e KORP non concorrono: il Prestigio è un punteggio
+    assegnato al personaggio (staff, eventi, task).
+    """
+    return max(1, int(getattr(personaggio, "prestigio", None) or 0))
 
 
 def random_likes_base(personaggio):
-    peso = get_effective_peso_influencer(personaggio)
+    peso = get_peso_social(personaggio)
     return random.randint(1, peso)
 
 
@@ -40,8 +32,8 @@ def compute_like_peso(liker, content_owner):
     Peso statico di un singolo like:
     random(1, peso_liker) + random(1, peso_autore_post/commento).
     """
-    peso_liker = get_effective_peso_influencer(liker)
-    peso_owner = get_effective_peso_influencer(content_owner)
+    peso_liker = get_peso_social(liker)
+    peso_owner = get_peso_social(content_owner)
     return random.randint(1, peso_liker) + random.randint(1, peso_owner)
 
 

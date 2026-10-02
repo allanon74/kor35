@@ -32,8 +32,10 @@ class InstafameBadgeCaricheTests(TestCase):
             tipo=TIER_3,
             tipo_carriera=cls.tipo_prof,
         )
-        cls.carica_pub = Carica.objects.create(carriera=cls.carriera, nome="Capo visibile", ordine=1)
-        cls.carica_hidden = Carica.objects.create(carriera=cls.carriera, nome="Capo nascosto", ordine=2)
+        cls.carica_pub = Carica.objects.create(nome="Capo visibile", ordine=1)
+        cls.carica_pub.carriere.set([cls.carriera])
+        cls.carica_hidden = Carica.objects.create(nome="Capo nascosto", ordine=2)
+        cls.carica_hidden.carriere.set([cls.carriera])
         cls.author = Personaggio.objects.create(
             nome="Autore Badge",
             campagna=cls.campagna,

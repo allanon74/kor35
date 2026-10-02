@@ -79,43 +79,75 @@ class MissioniRiepilogoLogicTests(SimpleTestCase):
 
 
 class MissioniFattoreKorpTests(SimpleTestCase):
-    def _missione(self, *, korp_id, fattore):
+    def _missione(self, *, korp_id, fattore_crediti, fattore_prestigio=None):
         m = _FakeMissione(korp_id=korp_id)
-        m.korp = type("Korp", (), {"fattore_task": fattore})()
+        m.korp = type(
+            "Korp",
+            (),
+            {
+                "fattore_task_crediti": fattore_crediti,
+                "fattore_task_prestigio": (
+                    fattore_crediti if fattore_prestigio is None else fattore_prestigio
+                ),
+            },
+        )()
         return m
 
     @patch("gestione_plot.missioni_service.personaggio_ha_korp", return_value=True)
     def test_sovrapagata_solo_fattore_maggiore_di_uno(self, _mock):
-        m = self._missione(korp_id=1, fattore=Decimal("2.00"))
-        cr, pr, is_bonus, fat = applica_fattore_korp(m, object(), Decimal("10"), 4)
+        m = self._missione(korp_id=1, fattore_crediti=Decimal("2.00"))
+        cr, pr, is_bonus, fat_cr, fat_pr = applica_fattore_korp(m, object(), Decimal("10"), 4)
         self.assertEqual(cr, Decimal("20.00"))
         self.assertEqual(pr, 8)
         self.assertTrue(is_bonus)
-        self.assertEqual(fat, Decimal("2.00"))
+        self.assertEqual(fat_cr, Decimal("2.00"))
+        self.assertEqual(fat_pr, Decimal("2.00"))
+
+    @patch("gestione_plot.missioni_service.personaggio_ha_korp", return_value=True)
+    def test_fattore_prestigio_indipendente_da_crediti(self, _mock):
+        m = self._missione(korp_id=1, fattore_crediti=Decimal("1.00"), fattore_prestigio=Decimal("3.00"))
+        cr, pr, is_bonus, fat_cr, fat_pr = applica_fattore_korp(m, object(), Decimal("10"), 4)
+        self.assertEqual(cr, Decimal("10.00"))
+        self.assertEqual(pr, 12)
+        self.assertTrue(is_bonus)
+        self.assertEqual(fat_cr, Decimal("1.00"))
+        self.assertEqual(fat_pr, Decimal("3.00"))
+
+    @patch("gestione_plot.missioni_service.personaggio_ha_korp", return_value=True)
+    def test_fattore_prestigio_zero_azzera_solo_prestigio(self, _mock):
+        m = self._missione(korp_id=1, fattore_crediti=Decimal("2.00"), fattore_prestigio=Decimal("0.00"))
+        cr, pr, is_bonus, fat_cr, fat_pr = applica_fattore_korp(m, object(), Decimal("10"), 4)
+        self.assertEqual(cr, Decimal("20.00"))
+        self.assertEqual(pr, 0)
+        self.assertTrue(is_bonus)
+        self.assertEqual(fat_pr, Decimal("0.00"))
 
     @patch("gestione_plot.missioni_service.personaggio_ha_korp", return_value=True)
     def test_stessa_korp_fattore_uno_non_evidenzia(self, _mock):
-        m = self._missione(korp_id=1, fattore=Decimal("1.00"))
-        cr, pr, is_bonus, fat = applica_fattore_korp(m, object(), Decimal("10"), 4)
+        m = self._missione(korp_id=1, fattore_crediti=Decimal("1.00"))
+        cr, pr, is_bonus, fat_cr, fat_pr = applica_fattore_korp(m, object(), Decimal("10"), 4)
         self.assertEqual(cr, Decimal("10.00"))
         self.assertEqual(pr, 4)
         self.assertFalse(is_bonus)
-        self.assertEqual(fat, Decimal("1.00"))
+        self.assertEqual(fat_cr, Decimal("1.00"))
+        self.assertEqual(fat_pr, Decimal("1.00"))
 
     @patch("gestione_plot.missioni_service.personaggio_ha_korp", return_value=False)
     def test_altra_korp_nessun_bonus(self, _mock):
-        m = self._missione(korp_id=2, fattore=Decimal("3.00"))
-        cr, pr, is_bonus, fat = applica_fattore_korp(m, object(), Decimal("10"), 4)
+        m = self._missione(korp_id=2, fattore_crediti=Decimal("3.00"))
+        cr, pr, is_bonus, fat_cr, fat_pr = applica_fattore_korp(m, object(), Decimal("10"), 4)
         self.assertEqual(cr, Decimal("10.00"))
         self.assertFalse(is_bonus)
-        self.assertEqual(fat, Decimal("1.00"))
+        self.assertEqual(fat_cr, Decimal("1.00"))
+        self.assertEqual(fat_pr, Decimal("1.00"))
 
     def test_task_generica_nessun_bonus(self):
         m = _FakeMissione(korp_id=None)
-        cr, pr, is_bonus, fat = applica_fattore_korp(m, object(), Decimal("10"), 4)
+        cr, pr, is_bonus, fat_cr, fat_pr = applica_fattore_korp(m, object(), Decimal("10"), 4)
         self.assertEqual(cr, Decimal("10.00"))
         self.assertFalse(is_bonus)
-        self.assertEqual(fat, Decimal("1.00"))
+        self.assertEqual(fat_cr, Decimal("1.00"))
+        self.assertEqual(fat_pr, Decimal("1.00"))
 
 
 class MissioniVisibilitaApiTests(APITestCase):

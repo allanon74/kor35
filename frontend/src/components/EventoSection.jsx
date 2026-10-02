@@ -171,7 +171,12 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                                     >
                                         <div className="font-black uppercase text-violet-200">
                                             {row.korp_nome}
-                                            <span className="ml-1 font-mono text-violet-400">×{row.fattore_task}</span>
+                                            <span
+                                                className="ml-1 font-mono text-violet-400"
+                                                title="Moltiplicatori task: Crediti / Prestigio"
+                                            >
+                                                ×{row.fattore_task_crediti} Cr · ×{row.fattore_task_prestigio} Pr
+                                            </span>
                                         </div>
                                         <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-gray-300">
                                             <span>Cr KORP: {Number(row.crediti_korp || 0).toLocaleString('it-IT')}</span>

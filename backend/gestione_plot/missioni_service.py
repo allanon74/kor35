@@ -19,10 +19,19 @@ def _q2(value) -> Decimal:
     return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def fattore_for_korp(korp) -> Decimal:
+def fattore_crediti_for_korp(korp) -> Decimal:
     if not korp:
         return Decimal("1.00")
-    return _q2(getattr(korp, "fattore_task", 1) or 1)
+    valore = getattr(korp, "fattore_task_crediti", None)
+    return _q2(Decimal("1.00") if valore is None else valore)
+
+
+def fattore_prestigio_for_korp(korp) -> Decimal:
+    """Moltiplicatore Prestigio della KORP, indipendente da quello dei Crediti."""
+    if not korp:
+        return Decimal("1.00")
+    valore = getattr(korp, "fattore_task_prestigio", None)
+    return _q2(Decimal("1.00") if valore is None else valore)
 
 
 def personaggio_ha_korp(personaggio, korp_id) -> bool:
@@ -58,34 +67,37 @@ def applica_fattore_korp(
     personaggio: Personaggio | None,
     cr: Decimal,
     pr: int,
-) -> tuple[Decimal, int, bool, Decimal]:
-    """Fattore solo se PG membro della KORP della task.
+) -> tuple[Decimal, int, bool, Decimal, Decimal]:
+    """Fattori KORP (Crediti e Prestigio separati) solo se PG membro della KORP della task.
 
-    ``is_bonus`` (sovrapagata) è True solo con fattore > 1: il giocatore
-    non vede il mittente KORP, ma le task della propria KORP pagate di più
-    restano evidenziate.
+    ``is_bonus`` (sovrapagata) è True se almeno uno dei due fattori è > 1:
+    il giocatore non vede il mittente KORP, ma le task della propria KORP
+    pagate di più restano evidenziate.
     """
+    uno = Decimal("1.00")
     if not missione.korp_id or not personaggio:
-        return _q2(cr), int(pr), False, Decimal("1.00")
+        return _q2(cr), int(pr), False, uno, uno
     if not personaggio_ha_korp(personaggio, missione.korp_id):
-        return _q2(cr), int(pr), False, Decimal("1.00")
-    fattore = fattore_for_korp(missione.korp)
-    cr2 = _q2(cr * fattore)
-    pr2 = int((Decimal(pr) * fattore).to_integral_value(rounding=ROUND_HALF_UP))
-    is_bonus = fattore > Decimal("1.00")
-    return cr2, pr2, is_bonus, fattore
+        return _q2(cr), int(pr), False, uno, uno
+    fattore_cr = fattore_crediti_for_korp(missione.korp)
+    fattore_pr = fattore_prestigio_for_korp(missione.korp)
+    cr2 = _q2(cr * fattore_cr)
+    pr2 = int((Decimal(pr) * fattore_pr).to_integral_value(rounding=ROUND_HALF_UP))
+    is_bonus = fattore_cr > uno or fattore_pr > uno
+    return cr2, pr2, is_bonus, fattore_cr, fattore_pr
 
 
 def ricompensa_per_visualizzazione(missione, personaggio, *, is_primo=True) -> dict:
     cr, pr = calcola_ricompensa_base(missione, is_primo=is_primo)
-    cr2, pr2, is_bonus, fattore = applica_fattore_korp(missione, personaggio, cr, pr)
+    cr2, pr2, is_bonus, fattore_cr, fattore_pr = applica_fattore_korp(missione, personaggio, cr, pr)
     return {
         "reward_crediti": cr2,
         "reward_prestigio": pr2,
         "reward_crediti_base": cr,
         "reward_prestigio_base": pr,
         "is_korp_bonus": is_bonus,
-        "fattore_applicato": fattore,
+        "fattore_crediti_applicato": fattore_cr,
+        "fattore_prestigio_applicato": fattore_pr,
     }
 
 
@@ -183,7 +195,7 @@ def assegna_risoluzione(
 
     is_primo = _is_primo(missione.id, evento.id)
     cr, pr = calcola_ricompensa_base(missione, is_primo=is_primo)
-    cr, pr, _, _ = applica_fattore_korp(missione, personaggio, cr, pr)
+    cr, pr, _, _, _ = applica_fattore_korp(missione, personaggio, cr, pr)
 
     ris = MissioneRisoluzione.objects.create(
         missione=missione,
@@ -207,8 +219,8 @@ def assegna_risoluzione(
 def riepilogo_premi_evento(evento: Evento) -> list[dict]:
     """
     Per KORP X:
-    - di Korp = task di X × fattore_X
-    - non di Korp = generiche + altre KORP non esclusive (senza fattore)
+    - di Korp = task di X × fattore_crediti_X (Cr) e × fattore_prestigio_X (Pr)
+    - non di Korp = generiche + altre KORP non esclusive (senza fattori)
     """
     missioni = list(
         Missione.objects.filter(
@@ -228,7 +240,8 @@ def riepilogo_premi_evento(evento: Evento) -> list[dict]:
             for m in missioni
             if m.korp_id != korp.id and not m.esclusiva
         ]
-        fattore = fattore_for_korp(korp)
+        fattore_cr = fattore_crediti_for_korp(korp)
+        fattore_pr = fattore_prestigio_for_korp(korp)
         cr_k = sum((_q2(m.reward_crediti) for m in di_korp), ZERO)
         pr_k = sum((int(m.reward_prestigio or 0) for m in di_korp), 0)
         cr_n = sum((_q2(m.reward_crediti) for m in non_di_korp), ZERO)
@@ -236,9 +249,10 @@ def riepilogo_premi_evento(evento: Evento) -> list[dict]:
         out.append({
             "korp_id": korp.id,
             "korp_nome": korp.nome,
-            "fattore_task": fattore,
-            "crediti_korp": _q2(cr_k * fattore),
-            "prestigio_korp": int((Decimal(pr_k) * fattore).to_integral_value(rounding=ROUND_HALF_UP)),
+            "fattore_task_crediti": fattore_cr,
+            "fattore_task_prestigio": fattore_pr,
+            "crediti_korp": _q2(cr_k * fattore_cr),
+            "prestigio_korp": int((Decimal(pr_k) * fattore_pr).to_integral_value(rounding=ROUND_HALF_UP)),
             "crediti_non_korp": _q2(cr_n),
             "prestigio_non_korp": pr_n,
             "n_task_korp": len(di_korp),
@@ -372,7 +386,8 @@ def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
             "effettuabile": effettuabile,
             "risoluzioni": miei_r,
             "is_korp_bonus": view["is_korp_bonus"],
-            "fattore_applicato": str(view["fattore_applicato"]),
+            "fattore_crediti_applicato": str(view["fattore_crediti_applicato"]),
+            "fattore_prestigio_applicato": str(view["fattore_prestigio_applicato"]),
             "reward_crediti": str(view["reward_crediti"]),
             "reward_prestigio": view["reward_prestigio"],
             "reward_crediti_base": str(view["reward_crediti_base"]),

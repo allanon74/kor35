@@ -1149,14 +1149,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                     {personaggiList.map(p => (
                         <option key={p.id} value={p.id}>
                             {p.nome} [{p.campagna_nome || 'Kor35'}]
-                            {isCampaignStaffer && (() => {
-                                const base = Math.max(1, Number(p.peso_influencer) || 1);
-                                const effettivo = Math.max(base, Number(p.peso_influencer_effettivo) || base);
-                                const bonus = Math.max(0, effettivo - base);
-                                return bonus > 0
-                                    ? ` · Prestigio ${base}+${bonus}=${effettivo}`
-                                    : ` · Prestigio ${effettivo}`;
-                            })()}
+                            {isCampaignStaffer && ` · Prestigio ${Math.max(0, Number(p.prestigio) || 0)}`}
                             {String(preferredCharacterId || '') === String(p.id) ? ' ★ Preferito' : ''}
                         </option>
                     ))}
