@@ -11,16 +11,21 @@ from personaggi.models import Personaggio
 from social.models import SocialProfile, prepare_image_upload
 
 
-def _tiny_jpeg_upload(name="avatar.jpg"):
+def _tiny_jpeg_upload(name="avatar.jpg", committed=True):
     buf = BytesIO()
     Image.new("RGB", (8, 8), color="red").save(buf, format="JPEG")
     buf.seek(0)
-    return SimpleUploadedFile(name, buf.read(), content_type="image/jpeg")
+    upload = SimpleUploadedFile(name, buf.read(), content_type="image/jpeg")
+    if not committed:
+        # prepare_image_upload riceve sempre un FieldFile: su un file appena
+        # caricato `_committed` è False ed è quel ramo che vogliamo esercitare.
+        upload._committed = False
+    return upload
 
 
 class SocialProfileImagePathTests(TestCase):
     def test_optimize_uses_basename_only(self):
-        upload = _tiny_jpeg_upload("nested/path/photo.png")
+        upload = _tiny_jpeg_upload("nested/path/photo.png", committed=False)
         upload.name = "social/profiles/99/social/profiles/99/photo.png"
         optimized = prepare_image_upload(upload, "social/profiles/99")
         self.assertEqual(optimized.name, "photo.jpg")

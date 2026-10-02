@@ -7,8 +7,10 @@ import uuid
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import RequestFactory, SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
+from rest_framework.request import Request
+from rest_framework.test import APIRequestFactory
 
 from gestione_plot.models import Evento
 from personaggi.contratti_effetti import calcola_post_tetto, render_testo_contratto
@@ -321,7 +323,8 @@ class ContrattiMotoreTests(TestCase):
 
     def test_qr_risponde_contratto(self):
         proposta = self._proposta("talento")
-        request = RequestFactory().get("/", {"personaggio_id": str(self.cliente.pk)})
+        # risposta_qr_contratto legge `request.query_params`: serve la request DRF.
+        request = Request(APIRequestFactory().get("/", {"personaggio_id": str(self.cliente.pk)}))
         request.user = self.user_b
         risposta = risposta_qr_contratto(proposta.qr_code, request)
         self.assertEqual(risposta.data["tipo_modello"], "contratto")
