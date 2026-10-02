@@ -524,6 +524,13 @@ class TessituraRuntimeTests(APITestCase):
         self.stat_rpg = Statistica.objects.create(nome="Rango Guscio Runtime", sigla="RGR", parametro="RGR")
         self.caratt = Punteggio.objects.create(nome="Forza Runtime", sigla="FRT", tipo=CARATTERISTICA)
         self.aura_runtime = Punteggio.objects.create(nome="Aura Runtime", sigla="ART", tipo="AU")
+        # Ogni effetto runtime occupa uno slot COG: senza COG l'attivazione è bloccata.
+        self.stat_cog = Statistica.objects.create(nome="Capacità Oggetti Runtime", sigla="COG", parametro="COG")
+        PersonaggioStatisticaBase.objects.update_or_create(
+            personaggio=self.pg,
+            statistica=self.stat_cog,
+            defaults={"valore_base": 3},
+        )
 
     def test_attiva_runtime_abilita_applica_modificatore_finche_attivo(self):
         abilita = Abilita.objects.create(
@@ -755,12 +762,13 @@ class RisorsePoolUiVisibilityTests(APITestCase):
             is_risorsa_pool=True,
             massimo_pool_sigla="FRT",
         )
-        pb = dict(self.pg.punteggi_base or {})
-        pb[self.stat_frt.nome] = 2
-        pb[self.stat_teo.nome] = 0
-        pb[self.stat_cap.nome] = 0
-        self.pg.punteggi_base = pb
-        self.pg.save(update_fields=["punteggi_base", "updated_at"])
+        # `punteggi_base` è calcolato (scheda + abilità): il valore di scheda si
+        # imposta su PersonaggioStatisticaBase. TEO e CAP restano al predefinito 0.
+        PersonaggioStatisticaBase.objects.update_or_create(
+            personaggio=self.pg,
+            statistica=self.stat_frt,
+            defaults={"valore_base": 2},
+        )
 
     def test_risorse_pool_ui_solo_massimo_scheda_positivo(self):
         ser = PersonaggioDetailSerializer()
@@ -1433,7 +1441,15 @@ class PersonaggioStaffRetrieveTests(APITestCase):
         self.assertEqual(body.get("professioni"), "Scout")
 
     def test_staff_assegna_e_rimuovi_abilita(self):
-        ab = Abilita.objects.create(nome="Staff Test Skill", costo_pc=0, costo_crediti=0)
+        caratteristica = Punteggio.objects.create(
+            nome="Caratteristica Staff Skill", sigla="CSS", tipo=CARATTERISTICA
+        )
+        ab = Abilita.objects.create(
+            nome="Staff Test Skill",
+            costo_pc=0,
+            costo_crediti=0,
+            caratteristica=caratteristica,
+        )
         base = f"/api/personaggi/api/staff/personaggi/{self.pg.id}"
 
         res_add = self.client.post(

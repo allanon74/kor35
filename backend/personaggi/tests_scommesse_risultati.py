@@ -2,7 +2,7 @@
 import random
 from decimal import Decimal
 
-from django.test import SimpleTestCase
+from django.test import TestCase
 
 from personaggi.scommesse_logic import (
     ESITO_CASA,
@@ -24,7 +24,7 @@ from personaggi.scommesse_risultati import (
 )
 
 
-class ScommesseRisultatiSportTests(SimpleTestCase):
+class ScommesseRisultatiSportTests(TestCase):
     def test_pareggio_solo_calcio_e_rugby(self):
         self.assertTrue(pareggio_consentito(TIPO_CALCIO))
         self.assertTrue(pareggio_consentito(TIPO_RUGBY))
