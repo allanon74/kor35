@@ -287,7 +287,8 @@ class KorpSerializer(serializers.ModelSerializer):
             "tipo",
             "foto",
             "tipo_carriera",
-            "fattore_task",
+            "fattore_task_crediti",
+            "fattore_task_prestigio",
             "sottoscrive_contratti",
             "slot_contratto_base",
             "sync_id",
@@ -340,7 +341,6 @@ class CaricaSerializer(serializers.ModelSerializer):
             "tipo_carriera_codice",
             "bonus_stipendio_evento",
             "bonus_crediti_evento",
-            "bonus_peso_influencer",
             "bonus_slot_contratto",
             "ordine",
             "attiva",
@@ -398,7 +398,8 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
             "foto",
             "tipo_carriera",
             "bonus_crediti_evento",
-            "fattore_task",
+            "fattore_task_crediti",
+            "fattore_task_prestigio",
             "sottoscrive_contratti",
             "slot_contratto_base",
             "tipo_carriera_nome",
@@ -514,7 +515,6 @@ class CaricaStaffSerializer(serializers.ModelSerializer):
             "nome",
             "bonus_stipendio_evento",
             "bonus_crediti_evento",
-            "bonus_peso_influencer",
             "bonus_slot_contratto",
             "ordine",
             "attiva",
@@ -3398,8 +3398,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     avatar_url = serializers.SerializerMethodField()
     watch_enabled = serializers.BooleanField(read_only=True)
     watch_binding = serializers.SerializerMethodField()
-    peso_influencer = serializers.IntegerField(read_only=True)
-    peso_influencer_effettivo = serializers.SerializerMethodField()
+    prestigio = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Personaggio
@@ -3425,7 +3424,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'era', 'prefettura', 'prefettura_esterna',
             'avatar_url',
             'watch_enabled', 'watch_binding',
-            'peso_influencer', 'peso_influencer_effettivo',
+            'prestigio',
         )
 
     def get_economia(self, obj):
@@ -3458,11 +3457,6 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         # Compat: riserva legacy = saldo deposito
         data["riserva"] = summary["crediti_deposito"] or "0.00"
         return data
-
-    def get_peso_influencer_effettivo(self, obj):
-        from social.influencer import get_effective_peso_influencer
-
-        return get_effective_peso_influencer(obj)
 
     def get_avatar_url(self, obj):
         return _personaggio_avatar_url(obj, self.context.get("request"))
@@ -3988,8 +3982,7 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
     can_edit_era = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
     impostazioni_ui = serializers.JSONField(required=False)
-    peso_influencer = serializers.IntegerField(required=False, min_value=1)
-    peso_influencer_effettivo = serializers.SerializerMethodField()
+    prestigio = serializers.IntegerField(required=False, min_value=0)
     badge_instafame = serializers.ChoiceField(
         choices=[("", "Nessuno"), ("GOLD", "Gold"), ("DIAMOND", "Diamond"), ("PREMIUM", "Premium")],
         required=False,
@@ -4014,12 +4007,11 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
             'can_edit_razza', 'can_edit_era',
             'avatar_url',
             'impostazioni_ui',
-            'peso_influencer',
-            'peso_influencer_effettivo',
+            'prestigio',
             'badge_instafame',
             'foto_trucco_url', 'foto_outfit_url', 'foto_trucco', 'foto_outfit',
         )
-        read_only_fields = ('crediti', 'punti_caratteristica', 'proprietario', 'peso_influencer_effettivo')
+        read_only_fields = ('crediti', 'punti_caratteristica', 'proprietario')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -4041,11 +4033,6 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
             if not _user_can_edit_personaggio_staff_fields(request, self.instance):
                 raise serializers.ValidationError("Permessi insufficienti per le foto costume.")
         return attrs
-
-    def get_peso_influencer_effettivo(self, obj):
-        from social.influencer import get_effective_peso_influencer
-
-        return get_effective_peso_influencer(obj)
 
     def get_avatar_url(self, obj):
         return _personaggio_avatar_url(obj, self.context.get("request"))
@@ -4344,8 +4331,7 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
     campagna = serializers.PrimaryKeyRelatedField(read_only=True)
     campagna_nome = serializers.CharField(source="campagna.nome", read_only=True)
     avatar_url = serializers.SerializerMethodField()
-    peso_influencer = serializers.IntegerField(read_only=True)
-    peso_influencer_effettivo = serializers.SerializerMethodField()
+    prestigio = serializers.IntegerField(read_only=True)
     is_own = serializers.SerializerMethodField()
 
     class Meta:
@@ -4359,8 +4345,7 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
             'era_nome', 'prefettura_nome', 'prefettura_era_nome', 'prefettura_regione_sigla',
             'avatar_url',
             'watch_enabled',
-            'peso_influencer',
-            'peso_influencer_effettivo',
+            'prestigio',
             'is_own',
             )
         read_only_fields = ('crediti', 'punti_caratteristica') 
@@ -4371,11 +4356,6 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
         if not user or not user.is_authenticated:
             return False
         return obj.proprietario_id == user.id
-
-    def get_peso_influencer_effettivo(self, obj):
-        from social.influencer import get_effective_peso_influencer
-
-        return get_effective_peso_influencer(obj)
 
     def get_avatar_url(self, obj):
         return _personaggio_avatar_url(obj, self.context.get("request"))
@@ -4414,7 +4394,7 @@ class PersonaggioStaffListSerializer(serializers.ModelSerializer):
             'proprietario_nome', 'proprietario_username',
             'era', 'era_nome', 'prefettura_nome', 'campagna_nome',
             'crediti', 'crediti_corrente', 'crediti_deposito', 'punti_caratteristica', 'data_morte',
-            'punti_luminosi', 'punti_oscuri', 'punti_grigi',
+            'prestigio', 'punti_luminosi', 'punti_oscuri', 'punti_grigi',
             'qrcode_id', 'korp_attivi', 'avatar_url',
         )
         read_only_fields = fields
@@ -4525,7 +4505,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
         queryset=Prefettura.objects.all(), allow_null=True, required=False
     )
     prefettura_esterna = serializers.BooleanField(required=False)
-    peso_influencer = serializers.IntegerField(required=False, min_value=1)
+    prestigio = serializers.IntegerField(required=False, min_value=0)
     punti_luminosi = serializers.IntegerField(required=False, min_value=0)
     punti_oscuri = serializers.IntegerField(required=False, min_value=0)
     punti_grigi = serializers.IntegerField(required=False, min_value=0)
@@ -4551,7 +4531,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'campagna', 'campagna_nome',
             'era', 'prefettura', 'prefettura_esterna',
             'era_nome', 'prefettura_nome',
-            'watch_enabled', 'peso_influencer', 'badge_instafame',
+            'watch_enabled', 'prestigio', 'badge_instafame',
             'punti_luminosi', 'punti_oscuri', 'punti_grigi',
             'avatar_url', 'qrcode_id', 'qrcode_testo',
             'carriere_membership', 'risorse_pool_ui', 'abilita_possedute', 'razza_abilita',

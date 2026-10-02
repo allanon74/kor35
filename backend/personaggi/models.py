@@ -1955,15 +1955,27 @@ class Carriera(Tier):
         verbose_name="Bonus crediti evento",
         help_text="Bonus crediti assegnato a ogni evento iniziato ai membri attivi di questa carriera/KORP.",
     )
-    fattore_task = models.DecimalField(
+    fattore_task_crediti = models.DecimalField(
         max_digits=5,
         decimal_places=2,
         default=Decimal("1.00"),
-        validators=[MinValueValidator(Decimal("0.01"))],
-        verbose_name="Fattore task (KORP)",
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name="Fattore task Crediti (KORP)",
         help_text=(
-            "Moltiplicatore ricompense (Crediti/Prestigio) delle task di questa KORP "
-            "per i membri attivi (es. 2.00 = doppie). Rilevante se tipo = korp."
+            "Moltiplicatore dei Crediti delle task di questa KORP "
+            "per i membri attivi (es. 2.00 = doppi). Rilevante se tipo = korp."
+        ),
+    )
+    fattore_task_prestigio = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("1.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name="Fattore task Prestigio (KORP)",
+        help_text=(
+            "Moltiplicatore del Prestigio delle task di questa KORP per i membri attivi, "
+            "indipendente dal fattore Crediti (0.00 = la KORP non dà Prestigio). "
+            "Rilevante se tipo = korp."
         ),
     )
     sottoscrive_contratti = models.BooleanField(
@@ -2056,11 +2068,6 @@ class Carica(A_modello):
         decimal_places=2,
         default=0,
         help_text="Bonus crediti evento assegnato ai membri con questa carica.",
-    )
-    bonus_peso_influencer = models.PositiveIntegerField(
-        default=0,
-        verbose_name="Bonus Prestigio",
-        help_text="Bonus al Prestigio (ex peso social) per i membri con questa carica.",
     )
     bonus_slot_contratto = models.IntegerField(
         default=0,
@@ -6117,12 +6124,13 @@ class Personaggio(Inventario):
     prefettura_esterna = models.BooleanField(default=False)
     campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="personaggi", default=get_default_campagna_id, db_index=True)
     watch_enabled = models.BooleanField(default=False, db_index=True)
-    peso_influencer = models.PositiveIntegerField(
-        default=1,
+    prestigio = models.PositiveIntegerField(
+        default=0,
         verbose_name="Prestigio",
         help_text=(
-            "Prestigio del personaggio (conosciuto / influenza social). "
-            "Usato per like InstaFame (1 = minimo). Le cariche attive e le task possono aumentarlo."
+            "Punteggio di Prestigio del personaggio: peso social su post, commenti e like. "
+            "Assegnato dallo staff, dalla partecipazione agli eventi e dalle task. "
+            "Cariche, carriere e KORP non lo modificano."
         ),
     )
     punti_luminosi = models.PositiveIntegerField(
@@ -6241,14 +6249,14 @@ class Personaggio(Inventario):
         PuntiCaratteristicaMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
 
     def modifica_prestigio(self, delta, descrizione=""):
-        """Variazione Prestigio (peso_influencer). Minimo 1. Ledger completo → v2."""
+        """Variazione del punteggio Prestigio. Non scende sotto zero. Ledger completo → v2."""
         delta = int(delta or 0)
         if delta == 0:
-            return self.peso_influencer
-        attuale = max(1, int(self.peso_influencer or 1))
-        nuovo = max(1, attuale + delta)
-        self.peso_influencer = nuovo
-        self.save(update_fields=["peso_influencer", "updated_at"])
+            return self.prestigio
+        attuale = max(0, int(self.prestigio or 0))
+        nuovo = max(0, attuale + delta)
+        self.prestigio = nuovo
+        self.save(update_fields=["prestigio", "updated_at"])
         segno = "+" if delta >= 0 else ""
         self.aggiungi_log(f"Prestigio {segno}{delta} (ora {nuovo}) — {descrizione or 'variazione Prestigio'}")
         return nuovo

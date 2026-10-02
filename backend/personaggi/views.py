@@ -5166,12 +5166,12 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
         serializer = super().get_serializer(*args, **kwargs)
         user = self.request.user
         active_campaign = _get_active_campaign(self.request)
-        can_edit_peso = user.is_staff or user.is_superuser or _can_operate_in_campaign(
+        can_edit_prestigio = user.is_staff or user.is_superuser or _can_operate_in_campaign(
             user, active_campaign, needs_master=False
         )
-        if not can_edit_peso and "peso_influencer" in serializer.fields:
-            serializer.fields["peso_influencer"].read_only = True
-        if not can_edit_peso and "badge_instafame" in serializer.fields:
+        if not can_edit_prestigio and "prestigio" in serializer.fields:
+            serializer.fields["prestigio"].read_only = True
+        if not can_edit_prestigio and "badge_instafame" in serializer.fields:
             serializer.fields["badge_instafame"].read_only = True
         return serializer
 
@@ -5273,7 +5273,7 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
                 except RigeneraLikeInfluencerError as exc:
                     raise serializers.ValidationError(str(exc)) from exc
 
-    def _can_edit_peso_influencer(self, user, personaggio=None):
+    def _can_edit_prestigio(self, user, personaggio=None):
         active_campaign = _get_active_campaign(self.request)
         if personaggio and active_campaign and personaggio.campagna_id != active_campaign.id:
             active_campaign = personaggio.campagna
@@ -5285,7 +5285,7 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
     def rigenera_like_influencer_action(self, request, pk=None):
         """Ricalcola i peso_like storici messi da questo personaggio (post e commenti)."""
         personaggio = self.get_object()
-        if not self._can_edit_peso_influencer(request.user, personaggio):
+        if not self._can_edit_prestigio(request.user, personaggio):
             raise permissions.PermissionDenied("Permessi insufficienti per rigenerare i like InstaFame.")
         from social.influencer import RigeneraLikeInfluencerError, rigenera_like_personaggio
 
