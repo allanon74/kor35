@@ -124,7 +124,7 @@ watch_event_wifi() {
   [ -x "$WIFI_HELPER" ] || return 0
   (
     while true; do
-      sleep "${KIOSK_WIFI_WATCH_SECONDS:-20}"
+      sleep "${KIOSK_WIFI_WATCH_SECONDS:-8}"
       sudo -n "$WIFI_HELPER" prefer || true
     done
   ) &

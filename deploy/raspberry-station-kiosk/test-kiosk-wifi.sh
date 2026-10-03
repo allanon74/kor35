@@ -46,6 +46,9 @@ write_stubs() {
 #!/usr/bin/env bash
 STATE="${KIOSK_WIFI_STUB_STATE:?}"
 printf '%s\n' "$*" >>"$STATE/calls"
+if [ "${1:-}" = "-w" ]; then
+  shift 2
+fi
 reveal() {
   local n
   n="$(cat "$STATE/rescans")"
@@ -88,6 +91,16 @@ if [ "${1:-}" = "-t" ]; then
           printf 'yes:%s\n' "$(cat "$STATE/current")"
           ;;
         SSID) list_ssids ;;
+        NAME,TYPE)
+          cur="$(cat "$STATE/current")"
+          while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            IFS='|' read -r pname pssid ptype prio pts <<<"$line"
+            if [ -n "$cur" ] && [ "$pssid" = "$cur" ]; then
+              printf '%s:%s\n' "$pname" "${ptype:-802-11-wireless}"
+            fi
+          done <"$STATE/profiles"
+          ;;
       esac
       ;;
   esac
@@ -134,9 +147,26 @@ fi
 if [ "${1:-}" = "connection" ] && [ "${2:-}" = "modify" ]; then
   exit 0
 fi
+if [ "${1:-}" = "connection" ] && [ "${2:-}" = "down" ]; then
+  name="${3:-}"
+  ssid="$(profile_field "$name" 2 || true)"
+  printf '%s\n' "$name" >>"$STATE/downs"
+  if [ -n "$ssid" ] && [ "$(cat "$STATE/current")" = "$ssid" ]; then
+    printf '%s\n' "" >"$STATE/current"
+  fi
+  exit 0
+fi
+if [ "${1:-}" = "device" ] && [ "${2:-}" = "disconnect" ]; then
+  printf '%s\n' "" >"$STATE/current"
+  exit 0
+fi
 if [ "${1:-}" = "connection" ] && [ "${2:-}" = "up" ]; then
   name="${3:-}"
   ssid="$(profile_field "$name" 2 || true)"
+  if [ -f "$STATE/require_down" ] && [ -n "$(cat "$STATE/current")" ] && [ "$(cat "$STATE/current")" != "$ssid" ]; then
+    echo "Error: device busy with $(cat "$STATE/current")" >&2
+    exit 1
+  fi
   printf '%s\n' "$name" >>"$STATE/ups"
   [ -n "$ssid" ] && printf '%s\n' "$ssid" >"$STATE/current"
   exit 0
@@ -336,11 +366,50 @@ if grep -q 'ifname p2p-dev-wlan0' "$D/state/calls"; then
 else
   ok "interfaccia p2p non usata"
 fi
-if grep -q 'connection up Desktop ifname wlan0' "$D/state/calls"; then
+if grep -q -- '-w 15 connection up Desktop ifname wlan0' "$D/state/calls"; then
   ok "attivato Desktop su wlan0"
 else
   fail "manca connection up Desktop su wlan0"
 fi
+
+# 8. Già su Casa, Omada non in scan (tipico da associati): usa il profilo e stacca Casa.
+D="$TMP/busy-home"
+write_stubs "$D"
+new_case "$D"
+write_stubs "$D"
+: >"$D/state/require_down"
+printf '%s\n' "99" >"$D/state/reveal_after"
+printf '%s\n' "Desktop|kor35-larp|802-11-wireless|0|99" >>"$D/state/profiles"
+if run_helper "$D" prefer >/tmp/kiosk-wifi-busy.log 2>&1; then
+  ok "prefer stacca Casa anche se kor35-larp non è in scan"
+else
+  fail "prefer doveva staccare Casa e usare il profilo evento"; cat /tmp/kiosk-wifi-busy.log >&2 || true
+fi
+assert_last_up "$D" "Desktop"
+if grep -qx "Casa" "$D/state/downs"; then
+  ok "ha staccato Casa"
+else
+  fail "doveva fare connection down Casa"
+fi
+if grep -q "kor35-larp" "$D/state/current"; then
+  ok "ora su kor35-larp"
+else
+  fail "corrente $(cat "$D/state/current")"
+fi
+
+# 9. SSID salvato kor35_larp (underscore): è la stessa rete evento.
+D="$TMP/underscore"
+write_stubs "$D"
+new_case "$D"
+write_stubs "$D"
+printf '%s\n' "99" >"$D/state/reveal_after"
+printf '%s\n' "Omada|kor35_larp|802-11-wireless|0|50" >>"$D/state/profiles"
+if run_helper "$D" prefer >/tmp/kiosk-wifi-underscore.log 2>&1; then
+  ok "prefer accetta kor35_larp come kor35-larp"
+else
+  fail "prefer doveva usare il profilo kor35_larp"; cat /tmp/kiosk-wifi-underscore.log >&2 || true
+fi
+assert_last_up "$D" "Omada"
 
 echo "--- ${PASS} ok, ${FAIL} fail ---"
 [ "$FAIL" -eq 0 ]

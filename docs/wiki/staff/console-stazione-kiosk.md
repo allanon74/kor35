@@ -40,7 +40,7 @@ Questa console 7" fa lo stesso, con un helper (`kor35-kiosk-wifi.sh`) perché al
 | 2 | SSID di riserva in `/etc/kor35/kiosk-station.env` (o profilo già salvato, es. Vodafone) | Il bosco non si vede (laboratorio, casa) |
 | 3 | Scelta a schermo (zenity) | Nessuna delle due risponde e `KIOSK_WIFI_PROMPT=1` |
 
-All'avvio riprova `kor35-larp` per alcuni secondi. Se non c'è, resta sulla rete di casa. Ogni 20 secondi, se `kor35-larp` è in aria, lascia la casa e ci si aggancia. **Riusa il profilo già salvato dal desktop e non ne riscrive la password**: se la riscrive, l'associazione fallisce e NetworkManager torna a casa. Il profilo evento ha priorità più alta, così al boot successivo vince lui quando entrambe le reti si vedono.
+All'avvio riprova `kor35-larp` per alcuni secondi. Se non c'è, resta sulla rete di casa. Ogni 8 secondi, se esiste un profilo `kor35-larp` (anche con underscore, `kor35_larp`) **stacca Vodafone/casa e alza quello**, anche quando lo scan da associati non elenca Omada — è lo stesso gesto della connessione manuale dal desktop. **Non riscrive la password** dei profili già salvati. Il profilo evento ha priorità 200, gli altri −100, così al boot successivo vince lui quando entrambe le reti si vedono.
 
 Non usare `Pi_Emergenza` / `10.42.0.1` per questa console.
 
@@ -74,7 +74,7 @@ journalctl -u kiosk-station.service -n 40 --no-pager
 curl -fsS -k https://www.kor35.it/api/healthz/ && echo OK
 ```
 
-Nel log deve comparire `Già connesso a kor35-larp`, `Profilo salvato` o `Passato a kor35-larp`. Se resta sulla rete di casa con `kor35-larp` visibile, la PSK del profilo desktop è sbagliata: connettiti a mano una volta dal desktop (kiosk spento) e poi riavvia il servizio, senza riscrivere la password in `/etc/kor35/kiosk-station.env`.
+Nel log deve comparire `Passato a kor35-larp`, `Stacco` o `Già connesso a kor35-larp`. Se resta su Vodafone, spegni il kiosk, connettiti **una volta** a `kor35-larp` dal desktop (così esiste il profilo), poi riavvia il servizio: da quel momento lo script stacca da solo la casa.
 
 Rete di riserva (es. Vodafone) se non è già in env: edita solo quelle due righe, non il file intero.
 
