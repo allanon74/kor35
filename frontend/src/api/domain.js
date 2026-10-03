@@ -2211,6 +2211,20 @@ export const staffSetPilotSerbatoioCarburante = (sottosistemaId, data, onLogout)
     onLogout
   );
 
+export const staffGetPilotBatteriaStorage = (sottosistemaId, onLogout) =>
+  fetchAuthenticated(
+    `/api/pilot/staff/sottosistemi/${sottosistemaId}/storage-sessione/`,
+    { method: 'GET' },
+    onLogout
+  );
+
+export const staffSetPilotBatteriaStorage = (sottosistemaId, data, onLogout) =>
+  fetchAuthenticated(
+    `/api/pilot/staff/sottosistemi/${sottosistemaId}/storage-sessione/`,
+    { method: 'POST', body: JSON.stringify(data) },
+    onLogout
+  );
+
 export const staffGetPilotComandi = (onLogout) =>
   fetchAuthenticated('/api/pilot/staff/comandi/', { method: 'GET' }, onLogout);
 export const staffCreatePilotComando = (data, onLogout) =>

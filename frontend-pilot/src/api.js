@@ -141,6 +141,10 @@ export const api = {
     method: 'POST',
     body: { allocazioni },
   }),
+  compattatoreRicaricaBatterie: (allocazioni) => request('/api/pilot/compattatore/ricarica-batterie/', {
+    method: 'POST',
+    body: { allocazioni },
+  }),
   compattatoreEnergizzaMinimo: () => request('/api/pilot/compattatore/energizza-minimo/', {
     method: 'POST',
     body: {},

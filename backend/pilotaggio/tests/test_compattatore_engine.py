@@ -8,6 +8,7 @@ from pilotaggio.compattatore_engine import (
     build_compattatore_state_payload,
     operazione_compressione,
     operazione_decompressione,
+    operazione_ricarica_batterie,
     operazione_risonanza,
 )
 from pilotaggio.componenti_stiva import mattoni_componente_qs, staff_modifica_stiva
@@ -66,3 +67,39 @@ class CompattatoreEngineTests(TestCase):
         self.assertIsNotNone(payload["risonanza"]["slot_a"])
         self.assertIsNotNone(payload["risonanza"]["slot_b"])
         self.assertLess(payload["energia_accumulata"], 9.0)
+
+    def test_ricarica_batterie_versa_la_resa_nello_storage(self):
+        from pilotaggio.models import SessioneVolo
+        from pilotaggio.tests.test_views import _crea_pilota_con_0pi
+
+        _, pilota = _crea_pilota_con_0pi(nome="PilotaBattComp", valore_0pi=1)
+        SottosistemaNave.objects.create(
+            codice="B",
+            nome="Batterie emergenza",
+            tipo="batteria",
+            capacita_storage=5000.0,
+            attivo=True,
+        )
+        sessione = SessioneVolo.objects.create(
+            pilota=pilota,
+            stato="idle",
+            storage_energia_attuale=10.0,
+            storage_energia_massimo=100.0,
+        )
+        staff_modifica_stiva(mattone_id=str(self.m0.pk), delta=2)
+        stato_comp = CompattatoreStatoNave.get_solo()
+        stato_comp.energia_accumulata = 9.0
+        stato_comp.save(update_fields=["energia_accumulata", "updated_at"])
+
+        payload = operazione_ricarica_batterie(
+            allocazioni=[{"mattone_id": str(self.m0.pk), "quantita": 1}]
+        )
+        sessione.refresh_from_db()
+        self.assertEqual(payload["sintesi"]["destinazione"], "batterie")
+        self.assertGreater(payload["sintesi"]["aggiunto"], 0)
+        self.assertEqual(
+            sessione.storage_energia_attuale,
+            round(10.0 + payload["sintesi"]["aggiunto"], 3),
+        )
+        self.assertEqual(sessione.storage_energia_massimo, 5000.0)
+        self.assertIn("ricarica_batterie", payload)

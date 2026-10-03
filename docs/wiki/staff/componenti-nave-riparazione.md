@@ -187,18 +187,30 @@ API console (token pilota):
 | `POST /api/pilot/compattatore/decompressione/` | `{ "mattone_id": "uuid" }` |
 | `POST /api/pilot/compattatore/risonanza/` | `{ "mattone_id": "uuid" }` |
 | `POST /api/pilot/compattatore/quantico/` | `{ "nome_oggetto": "..." }` o `{ "qr_id", "personaggio_id" }` |
-| `POST /api/pilot/compattatore/sintesi-carburante/` | `{ "allocazioni": [{ "mattone_id", "quantita" }] }` (1–3 unità) |
+| `POST /api/pilot/compattatore/sintesi-carburante/` | `{ "allocazioni": [{ "mattone_id", "quantita" }] }` (1–3 unità) → serbatoi |
+| `POST /api/pilot/compattatore/ricarica-batterie/` | Stesso body del bruciatore → batterie d'emergenza (storage) |
 | `POST /api/pilot/compattatore/energizza-minimo/` | A nave ferma porta Z a 1 (banchina) |
 
-### Sintesi carburante (bruciatore)
+### Sintesi carburante e ricarica batterie (bruciatore)
 
-Colma il gap «riempire i serbatoi dalla stiva». Pannello dedicato sulla console Compattatore.
+Pannello **Bruciatore** sulla console Compattatore. Si sceglie la destinazione: **Serbatoi** o **Batterie**.
 
-- Consuma **1–3** unità componenti.
+- Consuma **1–3** unità componenti. La formula di resa è la stessa per entrambe.
 - Resa: `Σ densità(indice)×qty × η(Z) × miscela` con `η(Z)=0.42+0.07×Z` (Z1≈49%, Z9≈105%); miscela +22% se ≥2 indici.
 - Densità indice 0 = 14, indice 9 ≈ 36.7. Costo energia: 9 (come le altre ops).
-- **Bilancio**: Z alto + componenti buoni → una op/tick supera la crociera tipica (K5+L2 = 28.8/tick). Z=1 solo per rifornimento a terra (resa/tick sotto crociera).
+- **Serbatoi**: la resa si somma a `carburante_attuale` (tetto = somma capacità serbatoi attivi).
+- **Batterie**: la resa si somma a `storage_energia_attuale` (tetto = somma `capacita_storage` delle batterie attive).
+- **Bilancio carburante**: Z alto + componenti buoni → una op/tick supera la crociera tipica (K5+L2 = 28.8/tick). Z=1 solo per rifornimento a terra (resa/tick sotto crociera).
 - A **nave ferma**, `energizza-minimo` permette Z=1 senza carico sul bus di volo.
+
+### Carica manuale da dashboard staff
+
+Su un sottosistema **serbatoio** o **batteria**, in modifica, compare il riquadro della sessione console attiva (idle o in volo):
+
+- Serbatoio: `POST /api/pilot/staff/sottosistemi/<id>/carburante-sessione/` con `{ "carburante_attuale" }` o `{ "riempi": true }`.
+- Batterie d'emergenza: `POST /api/pilot/staff/sottosistemi/<id>/storage-sessione/` con `{ "storage_attuale" }` o `{ "riempi": true }`.
+
+Il valore è limitato alla capacità configurata sui sottosistemi attivi di quel tipo.
 
 ---
 

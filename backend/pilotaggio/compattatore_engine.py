@@ -99,6 +99,7 @@ def build_compattatore_state_payload() -> dict:
         descrizione_formula,
         nave_ferma_per_compattatore,
         payload_carburante_sessione,
+        payload_storage_sessione,
     )
     from .engine import sessione_nave_operativa
     from .models import PilotRuntimeConfig
@@ -145,6 +146,11 @@ def build_compattatore_state_payload() -> dict:
             "abilitato": True,
             "formula": descrizione_formula(),
             **payload_carburante_sessione(),
+        },
+        "ricarica_batterie": {
+            "abilitato": True,
+            "formula": descrizione_formula(),
+            **payload_storage_sessione(),
         },
         "stiva": build_stiva_payload(),
     }
@@ -488,6 +494,31 @@ def operazione_sintesi_carburante(*, allocazioni: List[dict]) -> dict:
     payload["sintesi"] = {
         **stima,
         **serbatoio,
+        "resa": stima["resa"],
+    }
+    return payload
+
+
+@transaction.atomic
+def operazione_ricarica_batterie(*, allocazioni: List[dict]) -> dict:
+    """Brucia 1–3 componenti e versa la stessa resa del bruciatore nelle batterie."""
+    from .compattatore_carburante import applica_storage_sintesi, stima_da_allocazioni
+
+    if not _operazione_disponibile():
+        raise ValueError("Compattatore non operativo o energia insufficiente.")
+    livello = _livello_compattatore()
+    stima = stima_da_allocazioni(allocazioni, livello)
+    if stima["resa"] <= 0:
+        raise ValueError("Resa energia nulla: alza il livello Z o scegli altri componenti.")
+    consuma_mattoni_stiva(
+        [{"mattone_id": u["mattone_id"], "quantita": u["quantita"]} for u in stima["unita"]]
+    )
+    _consuma_energia_operazione()
+    batterie = applica_storage_sintesi(stima["resa"])
+    payload = build_compattatore_state_payload()
+    payload["sintesi"] = {
+        **stima,
+        **batterie,
         "resa": stima["resa"],
     }
     return payload
