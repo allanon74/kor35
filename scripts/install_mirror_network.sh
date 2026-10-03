@@ -111,6 +111,10 @@ if ! "${ROOT_DIR}/scripts/mirror_ensure_emergency_wifi.sh"; then
   mirror_pi_warn "WiFi emergenza non attiva dopo install — verifica EMERGENCY_WIFI_PASSPHRASE in /etc/kor35/mirror-network.env"
 fi
 
+if [ -f "${ROOT_DIR}/scripts/install_mirror_noip.sh" ]; then
+  bash "${ROOT_DIR}/scripts/install_mirror_noip.sh" || mirror_pi_warn "client No-IP non installato"
+fi
+
 # ddns.conf per kor35.ddns.net (HTTPS a casa) se mancante
 ddns_dst="${KOR35_REPO_PATH}/config/docker/nginx-docker/nginx_conf/ddns.conf"
 ddns_example="${KOR35_REPO_PATH}/config/docker/nginx-docker/nginx_conf/ddns.conf.example"

@@ -275,6 +275,7 @@ Solo mirror:
 - topologia WiFi e modalità rete router/evento: **`docs/MIRROR_PI_NETWORK.md`**
 - SSH da PC dev / Cursor: alias `kor35-mirror`, `kor35.ddns.net:10022`, utente `pi` — **`.cursor/rules/mirror-pi-ops.mdc`**
 - diagnostica remota: `make mirror-ssh-check`
+- No-IP sul Pi (il nome segue il Raspberry, non il DUC Windows): `sudo make install-mirror-noip ENV=mirror` — vedi **`docs/MIRROR_PI_NETWORK.md`**
 
 ### 6.3 Local dev (home/office)
 

@@ -8,6 +8,7 @@ set -euo pipefail
 #   ./scripts/mirror_pi_remote.sh pull
 #   ./scripts/mirror_pi_remote.sh install-network [--no-auto-mode]
 #   ./scripts/mirror_pi_remote.sh network-mode --mode router|event|auto
+#   ./scripts/mirror_pi_remote.sh install-noip
 #   ./scripts/mirror_pi_remote.sh configure [--mode router] [--no-auto-mode] [--no-git-pull]
 #
 # Make (da PC dev):
@@ -79,6 +80,10 @@ remote_install_network() {
   mirror_ssh_run "cd '${REPO}' && sudo ./scripts/install_mirror_network.sh ${flags}"
 }
 
+remote_install_noip() {
+  mirror_ssh_run "cd '${REPO}' && sudo ./scripts/install_mirror_noip.sh"
+}
+
 remote_network_mode() {
   mirror_ssh_run "cd '${REPO}' && sudo ./scripts/mirror_network_apply_mode.sh --mode '${NETWORK_MODE}'"
 }
@@ -98,6 +103,10 @@ case "$ACTION" in
   install-network)
     mirror_ssh_require_connection
     remote_install_network
+    ;;
+  install-noip)
+    mirror_ssh_require_connection
+    remote_install_noip
     ;;
   network-mode)
     if [ -z "$NETWORK_MODE" ]; then
@@ -119,7 +128,7 @@ case "$ACTION" in
     remote_check
     ;;
   "")
-    echo "Specificare azione: check | pull | install-network | network-mode | configure | update" >&2
+    echo "Specificare azione: check | pull | install-network | install-noip | network-mode | configure | update" >&2
     exit 1
     ;;
   *)

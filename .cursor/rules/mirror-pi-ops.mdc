@@ -164,6 +164,8 @@ sudo make mirror-configure ENV=mirror MIRROR_NETWORK_MODE=router MIRROR_NETWORK_
 
 **WiFi emergenza:** install da repo (`make mirror-install-network` / `make mirror-reinstall-units`); non editare unit systemd a mano sul Pi. Vedi `docs/wiki/staff/mirror-pi.md`.
 
+**No-IP:** il client di `kor35.ddns.net` sta sul Pi (`kor35-mirror-noip.timer`, credenziali `/etc/kor35/noip.env`, mai nel git). Install: `sudo make install-mirror-noip ENV=mirror` o `make mirror-pi-install-noip`. Il DUC Windows va spento. Un router nuovo ha bisogno dei forward TCP 80, 443 e 10022→22 (UPnP se il router lo consente). Un hotspot telefono dà Internet in uscita ma, per CGNAT, quasi mai l'ingresso su `kor35.ddns.net`. Runbook: `docs/MIRROR_PI_NETWORK.md`.
+
 ---
 
 ## Path e nomi fissi (mirror)
