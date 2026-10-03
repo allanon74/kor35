@@ -3613,7 +3613,13 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     def get_infusioni_possedute(self, personaggio):
         from .models import PersonaggioInfusione
 
-        infusioni = personaggio.infusioni_possedute.all()
+        infusioni = personaggio.infusioni_possedute.select_related(
+            "aura_richiesta", "aura_infusione"
+        ).prefetch_related(
+            "infusionestatisticabase_set__statistica",
+            "costi_attivazione__statistica",
+            "componenti__caratteristica",
+        )
         infusioni_ids = list(infusioni.values_list("id", flat=True))
         if not infusioni_ids:
             return []
@@ -3638,7 +3644,13 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
 
     def get_tessiture_possedute(self, personaggio):
         from .models import PersonaggioTessitura
-        tessiture = personaggio.tessiture_possedute.all()
+        tessiture = personaggio.tessiture_possedute.select_related(
+            "aura_richiesta", "elemento_principale", "abilita_temporanea"
+        ).prefetch_related(
+            "tessiturastatisticabase_set__statistica",
+            "costi_attivazione__statistica",
+            "componenti__caratteristica",
+        )
         tessiture_ids = list(tessiture.values_list("id", flat=True))
         if not tessiture_ids:
             return []
@@ -3666,7 +3678,11 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     def get_cerimoniali_posseduti(self, personaggio):
         from .models import PersonaggioCerimoniale
 
-        cerimoniali = personaggio.cerimoniali_posseduti.all()
+        cerimoniali = personaggio.cerimoniali_posseduti.select_related(
+            "aura_richiesta"
+        ).prefetch_related(
+            "componenti__caratteristica",
+        )
         cer_ids = list(cerimoniali.values_list("id", flat=True))
         if not cer_ids:
             return []

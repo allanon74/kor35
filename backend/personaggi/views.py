@@ -4515,24 +4515,50 @@ def _send_staff_death_message(personaggio, reason_text="Morte personaggio"):
     )
 
 
+def _coma_snapshot(ui):
+    """Stato persistito del coma, senza il countdown che cambia a ogni lettura."""
+    snap = {}
+    for key, value in (ui or {}).items():
+        if key in ("coma_state", "rianimazione_state") and isinstance(value, dict):
+            block = {k: v for k, v in value.items() if k != "remaining_seconds"}
+            if block:
+                snap[key] = block
+            continue
+        snap[key] = value
+    return snap
+
+
 def _sync_coma_state(personaggio):
     """
     Mantiene coerente lo stato coma lato server, con persistenza anche dopo chiusura app.
     Ritorna un dict con coma_state e rianimazione_state aggiornati.
+
+    Il countdown (`remaining_seconds`) resta in memoria per la risposta, ma non viene
+    scritto a ogni GET: altrimenti ogni apertura scheda aggiorna `updated_at` e
+    invalida cache e sync.
     """
-    ui = dict(personaggio.impostazioni_ui or {})
+    original_ui = personaggio.impostazioni_ui or {}
+    ui = dict(original_ui)
     coma = dict(ui.get("coma_state") or {})
     rianimazione = dict(ui.get("rianimazione_state") or {})
     now = timezone.now()
+
+    def _finish(extra_fields=None):
+        personaggio.impostazioni_ui = ui
+        structural = _coma_snapshot(ui) != _coma_snapshot(original_ui)
+        if structural or extra_fields:
+            fields = ["impostazioni_ui", "updated_at"]
+            for field_name in extra_fields or []:
+                if field_name not in fields:
+                    fields.append(field_name)
+            personaggio.save(update_fields=fields)
+        return {"coma_state": coma, "rianimazione_state": rianimazione}
 
     # 1) Sync rianimazione
     if rianimazione:
         r_status = str(rianimazione.get("status") or "").lower()
         r_end_at = _parse_dt_iso(rianimazione.get("end_at"))
-        if r_status in {"idle", "resolved"}:
-            ui.pop("rianimazione_state", None)
-            rianimazione = {}
-        elif personaggio.data_morte:
+        if r_status in {"idle", "resolved"} or personaggio.data_morte:
             ui.pop("rianimazione_state", None)
             rianimazione = {}
         elif r_end_at and now >= r_end_at:
@@ -4544,6 +4570,7 @@ def _sync_coma_state(personaggio):
             personaggio.aggiungi_log("Rianimazione completata: PV ripristinati al massimo.")
             personaggio.impostazioni_ui = ui
             personaggio.save(update_fields=["risorse_consumabili", "statistiche_temporanee", "impostazioni_ui", "updated_at"])
+            return {"coma_state": coma, "rianimazione_state": rianimazione}
         elif r_end_at:
             rianimazione["remaining_seconds"] = max(0, int((r_end_at - now).total_seconds()))
             ui["rianimazione_state"] = rianimazione
@@ -4551,29 +4578,26 @@ def _sync_coma_state(personaggio):
     # 2) Sync coma
     status_val = str(coma.get("status") or "").lower()
     if not coma:
-        personaggio.impostazioni_ui = ui
-        personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
-        return {"coma_state": {}, "rianimazione_state": rianimazione}
+        ui.pop("coma_state", None)
+        return _finish()
 
     if status_val in {"idle", "resolved"}:
         ui.pop("coma_state", None)
-        personaggio.impostazioni_ui = ui
-        personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
-        return {"coma_state": {}, "rianimazione_state": rianimazione}
+        coma = {}
+        return _finish()
 
     if personaggio.data_morte:
         coma["status"] = "dead"
         coma["remaining_seconds"] = 0
         ui["coma_state"] = coma
-        personaggio.impostazioni_ui = ui
-        personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
-        return {"coma_state": coma, "rianimazione_state": rianimazione}
+        return _finish()
 
     if coma.get("is_paused"):
         paused_at = _parse_dt_iso(coma.get("paused_at"))
         if paused_at:
             remaining = max(0, int(((_parse_dt_iso(coma.get("end_at")) or now) - paused_at).total_seconds()))
             coma["remaining_seconds"] = remaining
+            ui["coma_state"] = coma
     else:
         end_at = _parse_dt_iso(coma.get("end_at"))
         if end_at and now >= end_at:
@@ -4584,29 +4608,27 @@ def _sync_coma_state(personaggio):
                 personaggio.data_morte = now
                 personaggio.aggiungi_log("Morte per colpo fatale al termine del coma.")
                 _send_staff_death_message(personaggio, reason_text="Morte per colpo fatale")
-                personaggio.save(update_fields=["data_morte", "updated_at"])
-            else:
-                tri_seconds = max(0, int(personaggio.get_valore_statistica("TRI") or 0))
-                r_end = now + timedelta(seconds=tri_seconds)
-                rianimazione = {
-                    "status": "counting",
-                    "started_at": _to_iso(now),
-                    "end_at": _to_iso(r_end),
-                    "remaining_seconds": tri_seconds,
-                    "tri_seconds": tri_seconds,
-                }
-                ui["rianimazione_state"] = rianimazione
-                ui.pop("coma_state", None)
-                personaggio.impostazioni_ui = ui
-                personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
-                return {"coma_state": {}, "rianimazione_state": rianimazione}
+                ui["coma_state"] = coma
+                return _finish(extra_fields=["data_morte"])
+            tri_seconds = max(0, int(personaggio.get_valore_statistica("TRI") or 0))
+            r_end = now + timedelta(seconds=tri_seconds)
+            rianimazione = {
+                "status": "counting",
+                "started_at": _to_iso(now),
+                "end_at": _to_iso(r_end),
+                "remaining_seconds": tri_seconds,
+                "tri_seconds": tri_seconds,
+            }
+            ui["rianimazione_state"] = rianimazione
+            ui.pop("coma_state", None)
+            coma = {}
+            return _finish()
         elif end_at:
             coma["remaining_seconds"] = max(0, int((end_at - now).total_seconds()))
+            ui["coma_state"] = coma
 
     ui["coma_state"] = coma
-    personaggio.impostazioni_ui = ui
-    personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
-    return {"coma_state": coma, "rianimazione_state": rianimazione}
+    return _finish()
 
 
 def _game_key_to_pool_base(stat_sigla):

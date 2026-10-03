@@ -959,13 +959,13 @@ def stat_link_attivo_in_contesto(personaggio, stat_link, context=None):
     if stat_link.usa_limitazione_elemento:
         if not elemento_target:
             return False
-        if not stat_link.limit_a_elementi.filter(pk=elemento_target.pk).exists():
+        if elemento_target.pk not in {el.pk for el in stat_link.limit_a_elementi.all()}:
             return False
 
     if stat_link.usa_limitazione_aura:
         if not aura_target:
             return False
-        if not stat_link.limit_a_aure.filter(pk=aura_target.pk).exists():
+        if aura_target.pk not in {au.pk for au in stat_link.limit_a_aure.all()}:
             return False
 
     if stat_link.usa_condizione_text and stat_link.condizione_text:
@@ -1053,15 +1053,13 @@ def calcola_metatalenti(personaggio, context, mods_attivi):
     if not aura_riferimento:
         return ""
     livello_item = context.get('livello', 0)
-    modello = personaggio.modelli_aura.filter(aura=aura_riferimento).first()
+    modello = personaggio.modello_aura_per(aura_riferimento)
     if not modello:
         return ""
 
     testo_parts = []
     caratteristiche_pg = personaggio.caratteristiche_base
-    for mattone in modello.mattoni_proibiti.select_related('caratteristica_associata').prefetch_related(
-        'mattonestatistica_set__statistica'
-    ).all():
+    for mattone in modello.mattoni_proibiti.all():
         funz = mattone.funzionamento_metatalento
         if funz == META_NESSUN_EFFETTO:
             continue
@@ -7082,8 +7080,18 @@ class Personaggio(Inventario):
 
         # Valori base da scheda (PersonaggioStatisticaBase / default statistica): senza questo,
         # punteggi_dipendenti usa solo abilita_punteggio e sorgenti come Chakra restano sempre 0.
+        # Una query per tutti gli override, non una per statistica.
+        base_rows = {
+            row.statistica_id: row.valore_base
+            for row in PersonaggioStatisticaBase.objects.filter(personaggio=self).only(
+                "statistica_id", "valore_base"
+            )
+        }
         for stat in Statistica.objects.filter(parametro__isnull=False).exclude(parametro__exact=''):
-            base_pg = int(self.get_valore_statistica_base(stat) or 0)
+            if stat.id in base_rows:
+                base_pg = int(base_rows[stat.id] or 0)
+            else:
+                base_pg = int(stat.valore_base_predefinito or 0)
             nome = stat.nome
             from_links = int(p.get(nome, 0) or 0)
             p[nome] = base_pg + from_links
@@ -7332,6 +7340,8 @@ class Personaggio(Inventario):
     @property
     def punteggi_base(self):
         if hasattr(self, '_punteggi_base_cache'): return self._punteggi_base_cache
+        if hasattr(self, '_caratteristiche_base_cache'):
+            del self._caratteristiche_base_cache
         p = self._build_punteggi_base_indipendenti(exclude_abilita_ids=None)
         regole = self._collect_regole_punteggio_dipendente(exclude_abilita_ids=None)
         p = self._applica_punteggi_dipendenti(p, regole)
@@ -7415,14 +7425,22 @@ class Personaggio(Inventario):
         if hasattr(self, '_statistiche_base_cache'):
             return self._statistiche_base_cache
         
-        # Recupera tutte le statistiche
-        tutte_statistiche = Statistica.objects.all()
+        # Una lettura degli override di scheda, poi i default di catalogo.
+        base_rows = {
+            row.statistica_id: row.valore_base
+            for row in PersonaggioStatisticaBase.objects.filter(personaggio=self).only(
+                "statistica_id", "valore_base"
+            )
+        }
         risultato = {}
-        
-        for stat in tutte_statistiche:
-            if stat.parametro:
-                risultato[stat.parametro] = self.get_valore_statistica_base(stat)
-        
+        for stat in Statistica.objects.all():
+            if not stat.parametro:
+                continue
+            if stat.id in base_rows:
+                risultato[stat.parametro] = base_rows[stat.id]
+            else:
+                risultato[stat.parametro] = stat.valore_base_predefinito
+
         self._statistiche_base_cache = risultato
         return risultato
     
@@ -7436,19 +7454,59 @@ class Personaggio(Inventario):
         """
         if hasattr(self, '_punteggi_base_partial_for_mods'):
             p = self._punteggi_base_partial_for_mods
-            nomi_ca = set(
-                Punteggio.objects.filter(tipo=CARATTERISTICA).values_list('nome', flat=True)
-            )
-            return {k: v for k, v in p.items() if k in nomi_ca}
-        return {
-            k: v
-            for k, v in self.punteggi_base.items()
-            if Punteggio.objects.filter(nome=k, tipo=CARATTERISTICA).exists()
-        }
+        else:
+            if hasattr(self, '_caratteristiche_base_cache'):
+                return self._caratteristiche_base_cache
+            p = self.punteggi_base
+        nomi_ca = self._nomi_punteggio(tipo=CARATTERISTICA)
+        result = {k: v for k, v in p.items() if k in nomi_ca}
+        if not hasattr(self, '_punteggi_base_partial_for_mods'):
+            self._caratteristiche_base_cache = result
+        return result
     
+    def _nomi_punteggio(self, *, tipo, is_generica=None):
+        """Nomi catalogo per tipo, in cache sull'istanza (niente EXISTS per chiave)."""
+        cache = getattr(self, "_nomi_punteggio_cache", None)
+        if cache is None:
+            cache = {}
+            self._nomi_punteggio_cache = cache
+        key = (tipo, is_generica)
+        if key not in cache:
+            qs = Punteggio.objects.filter(tipo=tipo)
+            if is_generica is not None:
+                qs = qs.filter(is_generica=is_generica)
+            cache[key] = set(qs.values_list("nome", flat=True))
+        return cache[key]
+
+    def _aura_per_sigla(self, sigla):
+        cache = getattr(self, "_aura_per_sigla_cache", None)
+        if cache is None:
+            cache = {p.sigla: p for p in Punteggio.objects.filter(tipo=AURA) if p.sigla}
+            self._aura_per_sigla_cache = cache
+        aura = cache.get(sigla)
+        if aura is None and sigla:
+            aura = Punteggio.objects.filter(sigla=sigla, tipo=AURA).first()
+            if aura:
+                cache[sigla] = aura
+        return aura
+
+    def _statistica_per_sigla(self, sigla):
+        cache = getattr(self, "_statistiche_per_sigla", None)
+        if cache is None:
+            cache = {s.sigla: s for s in Statistica.objects.all() if s.sigla}
+            self._statistiche_per_sigla = cache
+        stat = cache.get(sigla)
+        if stat is None and sigla:
+            stat = Statistica.objects.filter(sigla=sigla).first()
+            if stat:
+                cache[sigla] = stat
+        return stat
+
     def get_valore_aura_effettivo(self, aura):
         pb = self.punteggi_base
-        if aura.is_generica: return max([v for k,v in pb.items() if Punteggio.objects.filter(nome=k, tipo=AURA, is_generica=False).exists()] or [0])
+        if aura.is_generica:
+            nomi = self._nomi_punteggio(tipo=AURA, is_generica=False)
+            return max([v for k, v in pb.items() if k in nomi] or [0])
         return pb.get(aura.nome, 0)
 
     def get_valore_aura_per_sigla(self, sigla):
@@ -7456,7 +7514,7 @@ class Personaggio(Inventario):
         Valore effettivo di un'aura (Punteggio tipo AU) per sigla (es. ATE, AMS).
         Non usare get_valore_statistica: le aure non sono Statistiche (tipo ST).
         """
-        aura = Punteggio.objects.filter(sigla=sigla, tipo=AURA).first()
+        aura = self._aura_per_sigla(sigla)
         if not aura:
             return 0
         return self.get_valore_aura_effettivo(aura)
@@ -7470,9 +7528,18 @@ class Personaggio(Inventario):
         - MATERIA / MUTAZIONE / MOD: aure AMS / AIN / ATE
         - CONSUMABILE: aura ALC
         """
+        cache_key = (ambito, getattr(aura, "id", None))
+        livello_cache = getattr(self, "_max_livello_creazione_cache", None)
+        if livello_cache is None:
+            livello_cache = {}
+            self._max_livello_creazione_cache = livello_cache
+        if cache_key in livello_cache:
+            return livello_cache[cache_key]
+
         base = 0
         if ambito == Abilita.AMBITO_CREAZIONE_TES_AURA:
             if aura is None:
+                livello_cache[cache_key] = 0
                 return 0
             base = int(self.get_valore_aura_effettivo(aura) or 0)
         elif ambito == Abilita.AMBITO_CREAZIONE_MATERIA:
@@ -7484,6 +7551,7 @@ class Personaggio(Inventario):
         elif ambito == Abilita.AMBITO_CREAZIONE_CONSUMABILE:
             base = int(self.get_valore_aura_per_sigla("ALC") or 0)
         else:
+            livello_cache[cache_key] = 0
             return 0
 
         bonus = 0
@@ -7496,6 +7564,7 @@ class Personaggio(Inventario):
             # aura_creazione è obbligatoria per TES_AURA: niente match su NULL
             # (altrimenti uno sblocco senza aura varrebbe per tutte le aure).
             if aura is None:
+                livello_cache[cache_key] = base
                 return base
             qs = qs.filter(aura_creazione_id=aura.id)
         for liv in qs.values_list("sblocca_creazione_livello", flat=True):
@@ -7503,7 +7572,9 @@ class Personaggio(Inventario):
                 bonus = max(bonus, int(liv or 0))
             except (TypeError, ValueError):
                 continue
-        return max(base, bonus)
+        result = max(base, bonus)
+        livello_cache[cache_key] = result
+        return result
     
     def valida_acquisto_tecnica(self, t):
         if not t.aura_richiesta: return False, "Aura mancante."
@@ -7685,6 +7756,9 @@ class Personaggio(Inventario):
     @property
     def modificatori_calcolati(self):
         if hasattr(self, '_modificatori_calcolati_cache'): return self._modificatori_calcolati_cache
+        for stale in ("_modificatori_contestuali_prefetch_cache", "_formula_rules_cache"):
+            if hasattr(self, stale):
+                delattr(self, stale)
         mods = {}
         
         def _add(p, t, v):
@@ -7743,7 +7817,7 @@ class Personaggio(Inventario):
 
         def _val_stat_senza_sezioni(sigla):
             """Evita ricorsione: usa punteggi_base + mods già raccolti (senza sezioni)."""
-            st_obj = Statistica.objects.filter(sigla=sigla).first()
+            st_obj = self._statistica_per_sigla(sigla)
             if not st_obj:
                 return 0
             base = self.punteggi_base.get(st_obj.nome, 0)
@@ -8041,6 +8115,69 @@ class Personaggio(Inventario):
         
         return dettagli
 
+    def modello_aura_per(self, aura):
+        """ModelloAura del personaggio per un'aura, con prefetch riusabile nella scheda."""
+        if not aura:
+            return None
+        aura_id = getattr(aura, "id", aura)
+        cache = getattr(self, "_modelli_aura_by_aura_id", None)
+        if cache is None:
+            cache = {}
+            qs = self.modelli_aura.select_related("elemento_secondario").prefetch_related(
+                "mattoni_proibiti__caratteristica_associata",
+                "mattoni_proibiti__mattonestatistica_set__statistica",
+                "req_doppia_rel__requisito",
+                "req_caratt_rel__requisito",
+                "req_mattone_rel__requisito",
+            )
+            for modello in qs:
+                cache[modello.aura_id] = modello
+            self._modelli_aura_by_aura_id = cache
+        return cache.get(aura_id)
+
+    def _modificatori_contestuali_prefetch(self):
+        """
+        Link condizionali (abilità e oggetti) caricati una volta per istanza.
+        La scheda richiama get_modificatori_extra_da_contesto per ogni tecnica.
+        """
+        cached = getattr(self, "_modificatori_contestuali_prefetch_cache", None)
+        if cached is not None:
+            return cached
+        links_abilita = list(
+            AbilitaStatistica.objects.filter(
+                abilita__personaggioabilita__personaggio=self
+            ).select_related("statistica").prefetch_related("limit_a_elementi", "limit_a_aure")
+        )
+        oggetti = list(
+            self.get_oggetti().select_related(
+                "infusione_generatrice", "aura", "ospitato_su"
+            ).prefetch_related(
+                "oggettostatistica_set__statistica",
+                "oggettostatistica_set__limit_a_elementi",
+                "oggettostatistica_set__limit_a_aure",
+                "potenziamenti_installati__infusione_generatrice",
+                "potenziamenti_installati__aura",
+                "potenziamenti_installati__oggettostatistica_set__statistica",
+                "potenziamenti_installati__oggettostatistica_set__limit_a_elementi",
+                "potenziamenti_installati__oggettostatistica_set__limit_a_aure",
+            )
+        )
+        cached = (links_abilita, oggetti)
+        self._modificatori_contestuali_prefetch_cache = cached
+        return cached
+
+    def _formula_rules_possedute(self):
+        cached = getattr(self, "_formula_rules_cache", None)
+        if cached is not None:
+            return cached
+        cached = list(
+            AbilitaFormulaRule.objects.filter(
+                abilita__personaggioabilita__personaggio=self
+            ).select_related("from_punteggio", "to_punteggio", "from_mattone", "to_mattone")
+        )
+        self._formula_rules_cache = cached
+        return cached
+
     def get_modificatori_extra_da_contesto(self, context=None):
         """
         Calcola e restituisce SOLO i modificatori che si attivano specificamente
@@ -8085,15 +8222,14 @@ class Personaggio(Inventario):
             # 2. Verifica Elemento (se richiesto)
             if stat_link.usa_limitazione_elemento:
                 if not elemento_target: return False
-                # Controlla se l'elemento attuale è nella lista di quelli permessi
-                if not stat_link.limit_a_elementi.filter(pk=elemento_target.pk).exists():
+                # .all() usa il prefetch; .filter().exists() rifarebbe una query per link.
+                if elemento_target.pk not in {el.pk for el in stat_link.limit_a_elementi.all()}:
                     return False
 
             # 3. Verifica Aura (se richiesta)
             if stat_link.usa_limitazione_aura:
                 if not aura_target: return False
-                # Controlla se l'aura attuale è nella lista di quelle permesse
-                if not stat_link.limit_a_aure.filter(pk=aura_target.pk).exists():
+                if aura_target.pk not in {au.pk for au in stat_link.limit_a_aure.all()}:
                     return False
             
             # 4. Verifica Condizione Testuale (es. script custom)
@@ -8109,28 +8245,14 @@ class Personaggio(Inventario):
             return True
 
         # --- FASE 1: ABILITÀ ---
-        # Recuperiamo i modificatori dalle abilità possedute
-        # (Usiamo select/prefetch per evitare query N+1 sulle condizioni)
-        links_abilita = AbilitaStatistica.objects.filter(
-            abilita__personaggioabilita__personaggio=self
-        ).select_related('statistica').prefetch_related('limit_a_elementi', 'limit_a_aure')
+        # I link sono già in prefetch: la scheda valuta il contesto per ogni tecnica.
+        links_abilita, oggetti = self._modificatori_contestuali_prefetch()
 
         for link in links_abilita:
             if _check_condition(link):
                 _add(link.statistica.parametro, link.tipo_modificatore, link.valore)
 
         # --- FASE 2: OGGETTI & INNESTI ---
-        # Recuperiamo gli oggetti attivi. 
-        # Nota: get_oggetti() filtra già per l'inventario corrente.
-        oggetti = self.get_oggetti().prefetch_related(
-            'oggettostatistica_set__statistica',
-            'oggettostatistica_set__limit_a_elementi',
-            'oggettostatistica_set__limit_a_aure',
-            'potenziamenti_installati__oggettostatistica_set__statistica',
-            'potenziamenti_installati__oggettostatistica_set__limit_a_elementi',
-            'potenziamenti_installati__oggettostatistica_set__limit_a_aure'
-        )
-        
         for oggetto in oggetti:
             if oggetto.is_active():
             # 2A. Modificatori diretti dell'oggetto
@@ -8154,9 +8276,7 @@ class Personaggio(Inventario):
         formula_kind = str(context.get("formula_kind") or FORMULA_SCOPE_ATTACK).upper()
         aura_obj = context.get("aura")
         elemento_obj = context.get("elemento")
-        rules = AbilitaFormulaRule.objects.filter(
-            abilita__personaggioabilita__personaggio=self
-        ).select_related("from_punteggio", "to_punteggio", "from_mattone", "to_mattone")
+        rules = self._formula_rules_possedute()
 
         source_override = None
         source_append_labels = []
@@ -8321,7 +8441,7 @@ class Personaggio(Inventario):
                 ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale, 'formula_kind': FORMULA_SCOPE_WEAVE}
                 testo_finale =  formatta_testo_generico(item.testo, formula=formula_text, statistiche_base=stats, personaggio=self, context=ctx)
             else:
-                modello = self.modelli_aura.filter(aura=item.aura_richiesta).first()
+                modello = self.modello_aura_per(item.aura_richiesta)
                 elementi_map = {} 
                 if item.elemento_principale: elementi_map[item.elemento_principale.id] = item.elemento_principale
                 
@@ -8508,7 +8628,7 @@ class Personaggio(Inventario):
         Con _punteggi_base_partial_for_mods (uso interno) la base viene letta dal dict parziale.
         """
         try:
-            stat_obj = Statistica.objects.filter(sigla=sigla).first()
+            stat_obj = self._statistica_per_sigla(sigla)
             if not stat_obj or not stat_obj.parametro:
                 return 0
             mods = self.modificatori_calcolati.get(stat_obj.parametro, {'add': 0, 'mol': 1.0})
