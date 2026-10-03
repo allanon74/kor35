@@ -78,6 +78,8 @@ class WikiStaffOpsSyncTests(TestCase):
         self.assertIn("800x480", station_page.contenuto)
         self.assertIn("kiosk-station", station_page.contenuto)
         self.assertIn("kor35-larp", station_page.contenuto)
+        self.assertIn("update-station-kiosk", station_page.contenuto)
+        self.assertIn("raw.githubusercontent.com", station_page.contenuto)
 
         mirror_page = PaginaRegolamento.objects.get(slug="staff-mirror-pi")
         self.assertEqual(mirror_page.parent_id, parent.id)

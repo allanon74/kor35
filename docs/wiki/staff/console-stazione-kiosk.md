@@ -30,28 +30,60 @@ Se nello staff il login della console è spento, dopo il pulsante l'accesso è a
 
 ## WiFi
 
+La **plancia dual-screen** (`deploy/raspberry-pilot-kiosk/`) non ha uno script WiFi: usa i profili NetworkManager salvati sul desktop. `kor35-larp` ha priorità, la rete di casa (Vodafone) è il ripiego.
+
+Questa console 7" fa lo stesso, con un helper (`kor35-kiosk-wifi.sh`) perché all'accensione NetworkManager è spesso già sulla rete di casa mentre le EAP Omada comparono dopo:
+
 | Priorità | Rete | Quando |
 |----------|------|--------|
 | 1 | **`kor35-larp`** | Mirror in modalità evento (bosco), stessa LAN dei giocatori |
-| 2 | SSID di riserva in `/etc/kor35/kiosk-station.env` | Il bosco non si vede (laboratorio, casa) |
+| 2 | SSID di riserva in `/etc/kor35/kiosk-station.env` (o profilo già salvato, es. Vodafone) | Il bosco non si vede (laboratorio, casa) |
 | 3 | Scelta a schermo (zenity) | Nessuna delle due risponde e `KIOSK_WIFI_PROMPT=1` |
 
-All'avvio la rete di casa è spesso già associata, e le antenne Omada compaiono dopo. Lo script riprova `kor35-larp` per alcuni secondi prima di accettare la riserva. Poi, ogni 20 secondi, se `kor35-larp` è in aria lascia la rete di casa e ci si aggancia. Usa il profilo già salvato dal desktop e non ne riscrive la password: se la riscrive, l'associazione fallisce e NetworkManager torna alla rete di casa. Il profilo evento resta con priorità più alta, così al boot successivo vince lui quando entrambe le reti si vedono.
+All'avvio riprova `kor35-larp` per alcuni secondi. Se non c'è, resta sulla rete di casa. Ogni 20 secondi, se `kor35-larp` è in aria, lascia la casa e ci si aggancia. **Riusa il profilo già salvato dal desktop e non ne riscrive la password**: se la riscrive, l'associazione fallisce e NetworkManager torna a casa. Il profilo evento ha priorità più alta, così al boot successivo vince lui quando entrambe le reti si vedono.
 
 Non usare `Pi_Emergenza` / `10.42.0.1` per questa console.
 
-### Pi già installato
+### Aggiornare gli script (Pi già installato, da SSH)
 
-Non rilanciare `install-station-kiosk.sh`: riscrive `/etc/kor35/kiosk-station.env` e può svuotare la password. Copia solo gli script e riavvia:
+**Non** rilanciare `install-station-kiosk.sh`: riscrive `/etc/kor35/kiosk-station.env` e può svuotare la password.
+
+Da una shell SSH sul Pi (utente `pi`):
 
 ```bash
-sudo install -m 0755 kiosk-station.sh /usr/local/bin/kiosk-station.sh
-sudo install -m 0755 kor35-kiosk-wifi.sh /usr/local/sbin/kor35-kiosk-wifi.sh
-sudo systemctl restart kiosk-station.service
-journalctl -u kiosk-station.service -n 40 --no-pager
+REF=main
+BASE="https://raw.githubusercontent.com/allanon74/kor35/${REF}/deploy/raspberry-station-kiosk"
+WORKDIR=/tmp/kor35-station-kiosk
+mkdir -p "$WORKDIR"
+cd "$WORKDIR"
+curl -fsSL -o kiosk-station.sh "$BASE/kiosk-station.sh"
+curl -fsSL -o kor35-kiosk-wifi.sh "$BASE/kor35-kiosk-wifi.sh"
+curl -fsSL -o update-station-kiosk.sh "$BASE/update-station-kiosk.sh"
+chmod +x kiosk-station.sh kor35-kiosk-wifi.sh update-station-kiosk.sh
+sudo ./update-station-kiosk.sh
 ```
 
-Nel log deve comparire `Connessione a kor35-larp` oppure `Già connesso a kor35-larp`. Se resta sulla rete di casa, controlla che la PSK in `/etc/kor35/kiosk-station.env` sia quella della WLAN Omada (WPA2-PSK, non WPA3-only).
+Se `main` non ha ancora il commit, usa il branch al posto di `REF=main`, ad esempio `REF=cursor/station-kiosk-wifi-1661`.
+
+Verifica:
+
+```bash
+nmcli -t -f NAME,TYPE,AUTOCONNECT-PRIORITY connection show
+sudo /usr/local/sbin/kor35-kiosk-wifi.sh current
+journalctl -u kiosk-station.service -n 40 --no-pager
+curl -fsS -k https://www.kor35.it/api/healthz/ && echo OK
+```
+
+Nel log deve comparire `Già connesso a kor35-larp`, `Profilo salvato` o `Passato a kor35-larp`. Se resta sulla rete di casa con `kor35-larp` visibile, la PSK del profilo desktop è sbagliata: connettiti a mano una volta dal desktop (kiosk spento) e poi riavvia il servizio, senza riscrivere la password in `/etc/kor35/kiosk-station.env`.
+
+Rete di riserva (es. Vodafone) se non è già in env: edita solo quelle due righe, non il file intero.
+
+```bash
+sudo nano /etc/kor35/kiosk-station.env
+# KIOSK_WIFI_FALLBACK_SSID=Vodafone-XXXX
+# KIOSK_WIFI_FALLBACK_PSK='password'
+sudo systemctl restart kiosk-station.service
+```
 
 Il server resta `https://www.kor35.it`: in bosco il DNS del mirror lo risolve in locale.
 
@@ -111,6 +143,8 @@ sudo systemctl start kiosk-station.service
 ## Staff
 
 In runtime console abilita le tre console e, se serve, cambia la sigla. Il QR della stazione usa quella sigla: un personaggio con solo navigazione (`0PI`) non sblocca l'ingegneria. Comunicazioni si accende con il flag in Console di bordo.
+
+I link rapidi stanno in dashboard staff → **Link app**: pagina di selezione, Compattatore, Scientifica e Comunicazioni (anche nel riquadro 800×480 del Pi).
 
 Anteprima layout sul PC (senza backend), finestra del browser larga:
 

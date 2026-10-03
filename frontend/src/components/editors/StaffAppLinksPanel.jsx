@@ -13,6 +13,8 @@ import {
   Sparkles,
   Shield,
   Home,
+  Radio,
+  LayoutGrid,
 } from 'lucide-react';
 import {
   StaffToolPageTitle,
@@ -25,7 +27,7 @@ import {
  * Link relativi alle sezioni/app separate (nuova scheda).
  * Percorsi relativi: Nginx instrada su master/edge senza host assoluti.
  */
-const LINK_GROUPS = [
+export const LINK_GROUPS = [
   {
     id: 'pilot',
     title: 'Console pilotaggio',
@@ -53,6 +55,20 @@ const LINK_GROUPS = [
         icon: FlaskConical,
       },
       {
+        id: 'comunicazioni',
+        label: 'Comunicazioni',
+        href: '/pilot/?screen=comunicazioni',
+        hint: 'screen=comunicazioni',
+        icon: Radio,
+      },
+      {
+        id: 'station',
+        label: 'Scelta console (Pi 7")',
+        href: '/pilot/?screen=station&viewport=800x480',
+        hint: 'screen=station · 800×480',
+        icon: LayoutGrid,
+      },
+      {
         id: 'status',
         label: 'Kiosk — stato nave',
         href: '/pilot/?screen=status',
@@ -72,6 +88,41 @@ const LINK_GROUPS = [
         href: '/pilot/?screen=combined',
         hint: 'Status sopra, plancia sotto — un solo schermo',
         icon: LayoutDashboard,
+      },
+    ],
+  },
+  {
+    id: 'station-kiosk',
+    title: 'Console stazione (Pi 7" 800×480)',
+    description: 'Stessa pagina del kiosk touch: scelta, poi le tre console nel riquadro fisico.',
+    links: [
+      {
+        id: 'kiosk-station',
+        label: 'Pagina di selezione',
+        href: '/pilot/?screen=station&viewport=800x480',
+        hint: 'Tre pulsanti · 800×480',
+        icon: LayoutGrid,
+      },
+      {
+        id: 'kiosk-compattatore',
+        label: 'Compattatore',
+        href: '/pilot/?screen=compattatore&viewport=800x480',
+        hint: 'screen=compattatore · 800×480',
+        icon: Wrench,
+      },
+      {
+        id: 'kiosk-scientifica',
+        label: 'Scientifica',
+        href: '/pilot/?screen=scientifica&viewport=800x480',
+        hint: 'screen=scientifica · 800×480',
+        icon: FlaskConical,
+      },
+      {
+        id: 'kiosk-comunicazioni',
+        label: 'Comunicazioni',
+        href: '/pilot/?screen=comunicazioni&viewport=800x480',
+        hint: 'screen=comunicazioni · 800×480',
+        icon: Radio,
       },
     ],
   },
