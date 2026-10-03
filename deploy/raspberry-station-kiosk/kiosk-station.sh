@@ -103,8 +103,8 @@ ensure_wifi() {
   list="$(sudo -n "$WIFI_HELPER" scan || true)"
   [ -n "$list" ] || { warn "Nessuna rete WiFi visibile"; return 0; }
   ssid="$(printf '%s\n' "$list" | zenity --list --title="KOR35 — WiFi" \
-    --text="kor35-larp non disponibile. Scegli un'altra rete:" \
-    --column="SSID" --column="Segnale" \
+    --text="kor35-larp non disponibile. Scegli un'altra rete (come sulla plancia dual-screen):" \
+    --column="SSID" \
     --width=480 --height=360 2>/dev/null || true)"
   [ -n "$ssid" ] || return 0
   psk="$(zenity --entry --hide-text --title="KOR35 — WiFi" \
@@ -117,6 +117,18 @@ ensure_wifi() {
   else
     zenity --error --text="Connessione a ${ssid} non riuscita." 2>/dev/null || true
   fi
+}
+
+watch_event_wifi() {
+  [ "$KIOSK_WIFI_MANAGE" = "1" ] || return 0
+  [ -x "$WIFI_HELPER" ] || return 0
+  (
+    while true; do
+      sleep "${KIOSK_WIFI_WATCH_SECONDS:-20}"
+      sudo -n "$WIFI_HELPER" prefer || true
+    done
+  ) &
+  log "Controllo periodico della rete evento"
 }
 
 wait_for_x() {
@@ -203,6 +215,7 @@ main() {
   local base url
   wait_for_x || exit 1
   ensure_wifi
+  watch_event_wifi
   base="$(resolve_working_base)"
   PILOT_BASE_URL="$base"
   url="${base}${KIOSK_START_PATH}"

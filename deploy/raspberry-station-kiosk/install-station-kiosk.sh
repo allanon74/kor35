@@ -62,8 +62,8 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y \
   xserver-xorg x11-xserver-utils xinit openbox xinput \
-  chromium-browser curl unclutter zenity network-manager sudo \
-  || apt-get install -y chromium curl unclutter zenity network-manager sudo
+  chromium-browser curl unclutter zenity network-manager sudo iw \
+  || apt-get install -y chromium curl unclutter zenity network-manager sudo iw
 
 install -d -o "$KIOSK_USER" -g "$KIOSK_USER" /etc/kor35 /var/lib/kor35
 install -m 0755 "${SCRIPT_DIR}/kiosk-station.sh" /usr/local/bin/kiosk-station.sh
