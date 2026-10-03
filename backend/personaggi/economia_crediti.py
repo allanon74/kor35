@@ -90,7 +90,8 @@ def _invalidate_campagna_eco_cache(campagna) -> None:
             delattr(campagna, attr)
 
 
-def _invalidate_personaggio_saldi_cache(personaggio) -> None:
+def invalidate_saldi_cache(personaggio) -> None:
+    """Scarta i saldi memoizzati sull'istanza (vedi ``aggregati_conti``)."""
     if personaggio is None:
         return
     if hasattr(personaggio, "_eco_aggregati"):
@@ -394,7 +395,7 @@ def modifica_crediti(
     if evento is not None:
         kwargs["evento_id"] = getattr(evento, "pk", evento)
     mov = CreditoMovimento.objects.create(**kwargs)
-    _invalidate_personaggio_saldi_cache(personaggio)
+    invalidate_saldi_cache(personaggio)
     return mov
 
 

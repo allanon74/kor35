@@ -12,8 +12,11 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from personaggi.campaigns import get_or_create_base_campaign
 from personaggi.models import (
     A_vista,
+    CAMPAGNA_ROLE_MASTER,
+    CampagnaUtente,
     Era,
     Manifesto,
     Personaggio,
@@ -26,6 +29,7 @@ from pilotaggio.models import (
     EventoNave,
     PercorsoVolo,
     PilotConsoleToken,
+    PilotRuntimeConfig,
     SequenzaVolo,
     SessioneVolo,
     SottosistemaNave,
@@ -37,6 +41,30 @@ from pilotaggio.models import (
     SESSIONE_STATO_VOLO,
     SEQUENZA_DECOLLO,
 )
+
+
+def _abilita_login_console():
+    """`login_required_console` è disattivo di default: senza, il login QR/ticket risponde 400."""
+    cfg = PilotRuntimeConfig.get_solo()
+    cfg.login_required_console = True
+    cfg.save(update_fields=["login_required_console"])
+    return cfg
+
+
+def _crea_staff_di_campagna(username):
+    """
+    Utente abilitato agli endpoint staff del pilotaggio.
+
+    `IsStaffOrMaster` non guarda più il flag Django `is_staff`: serve il ruolo
+    Master nella campagna attiva (quella base, assegnata dal post_save su User).
+    """
+    user = User.objects.create_user(username=username, password="x", is_staff=True)
+    CampagnaUtente.objects.update_or_create(
+        user=user,
+        campagna=get_or_create_base_campaign(),
+        defaults={"ruolo": CAMPAGNA_ROLE_MASTER, "attivo": True},
+    )
+    return user
 
 
 def _crea_pilota_con_0pi(nome="Pilota", valore_0pi=2):
@@ -63,6 +91,9 @@ def _crea_qr_per_personaggio(pg):
 
 
 class QrLoginTests(TestCase):
+    def setUp(self):
+        _abilita_login_console()
+
     def test_login_ok_con_0pi(self):
         user, pg = _crea_pilota_con_0pi(valore_0pi=1)
         qr = _crea_qr_per_personaggio(pg)
@@ -193,7 +224,8 @@ class SessioneEndToEndTests(TestCase):
         self.assertEqual(body["sessione"]["stato"], SESSIONE_STATO_VOLO)
         self.assertFalse(body["decollo_effettuato"])
 
-    def test_command_esegue_sequenza_decollo(self):
+    def test_command_codici_dismesso(self):
+        """L'input a codici è stato sostituito dalla regolazione energetica dei sottosistemi."""
         self.client_api.post(
             "/api/pilot/session/start/",
             {"percorso_id": str(self.percorso.pk)},
@@ -202,9 +234,8 @@ class SessioneEndToEndTests(TestCase):
         res = self.client_api.post(
             "/api/pilot/session/command/", {"codice": "A12"}, format="json"
         )
-        self.assertEqual(res.status_code, 200, res.content)
-        body = res.json()
-        self.assertEqual(body["sessione"]["stato"], SESSIONE_STATO_VOLO)
+        self.assertEqual(res.status_code, 410, res.content)
+        self.assertIn("dismesso", res.json()["error"])
 
     def test_secondo_pilota_vede_stessa_sessione_nave(self):
         """Una nave: il pilota B vede la missione avviata dal pilota A."""
@@ -297,6 +328,7 @@ class SessioneEndToEndTests(TestCase):
 @override_settings(PILOT_CONSOLE_ENABLED=True)
 class TicketLoginFlowTests(TestCase):
     def setUp(self):
+        _abilita_login_console()
         self.user, self.pg = _crea_pilota_con_0pi(nome="PilotaTicket", valore_0pi=2)
         self.console_client = APIClient()
         self.phone_client = APIClient()
@@ -325,12 +357,12 @@ class TicketLoginFlowTests(TestCase):
 
 class StaffSottosistemaAssociaQrTests(TestCase):
     def setUp(self):
-        self.staff = User.objects.create_user(
-            username="staff_pilot", password="x", is_staff=True
-        )
+        self.staff = _crea_staff_di_campagna("staff_pilot")
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)
-        self.sottos = SottosistemaNave.objects.create(codice="ZQR", nome="Propulsione test")
+        # `codice` è un singolo carattere (primo char del codice comando);
+        # A–T sono già occupati dai sottosistemi creati in migrazione.
+        self.sottos = SottosistemaNave.objects.create(codice="Y", nome="Propulsione test")
         self.qr = QrCode.objects.create()
 
     def test_associa_qr_senza_vista_crea_manifesto(self):
@@ -371,9 +403,7 @@ class StaffSottosistemaAssociaQrTests(TestCase):
 
 class StaffSessioneLiveTests(TestCase):
     def setUp(self):
-        self.staff = User.objects.create_user(
-            username="staff_live", password="x", is_staff=True
-        )
+        self.staff = _crea_staff_di_campagna("staff_live")
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)
         self.pilota_user, self.pilota = _crea_pilota_con_0pi(nome="PilotaLive", valore_0pi=1)
@@ -484,9 +514,7 @@ class StaffSessioneLiveTests(TestCase):
 
 class StaffSerbatoioCarburanteTests(TestCase):
     def setUp(self):
-        self.staff = User.objects.create_user(
-            username="staff_fuel", password="x", is_staff=True
-        )
+        self.staff = _crea_staff_di_campagna("staff_fuel")
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)
         _, self.pilota = _crea_pilota_con_0pi(nome="PilotaFuel", valore_0pi=1)

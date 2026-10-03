@@ -49,18 +49,32 @@ from .services import GestioneOggettiService
 from .sso import _upsert_local_user
 
 
+def crea_campagna_base():
+    """
+    Campagna base `kor35` per i test.
+
+    Il post_save su User (`assegna_campagna_base_ai_nuovi_utenti`) la crea da solo
+    appena nasce un utente: un `create()` secco va in UniqueViolation sullo slug
+    a seconda dell'ordine del setUp.
+    """
+    campagna, _ = Campagna.objects.update_or_create(
+        slug="kor35",
+        defaults={
+            "nome": "Kor35",
+            "is_default": True,
+            "is_base": True,
+            "attiva": True,
+        },
+    )
+    return campagna
+
+
 class CampagnaAdminApiTests(APITestCase):
     def setUp(self):
         self.staff = User.objects.create_user(username="staff", password="x", is_staff=True)
         self.client.force_authenticate(user=self.staff)
 
-        self.kor35 = Campagna.objects.create(
-            slug="kor35",
-            nome="Kor35",
-            is_default=True,
-            is_base=True,
-            attiva=True,
-        )
+        self.kor35 = crea_campagna_base()
 
     def test_create_new_default_unsets_previous_default(self):
         response = self.client.post(
@@ -108,13 +122,7 @@ class ActiveCampaignValidationTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="player", password="x")
         self.client.force_authenticate(user=self.user)
-        self.kor35 = Campagna.objects.create(
-            slug="kor35",
-            nome="Kor35",
-            is_default=True,
-            is_base=True,
-            attiva=True,
-        )
+        self.kor35 = crea_campagna_base()
         self.alt = Campagna.objects.create(
             slug="alt-camp",
             nome="Alt Camp",
@@ -149,13 +157,7 @@ class ActiveCampaignValidationTests(APITestCase):
 
 class UserDefaultCampaignMembershipTests(APITestCase):
     def setUp(self):
-        self.kor35 = Campagna.objects.create(
-            slug="kor35",
-            nome="Kor35",
-            is_default=True,
-            is_base=True,
-            attiva=True,
-        )
+        self.kor35 = crea_campagna_base()
 
     def test_new_user_is_auto_assigned_to_base_campaign(self):
         user = User.objects.create_user(username="newbie", password="x")
@@ -181,13 +183,7 @@ class UserDefaultCampaignMembershipTests(APITestCase):
 
 class ArcanaSSONewUserCampaignAssignmentTests(APITestCase):
     def setUp(self):
-        self.kor35 = Campagna.objects.create(
-            slug="kor35",
-            nome="Kor35",
-            is_default=True,
-            is_base=True,
-            attiva=True,
-        )
+        self.kor35 = crea_campagna_base()
         Campagna.objects.create(
             slug="alt-camp",
             nome="Alt Camp",
@@ -216,6 +212,8 @@ class ArcanaSSONewUserCampaignAssignmentTests(APITestCase):
             email="legacy-user@example.com",
             password="legacy-pass",
         )
+        # Utente "storico": nato prima dell'assegnazione automatica alla campagna base.
+        CampagnaUtente.objects.filter(user=existing).delete()
         self.assertFalse(CampagnaUtente.objects.filter(user=existing).exists())
 
         profile = {
@@ -234,13 +232,7 @@ class ArcanaSSONewUserCampaignAssignmentTests(APITestCase):
 
 class LocalLoginCampaignRepairTests(APITestCase):
     def setUp(self):
-        self.kor35 = Campagna.objects.create(
-            slug="kor35",
-            nome="Kor35",
-            is_default=True,
-            is_base=True,
-            attiva=True,
-        )
+        self.kor35 = crea_campagna_base()
 
     def test_local_login_repairs_missing_active_membership_for_player(self):
         user = User.objects.create_user(
@@ -259,7 +251,8 @@ class LocalLoginCampaignRepairTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(CampagnaUtente.objects.filter(user=user, campagna=self.kor35, attivo=True).exists())
 
-    def test_local_login_does_not_auto_assign_staff_or_superuser(self):
+    def test_local_login_does_not_auto_assign_superuser(self):
+        """`is_staff` non è più un privilegio globale: conta solo il ruolo in campagna."""
         staff = User.objects.create_user(
             username="staff-no-campaign",
             email="staff-no-campaign@example.com",
@@ -286,7 +279,9 @@ class LocalLoginCampaignRepairTests(APITestCase):
         )
         self.assertEqual(r_staff.status_code, status.HTTP_200_OK)
         self.assertEqual(r_super.status_code, status.HTTP_200_OK)
-        self.assertFalse(CampagnaUtente.objects.filter(user=staff).exists())
+        self.assertTrue(
+            CampagnaUtente.objects.filter(user=staff, campagna=self.kor35, attivo=True).exists()
+        )
         self.assertFalse(CampagnaUtente.objects.filter(user=superuser).exists())
 
 
@@ -499,8 +494,12 @@ class AINFormaSwapTests(APITestCase):
             camaleontica=True,
             campagna=self.campagna,
         )
-        self.forma_a.descrizione = "<p>Forma del giorno di test.</p>"
-        self.forma_a.save(update_fields=["descrizione"])
+        # La forma del giorno è estratta deterministicamente dal sync_id del PG, che
+        # cambia a ogni run: entrambe le candidate devono avere una descrizione,
+        # altrimenti il blocco "Forma del giorno" non viene reso e il test è flaky.
+        for forma in (self.forma_a, self.forma_b):
+            forma.descrizione = "<p>Forma del giorno di test.</p>"
+            forma.save(update_fields=["descrizione"])
 
         r = self.client.post(
             "/api/personaggi/api/personaggio/me/acquisisci_abilita/",
@@ -513,6 +512,8 @@ class AINFormaSwapTests(APITestCase):
         )
         html = self.personaggio.get_testo_formattato_per_item(camaleonte)
         self.assertIn("Forma del giorno", html)
+        forma_oggi = self.personaggio.get_forma_camaleonte_del_giorno()
+        self.assertIn(forma_oggi.nome, html)
 
 
 class TessituraRuntimeTests(APITestCase):
@@ -523,6 +524,13 @@ class TessituraRuntimeTests(APITestCase):
         self.stat_rpg = Statistica.objects.create(nome="Rango Guscio Runtime", sigla="RGR", parametro="RGR")
         self.caratt = Punteggio.objects.create(nome="Forza Runtime", sigla="FRT", tipo=CARATTERISTICA)
         self.aura_runtime = Punteggio.objects.create(nome="Aura Runtime", sigla="ART", tipo="AU")
+        # Ogni effetto runtime occupa uno slot COG: senza COG l'attivazione è bloccata.
+        self.stat_cog = Statistica.objects.create(nome="Capacità Oggetti Runtime", sigla="COG", parametro="COG")
+        PersonaggioStatisticaBase.objects.update_or_create(
+            personaggio=self.pg,
+            statistica=self.stat_cog,
+            defaults={"valore_base": 3},
+        )
 
     def test_attiva_runtime_abilita_applica_modificatore_finche_attivo(self):
         abilita = Abilita.objects.create(
@@ -754,12 +762,13 @@ class RisorsePoolUiVisibilityTests(APITestCase):
             is_risorsa_pool=True,
             massimo_pool_sigla="FRT",
         )
-        pb = dict(self.pg.punteggi_base or {})
-        pb[self.stat_frt.nome] = 2
-        pb[self.stat_teo.nome] = 0
-        pb[self.stat_cap.nome] = 0
-        self.pg.punteggi_base = pb
-        self.pg.save(update_fields=["punteggi_base", "updated_at"])
+        # `punteggi_base` è calcolato (scheda + abilità): il valore di scheda si
+        # imposta su PersonaggioStatisticaBase. TEO e CAP restano al predefinito 0.
+        PersonaggioStatisticaBase.objects.update_or_create(
+            personaggio=self.pg,
+            statistica=self.stat_frt,
+            defaults={"valore_base": 2},
+        )
 
     def test_risorse_pool_ui_solo_massimo_scheda_positivo(self):
         ser = PersonaggioDetailSerializer()
@@ -1432,7 +1441,15 @@ class PersonaggioStaffRetrieveTests(APITestCase):
         self.assertEqual(body.get("professioni"), "Scout")
 
     def test_staff_assegna_e_rimuovi_abilita(self):
-        ab = Abilita.objects.create(nome="Staff Test Skill", costo_pc=0, costo_crediti=0)
+        caratteristica = Punteggio.objects.create(
+            nome="Caratteristica Staff Skill", sigla="CSS", tipo=CARATTERISTICA
+        )
+        ab = Abilita.objects.create(
+            nome="Staff Test Skill",
+            costo_pc=0,
+            costo_crediti=0,
+            caratteristica=caratteristica,
+        )
         base = f"/api/personaggi/api/staff/personaggi/{self.pg.id}"
 
         res_add = self.client.post(

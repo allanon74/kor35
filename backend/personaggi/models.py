@@ -6258,6 +6258,14 @@ class Personaggio(Inventario):
     def aggiungi_log(self, t): 
         PersonaggioLog.objects.create(personaggio=self, testo_log=t)
     
+    def refresh_from_db(self, using=None, fields=None):
+        super().refresh_from_db(using=using, fields=fields)
+        # I saldi corrente/deposito sono memoizzati sull'istanza: dopo un reload
+        # devono essere ricalcolati, altrimenti si legge il saldo pre-movimento.
+        from personaggi.economia_crediti import invalidate_saldi_cache
+
+        invalidate_saldi_cache(self)
+
     def modifica_crediti(self, i, d, *, conto=None, evento=None):
         from personaggi.economia_crediti import CONTO_CORRENTE, modifica_crediti as _mod
 

@@ -235,6 +235,8 @@ class EventoDurataUnificataTests(TestCase):
             distanza_percorsa=10.0,
             durata_pianificata_secondi=600,
             started_at=timezone.now(),
+            # Gli eventi compaiono solo in crociera, cioè a decollo completato.
+            decollo_completato_at=timezone.now(),
             tick_secondi=5,
         )
         evento = EventoNave.objects.create(
@@ -356,8 +358,10 @@ class CodiceProcessingTests(TestCase):
 class SottosistemaGuastoTests(TestCase):
     def setUp(self):
         self.pilota = _crea_pilota()
-        self.sottos = SottosistemaNave.objects.create(
-            codice="A", nome="Motori", durata_ripristino_secondi=60
+        # I sottosistemi A–T sono creati da una migrazione: il codice "A" esiste già.
+        self.sottos, _ = SottosistemaNave.objects.update_or_create(
+            codice="A",
+            defaults={"nome": "Motori", "durata_ripristino_secondi": 60},
         )
         self.evento = EventoNave.objects.create(
             nome="Surriscaldamento",
@@ -394,7 +398,9 @@ class SottosistemaGuastoTests(TestCase):
         stato = StatoSottosistemaSessione.objects.get(sessione=self.session)
         stato.recovery_at = timezone.now() - timedelta(seconds=1)
         stato.save()
-        tick_sessione(self.session)
+        # Con un evento pendente il tick non è ancora dovuto: senza `force` la
+        # funzione esce prima di applicare i recovery.
+        tick_sessione(self.session, force=True)
         stato.refresh_from_db()
         self.assertTrue(stato.online)
 
@@ -451,7 +457,9 @@ class SequenzeVoloTests(TestCase):
         s.refresh_from_db()
         self.assertEqual(s.stato, SESSIONE_STATO_ARRIVATA)
         stato = StatoSottosistemaSessione.objects.get(sessione=s, sottosistema=sottos)
-        self.assertFalse(stato.online)
+        # A fine volo i sottosistemi scendono a livello 0 ma restano `online`:
+        # nel modello runtime `online=False` significa guasto, non nave a terra.
+        self.assertTrue(stato.online)
         self.assertEqual(stato.livello_attuale, 0)
         self.assertEqual(stato.livello_target, 0)
 

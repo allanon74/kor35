@@ -405,7 +405,13 @@ def calcola_legami_attivi(personaggio: Personaggio) -> list[dict]:
 @transaction.atomic
 def apri_bustina(personaggio: Personaggio, bustina_id) -> dict:
     assert_personaggio_puo_accedere_carte(personaggio)
-    bustina = BustinaCarte.objects.select_for_update().select_related("espansione").get(pk=bustina_id, attiva=True)
+    # `of=("self",)`: `espansione` è nullable, quindi select_related produce un
+    # LEFT OUTER JOIN e Postgres rifiuta FOR UPDATE sul lato nullable.
+    bustina = (
+        BustinaCarte.objects.select_for_update(of=("self",))
+        .select_related("espansione")
+        .get(pk=bustina_id, attiva=True)
+    )
     if bustina.campagna_id != personaggio.campagna_id:
         raise ValidationError("Bustina non disponibile per la campagna del personaggio.")
     if bustina.espansione_id and not espansione_in_vendita(bustina.espansione):

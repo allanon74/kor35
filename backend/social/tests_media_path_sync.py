@@ -74,6 +74,9 @@ class NormalizeMediaPathSyncTests(TestCase):
             content_type="image/png",
         )
         upload.name = "social/rubriche/x/articoli/y/photo.png"
+        # prepare_image_upload riceve sempre un FieldFile: su un file appena
+        # caricato `_committed` è False ed è quel ramo che vogliamo esercitare.
+        upload._committed = False
         optimized = prepare_image_upload(upload, "social/rubriche/x/articoli/y")
         self.assertEqual(optimized.name, "photo.jpg")
 
