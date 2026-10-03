@@ -98,4 +98,22 @@ describe('StaffEditorHeader', () => {
     unmount();
     expect(document.body.querySelector('[data-testid="staff-fullscreen-editor"]')).toBeNull();
   });
+
+  it('StaffFullscreenEditor rende subHeader sticky fuori dallo scroll', () => {
+    const { unmount } = mount(
+      createElement(StaffFullscreenEditor, {
+        open: true,
+        onBack: () => {},
+        subHeader: createElement('nav', { 'data-testid': 'personaggi-tabs' }, 'BG'),
+        children: createElement('div', null, 'scheda'),
+      }),
+    );
+    const overlay = document.body.querySelector('[data-testid="staff-fullscreen-editor"]');
+    const scroller = overlay.querySelector('[data-staff-fullscreen-scroll]');
+    const tabs = overlay.querySelector('[data-testid="personaggi-tabs"]');
+    expect(tabs).toBeTruthy();
+    expect(scroller.contains(tabs)).toBe(false);
+    expect(scroller.textContent).toContain('scheda');
+    unmount();
+  });
 });
