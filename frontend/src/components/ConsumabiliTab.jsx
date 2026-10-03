@@ -43,7 +43,7 @@ const ConsumabiliTab = ({ onLogout }) => {
           const sec = prev[id] ?? 0;
           const s = Math.max(0, sec - 1);
           next[id] = s;
-          if (s === 0) anyZero = true;
+          if (sec > 0 && s === 0) anyZero = true;
         }
         if (anyZero) refreshCharacterData();
         return Object.keys(next).length ? next : prev;

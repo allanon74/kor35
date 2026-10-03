@@ -523,6 +523,13 @@ class TessituraRuntimeTests(APITestCase):
         self.stat_rpg = Statistica.objects.create(nome="Rango Guscio Runtime", sigla="RGR", parametro="RGR")
         self.caratt = Punteggio.objects.create(nome="Forza Runtime", sigla="FRT", tipo=CARATTERISTICA)
         self.aura_runtime = Punteggio.objects.create(nome="Aura Runtime", sigla="ART", tipo="AU")
+        # Su main la COG non è seminata dalle migrazioni: senza statistica lo slot è 0/0.
+        stat_cog = Statistica.objects.create(
+            nome="Cog runtime", sigla="COG", parametro="COG", valore_base_predefinito=3,
+        )
+        PersonaggioStatisticaBase.objects.create(
+            personaggio=self.pg, statistica=stat_cog, valore_base=3,
+        )
 
     def test_attiva_runtime_abilita_applica_modificatore_finche_attivo(self):
         abilita = Abilita.objects.create(
