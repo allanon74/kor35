@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Users, Search, X, QrCode, Briefcase, Coins, FileText, StickyNote, Loader2, Plus, Skull, Heart, RotateCcw,
-  Sparkles, Watch, Package, ScrollText, Calendar, Mail, Wand2, Archive, Award, Dna, Trophy, Wallet,
+  Archive, Filter, Heart, Loader2, Plus, RotateCcw, Search, Skull, Users,
 } from 'lucide-react';
 import StaffRazzaAuraTab from './StaffRazzaAuraTab';
 import StaffEconomiaTab from './StaffEconomiaTab';
@@ -14,7 +13,12 @@ import ProfileImageField from '../ProfileImageField';
 import InstafameFirmaEditor from '../InstafameFirmaEditor';
 import { prepareProfileImageForUpload } from '../../utils/profileImage';
 import { useStaffQrAssociation } from '../../hooks/useStaffQrAssociation';
-import { StaffToolHeader, StaffToolShell } from '../../staff/StaffToolShell';
+import { StaffFullscreenEditor, StaffToolHeader, StaffToolShell } from '../../staff/StaffToolShell';
+import {
+  PERSONAGGI_STAFF_TABS,
+  PersonaggiStaffDetailSubHeader,
+  personaggiExtraFiltersActive,
+} from './PersonaggiStaffChrome';
 import { useStaffTableControls } from '../../staff/useStaffTableControls';
 import { StaffTableControls } from '../../staff/StaffTableControls';
 import StaffDataTable from '../../staff/StaffDataTable';
@@ -65,24 +69,7 @@ function caricaIncludesCarriera(carica, carrieraId) {
   return ids.map(String).includes(String(carrieraId));
 }
 
-const TABS = [
-  { id: 'bg', label: 'BG / Anagrafica', icon: FileText },
-  { id: 'qr', label: 'QR', icon: QrCode },
-  { id: 'membership', label: 'Carriere / KORP', icon: Briefcase },
-  { id: 'abilita', label: 'Abilità', icon: Award },
-  { id: 'razza-aura', label: 'Razza / Aura', icon: Dna },
-  { id: 'risorse', label: 'Risorse', icon: Coins },
-  { id: 'economia', label: 'Economia', icon: Wallet },
-  { id: 'inventario', label: 'Inventario', icon: Package },
-  { id: 'instafame', label: 'InstaFame', icon: Sparkles },
-  { id: 'watch', label: 'Watch', icon: Watch },
-  { id: 'log', label: 'Log / Diario', icon: ScrollText },
-  { id: 'eventi', label: 'Eventi', icon: Calendar },
-  { id: 'messaggio', label: 'Messaggio', icon: Mail },
-  { id: 'creazione', label: 'Creazione guidata', icon: Wand2 },
-  { id: 'note', label: 'Note master', icon: StickyNote },
-  { id: 'azioni', label: 'Azioni', icon: RotateCcw },
-];
+const TABS = PERSONAGGI_STAFF_TABS;
 
 const PersonaggiStaffManager = ({ onLogout }) => {
   const [filters, setFilters] = useState({
@@ -137,6 +124,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
   const [abilitaMotivo, setAbilitaMotivo] = useState('Intervento staff abilità');
   const [selectedAbilitaId, setSelectedAbilitaId] = useState('');
   const [abilitaBusy, setAbilitaBusy] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const loadOggettiSenzaPosizione = useCallback(async () => {
     try {
@@ -286,6 +274,13 @@ const PersonaggiStaffManager = ({ onLogout }) => {
       loadAbilitaAcquistabili(detail.id);
     }
   }, [modalTab, detail?.id, loadAbilitaAcquistabili]);
+
+  useEffect(() => {
+    if (!selected) return;
+    document.querySelectorAll('[data-staff-fullscreen-scroll]').forEach((el) => {
+      el.scrollTop = 0;
+    });
+  }, [modalTab, selected]);
 
   const handleSaveSchedaModificaLibera = async (checked) => {
     if (!detail?.id) return;
@@ -509,6 +504,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
       {
         key: 'nome',
         header: 'Nome',
+        mobileRole: 'title',
         getSortValue: (row) => row.nome || '',
         render: (row) => (
           <span className="font-bold text-white">
@@ -520,36 +516,46 @@ const PersonaggiStaffManager = ({ onLogout }) => {
       {
         key: 'tipo',
         header: 'Tipo',
+        mobileRole: 'badge',
         getSortValue: (row) => (row.giocante ? 'PG' : 'PNG'),
-        render: (row) => <span className="text-gray-400">{row.giocante ? 'PG' : 'PNG'}</span>,
+        render: (row) => (
+          <span className="rounded bg-gray-700 px-1.5 py-0.5 text-[10px] font-bold uppercase text-gray-200">
+            {row.giocante ? 'PG' : 'PNG'}
+          </span>
+        ),
       },
       {
         key: 'proprietario',
         header: 'Proprietario',
+        mobileRole: 'detail',
         getSortValue: (row) => row.proprietario_nome || row.proprietario_username || '',
         render: (row) => <span className="text-gray-300">{row.proprietario_nome || row.proprietario_username}</span>,
       },
       {
         key: 'era',
         header: 'Era',
+        mobileRole: 'detail',
         getSortValue: (row) => row.era_nome || '',
         render: (row) => <span className="text-gray-400">{row.era_nome || '—'}</span>,
       },
       {
         key: 'korp',
         header: 'KORP / Carriere',
+        mobileRole: 'detail',
         getSortValue: (row) => (row.korp_attivi || []).join(', '),
-        render: (row) => <span className="text-gray-400 text-xs">{(row.korp_attivi || []).join(', ') || '—'}</span>,
+        render: (row) => <span className="text-gray-400 text-xs break-words">{(row.korp_attivi || []).join(', ') || '—'}</span>,
       },
       {
         key: 'qr',
         header: 'QR',
+        mobileRole: 'hidden',
         getSortValue: (row) => row.qrcode_id || '',
         render: (row) => <span className="font-mono text-xs text-indigo-300">{row.qrcode_id || '—'}</span>,
       },
       {
         key: 'corrente',
         header: 'Corrente',
+        mobileRole: 'detail',
         getSortValue: (row) => Number(row.crediti_corrente ?? row.crediti ?? 0),
         render: (row) => <span className="text-emerald-300">{row.crediti_corrente ?? row.crediti}</span>,
         align: 'right',
@@ -557,6 +563,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
       {
         key: 'deposito',
         header: 'Deposito',
+        mobileRole: 'hidden',
         getSortValue: (row) => Number(row.crediti_deposito ?? 0),
         render: (row) => <span className="text-amber-300">{row.crediti_deposito ?? '—'}</span>,
         align: 'right',
@@ -564,6 +571,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
       {
         key: 'prestigio',
         header: 'Prestigio',
+        mobileRole: 'detail',
         getSortValue: (row) => Number(row.prestigio || 0),
         render: (row) => <span className="text-fuchsia-300">{row.prestigio ?? 0}</span>,
         align: 'right',
@@ -572,6 +580,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
       {
         key: 'allineamento',
         header: 'L/O/G',
+        mobileRole: 'hidden',
         getSortValue: (row) =>
           Number(row.punti_luminosi || 0) + Number(row.punti_oscuri || 0) + Number(row.punti_grigi || 0),
         render: (row) => (
@@ -603,96 +612,125 @@ const PersonaggiStaffManager = ({ onLogout }) => {
         icon={<Users size={22} className="text-teal-400" />}
         title="Personaggi"
       >
-        <div className="mt-3 flex flex-wrap gap-2 items-end">
-          <div className="flex-1 min-w-[180px]">
-            <label className="text-xs text-gray-500 block mb-1">Cerca</label>
-            <div className="relative">
-              <Search size={14} className="absolute left-2 top-2.5 text-gray-500" />
-              <input
-                className="w-full bg-gray-800 border border-gray-700 rounded pl-8 pr-2 py-1.5 text-sm"
-                placeholder="Nome, utente, costume…"
-                value={filters.q}
-                onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value, page: 1 }))}
+        <div className="mt-3 space-y-2">
+          <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1">
+              <label className="text-xs text-gray-500 block mb-1">Cerca</label>
+              <div className="relative">
+                <Search size={14} className="absolute left-2 top-3 text-gray-500" />
+                <input
+                  className="w-full min-h-11 bg-gray-800 border border-gray-700 rounded pl-8 pr-2 py-2 text-sm"
+                  placeholder="Nome, utente, costume…"
+                  value={filters.q}
+                  onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value, page: 1 }))}
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((v) => !v)}
+              className={`lg:hidden inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-bold ${
+                filtersOpen || personaggiExtraFiltersActive(filters)
+                  ? 'border-teal-600 bg-teal-900/40 text-teal-100'
+                  : 'border-gray-700 bg-gray-800 text-gray-300'
+              }`}
+            >
+              <Filter size={14} />
+              Filtri
+            </button>
+            <button
+              type="button"
+              onClick={() => loadList()}
+              className="hidden sm:inline-flex min-h-11 items-center rounded-lg bg-teal-700 hover:bg-teal-600 px-3 text-sm font-bold"
+            >
+              Aggiorna
+            </button>
+          </div>
+          <div
+            className={`${
+              filtersOpen ? 'grid' : 'hidden'
+            } lg:flex lg:flex-wrap grid-cols-2 gap-2 items-end`}
+          >
+            <div className="min-w-0">
+              <label className="text-xs text-gray-500 block mb-1">Tipo</label>
+              <select
+                className="w-full lg:w-auto min-h-11 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-sm"
+                value={filters.tipo}
+                onChange={(e) => setFilters((f) => ({ ...f, tipo: e.target.value, page: 1 }))}
+              >
+                <option value="all">Tutti</option>
+                <option value="pg">PG (giocanti)</option>
+                <option value="png">PNG</option>
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className="text-xs text-gray-500 block mb-1">Era</label>
+              <select
+                className="w-full lg:w-auto min-h-11 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-sm lg:max-w-[160px]"
+                value={filters.era}
+                onChange={(e) => setFilters((f) => ({ ...f, era: e.target.value, page: 1 }))}
+              >
+                <option value="">Tutte</option>
+                {ere.map((era) => (
+                  <option key={era.id} value={era.id}>{era.nome}</option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-0 col-span-2 lg:col-span-1">
+              <label className="text-xs text-gray-500 block mb-1">KORP / Carriera</label>
+              <select
+                className="w-full lg:w-auto min-h-11 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-sm lg:max-w-[180px]"
+                value={filters.carriera}
+                onChange={(e) => setFilters((f) => ({ ...f, carriera: e.target.value, page: 1 }))}
+              >
+                <option value="">Tutte</option>
+                {carriere.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className="text-xs text-gray-500 block mb-1">Stato</label>
+              <select
+                className="w-full lg:w-auto min-h-11 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-sm"
+                value={filters.morto}
+                onChange={(e) => setFilters((f) => ({ ...f, morto: e.target.value, page: 1 }))}
+              >
+                <option value="vivo">Vivi</option>
+                <option value="morto">Morti</option>
+                <option value="all">Tutti</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={() => loadList()}
+              className="sm:hidden min-h-11 rounded-lg bg-teal-700 hover:bg-teal-600 px-3 text-sm font-bold"
+            >
+              Aggiorna
+            </button>
+            <div className="col-span-2 lg:col-span-1 min-w-0">
+              <StaffTableControls
+                compact
+                sorts={tableControls.sorts}
+                onResetSorts={tableControls.resetSorts}
+                columns={personaggioColumns}
+                hiddenColumnKeys={tableControls.hiddenColumnKeys}
+                onToggleColumn={tableControls.toggleColumn}
+                onResetColumns={tableControls.resetColumns}
+                showColumnFilters={tableControls.showColumnFilters}
+                onToggleColumnFilters={() => tableControls.setShowColumnFilters((v) => !v)}
+                columnFilters={tableControls.columnFilters}
+                onResetColumnFilters={tableControls.resetColumnFilters}
               />
             </div>
           </div>
-          <div>
-            <label className="text-xs text-gray-500 block mb-1">Tipo</label>
-            <select
-              className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm"
-              value={filters.tipo}
-              onChange={(e) => setFilters((f) => ({ ...f, tipo: e.target.value, page: 1 }))}
-            >
-              <option value="all">Tutti</option>
-              <option value="pg">PG (giocanti)</option>
-              <option value="png">PNG</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 block mb-1">Era</label>
-            <select
-              className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm max-w-[140px]"
-              value={filters.era}
-              onChange={(e) => setFilters((f) => ({ ...f, era: e.target.value, page: 1 }))}
-            >
-              <option value="">Tutte</option>
-              {ere.map((era) => (
-                <option key={era.id} value={era.id}>{era.nome}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 block mb-1">KORP / Carriera</label>
-            <select
-              className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm max-w-[160px]"
-              value={filters.carriera}
-              onChange={(e) => setFilters((f) => ({ ...f, carriera: e.target.value, page: 1 }))}
-            >
-              <option value="">Tutte</option>
-              {carriere.map((c) => (
-                <option key={c.id} value={c.id}>{c.nome}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 block mb-1">Stato</label>
-            <select
-              className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm"
-              value={filters.morto}
-              onChange={(e) => setFilters((f) => ({ ...f, morto: e.target.value, page: 1 }))}
-            >
-              <option value="vivo">Vivi</option>
-              <option value="morto">Morti</option>
-              <option value="all">Tutti</option>
-            </select>
-          </div>
-          <button
-            type="button"
-            onClick={() => loadList()}
-            className="px-3 py-1.5 bg-teal-700 hover:bg-teal-600 rounded text-sm font-bold"
-          >
-            Aggiorna
-          </button>
-          <StaffTableControls
-            compact
-            sorts={tableControls.sorts}
-            onResetSorts={tableControls.resetSorts}
-            columns={personaggioColumns}
-            hiddenColumnKeys={tableControls.hiddenColumnKeys}
-            onToggleColumn={tableControls.toggleColumn}
-            onResetColumns={tableControls.resetColumns}
-            showColumnFilters={tableControls.showColumnFilters}
-            onToggleColumnFilters={() => tableControls.setShowColumnFilters((v) => !v)}
-            columnFilters={tableControls.columnFilters}
-            onResetColumnFilters={tableControls.resetColumnFilters}
-          />
         </div>
         {message && !selected && (
           <p className="mt-2 text-sm text-teal-300">{message}</p>
         )}
       </StaffToolHeader>
 
-      <div className="flex-1 overflow-hidden min-h-0 flex flex-col bg-gray-800/40">
+      <div className="flex-1 overflow-y-auto lg:overflow-hidden min-h-0 flex flex-col bg-gray-800/40">
         {loading ? (
           <div className="p-8 text-center text-gray-400">Caricamento…</div>
         ) : (
@@ -710,56 +748,44 @@ const PersonaggiStaffManager = ({ onLogout }) => {
         )}
       </div>
 
-      <div className="p-3 border-t border-gray-800 flex justify-between items-center text-sm">
+      <div className="p-3 border-t border-gray-800 flex items-center gap-2 text-sm min-w-0">
         <button
           type="button"
           disabled={!listData.previous}
           onClick={() => setFilters((f) => ({ ...f, page: Math.max(1, f.page - 1) }))}
-          className="px-3 py-1 bg-gray-800 rounded disabled:opacity-30"
+          className="min-h-11 px-3 rounded-lg bg-gray-800 disabled:opacity-30 shrink-0"
         >
           Indietro
         </button>
-        <span className="text-gray-500">Pagina {filters.page} / {totalPages} · {listData.count ?? 0} personaggi</span>
+        <span className="flex-1 min-w-0 text-center text-gray-500 text-xs sm:text-sm break-words">
+          Pag. {filters.page}/{totalPages} · {listData.count ?? 0}
+        </span>
         <button
           type="button"
           disabled={!listData.next}
           onClick={() => setFilters((f) => ({ ...f, page: f.page + 1 }))}
-          className="px-3 py-1 bg-gray-800 rounded disabled:opacity-30"
+          className="min-h-11 px-3 rounded-lg bg-gray-800 disabled:opacity-30 shrink-0"
         >
           Avanti
         </button>
       </div>
 
-      {selected && (
-        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="w-full max-w-5xl max-h-[95vh] bg-gray-900 border border-gray-700 rounded-xl flex flex-col">
-            <div className="p-4 border-b border-gray-700 flex justify-between items-start gap-3">
-              <div>
-                <h3 className="text-lg font-bold text-white">{detail?.nome || selected.nome}</h3>
-                <p className="text-xs text-gray-400">
-                  {detail?.proprietario_nome} · {detail?.tipologia_nome} · {detail?.era_nome || '—'}
-                </p>
-              </div>
-              <button type="button" onClick={closeModal}><X className="text-gray-400" /></button>
-            </div>
-
-            <div className="px-4 pt-2 flex flex-wrap gap-1 border-b border-gray-800">
-              {TABS.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setModalTab(id)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
-                    modalTab === id ? 'bg-teal-700 text-white' : 'bg-gray-800 text-gray-400'
-                  }`}
-                >
-                  <Icon size={12} />
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4">
+      {selected ? (
+        <StaffFullscreenEditor
+          open
+          onBack={closeModal}
+          backLabel="Torna all'elenco"
+          subHeader={(
+            <PersonaggiStaffDetailSubHeader
+              nome={detail?.nome || selected.nome}
+              meta={[detail?.proprietario_nome, detail?.tipologia_nome, detail?.era_nome].filter(Boolean).join(' · ')}
+              tabs={TABS}
+              active={modalTab}
+              onChange={setModalTab}
+            />
+          )}
+        >
+          <div className="max-w-5xl mx-auto min-w-0 pb-8">
               {detailLoading || !detail ? (
                 <div className="flex justify-center py-12"><Loader2 className="animate-spin text-teal-400" /></div>
               ) : (
@@ -771,7 +797,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                       <div>
                         <label className="text-xs text-gray-400 block mb-1">Nome</label>
                         <input
-                          className="w-full bg-gray-800 border border-gray-700 rounded p-2"
+                          className="w-full min-h-11 bg-gray-800 border border-gray-700 rounded p-2"
                           value={detail.nome || ''}
                           onChange={(e) => setDetail((d) => ({ ...d, nome: e.target.value }))}
                         />
@@ -806,7 +832,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                         type="button"
                         disabled={saving}
                         onClick={() => handleSaveFields({ nome: detail.nome, testo: detail.testo, costume: detail.costume })}
-                        className="px-4 py-2 bg-teal-700 rounded font-bold text-sm disabled:opacity-50"
+                        className="min-h-11 px-4 bg-teal-700 rounded font-bold text-sm disabled:opacity-50"
                       >
                         Salva BG / anagrafica
                       </button>
@@ -828,7 +854,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                         <button
                           type="button"
                           onClick={() => setShowQrScan(true)}
-                          className="px-4 py-2 bg-indigo-700 rounded font-bold text-sm"
+                          className="min-h-11 px-4 bg-indigo-700 rounded font-bold text-sm"
                         >
                           Scansiona / associa QR
                         </button>
@@ -846,9 +872,9 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                       {pendingQrConflict && (
                         <div className="bg-amber-900/30 border border-amber-700 rounded p-3 text-sm">
                           <p className="mb-2">QR già associato altrove. Forzare?</p>
-                          <div className="flex gap-2">
-                            <button type="button" onClick={() => confirmConflict(setMessage)} disabled={conflictLoading} className="px-3 py-1 bg-amber-700 rounded text-xs">Forza</button>
-                            <button type="button" onClick={cancelConflict} className="px-3 py-1 bg-gray-700 rounded text-xs">Annulla</button>
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" onClick={() => confirmConflict(setMessage)} disabled={conflictLoading} className="min-h-11 px-3 bg-amber-700 rounded text-sm font-bold">Forza</button>
+                            <button type="button" onClick={cancelConflict} className="min-h-11 px-3 bg-gray-700 rounded text-sm">Annulla</button>
                           </div>
                         </div>
                       )}
@@ -864,24 +890,24 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                           tipo_carriera: tipiCarriera.find((t) => t.codice === 'korp')?.id,
                           chiudi_korp_precedenti: true,
                         })}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-violet-700 rounded text-sm font-bold"
+                        className="inline-flex min-h-11 items-center gap-1 px-3 bg-violet-700 rounded text-sm font-bold"
                       >
                         <Plus size={14} /> Nuova appartenenza
                       </button>
                       <ul className="space-y-2">
                         {(memberships.length ? memberships : detail.carriere_membership || []).map((m) => (
-                          <li key={m.id} className="bg-gray-800 border border-gray-700 rounded p-2 flex justify-between text-sm">
-                            <span>
+                          <li key={m.id} className="bg-gray-800 border border-gray-700 rounded p-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-sm min-w-0">
+                            <span className="min-w-0 break-words">
                               <strong>{m.carriera_nome}</strong>
                               {m.carica_nome ? ` · ${m.carica_nome}` : ''}
                               <span className="text-gray-500 ml-2">{m.data_a ? 'Chiusa' : 'Attiva'}</span>
                             </span>
-                            <div className="flex gap-2">
-                              <button type="button" className="text-xs text-indigo-400" onClick={() => setMembershipForm(m)}>Modifica</button>
+                            <div className="flex flex-wrap gap-2 shrink-0">
+                              <button type="button" className="min-h-11 px-3 text-sm text-indigo-300 bg-gray-900 rounded" onClick={() => setMembershipForm(m)}>Modifica</button>
                               {m.id && (
                                 <button
                                   type="button"
-                                  className="text-xs text-red-400"
+                                  className="min-h-11 px-3 text-sm text-red-300 bg-gray-900 rounded"
                                   onClick={async () => {
                                     if (!window.confirm('Eliminare appartenenza?')) return;
                                     await staffDeleteCarriereMembership(m.id, onLogout);
@@ -923,9 +949,9 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                             />
                             Chiudi KORP precedenti
                           </label>
-                          <div className="flex gap-2">
-                            <button type="button" onClick={() => saveMembership(membershipForm)} className="px-3 py-1 bg-violet-700 rounded text-sm">Salva</button>
-                            <button type="button" onClick={() => setMembershipForm(null)} className="px-3 py-1 bg-gray-700 rounded text-sm">Annulla</button>
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" onClick={() => saveMembership(membershipForm)} className="min-h-11 px-3 bg-violet-700 rounded text-sm font-bold">Salva</button>
+                            <button type="button" onClick={() => setMembershipForm(null)} className="min-h-11 px-3 bg-gray-700 rounded text-sm">Annulla</button>
                           </div>
                         </div>
                       )}
@@ -1038,7 +1064,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                                   ab.is_modifiable,
                                   ab.revoca_blocco,
                                 )}
-                                className="px-3 py-1 rounded text-xs font-bold bg-red-900/70 hover:bg-red-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                                className="min-h-11 px-3 rounded text-xs font-bold bg-red-900/70 hover:bg-red-800 disabled:opacity-40 disabled:cursor-not-allowed"
                               >
                                 Revoca
                               </button>
@@ -1066,7 +1092,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
 
                   {modalTab === 'risorse' && (
                     <div className="space-y-6">
-                      <div className="grid grid-cols-3 gap-3 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                         <div className="bg-gray-800 rounded p-3 border border-gray-700">
                           <span className="text-gray-400">Conto corrente</span>
                           <p className="text-2xl font-bold text-emerald-300">
@@ -1086,7 +1112,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-gray-300 mb-2">Allineamento (task)</h4>
-                        <div className="grid grid-cols-3 gap-3 text-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                           <div className="bg-gray-800 rounded p-3 border border-amber-900/40">
                             <span className="text-amber-200/80">Luminoso</span>
                             <p className="text-2xl font-bold text-amber-200">{detail.punti_luminosi ?? 0}</p>
@@ -1100,33 +1126,33 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                             <p className="text-2xl font-bold text-gray-300">{detail.punti_grigi ?? 0}</p>
                           </div>
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-2 items-end">
-                          <label className="flex flex-col gap-1 text-xs text-gray-400">
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                          <label className="flex flex-col gap-1 text-xs text-gray-400 min-w-0">
                             Luminoso
                             <input
                               type="number"
                               min={0}
-                              className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm w-20 text-amber-200"
+                              className="w-full min-h-11 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-sm text-amber-200"
                               value={detail.punti_luminosi ?? 0}
                               onChange={(e) => setDetail((d) => ({ ...d, punti_luminosi: e.target.value }))}
                             />
                           </label>
-                          <label className="flex flex-col gap-1 text-xs text-gray-400">
+                          <label className="flex flex-col gap-1 text-xs text-gray-400 min-w-0">
                             Oscuro
                             <input
                               type="number"
                               min={0}
-                              className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm w-20 text-violet-300"
+                              className="w-full min-h-11 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-sm text-violet-300"
                               value={detail.punti_oscuri ?? 0}
                               onChange={(e) => setDetail((d) => ({ ...d, punti_oscuri: e.target.value }))}
                             />
                           </label>
-                          <label className="flex flex-col gap-1 text-xs text-gray-400">
+                          <label className="flex flex-col gap-1 text-xs text-gray-400 min-w-0">
                             Grigio
                             <input
                               type="number"
                               min={0}
-                              className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm w-20 text-gray-300"
+                              className="w-full min-h-11 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-sm text-gray-300"
                               value={detail.punti_grigi ?? 0}
                               onChange={(e) => setDetail((d) => ({ ...d, punti_grigi: e.target.value }))}
                             />
@@ -1139,7 +1165,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                               punti_oscuri: Math.max(0, parseInt(detail.punti_oscuri, 10) || 0),
                               punti_grigi: Math.max(0, parseInt(detail.punti_grigi, 10) || 0),
                             })}
-                            className="px-3 py-1.5 bg-teal-800 rounded text-sm font-bold disabled:opacity-50"
+                            className="min-h-11 px-3 bg-teal-800 rounded text-sm font-bold disabled:opacity-50 sm:col-span-3"
                           >
                             Salva allineamento
                           </button>
@@ -1151,9 +1177,9 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                       <p className="text-xs text-gray-500">
                         Quantità positiva aggiunge, negativa sottrae. Per i crediti scegli il conto di destinazione.
                       </p>
-                      <div className="flex flex-wrap gap-2 items-end">
+                      <div className="flex flex-col sm:flex-row flex-wrap gap-2 items-stretch sm:items-end">
                         <select
-                          className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm"
+                          className="min-h-11 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-sm"
                           value={resourceForm.tipo}
                           onChange={(e) => setResourceForm((f) => ({ ...f, tipo: e.target.value }))}
                         >
@@ -1162,7 +1188,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                         </select>
                         {resourceForm.tipo === 'crediti' && (
                           <select
-                            className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm"
+                            className="min-h-11 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-sm"
                             value={resourceForm.conto}
                             onChange={(e) => setResourceForm((f) => ({ ...f, conto: e.target.value }))}
                           >
@@ -1172,7 +1198,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                         )}
                         <input
                           type="number"
-                          className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm w-24"
+                          className="min-h-11 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-sm w-full sm:w-24"
                           value={resourceForm.amount}
                           onChange={(e) => setResourceForm((f) => ({ ...f, amount: e.target.value }))}
                         />
@@ -1182,19 +1208,19 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                           value={resourceForm.reason}
                           onChange={(e) => setResourceForm((f) => ({ ...f, reason: e.target.value }))}
                         />
-                        <button type="button" onClick={handleAddResources} className="px-3 py-1.5 bg-amber-700 rounded text-sm font-bold">Applica</button>
+                        <button type="button" onClick={handleAddResources} className="min-h-11 px-3 bg-amber-700 rounded text-sm font-bold">Applica</button>
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-gray-300 mb-2">Pool risorse</h4>
                         <div className="space-y-2">
                           {(detail.risorse_pool_ui || []).map((pool) => (
-                            <div key={pool.sigla} className="bg-gray-800 border border-gray-700 rounded p-2 flex flex-wrap gap-2 items-center text-sm">
-                              <span className="font-bold w-16">{pool.sigla}</span>
+                            <div key={pool.sigla} className="bg-gray-800 border border-gray-700 rounded p-3 flex flex-col sm:flex-row flex-wrap gap-2 sm:items-center text-sm min-w-0">
+                              <span className="font-bold">{pool.sigla}</span>
                               <span className="text-gray-400">{pool.valore_corrente} / {pool.valore_max}</span>
                               <input
                                 type="number"
                                 placeholder="Δ"
-                                className="w-16 bg-gray-900 border border-gray-600 rounded px-1 py-0.5 text-xs"
+                                className="w-full sm:w-24 min-h-11 bg-gray-900 border border-gray-600 rounded px-2 py-2 text-sm"
                                 value={poolInputs[pool.sigla]?.delta || ''}
                                 onChange={(e) => setPoolInputs((p) => ({
                                   ...p,
@@ -1204,7 +1230,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                               <button
                                 type="button"
                                 onClick={() => handlePoolAdjust(pool.sigla)}
-                                className="px-2 py-0.5 bg-teal-800 rounded text-xs"
+                                className="min-h-11 px-3 bg-teal-800 rounded text-sm font-bold"
                               >
                                 Applica
                               </button>
@@ -1358,10 +1384,10 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                               {o.nome}
                               <span className="text-gray-500 font-mono text-xs ml-2">#{o.id} · {o.tipo_oggetto}</span>
                             </span>
-                            <span className="flex gap-1">
+                            <span className="flex flex-wrap gap-1">
                               <button
                                 type="button"
-                                className="px-2 py-0.5 bg-gray-700 rounded text-xs"
+                                className="min-h-11 px-3 bg-gray-700 rounded text-xs font-bold"
                                 onClick={async () => {
                                   if (!window.confirm(`Rimuovere «${o.nome}» dall'inventario (l'oggetto resta nel DB)?`)) return;
                                   try {
@@ -1380,7 +1406,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                               </button>
                               <button
                                 type="button"
-                                className="px-2 py-0.5 bg-red-900/60 border border-red-800 rounded text-xs"
+                                className="min-h-11 px-3 bg-red-900/60 border border-red-800 rounded text-xs font-bold"
                                 onClick={async () => {
                                   if (!window.confirm(`Distruggere definitivamente «${o.nome}»?`)) return;
                                   try {
@@ -1559,7 +1585,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                             prestigio: Math.max(0, parseInt(detail.prestigio, 10) || 0),
                             badge_instafame: detail.badge_instafame || '',
                           })}
-                          className="px-4 py-2 bg-teal-700 rounded font-bold text-sm disabled:opacity-50"
+                          className="min-h-11 px-4 bg-teal-700 rounded font-bold text-sm disabled:opacity-50"
                         >
                           Salva Prestigio e badge
                         </button>
@@ -1601,7 +1627,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                         type="button"
                         disabled={saving}
                         onClick={() => handleSaveFields({ watch_enabled: !!detail.watch_enabled })}
-                        className="px-4 py-2 bg-teal-700 rounded font-bold text-sm disabled:opacity-50"
+                        className="min-h-11 px-4 bg-teal-700 rounded font-bold text-sm disabled:opacity-50"
                       >
                         Salva Watch
                       </button>
@@ -1776,10 +1802,9 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                   )}
                 </>
               )}
-            </div>
           </div>
-        </div>
-      )}
+        </StaffFullscreenEditor>
+      ) : null}
     </StaffToolShell>
   );
 };

@@ -62,6 +62,7 @@ export function StaffFullscreenEditor({
   open = true,
   onBack,
   backLabel = 'Torna alla lista',
+  subHeader = null,
   children,
   className = '',
 }) {
@@ -94,6 +95,11 @@ export function StaffFullscreenEditor({
           >
             ← {backLabel}
           </button>
+        </div>
+      ) : null}
+      {subHeader ? (
+        <div className="shrink-0 min-w-0 border-b border-gray-800 bg-gray-950">
+          {subHeader}
         </div>
       ) : null}
       <div
