@@ -56,9 +56,11 @@ BASE="https://raw.githubusercontent.com/allanon74/kor35/${REF}/deploy/raspberry-
 WORKDIR=/tmp/kor35-station-kiosk
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
-curl -fsSL -o kiosk-station.sh "$BASE/kiosk-station.sh"
-curl -fsSL -o kor35-kiosk-wifi.sh "$BASE/kor35-kiosk-wifi.sh"
-curl -fsSL -o update-station-kiosk.sh "$BASE/update-station-kiosk.sh"
+stamp=$(date +%s)
+curl -fsSL -H 'Cache-Control: no-cache' -o kiosk-station.sh "${BASE}/kiosk-station.sh?${stamp}"
+curl -fsSL -H 'Cache-Control: no-cache' -o kor35-kiosk-wifi.sh "${BASE}/kor35-kiosk-wifi.sh?${stamp}"
+curl -fsSL -H 'Cache-Control: no-cache' -o update-station-kiosk.sh "${BASE}/update-station-kiosk.sh?${stamp}"
+grep -q "Scan da .* non elenca" kor35-kiosk-wifi.sh || { echo "SCRIPT VECCHIO, riprova il curl"; exit 1; }
 chmod +x kiosk-station.sh kor35-kiosk-wifi.sh update-station-kiosk.sh
 sudo ./update-station-kiosk.sh
 ```

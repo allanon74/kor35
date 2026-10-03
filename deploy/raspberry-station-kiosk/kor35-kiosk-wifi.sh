@@ -39,6 +39,23 @@ ssid_eq() {
   [ -n "$1" ] && [ -n "$2" ] && [ "$(normalize_ssid "$1")" = "$(normalize_ssid "$2")" ]
 }
 
+# Qualsiasi SSID tipo kor35…larp (trattino, underscore, spazi).
+is_event_ssid() {
+  case "$(normalize_ssid "$1")" in
+    *kor35*larp*) return 0 ;;
+  esac
+  return 1
+}
+
+ssid_matches_target() {
+  local found="$1" want="$2"
+  ssid_eq "$found" "$want" && return 0
+  if ssid_eq "$want" "$PRIMARY_SSID" && is_event_ssid "$found"; then
+    return 0
+  fi
+  return 1
+}
+
 wifi_iface() {
   if [ -n "$IFACE" ]; then
     printf '%s\n' "$IFACE"
@@ -84,7 +101,7 @@ connections_for_ssid() {
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     found="$(nmcli -g 802-11-wireless.ssid connection show "$name" 2>/dev/null || true)"
-    if ssid_eq "$found" "$ssid"; then
+    if ssid_matches_target "$found" "$ssid"; then
       ts="$(connection_timestamp "$name")"
       printf '%s\t%s\n' "$ts" "$name"
     fi
@@ -154,7 +171,7 @@ ssid_in_lines() {
   local ssid="$1" line
   while IFS= read -r line; do
     line="$(unescape_nmcli "$line")"
-    ssid_eq "$line" "$ssid" && return 0
+    ssid_matches_target "$line" "$ssid" && return 0
   done
   return 1
 }
@@ -267,26 +284,70 @@ try_saved_profiles() {
   return 1
 }
 
+log_wifi_state() {
+  local name found cur
+  cur="$(current_ssid)"
+  log "SSID attuale: '${cur}'"
+  log "Cerco: '${PRIMARY_SSID}'"
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    found="$(nmcli -g 802-11-wireless.ssid connection show "$name" 2>/dev/null || true)"
+    [ -n "$found" ] && log "Profilo '${name}' ssid='${found}'"
+  done < <(wifi_connection_names)
+}
+
+first_profile_for_ssid() {
+  local name
+  while IFS=$'\t' read -r _ name; do
+    [ -n "$name" ] || continue
+    printf '%s\n' "$name"
+    return 0
+  done < <(connections_for_ssid "$1" | sort -nr)
+}
+
 try_ssid() {
-  local ssid="$1" psk="$2"
+  local ssid="$1" psk="$2" prev cur
   LAST_PROFILE=""
   [ -n "$ssid" ] || return 1
-  if ssid_eq "$(current_ssid)" "$ssid"; then
+  if ssid_eq "$(current_ssid)" "$ssid" || { ssid_eq "$ssid" "$PRIMARY_SSID" && is_event_ssid "$(current_ssid)"; }; then
     log "Già connesso a ${ssid}"
-    LAST_PROFILE="$(connections_for_ssid "$ssid" | sort -nr | head -n 1 | cut -f2-)"
+    LAST_PROFILE="$(first_profile_for_ssid "$ssid")"
     return 0
   fi
   if try_saved_profiles "$ssid"; then
     return 0
   fi
-  if ! ssid_visible "$ssid"; then
-    log "SSID non in elenco e nessun profilo salvato: ${ssid}"
+  if ssid_visible "$ssid"; then
+    if connect_new "$ssid" "$psk"; then
+      LAST_PROFILE="$(first_profile_for_ssid "$ssid")"
+      [ -n "$LAST_PROFILE" ] || LAST_PROFILE="$ssid"
+      return 0
+    fi
+  fi
+
+  cur="$(current_ssid)"
+  if [ -n "$cur" ] && ! ssid_eq "$cur" "$ssid"; then
+    log "Scan da '${cur}' non elenca ${ssid}: stacco e scansiono (come dal desktop)"
+    prev="$(active_wifi_connection || true)"
+    disconnect_other_wifi ""
+    refresh_scan
+    if try_saved_profiles "$ssid"; then
+      return 0
+    fi
+    if ssid_visible "$ssid" && connect_new "$ssid" "$psk"; then
+      LAST_PROFILE="$(first_profile_for_ssid "$ssid")"
+      [ -n "$LAST_PROFILE" ] || LAST_PROFILE="$ssid"
+      return 0
+    fi
+    if [ -n "$prev" ]; then
+      log "Dopo lo stacco ${ssid} non c'è: ripristino ${prev}"
+      try_nmcli_up "$prev" || true
+    fi
     return 1
   fi
-  connect_new "$ssid" "$psk" || return 1
-  LAST_PROFILE="$(connections_for_ssid "$ssid" | sort -nr | head -n 1 | cut -f2-)"
-  [ -n "$LAST_PROFILE" ] || LAST_PROFILE="$ssid"
-  return 0
+
+  log "SSID non in elenco e nessun profilo salvato: ${ssid}"
+  return 1
 }
 
 cmd_scan() {
@@ -308,6 +369,7 @@ cmd_ensure() {
     exit 10
   fi
   remember_fallback_from_current
+  log_wifi_state
   attempt=1
   while [ "$attempt" -le "$PRIMARY_ATTEMPTS" ]; do
     refresh_scan
@@ -330,7 +392,8 @@ cmd_prefer() {
     exit 10
   fi
   remember_fallback_from_current
-  if ssid_eq "$(current_ssid)" "$PRIMARY_SSID"; then
+  log_wifi_state
+  if ssid_eq "$(current_ssid)" "$PRIMARY_SSID" || is_event_ssid "$(current_ssid)"; then
     try_ssid "$PRIMARY_SSID" "$PRIMARY_PSK" || true
     pin_primary "$LAST_PROFILE"
     exit 0
@@ -344,14 +407,22 @@ cmd_prefer() {
   exit 10
 }
 
+cmd_debug() {
+  log_wifi_state
+  log "--- scan ---"
+  refresh_scan
+  visible_ssids | awk 'NF && !seen[$0]++ { print }'
+}
+
 case "${1:-ensure}" in
   ensure) cmd_ensure ;;
   prefer) cmd_prefer ;;
   scan) cmd_scan ;;
   connect) cmd_connect "${2:-}" "${3:-}" ;;
   current) current_ssid ;;
+  debug) cmd_debug ;;
   *)
-    echo "Comandi: ensure | prefer | scan | connect SSID PSK | current" >&2
+    echo "Comandi: ensure | prefer | scan | connect SSID PSK | current | debug" >&2
     exit 1
     ;;
 esac

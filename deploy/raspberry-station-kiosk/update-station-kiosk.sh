@@ -43,6 +43,13 @@ echo ""
 echo "Script aggiornati, env non toccato."
 echo "  /usr/local/bin/kiosk-station.sh"
 echo "  /usr/local/sbin/kor35-kiosk-wifi.sh"
+if grep -q "Scan da .* non elenca" /usr/local/sbin/kor35-kiosk-wifi.sh; then
+  echo "  wifi script: stacca-e-scansiona OK"
+else
+  echo "  ATTENZIONE: /usr/local/sbin/kor35-kiosk-wifi.sh è vecchio (manca stacca-e-scansiona)"
+fi
+echo "  firma: $(sha256sum /usr/local/sbin/kor35-kiosk-wifi.sh | awk '{print $1}')"
 echo "  env: /etc/kor35/kiosk-station.env"
 echo "  wifi: sudo /usr/local/sbin/kor35-kiosk-wifi.sh current"
+echo "  debug: sudo /usr/local/sbin/kor35-kiosk-wifi.sh debug"
 echo "  log:  journalctl -u kiosk-station.service -n 40 --no-pager"

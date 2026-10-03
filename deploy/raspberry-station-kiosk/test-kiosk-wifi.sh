@@ -55,6 +55,12 @@ reveal() {
   [ "$n" -ge "$(cat "$STATE/reveal_after")" ]
 }
 list_ssids() {
+  local cur
+  cur="$(cat "$STATE/current")"
+  if [ -f "$STATE/associated_hides_others" ] && [ -n "$cur" ]; then
+    printf '%s\n' "$cur"
+    return 0
+  fi
   echo "Casa"
   if reveal; then
     echo "kor35-larp"
@@ -261,7 +267,11 @@ else
   fail "ensure doveva aspettare kor35-larp"; cat /tmp/kiosk-wifi-late.log >&2 || true
 fi
 assert_last_up "$D" "kor35-larp"
-assert_not_up "$D" "Casa"
+if grep -q "kor35-larp" "$D/state/current"; then
+  ok "ssid corrente kor35-larp dopo l'attesa"
+else
+  fail "dopo l'attesa corrente $(cat "$D/state/current")"
+fi
 
 # 3. Già in casa, Omada visibile: prefer cambia rete.
 D="$TMP/prefer"
@@ -302,10 +312,10 @@ if [ "$rc" -eq 10 ]; then
 else
   fail "prefer doveva uscire 10, codice ${rc}"
 fi
-if [ -s "$D/state/ups" ]; then
-  fail "prefer non doveva attivare profili: $(cat "$D/state/ups")"
+if grep -q "kor35-larp" "$D/state/current"; then
+  fail "non doveva finire su kor35-larp"
 else
-  ok "nessuna attivazione senza kor35-larp"
+  ok "resta sulla rete di casa se Omada non c'è"
 fi
 
 # 5. nmcli non elenca la rete, iw sì (scan del Pi mentre è associato a casa).
@@ -410,6 +420,25 @@ else
   fail "prefer doveva usare il profilo kor35_larp"; cat /tmp/kiosk-wifi-underscore.log >&2 || true
 fi
 assert_last_up "$D" "Omada"
+
+# 10. Da Vodafone lo scan non vede Omada: stacca, poi la vede e si connette.
+D="$TMP/hidden-scan"
+write_stubs "$D"
+new_case "$D"
+write_stubs "$D"
+: >"$D/state/associated_hides_others"
+printf '%s\n' "1" >"$D/state/reveal_after"
+if run_helper "$D" prefer >/tmp/kiosk-wifi-hidden.log 2>&1; then
+  ok "prefer stacca Casa, scansiona e vede kor35-larp"
+else
+  fail "prefer doveva connettersi dopo lo stacco"; cat /tmp/kiosk-wifi-hidden.log >&2 || true
+fi
+assert_last_up "$D" "kor35-larp"
+if grep -qx "Casa" "$D/state/downs"; then
+  ok "hidden-scan ha staccato Casa"
+else
+  fail "hidden-scan doveva staccare Casa"
+fi
 
 echo "--- ${PASS} ok, ${FAIL} fail ---"
 [ "$FAIL" -eq 0 ]
