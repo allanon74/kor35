@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { Camera, QrCode, RefreshCw, Package } from 'lucide-react';
 import { StaffToolShell, StaffToolHeader, staffSecondaryBtnClass } from '../../staff/StaffToolShell';
 import { StaffModalTabs } from '../../staff/StaffCrudUi';
@@ -92,6 +93,62 @@ const membershipNote = (m) => {
   }
   return parts.length ? parts.join(' · ') : '—';
 };
+
+/** Cooldown globale dei QR fisici: visibile nel tab Dati e nel tab QR. */
+const PoolCooldownFields = ({ form, setForm }) => (
+  <div
+    className="border border-sky-900/50 rounded-lg p-3 space-y-2 bg-sky-950/20"
+    data-testid="pool-cooldown-fields"
+  >
+    <div className="text-xs uppercase text-sky-300 font-semibold">
+      Tempo prima di riscansionare (cooldown)
+    </div>
+    <p className="text-[11px] text-gray-400 leading-snug">
+      Dopo una scansione riuscita il QR fisico si spegne per tutti, come i nodi.
+      Intervallo casuale tra min e max (imposti uguali per un tempo fisso).
+      Ogni PG può comunque usare ogni QR una sola volta (anti-farm).
+    </p>
+    <label className="flex items-center gap-2 text-sm min-h-11">
+      <input
+        type="checkbox"
+        checked={form.cooldown_attivo}
+        onChange={(e) => setForm((f) => ({ ...f, cooldown_attivo: e.target.checked }))}
+      />
+      Attiva attesa tra una scansione e la successiva
+    </label>
+    <div className="grid grid-cols-2 gap-2">
+      <label className="text-xs text-gray-400">
+        Minuti min
+        <input
+          type="number"
+          min={1}
+          className="w-full min-h-11 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm mt-0.5"
+          value={form.cooldown_minuti_min}
+          onChange={(e) => setForm((f) => ({
+            ...f,
+            cooldown_minuti_min: Number(e.target.value),
+          }))}
+          disabled={!form.cooldown_attivo}
+        />
+      </label>
+      <label className="text-xs text-gray-400">
+        Minuti max
+        <input
+          type="number"
+          min={1}
+          className="w-full min-h-11 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm mt-0.5"
+          value={form.cooldown_minuti_max}
+          onChange={(e) => setForm((f) => ({
+            ...f,
+            cooldown_minuti_max: Number(e.target.value),
+          }))}
+          disabled={!form.cooldown_attivo}
+        />
+      </label>
+    </div>
+  </div>
+);
+
 const emptyEffect = () => ({
   tipo: 'testo',
   frequenza: 1,
@@ -486,52 +543,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
                 />
                 Pool attivo
               </label>
-              <div className="border border-gray-700 rounded-lg p-3 space-y-2">
-                <div className="text-xs uppercase text-gray-400">Spegnimento QR (stile nodi)</div>
-                <p className="text-[11px] text-gray-500 leading-snug">
-                  Dopo una scansione riuscita il QR fisico si spegne per tutti per un intervallo
-                  casuale (min–max). Separato dall&apos;anti-farm: ogni PG può comunque usare ogni QR
-                  una sola volta.
-                </p>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={form.cooldown_attivo}
-                    onChange={(e) => setForm((f) => ({ ...f, cooldown_attivo: e.target.checked }))}
-                  />
-                  Attiva cooldown / spegnimento
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="text-xs text-gray-400">
-                    Minuti min
-                    <input
-                      type="number"
-                      min={1}
-                      className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-                      value={form.cooldown_minuti_min}
-                      onChange={(e) => setForm((f) => ({
-                        ...f,
-                        cooldown_minuti_min: Number(e.target.value),
-                      }))}
-                      disabled={!form.cooldown_attivo}
-                    />
-                  </label>
-                  <label className="text-xs text-gray-400">
-                    Minuti max
-                    <input
-                      type="number"
-                      min={1}
-                      className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-                      value={form.cooldown_minuti_max}
-                      onChange={(e) => setForm((f) => ({
-                        ...f,
-                        cooldown_minuti_max: Number(e.target.value),
-                      }))}
-                      disabled={!form.cooldown_attivo}
-                    />
-                  </label>
-                </div>
-              </div>
+              <PoolCooldownFields form={form} setForm={setForm} />
               <div className="border border-gray-700 rounded-lg p-3 space-y-2">
                 <div className="text-xs uppercase text-gray-400">Minigioco a monte (tutti i QR del pool)</div>
                 <label className="flex items-center gap-2 text-sm">
@@ -652,6 +664,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
                 </div>
               ) : (
                 <>
+                  <PoolCooldownFields form={form} setForm={setForm} />
                   <p className="text-[11px] text-gray-500 leading-snug">
                     Aggiungi i QR fisici del pool: incolla l&apos;ID oppure scansiona con la fotocamera.
                     Se il QR era un negozio mercante, resta nel pool e alla scansione estrae gli effetti
@@ -683,8 +696,9 @@ const RandomQrPoolManager = ({ onLogout }) => {
                         type="button"
                         onClick={() => setScanningQr(true)}
                         disabled={busy}
-                        className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-sky-700 rounded text-sm font-bold disabled:opacity-50"
+                        className="flex-1 sm:flex-none min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-sky-700 rounded text-sm font-bold disabled:opacity-50"
                         title="Scansiona QR fisico"
+                        data-testid="pool-qr-scan-button"
                       >
                         <Camera size={16} />
                         Scansiona
@@ -958,30 +972,40 @@ const RandomQrPoolManager = ({ onLogout }) => {
         </StaffEditorModal>
       )}
 
-      {scanningQr && (
-        <div className="fixed inset-0 z-[60] bg-black flex flex-col">
-          <div className="p-4 flex justify-between items-center gap-3 bg-gray-900 border-b border-gray-800">
-            <span className="font-bold text-white text-sm sm:text-base">
-              Scansiona QR da aggiungere al pool
-            </span>
-            <button
-              type="button"
-              onClick={() => setScanningQr(false)}
-              className="px-4 py-2 bg-red-600 rounded shrink-0"
+      {scanningQr && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[140] bg-black flex flex-col"
+              data-testid="pool-qr-scan-overlay"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Scansiona QR da aggiungere al pool"
             >
-              Chiudi
-            </button>
-          </div>
-          <div className="flex-1 min-h-0">
-            <StaffQrTab
-              onLogout={onLogout}
-              onScanSuccess={async (qr_id) => {
-                await addQrById(qr_id, { fromScan: true });
-              }}
-            />
-          </div>
-        </div>
-      )}
+              <div className="p-4 flex justify-between items-center gap-3 bg-gray-900 border-b border-gray-800 pt-[max(1rem,var(--kor-safe-top))]">
+                <span className="font-bold text-white text-sm sm:text-base min-w-0 break-words">
+                  Scansiona QR da aggiungere al pool
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setScanningQr(false)}
+                  className="min-h-11 px-4 py-2 bg-red-600 rounded shrink-0"
+                >
+                  Chiudi
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto pb-[max(1rem,var(--kor-safe-bottom))]">
+                <StaffQrTab
+                  onLogout={onLogout}
+                  autoStart
+                  onScanSuccess={async (qr_id) => {
+                    await addQrById(qr_id, { fromScan: true });
+                  }}
+                />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </StaffToolShell>
   );
 };

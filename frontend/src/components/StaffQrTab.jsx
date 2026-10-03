@@ -7,7 +7,7 @@ import { normalizeScannedQrId } from '../utils/qrScan';
  * A differenza di QrTab normale, questo restituisce solo l'ID del QR scansionato,
  * senza chiamare getQrCodeData() che richiederebbe un personaggio selezionato.
  */
-const StaffQrTab = ({ onScanSuccess, onLogout }) => {
+const StaffQrTab = ({ onScanSuccess, onLogout, autoStart = false }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isScanning, setIsScanning] = useState(false);
@@ -240,10 +240,15 @@ const StaffQrTab = ({ onScanSuccess, onLogout }) => {
   };
 
   useEffect(() => {
+    if (autoStart) {
+      startWebcamScan();
+    }
     return () => {
       stopWebcamScan();
     };
-  }, []);
+    // autoStart: avvio una tantum all'ingresso overlay
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart]);
 
   return (
     <div className="flex flex-col items-center p-4">
