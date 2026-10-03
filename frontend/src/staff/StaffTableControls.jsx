@@ -30,8 +30,8 @@ export function StaffTableControls({
   const hiddenSet = new Set(hiddenColumnKeys);
   const filtersOn = hasActiveColumnFilters(columnFilters);
   const btn = compact
-    ? 'inline-flex items-center gap-1 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-gray-300 hover:border-gray-500 hover:text-white'
-    : 'inline-flex items-center gap-1 rounded-lg border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-300 hover:border-gray-500 hover:text-white';
+    ? 'inline-flex min-h-11 items-center gap-1 rounded border border-gray-700 bg-gray-900 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-300 hover:border-gray-500 hover:text-white'
+    : 'inline-flex min-h-11 items-center gap-1 rounded-lg border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-300 hover:border-gray-500 hover:text-white';
 
   return (
     <div className="flex flex-wrap items-center gap-2">

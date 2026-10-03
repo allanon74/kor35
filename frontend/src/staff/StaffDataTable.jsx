@@ -82,7 +82,7 @@ function StaffMobileCards({
                 key={key}
                 type="button"
                 onClick={() => onCycleSort(key)}
-                className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-3 py-2 min-h-11 text-[10px] font-bold uppercase tracking-wide ${
                   spec
                     ? 'border-cyan-500 bg-cyan-900/40 text-cyan-100'
                     : 'border-gray-700 bg-gray-950 text-gray-400'
@@ -125,7 +125,7 @@ function StaffMobileCards({
               <li key={item.id ?? item.pk ?? item.sync_id}>
                 <div
                   onClick={clickable ? () => onRowClick(item) : undefined}
-                  className={`space-y-2 px-3 py-3 text-white ${
+                  className={`space-y-2 px-3 py-3 text-white min-h-11 ${
                     clickable ? 'cursor-pointer active:bg-gray-700/40' : ''
                   }`}
                 >

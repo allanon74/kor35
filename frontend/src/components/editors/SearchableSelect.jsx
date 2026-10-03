@@ -6,8 +6,8 @@ import { useDebounce } from '../../hooks/useDebounce';
 /** Sotto questa soglia si usa un `<select>` nativo (liste corte, UX più immediata). */
 export const DEFAULT_MIN_OPTIONS_FOR_SEARCH = 12;
 
-/** Sopra modali staff (z-[100]) e toast (z-[100]). */
-export const SEARCHABLE_DROPDOWN_Z_CLASS = 'z-[110]';
+/** Sopra StaffFullscreenEditor (z-[110]) e toast (z-[100]); sotto footer Salva (z-[130]). */
+export const SEARCHABLE_DROPDOWN_Z_CLASS = 'z-[125]';
 
 const NativeSelect = memo(({
     options = [],
@@ -67,8 +67,8 @@ const SearchableDropdown = memo(({
     labelKey = 'nome',
     valueKey = 'id',
     disabled = false,
-    /** Sopra StaffEditorModal (z-[100]) e altri overlay staff. */
-    dropdownZIndex = 110,
+    /** Sopra StaffFullscreenEditor (z-[110]) e altri overlay staff. */
+    dropdownZIndex = 125,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -255,7 +255,7 @@ const SearchableSelect = memo(
         valueKey = 'id',
         disabled = false,
         minOptionsForSearch = DEFAULT_MIN_OPTIONS_FOR_SEARCH,
-        dropdownZIndex = 110,
+        dropdownZIndex = 125,
         className = '',
     }) => {
         const useNative = options.length <= minOptionsForSearch;
