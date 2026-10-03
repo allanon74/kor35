@@ -186,6 +186,9 @@ backend/.env
 backend/.env.*
 !backend/.env.example
 
+# Credenziali No-IP del mirror (il template è noip.env.example)
+config/mirror/noip.env
+
 # Chiavi SSH generate in locale per CI/deploy (mai nel repo)
 kor35-actions
 kor35-actions.pub

@@ -40,6 +40,11 @@ EMERGENCY_WIFI_ACTIVE=0
 NGINX_EVENT_VHOST=0
 HEALTH_LOCAL_OK=0
 DHCP_CONFLICT=0
+NOIP_TIMER="inactive"
+NOIP_PUBLIC_IP=""
+NOIP_RESULT=""
+NOIP_HALT=""
+NOIP_UPNP=""
 
 if [ -f "${KOR35_REPO_PATH}/config/docker/compose.base.yml" ]; then
   if mirror_pi_service_active kor35-mirror-stack.service || \
@@ -69,6 +74,27 @@ if [ "$DHCP_EVENT_ACTIVE" = "1" ] && [ "$HAS_INTERNET" = "1" ]; then
   DHCP_CONFLICT=1
 fi
 
+if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet kor35-mirror-noip.timer 2>/dev/null; then
+  NOIP_TIMER="active"
+fi
+NOIP_STATE_FILE="${NOIP_STATE_FILE:-/var/lib/kor35/noip.state}"
+if [ -f "$NOIP_STATE_FILE" ]; then
+  NOIP_PUBLIC_IP="$(sed -n 's/^public_ip=//p' "$NOIP_STATE_FILE" | head -n 1)"
+  NOIP_RESULT="$(sed -n 's/^result=//p' "$NOIP_STATE_FILE" | head -n 1)"
+  NOIP_HALT="$(sed -n 's/^halt_reason=//p' "$NOIP_STATE_FILE" | head -n 1)"
+  NOIP_UPNP="$(sed -n 's/^upnp=//p' "$NOIP_STATE_FILE" | head -n 1)"
+fi
+case "$NOIP_PUBLIC_IP" in
+  *[!0-9.]*) NOIP_PUBLIC_IP="" ;;
+esac
+# Il JSON della diagnostica non deve spezzarsi se lo stato è sporco.
+for _noip_var in NOIP_RESULT NOIP_HALT NOIP_UPNP; do
+  case "${!_noip_var}" in
+    *\"*|*'\'*|*$'\n'*|*$'\r'*) printf -v "$_noip_var" '%s' "" ;;
+  esac
+done
+unset _noip_var
+
 EVENT_LAN_IP_ACTUAL="$(ip -4 -o addr show dev "$LAN_IFACE" 2>/dev/null | awk '{print $4}' | head -1 || true)"
 EMERGENCY_IP_ACTUAL="$(ip -4 -o addr show dev "$EMERGENCY_WIFI_INTERFACE" 2>/dev/null | awk '{print $4}' | head -1 || true)"
 
@@ -86,7 +112,12 @@ if [ "$JSON_OUTPUT" = "1" ]; then
   "emergency_wifi_active": $EMERGENCY_WIFI_ACTIVE,
   "nginx_event_vhost": $NGINX_EVENT_VHOST,
   "health_local_ok": $HEALTH_LOCAL_OK,
-  "dhcp_conflict": $DHCP_CONFLICT
+  "dhcp_conflict": $DHCP_CONFLICT,
+  "noip_timer": "$NOIP_TIMER",
+  "noip_public_ip": "$NOIP_PUBLIC_IP",
+  "noip_result": "$NOIP_RESULT",
+  "noip_halt": "$NOIP_HALT",
+  "noip_upnp": "$NOIP_UPNP"
 }
 EOF
   exit 0
@@ -104,6 +135,7 @@ echo "Healthz locale:          $([ "$HEALTH_LOCAL_OK" = "1" ] && echo OK || echo
 echo "DHCP evento (dnsmasq):   $([ "$DHCP_EVENT_ACTIVE" = "1" ] && echo ATTIVO || echo spento)"
 echo "WiFi emergenza service:  $([ "$EMERGENCY_WIFI_ACTIVE" = "1" ] && echo ATTIVO || echo spento)"
 echo "Nginx vhost evento HTTP: $([ "$NGINX_EVENT_VHOST" = "1" ] && echo attivo || echo disattivo)"
+echo "No-IP kor35.ddns.net:    timer ${NOIP_TIMER}; IP ${NOIP_PUBLIC_IP:-n/d}; esito ${NOIP_RESULT:-n/d}; UPnP ${NOIP_UPNP:-n/d}"
 echo ""
 
 if [ "$DHCP_CONFLICT" = "1" ]; then
@@ -117,6 +149,10 @@ fi
 
 if [ "$MODE" = "router" ] && [ "$DHCP_EVENT_ACTIVE" = "1" ]; then
   mirror_pi_warn "Modalità router registrata ma DHCP evento ancora attivo."
+fi
+
+if [ -n "$NOIP_HALT" ]; then
+  mirror_pi_warn "No-IP fermo (${NOIP_HALT}). Controlla /etc/kor35/noip.env oppure: sudo ./scripts/mirror_noip_update.sh --force"
 fi
 
 echo ""

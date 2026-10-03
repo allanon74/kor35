@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: android-apk android-sync android-open android-path android-doctor android-reset-studio help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push check-media repair-rubriche-media sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db prod-turn-prepare pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart timer-dispatch timer-dispatch-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run bootstrap-kor35-mse-template bootstrap-kor35-mse-template-dry-run
+.PHONY: android-apk android-sync android-open android-path android-doctor android-reset-studio help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push check-media repair-rubriche-media sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls install-mirror-noip mirror-noip-update mirror-pi-install-noip mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db prod-turn-prepare pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart timer-dispatch timer-dispatch-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run bootstrap-kor35-mse-template bootstrap-kor35-mse-template-dry-run
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -90,6 +90,8 @@ help:
 	@echo "  make install-prod-tls-automation ENV=prod # su prod: webroot + hook + timer mirror"
 	@echo "  make install-mirror-ddns-tls ENV=mirror   # sul Pi: certbot kor35.ddns.net + timer"
 	@echo "  make mirror-renew-ddns-tls ENV=mirror     # sul Pi: rinnovo immediato DDNS"
+	@echo "  sudo make install-mirror-noip ENV=mirror  # sul Pi: client No-IP (kor35.ddns.net)"
+	@echo "  sudo make mirror-noip-update ENV=mirror   # sul Pi: aggiorna subito (FORCE=1)"
 	@echo "  make mirror-resync-after-event # full DB diagnose + media push + media pull"
 	@echo ""
 	@echo "Mirror Pi — rete (vedi docs/MIRROR_PI_NETWORK.md):"
@@ -107,6 +109,7 @@ help:
 	@echo "    make mirror-pi-network-mode MIRROR_NETWORK_MODE=router"
 	@echo "    make mirror-pi-configure MIRROR_NETWORK_MODE=router   # pull + install + mode + check"
 	@echo "    make mirror-pi-update                                 # pull + install (senza cambio mode)"
+	@echo "    make mirror-pi-install-noip                         # client No-IP sul Pi"
 	@echo ""
 	@echo "Backup:"
 	@echo "  make backup-db ENV=prod      # dump DB su file + rotazione (vedi scripts/backup_db_daily.sh)"
@@ -344,6 +347,15 @@ mirror-renew-ddns-tls:
 
 install-mirror-ddns-tls:
 	sudo ./scripts/install_mirror_ddns_tls.sh $(if $(filter 1,$(FORCE)),--force-renew,)
+
+install-mirror-noip:
+	sudo ./scripts/install_mirror_noip.sh
+
+mirror-noip-update:
+	sudo ./scripts/mirror_noip_update.sh $(if $(filter 1,$(FORCE)),--force,)
+
+mirror-pi-install-noip:
+	./scripts/mirror_pi_remote.sh install-noip
 
 mirror-resync-after-event:
 	./scripts/mirror_resync_after_event.sh --env "$(ENV)"

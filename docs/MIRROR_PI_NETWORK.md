@@ -77,6 +77,65 @@ sudo make mirror-configure ENV=mirror MIRROR_NETWORK_MODE=router MIRROR_NETWORK_
 
 **Non** committare chiavi private nel repo. Template SSH: `config/mirror/ssh-config.example`.
 
+## No-IP sul Raspberry (`kor35.ddns.net`)
+
+Il nome `kor35.ddns.net` è un hostname **No-IP**. Finché il client (DUC) gira sul PC Windows, il DNS segue l'IP pubblico di quel PC, non il Pi. Il client va tenuto **sul mirror**: quando il Pi cambia rete, aggiorna lui il DNS.
+
+| Cosa fa il client sul Pi | Cosa non fa |
+|--------------------------|-------------|
+| Legge l'IP pubblico della rete a cui è attaccato il Pi | Non apre da solo le porte se il router ha UPnP spento |
+| Ogni 5 minuti, e subito quando cambia la rete (NetworkManager) | Non attraversa il CGNAT di un hotspot telefono |
+| Prova UPnP: TCP 80, 443 e **22 interno → 10022 esterno** | Non sostituisce il forward già fatto a mano sul router di casa |
+
+### Installazione (sul Pi)
+
+```bash
+cd /home/pi/kor35-replica
+sudo make install-mirror-noip ENV=mirror
+sudo nano /etc/kor35/noip.env    # NOIP_USERNAME e NOIP_PASSWORD
+sudo make mirror-noip-update ENV=mirror FORCE=1
+```
+
+Username e password sono quelli dell'account No-IP (email) oppure una **DDNS key** dello stesso hostname. Il file `/etc/kor35/noip.env` resta sul Pi (`chmod 600`), non nel git. Template: `config/mirror/noip.env.example`.
+
+Da PC dev, dopo che il file credenziali è già sul Pi:
+
+```bash
+make mirror-pi-install-noip
+```
+
+`make mirror-install-network` installa anche questo client.
+
+### Spegnere il DUC Windows
+
+Sul PC dove oggi gira No-IP: icona nel tray → **Exit**, e toglilo dall'avvio automatico. Due client sullo stesso hostname si sovrascrivono: il nome oscillerebbe tra la casa e il posto nuovo.
+
+### Router nuovo
+
+Il DNS punta all'IP pubblico del router nuovo entro pochi minuti. Perché SSH e HTTPS rispondano servono gli stessi inoltri di casa:
+
+| Porta esterna | Verso il Pi |
+|---------------|-------------|
+| TCP 80 | TCP 80 (certificato Let's Encrypt) |
+| TCP 443 | TCP 443 |
+| TCP 10022 | TCP 22 |
+
+Se il router ha **UPnP** acceso, il Pi prova ad aprirle da solo (`miniupnpc`). Altrimenti vanno inserite nel pannello del router, verso l'IP LAN del Pi (non `192.168.100.1`, quello è la modalità evento).
+
+### Hotspot del telefono
+
+Collegare il Pi a un telefono gli dà Internet **in uscita**: la sync verso `www.kor35.it` può funzionare. L'ingresso no, nella quasi totalità dei gestori italiani: l'indirizzo è condiviso (CGNAT) e non si possono aprire le porte. In quel caso `kor35.ddns.net` o non è raggiungibile, o non deve essere puntato a un IP del gestore che non inoltra al Pi. Il client **non pubblica** un indirizzo `100.64.0.0/10`. Se il rilevamento vede un IP pubblico del gestore ma UPnP fallisce, lo scrive nel journal e il nome può aggiornarsi lo stesso: dall'esterno il Pi comunque non risponde finché non torna dietro un router con forward.
+
+Per lavorare sul Pi senza DNS: WiFi `Pi_Emergenza` → `ssh pi@10.42.0.1`, oppure il cavo LAN.
+
+Verifica:
+
+```bash
+./scripts/mirror_noip_update.sh --status
+journalctl -u kor35-mirror-noip.service -n 40 --no-pager
+getent hosts kor35.ddns.net
+```
+
 ## Due modalità operative
 
 | Modalità | Quando | LAN `eth0` | DHCP `192.168.100.0/24` | `www.kor35.it` |
