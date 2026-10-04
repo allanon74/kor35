@@ -77,6 +77,102 @@ sudo make mirror-configure ENV=mirror MIRROR_NETWORK_MODE=router MIRROR_NETWORK_
 
 **Non** committare chiavi private nel repo. Template SSH: `config/mirror/ssh-config.example`.
 
+## No-IP sul Raspberry (`kor35.ddns.net`)
+
+Il nome `kor35.ddns.net` è un hostname **No-IP**. Finché il client (DUC) gira sul PC Windows, il DNS segue l'IP pubblico di quel PC, non il Pi. Il client va tenuto **sul mirror**: quando il Pi cambia rete, aggiorna lui il DNS.
+
+| Cosa fa il client sul Pi | Cosa non fa |
+|--------------------------|-------------|
+| Legge l'IP pubblico della rete a cui è attaccato il Pi | Non apre da solo le porte se il router ha UPnP spento |
+| Ogni 5 minuti, e subito quando cambia la rete (NetworkManager) | Non attraversa il CGNAT di un hotspot telefono |
+| Prova UPnP: TCP 80, 443 e **22 interno → 10022 esterno** | Non sostituisce il forward già fatto a mano sul router di casa |
+
+### Installazione (sul Pi)
+
+```bash
+cd /home/pi/kor35-replica
+sudo make install-mirror-noip ENV=mirror
+sudo nano /etc/kor35/noip.env    # NOIP_USERNAME e NOIP_PASSWORD
+sudo make mirror-noip-update ENV=mirror FORCE=1
+```
+
+Username e password sono quelli dell'account No-IP (email) oppure una **DDNS key** dello stesso hostname. Il file `/etc/kor35/noip.env` resta sul Pi (`chmod 600`), non nel git. Template: `config/mirror/noip.env.example`.
+
+Da PC dev, dopo che il file credenziali è già sul Pi:
+
+```bash
+make mirror-pi-install-noip
+```
+
+`make mirror-install-network` installa anche questo client.
+
+### Spegnere il DUC Windows
+
+Sul PC dove oggi gira No-IP: icona nel tray → **Exit**, e toglilo dall'avvio automatico. Due client sullo stesso hostname si sovrascrivono: il nome oscillerebbe tra la casa e il posto nuovo.
+
+### Router nuovo
+
+Il DNS punta all'IP pubblico del router nuovo entro pochi minuti. Perché SSH e HTTPS rispondano servono gli stessi inoltri di casa:
+
+| Porta esterna | Verso il Pi |
+|---------------|-------------|
+| TCP 80 | TCP 80 (certificato Let's Encrypt) |
+| TCP 443 | TCP 443 |
+| TCP 10022 | TCP 22 |
+
+Se il router ha **UPnP** acceso, il Pi prova ad aprirle da solo (`miniupnpc`). Altrimenti vanno inserite nel pannello del router, verso l'IP LAN del Pi (non `192.168.100.1`, quello è la modalità evento).
+
+### Hotspot del telefono
+
+Collegare il Pi a un telefono gli dà Internet **in uscita**: la sync verso `www.kor35.it` può funzionare. L'ingresso no, nella quasi totalità dei gestori italiani: l'indirizzo è condiviso (CGNAT) e non si possono aprire le porte. In quel caso `kor35.ddns.net` o non è raggiungibile, o non deve essere puntato a un IP del gestore che non inoltra al Pi. Il client **non pubblica** un indirizzo `100.64.0.0/10`. Se il rilevamento vede un IP pubblico del gestore ma UPnP fallisce, lo scrive nel journal e il nome può aggiornarsi lo stesso: dall'esterno il Pi comunque non risponde finché non torna dietro un router con forward.
+
+Per lavorare sul Pi senza DNS: WiFi `Pi_Emergenza` → `ssh pi@10.42.0.1`, oppure il cavo LAN.
+
+Verifica:
+
+```bash
+./scripts/mirror_noip_update.sh --status
+journalctl -u kor35-mirror-noip.service -n 40 --no-pager
+getent hosts kor35.ddns.net
+```
+
+Per spegnere il client senza disinstallarlo: `sudo systemctl disable --now kor35-mirror-noip.timer`.
+
+## Galleria `mirror.kor35.it` (senza DDNS)
+
+Quando il Pi ha Internet, apre una galleria SSH verso `www.kor35.it`. Il server di produzione continua a servire `www.kor35.it` come prima. Il nome `mirror.kor35.it` entra nello stesso nginx e, se la galleria è su, arriva all'HTTPS del Pi. Se la galleria è giù, nginx risponde HTTP 200 con la pagina «Il server di mirror non è raggiungibile.» Un 502 prodotto dal Pi, a galleria attiva, non viene sostituito.
+
+Il telefono in evento basta: la connessione nasce dal Pi. In bosco senza alcun Internet la galleria cade e resta la pagina di avviso; la rete locale dell'evento non cambia.
+
+### DNS su Hetzner
+
+Zona `kor35.it`, stessi indirizzi di `www` (oggi il server è `195.201.127.182` e `2a01:4f8:1c18:89dd::1`; controlla con `dig +short www.kor35.it A` e `AAAA`):
+
+| Tipo | Nome | Valore |
+|------|------|--------|
+| A | `mirror` | IPv4 di `www.kor35.it` |
+| AAAA | `mirror` | IPv6 di `www.kor35.it` |
+
+Nessun redirect HTTP nel pannello DNS: lo fa nginx. Dopo la propagazione, sul server prod: `sudo make install-prod-mirror-tunnel ENV=prod` (emette il certificato Let's Encrypt).
+
+### Comandi
+
+```bash
+# Dalla postazione dev (installa prod e Pi e avvia la galleria)
+make mirror-tunnel-pair
+
+# Sul Pi
+sudo make install-mirror-tunnel ENV=mirror
+sudo make mirror-tunnel-up ENV=mirror
+make mirror-tunnel-status ENV=mirror
+
+# Sul server prod
+sudo make install-prod-mirror-tunnel ENV=prod
+sudo MIRROR_TUNNEL_STATUS_ROLE=prod ./scripts/mirror_tunnel_status.sh
+```
+
+La chiave privata sta sul Pi in `/etc/kor35/mirror-tunnel/` (non nel git). Su prod l'utente è `kor35-tunnel`, senza shell interattiva. La porta `18443` ascolta solo su localhost e sul bridge Docker, non su Internet.
+
 ## Due modalità operative
 
 | Modalità | Quando | LAN `eth0` | DHCP `192.168.100.0/24` | `www.kor35.it` |

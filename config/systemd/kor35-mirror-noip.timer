@@ -1,0 +1,11 @@
+[Unit]
+Description=KOR35 Mirror - Scheduler aggiornamento No-IP (kor35.ddns.net)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=15s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

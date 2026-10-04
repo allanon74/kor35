@@ -1,0 +1,65 @@
+# Vhost produzione per mirror.kor35.it.
+# Non copiare a mano sul Pi: questo file, una volta reso mirror-public.conf,
+# vive solo sul server prod (gitignored). Lo scrive scripts/install_prod_mirror_tunnel.sh
+# sostituendo @MIRROR_TUNNEL_UPSTREAM@ con l'IP del bridge Docker (es. 172.18.0.1:18443).
+#
+# www.kor35.it resta in default.conf e non passa da questa galleria.
+
+map $http_upgrade $kor35_mirror_connection {
+    default upgrade;
+    ""      close;
+}
+
+server {
+    listen 80;
+    server_name mirror.kor35.it;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        default_type "text/plain";
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name mirror.kor35.it;
+
+    ssl_certificate /etc/nginx/certs_mirror/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs_mirror/privkey.pem;
+    include /etc/nginx/conf.d/ssl_params.snippets;
+
+    client_max_body_size 64m;
+
+    location = /mirror-offline.html {
+        root /usr/share/nginx/mirror-offline;
+        internal;
+        add_header Cache-Control "no-store" always;
+    }
+
+    location / {
+        proxy_pass https://@MIRROR_TUNNEL_UPSTREAM@;
+        proxy_ssl_verify off;
+        proxy_ssl_server_name on;
+        proxy_ssl_name kor35.ddns.net;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $kor35_mirror_connection;
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 86400s;
+        proxy_read_timeout 86400s;
+        # Galleria giù o handshake TLS fallito: nginx genera 502/504.
+        # =200 fa vedere la pagina al browser (un 502 nudo viene scartato da curl -f
+        # e da alcuni client). proxy_intercept_errors resta spento: un 502 HTTP
+        # prodotto dal Pi, con la galleria su, arriva al client così com'è.
+        error_page 502 503 504 =200 /mirror-offline.html;
+    }
+}

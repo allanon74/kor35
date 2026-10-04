@@ -95,6 +95,13 @@ Master = `ENV=prod`. Replica = `dev-office`, `mirror`.
 | `make install-prod-tls-automation ENV=prod` | Webroot certbot + hook + timer mirror |
 | `make install-mirror-ddns-tls ENV=mirror` | Sul Pi: certbot `kor35.ddns.net` + timer |
 | `make mirror-renew-ddns-tls ENV=mirror FORCE=1` | Rinnovo immediato DDNS sul Pi |
+| `sudo make install-mirror-noip ENV=mirror` | Sul Pi: client No-IP (il DNS segue il Raspberry) |
+| `sudo make mirror-noip-update ENV=mirror FORCE=1` | Aggiorna subito `kor35.ddns.net` |
+| `sudo make install-mirror-tunnel ENV=mirror` | Sul Pi: galleria SSH verso prod |
+| `sudo make mirror-tunnel-up ENV=mirror` | Riavvia la galleria |
+| `make mirror-tunnel-status ENV=mirror` | Stato galleria sul Pi |
+| `sudo make install-prod-mirror-tunnel ENV=prod` | Su prod: vhost `mirror.kor35.it` + certificato |
+| `make mirror-tunnel-pair` | Da PC dev: installa prod e Pi e avvia la galleria |
 
 Script: `scripts/sync_tls_certs_to_mirror.sh`, `scripts/mirror_renew_ddns_tls.sh`. Host mirror: `pi@kor35.ddns.net:10022`.
 
@@ -146,6 +153,7 @@ SSH: `kor35-mirror` → `kor35.ddns.net:10022`, utente `pi`.
 | `make mirror-pi-network-mode MIRROR_NETWORK_MODE=router` | Cambio modalità |
 | `make mirror-pi-configure MIRROR_NETWORK_MODE=router` | Pull + install + mode + check |
 | `make mirror-pi-update` | Pull + install (senza cambio mode) |
+| `make mirror-pi-install-noip` | Installa il client No-IP sul Pi |
 
 ---
 

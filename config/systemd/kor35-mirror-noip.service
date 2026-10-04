@@ -1,0 +1,14 @@
+[Unit]
+Description=KOR35 Mirror - Aggiorna No-IP (kor35.ddns.net)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/home/pi/kor35-replica
+ExecStart=/home/pi/kor35-replica/scripts/mirror_noip_update.sh
+
+NoNewPrivileges=true
+PrivateTmp=true
