@@ -157,6 +157,11 @@ config/docker/nginx-docker/certs/
 config/docker/nginx-docker/certs_ddns/
 # Config Nginx attiva sul Pi per kor35.ddns.net (generata da ddns.conf.example)
 config/docker/nginx-docker/nginx_conf/ddns.conf
+
+# Vhost prod di mirror.kor35.it (generato da mirror-public.conf.example)
+config/docker/nginx-docker/nginx_conf/mirror-public.conf
+config/docker/nginx-docker/certs_mirror/*
+!config/docker/nginx-docker/certs_mirror/.gitkeep
 .edge_sync_state.json
 .runtime-state/
 

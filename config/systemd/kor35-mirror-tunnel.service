@@ -1,0 +1,14 @@
+[Unit]
+Description=KOR35 Mirror - Galleria SSH verso la produzione (mirror.kor35.it)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/pi/kor35-replica/scripts/mirror_tunnel_connect.sh
+Restart=always
+RestartSec=20
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

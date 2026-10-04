@@ -136,6 +136,11 @@ echo "DHCP evento (dnsmasq):   $([ "$DHCP_EVENT_ACTIVE" = "1" ] && echo ATTIVO |
 echo "WiFi emergenza service:  $([ "$EMERGENCY_WIFI_ACTIVE" = "1" ] && echo ATTIVO || echo spento)"
 echo "Nginx vhost evento HTTP: $([ "$NGINX_EVENT_VHOST" = "1" ] && echo attivo || echo disattivo)"
 echo "No-IP kor35.ddns.net:    timer ${NOIP_TIMER}; IP ${NOIP_PUBLIC_IP:-n/d}; esito ${NOIP_RESULT:-n/d}; UPnP ${NOIP_UPNP:-n/d}"
+TUNNEL_STATE="n/d"
+if command -v systemctl >/dev/null 2>&1; then
+  TUNNEL_STATE="$(systemctl is-active kor35-mirror-tunnel.service 2>/dev/null || echo inactive)"
+fi
+echo "Galleria mirror.kor35.it: ${TUNNEL_STATE}"
 echo ""
 
 if [ "$DHCP_CONFLICT" = "1" ]; then

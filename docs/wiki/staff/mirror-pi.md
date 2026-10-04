@@ -141,6 +141,28 @@ Poi **chiudi il DUC sul PC Windows** (tray → Exit, e toglilo dall'avvio). Due 
 
 Dettaglio: `docs/MIRROR_PI_NETWORK.md`, sezione No-IP. Diagnostica: `./scripts/mirror_noip_update.sh --status`.
 
+Per fermare solo il client No-IP: `sudo systemctl disable --now kor35-mirror-noip.timer`.
+
+### Galleria `mirror.kor35.it`
+
+Se il Pi ha Internet (router o hotspot del telefono), apre una galleria SSH verso la produzione. `www.kor35.it` non cambia. `mirror.kor35.it` parla con il nginx del Pi attraverso la galleria. Galleria spenta o Pi offline: pagina «Il server di mirror non è raggiungibile.»
+
+DNS su Hetzner, zona `kor35.it` (stessi IP di `www.kor35.it`):
+
+| Tipo | Nome | Valore |
+|------|------|--------|
+| A | `mirror` | IPv4 di www |
+| AAAA | `mirror` | IPv6 di www |
+
+```bash
+make mirror-tunnel-pair
+sudo make mirror-tunnel-up ENV=mirror
+make mirror-tunnel-status ENV=mirror
+sudo make install-prod-mirror-tunnel ENV=prod
+```
+
+Dopo il record DNS, rilancia `install-prod-mirror-tunnel` sul server prod per Let's Encrypt. Dettaglio: `docs/MIRROR_PI_NETWORK.md`.
+
 In **modalità evento** offline: `http://www.kor35.it` (HTTP). HTTPS richiede cert aggiornati sul Pi.
 
 **Come funziona:** a ogni boot il Pi prova prima **NetworkManager** (`Hotspot-Emergenza`); se fallisce, **hostapd** da repo se la PSK è configurata. `MIRROR_NETWORK_AUTO_BOOT=0` riguarda solo router/event automatico, non la WiFi emergenza.

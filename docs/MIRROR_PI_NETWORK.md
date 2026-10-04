@@ -136,6 +136,43 @@ journalctl -u kor35-mirror-noip.service -n 40 --no-pager
 getent hosts kor35.ddns.net
 ```
 
+Per spegnere il client senza disinstallarlo: `sudo systemctl disable --now kor35-mirror-noip.timer`.
+
+## Galleria `mirror.kor35.it` (senza DDNS)
+
+Quando il Pi ha Internet, apre una galleria SSH verso `www.kor35.it`. Il server di produzione continua a servire `www.kor35.it` come prima. Il nome `mirror.kor35.it` entra nello stesso nginx e, se la galleria è su, arriva all'HTTPS del Pi. Se la galleria è giù, la pagina dice «Il server di mirror non è raggiungibile.»
+
+Il telefono in evento basta: la connessione nasce dal Pi. In bosco senza alcun Internet la galleria cade e resta la pagina di avviso; la rete locale dell'evento non cambia.
+
+### DNS su Hetzner
+
+Zona `kor35.it`, stessi indirizzi di `www` (oggi il server è `195.201.127.182` e `2a01:4f8:1c18:89dd::1`; controlla con `dig +short www.kor35.it A` e `AAAA`):
+
+| Tipo | Nome | Valore |
+|------|------|--------|
+| A | `mirror` | IPv4 di `www.kor35.it` |
+| AAAA | `mirror` | IPv6 di `www.kor35.it` |
+
+Nessun redirect HTTP nel pannello DNS: lo fa nginx. Dopo la propagazione, sul server prod: `sudo make install-prod-mirror-tunnel ENV=prod` (emette il certificato Let's Encrypt).
+
+### Comandi
+
+```bash
+# Dalla postazione dev (installa prod e Pi e avvia la galleria)
+make mirror-tunnel-pair
+
+# Sul Pi
+sudo make install-mirror-tunnel ENV=mirror
+sudo make mirror-tunnel-up ENV=mirror
+make mirror-tunnel-status ENV=mirror
+
+# Sul server prod
+sudo make install-prod-mirror-tunnel ENV=prod
+sudo MIRROR_TUNNEL_STATUS_ROLE=prod ./scripts/mirror_tunnel_status.sh
+```
+
+La chiave privata sta sul Pi in `/etc/kor35/mirror-tunnel/` (non nel git). Su prod l'utente è `kor35-tunnel`, senza shell interattiva. La porta `18443` ascolta solo su localhost e sul bridge Docker, non su Internet.
+
 ## Due modalità operative
 
 | Modalità | Quando | LAN `eth0` | DHCP `192.168.100.0/24` | `www.kor35.it` |

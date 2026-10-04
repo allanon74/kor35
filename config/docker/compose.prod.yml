@@ -77,4 +77,6 @@ services:
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
       - ./nginx-docker/certs:/etc/nginx/certs:ro
+      - ./nginx-docker/certs_mirror:/etc/nginx/certs_mirror:ro
+      - ./nginx-docker/mirror-offline:/usr/share/nginx/mirror-offline:ro
       - ./nginx-docker/certbot_webroot:/var/www/certbot:ro

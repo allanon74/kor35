@@ -97,6 +97,11 @@ Master = `ENV=prod`. Replica = `dev-office`, `mirror`.
 | `make mirror-renew-ddns-tls ENV=mirror FORCE=1` | Rinnovo immediato DDNS sul Pi |
 | `sudo make install-mirror-noip ENV=mirror` | Sul Pi: client No-IP (il DNS segue il Raspberry) |
 | `sudo make mirror-noip-update ENV=mirror FORCE=1` | Aggiorna subito `kor35.ddns.net` |
+| `sudo make install-mirror-tunnel ENV=mirror` | Sul Pi: galleria SSH verso prod |
+| `sudo make mirror-tunnel-up ENV=mirror` | Riavvia la galleria |
+| `make mirror-tunnel-status ENV=mirror` | Stato galleria sul Pi |
+| `sudo make install-prod-mirror-tunnel ENV=prod` | Su prod: vhost `mirror.kor35.it` + certificato |
+| `make mirror-tunnel-pair` | Da PC dev: installa prod e Pi e avvia la galleria |
 
 Script: `scripts/sync_tls_certs_to_mirror.sh`, `scripts/mirror_renew_ddns_tls.sh`. Host mirror: `pi@kor35.ddns.net:10022`.
 

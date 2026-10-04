@@ -519,6 +519,7 @@ CSRF_TRUSTED_ORIGINS = [
     "https://social.kor35.it",
     "https://kor35.ddns.net",
     "http://kor35.ddns.net",  # mirror LAN spesso in HTTP
+    "https://mirror.kor35.it",
     "http://127.0.0.1:8080",
     "http://localhost:8080",
 ]
