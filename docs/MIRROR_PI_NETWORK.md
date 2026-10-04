@@ -140,7 +140,7 @@ Per spegnere il client senza disinstallarlo: `sudo systemctl disable --now kor35
 
 ## Galleria `mirror.kor35.it` (senza DDNS)
 
-Quando il Pi ha Internet, apre una galleria SSH verso `www.kor35.it`. Il server di produzione continua a servire `www.kor35.it` come prima. Il nome `mirror.kor35.it` entra nello stesso nginx e, se la galleria è su, arriva all'HTTPS del Pi. Se la galleria è giù, la pagina dice «Il server di mirror non è raggiungibile.»
+Quando il Pi ha Internet, apre una galleria SSH verso `www.kor35.it`. Il server di produzione continua a servire `www.kor35.it` come prima. Il nome `mirror.kor35.it` entra nello stesso nginx e, se la galleria è su, arriva all'HTTPS del Pi. Se la galleria è giù, nginx risponde HTTP 200 con la pagina «Il server di mirror non è raggiungibile.» Un 502 prodotto dal Pi, a galleria attiva, non viene sostituito.
 
 Il telefono in evento basta: la connessione nasce dal Pi. In bosco senza alcun Internet la galleria cade e resta la pagina di avviso; la rete locale dell'evento non cambia.
 

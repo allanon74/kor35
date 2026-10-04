@@ -56,7 +56,10 @@ server {
         proxy_connect_timeout 5s;
         proxy_send_timeout 86400s;
         proxy_read_timeout 86400s;
-        proxy_intercept_errors on;
-        error_page 502 503 504 /mirror-offline.html;
+        # Galleria giù o handshake TLS fallito: nginx genera 502/504.
+        # =200 fa vedere la pagina al browser (un 502 nudo viene scartato da curl -f
+        # e da alcuni client). proxy_intercept_errors resta spento: un 502 HTTP
+        # prodotto dal Pi, con la galleria su, arriva al client così com'è.
+        error_page 502 503 504 =200 /mirror-offline.html;
     }
 }

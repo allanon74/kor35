@@ -145,7 +145,7 @@ Per fermare solo il client No-IP: `sudo systemctl disable --now kor35-mirror-noi
 
 ### Galleria `mirror.kor35.it`
 
-Se il Pi ha Internet (router o hotspot del telefono), apre una galleria SSH verso la produzione. `www.kor35.it` non cambia. `mirror.kor35.it` parla con il nginx del Pi attraverso la galleria. Galleria spenta o Pi offline: pagina «Il server di mirror non è raggiungibile.»
+Se il Pi ha Internet (router o hotspot del telefono), apre una galleria SSH verso la produzione. `www.kor35.it` non cambia. `mirror.kor35.it` parla con il nginx del Pi attraverso la galleria. Galleria spenta o Pi offline: pagina «Il server di mirror non è raggiungibile.» (HTTP 200). Un errore del sito sul Pi, con la galleria attiva, non viene sostituito da questa pagina.
 
 DNS su Hetzner, zona `kor35.it` (stessi IP di `www.kor35.it`):
 

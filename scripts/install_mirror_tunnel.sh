@@ -42,7 +42,7 @@ if ! command -v ssh >/dev/null 2>&1; then
   DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-client
 fi
 
-install -d -m 0750 /etc/kor35/mirror-tunnel
+install -d -m 0755 /etc/kor35/mirror-tunnel
 KEY=/etc/kor35/mirror-tunnel/id_ed25519
 if [ ! -f "$KEY" ]; then
   ssh-keygen -t ed25519 -N "" -C "kor35-mirror-tunnel" -f "$KEY"

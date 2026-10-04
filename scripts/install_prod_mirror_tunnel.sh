@@ -129,8 +129,11 @@ fi
 
 install -d -m 0750 -o "$RUN_USER" -g "$RUN_USER" "$CERT_DEST"
 install -d -m 0755 "$OFFLINE_DIR"
-install -m 0644 "${ROOT_DIR}/config/docker/nginx-docker/mirror-offline/mirror-offline.html" \
-  "${OFFLINE_DIR}/mirror-offline.html"
+src_html="${ROOT_DIR}/config/docker/nginx-docker/mirror-offline/mirror-offline.html"
+dst_html="${OFFLINE_DIR}/mirror-offline.html"
+if [ "$src_html" != "$dst_html" ]; then
+  install -m 0644 "$src_html" "$dst_html"
+fi
 
 if [ ! -s "${CERT_DEST}/fullchain.pem" ] || [ ! -s "${CERT_DEST}/privkey.pem" ]; then
   openssl req -x509 -nodes -newkey rsa:2048 -days 30 \

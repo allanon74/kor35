@@ -47,7 +47,7 @@ upload pi /home/pi/kor35-replica
 mirror_ssh_run "cd /home/pi/kor35-replica && sudo ./scripts/install_mirror_tunnel.sh --no-start"
 mirror_ssh_build_args
 ssh "${MIRROR_SSH_ARGS[@]}" "$MIRROR_SSH_EFFECTIVE_TARGET" \
-  "cat /etc/kor35/mirror-tunnel/id_ed25519.pub" > /tmp/kor35-mirror-tunnel.pub
+  "sudo cat /etc/kor35/mirror-tunnel/id_ed25519.pub" > /tmp/kor35-mirror-tunnel.pub
 chmod 600 /tmp/kor35-mirror-tunnel.pub
 
 prod_ssh_build_args
