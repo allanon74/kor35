@@ -16,10 +16,12 @@ from django.utils.dateparse import parse_datetime
 from kor35.syncing import (
     apply_natural_pk_precheck,
     build_model_sync_records,
+    coerce_sync_scalar_value,
     ensure_qrcode_natural_pk_aligned,
     find_pilot_catalog_counterpart,
     lww_update_existing,
     pagina_regolamento_sync_field_allowed,
+    restore_auto_now_add_from_sync,
     touch_sync_updated_at,
     try_apply_mti_child_fields_when_skipped,
     try_apply_pagina_regolamento_structure_when_skipped,
@@ -429,12 +431,7 @@ class Command(BaseCommand):
                         return "defer"
                 update_data[field.name] = resolved
                 continue
-            if field.name == "updated_at":
-                dt = parse_datetime(value) if value else None
-                if dt:
-                    update_data[field.name] = dt
-                continue
-            update_data[field.name] = value
+            update_data[field.name] = coerce_sync_scalar_value(field, value)
 
         pk_result, local_obj = apply_natural_pk_precheck(
             model, sync_id, row, update_data, remote_updated_at, local_obj
@@ -589,6 +586,7 @@ class Command(BaseCommand):
                 return "defer"
             getattr(obj, field_name).set(resolved_list)
 
+        restore_auto_now_add_from_sync(model, obj, update_data)
         if remote_updated_at:
             model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
 

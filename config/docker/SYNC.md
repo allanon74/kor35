@@ -79,6 +79,22 @@ Campi sulla tabella figlia (`usa_effetto_temporaneo`, `oggetto_runtime_config`, 
 
 Identificare un record: **`sync_id`**, non l’`id` numerico (diverso tra ambienti).
 
+## DateTime nel payload e `save()` dei modelli
+
+Export JSON: i `DateTimeField` diventano stringhe ISO. All’apply vanno riconvertiti **prima** di `update_or_create`/`save()` (`coerce_sync_scalar_value` in `kor35/syncing.py`). Senza conversione, un `save()` che fa aritmetica su datetime (es. `StaffCompito.scadenza - timedelta`) alza `TypeError`, il record resta *defer* e il cursore `since` avanza comunque: i compiti spariscono dal delta e **non tornano** finché non fai un pull completo.
+
+`auto_now_add` su `created_at` ignora il valore remoto in creazione: dopo l’apply si riallinea col payload (`restore_auto_now_add_from_sync`). Altrimenti gli eventi runtime di pilotaggio (`EventoAttivoSessione`) sul mirror hanno `created_at` = istante sync e `deadline_at` originale, quindi countdown di migliaia di secondi (o negativi).
+
+Recupero dopo il fix (sul nodo replica, **dopo** il deploy del backend):
+
+```bash
+make sync-db-full ENV=mirror
+# oppure da PC: make mirror-pi-pull  poi sul Pi:
+# make sync-db-full ENV=mirror
+```
+
+Sintomo nei log: `gestione_plot.staffcompito: TypeError: unsupported operand type(s) for -: 'str' and 'datetime.timedelta'`.
+
 ## Comandi utili
 
 ```bash

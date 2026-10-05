@@ -4,9 +4,11 @@ from typing import Any, Iterator, Literal
 
 from django.apps import apps
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.files.base import File
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 
 
@@ -91,6 +93,68 @@ def json_safe_for_sync(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)):
         return value
     return str(value)
+
+
+def coerce_sync_scalar_value(field: models.Field, value: Any) -> Any:
+    """
+    Il payload JSON serializza datetime/decimal/UUID come stringhe.
+    Senza conversione, `Model.save()` che fa aritmetica su DateTimeField
+    (es. StaffCompito.scadenza - timedelta) alza TypeError e il record resta defer.
+    """
+    if isinstance(field, (models.ForeignKey, models.OneToOneField, models.FileField)):
+        return value
+    if value is None:
+        return None
+    if value == "" and isinstance(
+        field,
+        (models.DateTimeField, models.DateField, models.TimeField, models.DecimalField),
+    ):
+        return None
+    if not isinstance(
+        field,
+        (
+            models.DateTimeField,
+            models.DateField,
+            models.TimeField,
+            models.DecimalField,
+            models.UUIDField,
+        ),
+    ):
+        return value
+    try:
+        return field.to_python(value)
+    except (TypeError, ValueError, ValidationError):
+        if isinstance(field, models.DateTimeField) and isinstance(value, str):
+            parsed = parse_datetime(value)
+            if parsed is not None:
+                if timezone.is_naive(parsed) and timezone.is_aware(timezone.now()):
+                    return timezone.make_aware(parsed, timezone.get_current_timezone())
+                return parsed
+        return value
+
+
+def restore_auto_now_add_from_sync(
+    model: type[models.Model], obj: models.Model | None, update_data: dict[str, Any]
+) -> None:
+    """
+    `auto_now_add` ignora il valore passato a `update_or_create` in creazione.
+    Senza questo, `created_at` diventa l'istante dell'apply e i countdown
+    (deadline - created) sugli eventi di pilotaggio risultano enormi o negativi.
+    """
+    if obj is None or not update_data:
+        return
+    patch: dict[str, Any] = {}
+    for field in model._meta.concrete_fields:
+        if not getattr(field, "auto_now_add", False):
+            continue
+        if field.name not in update_data:
+            continue
+        val = update_data[field.name]
+        if val is None:
+            continue
+        patch[field.name] = val
+    if patch:
+        model.objects.filter(pk=obj.pk).update(**patch)
 
 
 def expand_paginaregolamento_queryset_with_ancestors(model: type[models.Model], qs):

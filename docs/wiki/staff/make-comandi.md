@@ -69,7 +69,7 @@ Master = `ENV=prod`. Replica = `dev-office`, `mirror`.
 | Comando | Descrizione |
 |---------|-------------|
 | `make sync-db ENV=<profilo>` | Pull-only DB (`SYNC_SINCE=ISO` opzionale) |
-| `make sync-db-full ENV=<profilo>` | Pull completo da 1970 |
+| `make sync-db-full ENV=<profilo>` | Pull completo da 1970 (serve se un apply defer ha fatto avanzare `since` senza salvare i record, es. compiti staff) |
 | `make sync-db-diagnose ENV=<profilo>` | Pull + diagnostica SegnoZodiacale |
 | `make sync-db-full-diagnose ENV=<profilo>` | Full pull + diagnostica |
 | `make sync-media` | Pull media via rsync (`.env.sync-media`) |

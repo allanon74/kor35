@@ -583,6 +583,75 @@ class EdgeSyncPilotCatalogLwwTests(TestCase):
         self.assertEqual(evento.sottosistema_id, local.pk)
 
 
+class EdgeSyncStaffCompitoDatetimeTests(TestCase):
+    """I compiti staff devono applicarsi anche se scadenza/created_at arrivano come ISO."""
+
+    def test_compiti_nel_registry(self):
+        registry = get_sync_model_registry()
+        self.assertIn("gestione_plot.staffcompito", registry)
+        self.assertIn("gestione_plot.staffcompitoassegnazione", registry)
+        self.assertIn("gestione_plot.staffcompitoautomatico", registry)
+
+    def test_apply_scadenza_iso_non_fa_typeerror(self):
+        from django.contrib.auth.models import User
+        from gestione_plot.models import StaffCompito, StaffCompitoAssegnazione
+        from personaggi.models import Campagna
+
+        campagna = Campagna.objects.create(
+            slug=f"sync-compiti-{uuid.uuid4().hex[:8]}",
+            nome="Sync Compiti",
+            attiva=True,
+        )
+        user = User.objects.create_user(
+            "staff_sync_compiti",
+            password="x",
+            email="staff.sync.compiti@example.com",
+        )
+        created = timezone.now() - timedelta(days=2)
+        scadenza = timezone.now() + timedelta(hours=5)
+        remote_id = uuid.uuid4()
+        view = EdgeSyncView()
+        result = view._try_apply_one(
+            StaffCompito,
+            {
+                "sync_id": str(remote_id),
+                "updated_at": timezone.now().isoformat(),
+                "created_at": created.isoformat(),
+                "campagna": str(campagna.sync_id),
+                "titolo": "Compito da prod",
+                "descrizione": "",
+                "scadenza": scadenza.isoformat(),
+                "preavviso_minuti": 60,
+                "preavviso_at": (scadenza - timedelta(minutes=60)).isoformat(),
+                "crea_notifica_scadenza": True,
+                "creato_da": user.email,
+                "attivo": True,
+            },
+        )
+        self.assertEqual(result, "applied")
+        obj = StaffCompito.objects.get(sync_id=remote_id)
+        self.assertLess(abs((obj.created_at - created).total_seconds()), 2)
+        self.assertTrue(timezone.is_aware(obj.scadenza))
+        self.assertIsNotNone(obj.preavviso_at)
+
+        ass_id = uuid.uuid4()
+        result_ass = view._try_apply_one(
+            StaffCompitoAssegnazione,
+            {
+                "sync_id": str(ass_id),
+                "updated_at": timezone.now().isoformat(),
+                "created_at": created.isoformat(),
+                "compito": str(obj.sync_id),
+                "user": user.email,
+                "completato_at": None,
+                "push_preavviso_inviata": False,
+                "push_scadenza_inviata": False,
+            },
+        )
+        self.assertEqual(result_ass, "applied")
+        self.assertEqual(StaffCompitoAssegnazione.objects.filter(compito=obj).count(), 1)
+
+
 class EdgeSyncRubricheRegistryTests(TestCase):
     def test_rubriche_models_in_registry(self):
         registry = get_sync_model_registry()

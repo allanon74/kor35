@@ -264,6 +264,7 @@ journalctl -u kor35-mirror-db-sync.service -n 80 --no-pager
 journalctl -u kor35-mirror-media-sync.service -n 80 --no-pager
 systemctl list-timers | grep -E 'kor35-mirror-(db-sync|media-sync)'
 make sync-db ENV=mirror
+make sync-db-full ENV=mirror   # se i compiti staff o altri record “vecchi” mancano (cursore since già avanzato)
 make sync-media          # path da .env.sync-media → master
 make check-media ENV=mirror   # path rubriche mancanti su disco
 ```
