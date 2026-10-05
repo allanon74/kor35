@@ -11,6 +11,7 @@ Pagine **solo staff** nella Wiki KOR, sincronizzate nel DB (`PaginaRegolamento`)
 | `console-scientifica.md` | Utilizzo Console Scientifica (spettro, scan, matrice, interventi) |
 | `mirror-pi.md` | Procedure mirror Raspberry Pi |
 | `card-studio-sette-elegie.md` | Card Studio — creare carta Sette Elegie |
+| `sezioni-condizionali.md` | Tessiture e infusioni condizionali (`staff-sezioni-condizionali`) |
 
 ## Aggiornare la Wiki
 
