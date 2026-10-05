@@ -10,7 +10,6 @@ import FormulaBuilderModal from './FormulaBuilderModal';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import ActivationCostInline from './inlines/ActivationCostInline';
 import SezioniCondizionaliEditor from './inlines/SezioniCondizionaliEditor';
-import SearchableSelect from './SearchableSelect';
 import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
 
 /** Garantisce che l'abilità già salvata compaia nel select anche se fuori dalla prima pagina API. */
