@@ -1,5 +1,5 @@
 import uuid
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, Iterator, Literal
 
 from django.apps import apps
@@ -617,6 +617,49 @@ _MTICHILD_PATCH_DENYLIST = frozenset(
     }
 )
 
+# Eccezione alla denylist / al skip per payload stale: campi staff/catalogo sulla
+# tabella figlia che devono convergere anche se un touch locale (M2M, inventario,
+# login) ha reso `updated_at` più recente. Prestigio e punti allineamento usano
+# max-wins così un premio assegnato sul master non viene perso, e un premio
+# assegnato sull'edge durante l'evento non viene ribassato da un pull stale.
+_MTI_CHILD_ALWAYS_SYNC_FIELDS = {
+    "personaggi.personaggio": frozenset(
+        {
+            "prestigio",
+            "punti_luminosi",
+            "punti_oscuri",
+            "punti_grigi",
+        }
+    ),
+    "personaggi.carriera": frozenset(
+        {
+            "fattore_task_crediti",
+            "fattore_task_prestigio",
+            "sottoscrive_contratti",
+            "slot_contratto_base",
+            "bonus_crediti_evento",
+        }
+    ),
+}
+
+_MTI_CHILD_MAX_WINS_FIELDS = frozenset(
+    {
+        "prestigio",
+        "punti_luminosi",
+        "punti_oscuri",
+        "punti_grigi",
+    }
+)
+
+
+def _mti_remote_numeric_wins(remote_value: Any, local_value: Any) -> bool:
+    try:
+        remote_n = Decimal(str(remote_value))
+        local_n = Decimal(str(local_value if local_value is not None else 0))
+    except (InvalidOperation, TypeError, ValueError):
+        return False
+    return remote_n > local_n
+
 
 def try_apply_mti_child_fields_when_skipped(
     local_obj: models.Model,
@@ -639,17 +682,23 @@ def try_apply_mti_child_fields_when_skipped(
     Se il record locale è più recente del payload (remote < local), non applicare:
     altrimenti un mirror/edge in ritardo può azzerare modifiche già salvate sul Master
     (es. usa_effetto_temporaneo su Tessitura).
+
+    Eccezione: `_MTI_CHILD_ALWAYS_SYNC_FIELDS` (prestigio, fattori KORP). Senza di essa
+    un touch locale sul Personaggio/Carriera lascia il mirror con timestamp più nuovo
+    e valori staff/catalogo vecchi; la denylist Personaggio bloccherebbe anche il
+    caso di timestamp uguale. Prestigio/punti: solo se il remoto è maggiore.
     """
     label = local_obj._meta.label_lower
-    if label in _MTICHILD_PATCH_DENYLIST:
-        return "noop"
-    if not local_obj._meta.parents:
-        return "noop"
-    if (
+    always_fields = _MTI_CHILD_ALWAYS_SYNC_FIELDS.get(label, frozenset())
+    denied = label in _MTICHILD_PATCH_DENYLIST
+    stale_remote = (
         remote_updated_at is not None
         and local_updated_at is not None
         and remote_updated_at < local_updated_at
-    ):
+    )
+    if not local_obj._meta.parents:
+        return "noop"
+    if (denied or stale_remote) and not always_fields:
         return "noop"
 
     patch: dict[str, Any] = {}
@@ -659,6 +708,8 @@ def try_apply_mti_child_fields_when_skipped(
         if isinstance(field, models.ForeignKey) and getattr(field.remote_field, "parent_link", False):
             continue
         if field.name not in row:
+            continue
+        if (denied or stale_remote) and field.name not in always_fields:
             continue
         value = row[field.name]
         if isinstance(field, models.ForeignKey):
@@ -672,7 +723,11 @@ def try_apply_mti_child_fields_when_skipped(
                 patch[field.name] = resolved
             continue
 
+        value = coerce_sync_scalar_value(field, value)
         current = getattr(local_obj, field.name)
+        if field.name in _MTI_CHILD_MAX_WINS_FIELDS and (denied or stale_remote):
+            if not _mti_remote_numeric_wins(value, current):
+                continue
         if json_safe_for_sync(current) != json_safe_for_sync(value):
             patch[field.name] = value
 

@@ -95,6 +95,17 @@ make sync-db-full ENV=mirror
 
 Sintomo nei log: `gestione_plot.staffcompito: TypeError: unsupported operand type(s) for -: 'str' and 'datetime.timedelta'`.
 
+## Prestigio, punti allineamento e fattori KORP
+
+`Personaggio` è in denylist MTI (stato di gioco live): un touch locale su inventario/M2M rende `updated_at` più nuovo del master e LWW salta gli scalari, lasciando il mirror con Prestigio/punti vecchi. Stesso schema sui campi catalogo di `Carriera` (`fattore_task_*`, `sottoscrive_contratti`, slot, bonus).
+
+All’apply, se il record viene saltato per timestamp:
+
+- **prestigio / punti luminosi-oscuri-grigi**: si applica il valore remoto solo se è *maggiore* (max-wins: recupera i premi staff sul master, non ribassa un premio assegnato sull’edge).
+- **fattori KORP / contratti sulla Carriera**: si allineano dal payload anche se locale è più recente (catalogo: edit sul master).
+
+Dopo il deploy del backend sulla replica, `make sync-db-full ENV=mirror` **prima** del push verso il master, così il mirror recupera i valori staff e non rispedisce Prestigio=1 o fattori 1.00.
+
 ## Comandi utili
 
 ```bash

@@ -14,7 +14,18 @@ from personaggi.carte_collezionabili_models import (
     CartaCollezionabile,
     CartaErrata,
 )
-from personaggi.models import Campagna, Manifesto, MinigiocoQrConfig, Punteggio, QrCode, Tessitura
+from personaggi.models import (
+    Campagna,
+    Carriera,
+    Manifesto,
+    MinigiocoQrConfig,
+    Personaggio,
+    Punteggio,
+    QrCode,
+    Tessitura,
+    TipoCarriera,
+    TipologiaPersonaggio,
+)
 from pilotaggio.models import SottosistemaNave
 
 
@@ -374,6 +385,105 @@ class EdgeSyncMtiChildLwwTests(TestCase):
             tess.oggetto_runtime_config,
             {"nome": "Runtime", "slot_key": "melee", "modificatori": []},
         )
+
+
+class EdgeSyncMtiStaffCatalogTests(TestCase):
+    """Prestigio e fattori KORP devono convergere anche se il locale ha updated_at più nuovo."""
+
+    def test_prestigio_remoto_maggiore_applica_anche_se_locale_piu_recente(self):
+        campagna = Campagna.objects.create(
+            slug=f"sync-prestigio-{uuid.uuid4().hex[:8]}",
+            nome="Sync Prestigio",
+            attiva=True,
+        )
+        tipologia = TipologiaPersonaggio.objects.create(nome="Giocante sync prestigio")
+        pg = Personaggio.objects.create(
+            nome="Miranda sync",
+            campagna=campagna,
+            tipologia=tipologia,
+            prestigio=1,
+            punti_luminosi=0,
+        )
+        now = timezone.now()
+        Personaggio.objects.filter(pk=pg.pk).update(updated_at=now)
+        pg.refresh_from_db()
+
+        row = serialize_for_sync(pg)
+        row["prestigio"] = 75000
+        row["punti_luminosi"] = 4
+        row["watch_enabled"] = True
+        row["updated_at"] = (now - timedelta(minutes=2)).isoformat()
+
+        view = EdgeSyncView()
+        result = view._try_apply_one(Personaggio, row)
+        self.assertIn(result, ("skipped", "applied"))
+
+        pg.refresh_from_db()
+        self.assertEqual(pg.prestigio, 75000)
+        self.assertEqual(pg.punti_luminosi, 4)
+        self.assertFalse(pg.watch_enabled)
+
+    def test_prestigio_locale_maggiore_non_viene_ribassato_da_payload_stale(self):
+        campagna = Campagna.objects.create(
+            slug=f"sync-prestigio-keep-{uuid.uuid4().hex[:8]}",
+            nome="Sync Prestigio keep",
+            attiva=True,
+        )
+        tipologia = TipologiaPersonaggio.objects.create(nome="Giocante sync keep")
+        pg = Personaggio.objects.create(
+            nome="Alice edge",
+            campagna=campagna,
+            tipologia=tipologia,
+            prestigio=110,
+        )
+        now = timezone.now()
+        Personaggio.objects.filter(pk=pg.pk).update(updated_at=now)
+        pg.refresh_from_db()
+
+        row = serialize_for_sync(pg)
+        row["prestigio"] = 100
+        row["updated_at"] = (now - timedelta(hours=1)).isoformat()
+
+        view = EdgeSyncView()
+        result = view._try_apply_one(Personaggio, row)
+        self.assertIn(result, ("skipped", "applied"))
+
+        pg.refresh_from_db()
+        self.assertEqual(pg.prestigio, 110)
+
+    def test_fattori_korp_stale_allineano_catalogo(self):
+        from decimal import Decimal
+
+        tipo_korp, _ = TipoCarriera.objects.get_or_create(
+            codice="korp",
+            defaults={"nome": "KORP", "ordine": 0},
+        )
+        korp = Carriera.objects.create(
+            nome=f"APEX sync {uuid.uuid4().hex[:6]}",
+            tipo="T3",
+            tipo_carriera=tipo_korp,
+            fattore_task_crediti=Decimal("1.00"),
+            fattore_task_prestigio=Decimal("1.00"),
+            sottoscrive_contratti=False,
+        )
+        now = timezone.now()
+        Carriera.objects.filter(pk=korp.pk).update(updated_at=now)
+        korp.refresh_from_db()
+
+        row = serialize_for_sync(korp)
+        row["fattore_task_crediti"] = "2.00"
+        row["fattore_task_prestigio"] = "2.00"
+        row["sottoscrive_contratti"] = True
+        row["updated_at"] = (now - timedelta(days=2)).isoformat()
+
+        view = EdgeSyncView()
+        result = view._try_apply_one(Carriera, row)
+        self.assertIn(result, ("skipped", "applied"))
+
+        korp.refresh_from_db()
+        self.assertEqual(korp.fattore_task_crediti, Decimal("2.00"))
+        self.assertEqual(korp.fattore_task_prestigio, Decimal("2.00"))
+        self.assertTrue(korp.sottoscrive_contratti)
 
 
 class EdgeSyncMissioneEventoAttivaTests(TestCase):
