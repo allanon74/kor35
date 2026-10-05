@@ -9,15 +9,21 @@ set -euo pipefail
 # Uso (root, sul server):
 #   sudo ./scripts/install_prod_mirror_tunnel.sh
 #   sudo ./scripts/install_prod_mirror_tunnel.sh --pubkey-file /tmp/mirror-tunnel.pub
+#   sudo ./scripts/install_prod_mirror_tunnel.sh --jump-pubkey-file /tmp/github-actions.pub
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 PUBKEY_FILE=""
+JUMP_PUBKEY_FILES=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --pubkey-file)
       PUBKEY_FILE="${2:-}"
+      shift 2
+      ;;
+    --jump-pubkey-file)
+      JUMP_PUBKEY_FILES+=("${2:-}")
       shift 2
       ;;
     -h|--help)
@@ -47,7 +53,9 @@ RUN_USER="${KOR35_PROD_TLS_USER:-deploy}"
 TUNNEL_USER="kor35-tunnel"
 TUNNEL_HOME="/var/lib/kor35-tunnel"
 REMOTE_PORT="18443"
+SSH_REMOTE_PORT="18022"
 DOMAIN="mirror.kor35.it"
+JUMP_USER="kor35-mirror-jump"
 
 if ! grep -q 'certs_mirror' "${DOCKER_DIR}/compose.prod.yml"; then
   echo "compose.prod.yml non monta certs_mirror. Aggiorna il monorepo prima di installare." >&2
@@ -79,17 +87,52 @@ if [ -n "$PUBKEY_FILE" ]; then
   auth="${TUNNEL_HOME}/.ssh/authorized_keys"
   touch "$auth"
   grep -v 'kor35-mirror-tunnel' "$auth" > "${auth}.tmp" || true
-  printf 'command="/bin/sleep infinity",restrict,port-forwarding,permitlisten="127.0.0.1:%s" %s %s kor35-mirror-tunnel\n' \
-    "$REMOTE_PORT" "$key_type" "$key_data" >> "${auth}.tmp"
+  printf 'command="/bin/sleep infinity",restrict,port-forwarding,permitlisten="127.0.0.1:%s",permitlisten="127.0.0.1:%s" %s %s kor35-mirror-tunnel\n' \
+    "$REMOTE_PORT" "$SSH_REMOTE_PORT" "$key_type" "$key_data" >> "${auth}.tmp"
   mv "${auth}.tmp" "$auth"
   chown "$TUNNEL_USER:$TUNNEL_USER" "$auth"
   chmod 600 "$auth"
   echo "Chiave pubblica installata per ${TUNNEL_USER}."
 fi
 
+# Galleria già autorizzata: aggiungi l'ascolto SSH senza rigenerare la chiave.
+auth="${TUNNEL_HOME}/.ssh/authorized_keys"
+if [ -f "$auth" ] && ! grep -q "permitlisten=\"127.0.0.1:${SSH_REMOTE_PORT}\"" "$auth"; then
+  sed -i "s/permitlisten=\"127.0.0.1:${REMOTE_PORT}\"/permitlisten=\"127.0.0.1:${REMOTE_PORT}\",permitlisten=\"127.0.0.1:${SSH_REMOTE_PORT}\"/" "$auth"
+fi
+
+JUMP_HOME="/var/lib/${JUMP_USER}"
+if ! id "$JUMP_USER" >/dev/null 2>&1; then
+  useradd --system --create-home --home-dir "$JUMP_HOME" --shell /bin/bash "$JUMP_USER"
+fi
+passwd -l "$JUMP_USER" >/dev/null 2>&1 || true
+install -d -m 0700 -o "$JUMP_USER" -g "$JUMP_USER" "${JUMP_HOME}/.ssh"
+jump_auth="${JUMP_HOME}/.ssh/authorized_keys"
+touch "$jump_auth"
+for jump_pub in "${JUMP_PUBKEY_FILES[@]}"; do
+  if [ ! -f "$jump_pub" ]; then
+    echo "Chiave salto assente: ${jump_pub}" >&2
+    exit 1
+  fi
+  read -r jtype jdata jcomment < "$jump_pub"
+  if [ -z "${jtype:-}" ] || [ -z "${jdata:-}" ]; then
+    echo "Chiave salto non valida in ${jump_pub}" >&2
+    exit 1
+  fi
+  grep -v -F "$jdata" "$jump_auth" > "${jump_auth}.tmp" || true
+  printf 'restrict,port-forwarding,permitopen="127.0.0.1:%s" %s %s %s\n' \
+    "$SSH_REMOTE_PORT" "$jtype" "$jdata" "${jcomment:-kor35-mirror-jump}" >> "${jump_auth}.tmp"
+  mv "${jump_auth}.tmp" "$jump_auth"
+done
+chown "$JUMP_USER:$JUMP_USER" "$jump_auth"
+chmod 600 "$jump_auth"
+
 install -m 0644 \
   "${ROOT_DIR}/config/ssh/kor35-mirror-tunnel.sshd.conf" \
   /etc/ssh/sshd_config.d/60-kor35-mirror-tunnel.conf
+install -m 0644 \
+  "${ROOT_DIR}/config/ssh/kor35-mirror-jump.sshd.conf" \
+  /etc/ssh/sshd_config.d/61-kor35-mirror-jump.conf
 sshd -t
 systemctl reload ssh 2>/dev/null || systemctl reload sshd
 

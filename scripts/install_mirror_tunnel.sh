@@ -57,6 +57,9 @@ ENV_FILE=/etc/kor35/mirror-tunnel.env
 if [ ! -f "$ENV_FILE" ]; then
   install -m 600 "$ROOT_DIR/config/mirror/mirror-tunnel.env.example" "$ENV_FILE"
 fi
+if ! grep -q '^MIRROR_TUNNEL_SSH_REMOTE_PORT=' "$ENV_FILE"; then
+  printf '\n# SSH del Pi su localhost della produzione (deploy senza DDNS).\nMIRROR_TUNNEL_SSH_REMOTE_PORT=18022\nMIRROR_TUNNEL_SSH_LOCAL_PORT=22\n' >> "$ENV_FILE"
+fi
 chmod 600 "$ENV_FILE"
 
 # shellcheck disable=SC1090

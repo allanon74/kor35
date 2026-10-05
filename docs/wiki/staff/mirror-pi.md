@@ -163,6 +163,8 @@ sudo make install-prod-mirror-tunnel ENV=prod
 
 Dopo il record DNS, rilancia `install-prod-mirror-tunnel` sul server prod per Let's Encrypt. Dettaglio: `docs/MIRROR_PI_NETWORK.md`.
 
+Il deploy da GitHub, se `kor35.ddns.net` non risponde (Pi sul telefono), passa dalla stessa galleria: entra in produzione e da lì raggiunge la SSH del Pi. I secret GitHub dell'host restano `kor35.ddns.net` e la porta `10022`.
+
 In **modalità evento** offline: `http://www.kor35.it` (HTTP). HTTPS richiede cert aggiornati sul Pi.
 
 **Come funziona:** a ogni boot il Pi prova prima **NetworkManager** (`Hotspot-Emergenza`); se fallisce, **hostapd** da repo se la PSK è configurata. `MIRROR_NETWORK_AUTO_BOOT=0` riguarda solo router/event automatico, non la WiFi emergenza.

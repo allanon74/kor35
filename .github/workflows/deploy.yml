@@ -699,6 +699,20 @@ jobs:
           name: card-studio-dist
           path: dist-upload-cardeditor
 
+      - name: Scegli come raggiungere il mirror
+        id: mirror_ssh
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.MIRROR_SERVER_SSH_KEY }}
+          HOST: ${{ secrets.MIRROR_SERVER_HOST }}
+          USER: ${{ secrets.MIRROR_SERVER_USER }}
+          PORT: ${{ secrets.MIRROR_SERVER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          bash scripts/ci_mirror_ssh.sh probe
+
       - name: Rsync frontend verso mirror
         if: needs.build-frontend.outputs.changed == 'true'
         env:
@@ -722,15 +736,15 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          P="${PORT:-10022}"
-          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
-          ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          ssh $SSH_OPTS "${USER}@${HOST}" "test -f '${REMOTE_BASE}/config/docker/compose.base.yml'" || {
+          # shellcheck disable=SC1090
+          source "${GITHUB_WORKSPACE}/.mirror-ssh-route"
+          RSH="${GITHUB_WORKSPACE}/scripts/ci_mirror_ssh.sh"
+          "$RSH" "${user}@${host}" "test -f '${REMOTE_BASE}/config/docker/compose.base.yml'" || {
             echo "Path mirror errato: ${REMOTE_BASE} (manca config/docker/compose.base.yml)." >&2
             echo "Allinea i secret MIRROR_ROOT_PATH e MIRROR_BACKEND_PATH alla root del monorepo (es. /home/pi/kor35-replica)." >&2
             exit 1
           }
-          ssh $SSH_OPTS "${USER}@${HOST}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_PREP'
+          "$RSH" "${user}@${host}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_PREP'
           set -euo pipefail
           REMOTE_BASE="${1:?}"
           CPN="${2:?}"
@@ -750,9 +764,9 @@ jobs:
           fi
           rm -f "${RB}/.ci_write_test"
           REMOTE_PREP
-          rsync -avz --delete -e "ssh $SSH_OPTS" \
-            dist-upload/ "${USER}@${HOST}:${REMOTE}/"
-          ssh $SSH_OPTS "${USER}@${HOST}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_START'
+          rsync -avz --delete -e "$RSH" \
+            dist-upload/ "${user}@${host}:${REMOTE}/"
+          "$RSH" "${user}@${host}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_START'
           set -euo pipefail
           REMOTE_BASE="${1:?}"
           CPN="${2:?}"
@@ -784,10 +798,10 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          P="${PORT:-10022}"
-          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
-          ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          ssh $SSH_OPTS "${USER}@${HOST}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_PREP'
+          # shellcheck disable=SC1090
+          source "${GITHUB_WORKSPACE}/.mirror-ssh-route"
+          RSH="${GITHUB_WORKSPACE}/scripts/ci_mirror_ssh.sh"
+          "$RSH" "${user}@${host}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_PREP'
           set -euo pipefail
           REMOTE_BASE="${1:?}"
           CPN="${2:?}"
@@ -799,8 +813,8 @@ jobs:
             echo "WARN: chown react_build_pilot via docker fallito; continuo." >&2
           fi
           REMOTE_PREP
-          rsync -avz --delete -e "ssh $SSH_OPTS" \
-            dist-upload-pilot/ "${USER}@${HOST}:${REMOTE}/"
+          rsync -avz --delete -e "$RSH" \
+            dist-upload-pilot/ "${user}@${host}:${REMOTE}/"
 
       - name: Rsync Card Studio verso mirror
         if: needs.build-card-studio.outputs.changed == 'true'
@@ -822,12 +836,12 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          P="${PORT:-10022}"
-          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
-          ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          ssh $SSH_OPTS "${USER}@${HOST}" "mkdir -p '${REMOTE}'"
-          rsync -avz --delete -e "ssh $SSH_OPTS" \
-            dist-upload-cardeditor/ "${USER}@${HOST}:${REMOTE}/"
+          # shellcheck disable=SC1090
+          source "${GITHUB_WORKSPACE}/.mirror-ssh-route"
+          RSH="${GITHUB_WORKSPACE}/scripts/ci_mirror_ssh.sh"
+          "$RSH" "${user}@${host}" "mkdir -p '${REMOTE}'"
+          rsync -avz --delete -e "$RSH" \
+            dist-upload-cardeditor/ "${user}@${host}:${REMOTE}/"
 
       - name: Rsync firmware OTA verso mirror
         env:
@@ -849,11 +863,11 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          P="${PORT:-10022}"
-          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
-          ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          ssh $SSH_OPTS "${USER}@${HOST}" "mkdir -p '${REMOTE_DIR}'"
-          rsync -avz -e "ssh $SSH_OPTS" "$SRC" "${USER}@${HOST}:${REMOTE_DIR}/firmware.bin"
+          # shellcheck disable=SC1090
+          source "${GITHUB_WORKSPACE}/.mirror-ssh-route"
+          RSH="${GITHUB_WORKSPACE}/scripts/ci_mirror_ssh.sh"
+          "$RSH" "${user}@${host}" "mkdir -p '${REMOTE_DIR}'"
+          rsync -avz -e "$RSH" "$SRC" "${user}@${host}:${REMOTE_DIR}/firmware.bin"
 
       - name: Rsync APK Wear OS verso mirror
         env:
@@ -875,21 +889,25 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          P="${PORT:-10022}"
-          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
-          ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          ssh $SSH_OPTS "${USER}@${HOST}" "mkdir -p '${REMOTE_DIR}'"
-          rsync -avz -e "ssh $SSH_OPTS" "$SRC" "${USER}@${HOST}:${REMOTE_DIR}/app-release.apk"
+          # shellcheck disable=SC1090
+          source "${GITHUB_WORKSPACE}/.mirror-ssh-route"
+          RSH="${GITHUB_WORKSPACE}/scripts/ci_mirror_ssh.sh"
+          "$RSH" "${user}@${host}" "mkdir -p '${REMOTE_DIR}'"
+          rsync -avz -e "$RSH" "$SRC" "${user}@${host}:${REMOTE_DIR}/app-release.apk"
 
       - name: Deploy backend to mirror via SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
           DEPLOY_GIT_TOKEN: ${{ github.token }}
         with:
-          host: ${{ secrets.MIRROR_SERVER_HOST }}
-          username: ${{ secrets.MIRROR_SERVER_USER }}
+          host: ${{ steps.mirror_ssh.outputs.host }}
+          username: ${{ steps.mirror_ssh.outputs.user }}
           key: ${{ secrets.MIRROR_SERVER_SSH_KEY }}
-          port: ${{ secrets.MIRROR_SERVER_SSH_PORT || 10022 }}
+          port: ${{ steps.mirror_ssh.outputs.port }}
+          proxy_host: ${{ steps.mirror_ssh.outputs.proxy_host }}
+          proxy_username: ${{ steps.mirror_ssh.outputs.proxy_user }}
+          proxy_port: ${{ steps.mirror_ssh.outputs.proxy_port }}
+          proxy_key: ${{ steps.mirror_ssh.outputs.proxy_host != '' && secrets.MIRROR_SERVER_SSH_KEY || '' }}
           envs: DEPLOY_GIT_TOKEN
           script: |
             set -euo pipefail

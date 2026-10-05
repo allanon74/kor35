@@ -173,6 +173,10 @@ sudo MIRROR_TUNNEL_STATUS_ROLE=prod ./scripts/mirror_tunnel_status.sh
 
 La chiave privata sta sul Pi in `/etc/kor35/mirror-tunnel/` (non nel git). Su prod l'utente è `kor35-tunnel`, senza shell interattiva. La porta `18443` ascolta solo su localhost e sul bridge Docker, non su Internet.
 
+### Deploy GitHub senza DDNS
+
+Il workflow prova prima `kor35.ddns.net:10022`. Se il Pi è su un hotspot del telefono quella strada non risponde: GitHub entra allora su `www.kor35.it` come utente `kor35-mirror-jump` e, da lì, sulla porta `127.0.0.1:18022`, che la galleria collega alla SSH del Pi. Quella porta non è aperta su Internet. I secret `MIRROR_SERVER_HOST` e `MIRROR_SERVER_SSH_PORT` restano il DDNS. Non va messo `mirror.kor35.it` al loro posto: quel nome è il sito, non la SSH.
+
 ## Due modalità operative
 
 | Modalità | Quando | LAN `eth0` | DHCP `192.168.100.0/24` | `www.kor35.it` |

@@ -409,10 +409,10 @@ Usa **Settings → Secrets and variables → Actions**. Valori da adattare ai tu
 
 | Secret | Obbligatorio | Valore tipico / note |
 |--------|--------------|----------------------|
-| `MIRROR_SERVER_HOST` | Sì | Hostname/IP del Pi (es. `kor35.ddns.net`) |
+| `MIRROR_SERVER_HOST` | Sì | `kor35.ddns.net`. Non usare `mirror.kor35.it`: è il sito. Se il DDNS non risponde, la CI passa dalla galleria |
 | `MIRROR_SERVER_USER` | Sì | Es. `pi` |
-| `MIRROR_SERVER_SSH_KEY` | Sì | Chiave privata CI per il Pi |
-| `MIRROR_SERVER_SSH_PORT` | No | **`10022`** (NAT pubblico → Pi:22) |
+| `MIRROR_SERVER_SSH_KEY` | Sì | Chiave privata CI per il Pi (la stessa pubkey è autorizzata anche come salto `kor35-mirror-jump` su prod) |
+| `MIRROR_SERVER_SSH_PORT` | No | **`10022`** (NAT pubblico → Pi:22). Via galleria la CI usa `127.0.0.1:18022` da sola |
 | `MIRROR_ROOT_PATH` | Forte consiglio | `/home/pi/kor35-replica` (root monorepo) |
 | `MIRROR_BACKEND_PATH` | No | Stesso valore di `MIRROR_ROOT_PATH` se usi solo un path |
 | `MIRROR_COMPOSE_PROJECT_NAME` | No | `kor35-replica` (come `docker compose ls` sul Pi) |
