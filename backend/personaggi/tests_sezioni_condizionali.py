@@ -249,9 +249,9 @@ class TessituraSezioniCondizionaliTests(TestCase):
         )
 
         self.tessitura = Tessitura.objects.create(
-            nome="Brace Cantata",
+            nome="Brace Condizionale",
             testo="Una fiamma.",
-            formula="{dannigen|:N}{if canto} CANTO{endif}{if ballo} BALLO{endif}",
+            formula="{dannigen|:N}{if intensifica} INTENSIFICA{endif}{if ampia} AMPIA{endif}",
             aura_richiesta=self.aura_req,
         )
         TessituraStatisticaBase.objects.create(
@@ -270,23 +270,23 @@ class TessituraSezioniCondizionaliTests(TestCase):
         TessituraSezioneStatisticaBase.objects.create(
             sezione=sez_auto, statistica=self.stat_danno, valore_base=2
         )
-        sez_canto = TessituraSezioneCondizionale.objects.create(
+        sez_intensifica = TessituraSezioneCondizionale.objects.create(
             tessitura=self.tessitura,
             ordine=1,
             modalita=SEZIONE_MODALITA_MANUALE,
-            etichetta="Canto",
-            testo="Se canti il danno aumenta.",
+            etichetta="Intensifica",
+            testo="Se intensifichi il danno aumenta.",
             condizioni={"operator": "AND", "requisiti": []},
         )
         TessituraSezioneStatisticaBase.objects.create(
-            sezione=sez_canto, statistica=self.stat_danno, valore_base=4
+            sezione=sez_intensifica, statistica=self.stat_danno, valore_base=4
         )
         TessituraSezioneCondizionale.objects.create(
             tessitura=self.tessitura,
             ordine=2,
             modalita=SEZIONE_MODALITA_MANUALE,
-            etichetta="Ballo",
-            testo="Se balli l'attacco è ad area.",
+            etichetta="Ampia",
+            testo="Se ampia l'attacco è ad area.",
             condizioni={"operator": "AND", "requisiti": []},
         )
 
@@ -294,25 +294,25 @@ class TessituraSezioniCondizionaliTests(TestCase):
         html = self.tessitura.TestoFormattato
         self.assertIn("Una fiamma", html)
         self.assertIn("Aura Magica TessSez", html)
-        self.assertIn("Se Canto", html)
-        self.assertIn("Se Ballo", html)
-        self.assertIn("Se Canto e Ballo", html)
-        self.assertIn("CANTO", html)
-        self.assertIn("BALLO", html)
+        self.assertIn("Se Intensifica", html)
+        self.assertIn("Se Ampia", html)
+        self.assertIn("Se Intensifica e Ampia", html)
+        self.assertIn("INTENSIFICA", html)
+        self.assertIn("AMPIA", html)
 
     def test_personaggio_merge_auto_nella_formula_principale(self):
         html = self.pg.get_testo_formattato_per_item(self.tessitura)
         self.assertIn("Potenziata dall'aura magica", html)
         self.assertNotIn("Aura Magica TessSez", html)
         self.assertIn("tre", html.lower())
-        self.assertIn("Se Canto", html)
+        self.assertIn("Se Intensifica", html)
         self.assertIn("kor-formula-variante", html)
 
     def test_personaggio_senza_aura_non_vede_sezione_auto(self):
         pg2 = Personaggio.objects.create(nome="PG Senza Aura", proprietario=self.user)
         html = pg2.get_testo_formattato_per_item(self.tessitura)
         self.assertNotIn("Potenziata dall'aura magica", html)
-        self.assertIn("Se Canto", html)
+        self.assertIn("Se Intensifica", html)
 
 
 class StaffTessituraSezioniTests(APITestCase):
@@ -351,8 +351,8 @@ class StaffTessituraSezioniTests(APITestCase):
                 {
                     "ordine": 1,
                     "modalita": "manuale",
-                    "etichetta": "Canto",
-                    "testo": "Se canti",
+                    "etichetta": "Intensifica",
+                    "testo": "Se intensifichi",
                     "condizioni": {"operator": "AND", "requisiti": []},
                     "statistiche_base": [{"statistica": self.stat.id, "valore_base": 4}],
                     "sostituisci_bersaglio": False,
@@ -369,5 +369,5 @@ class StaffTessituraSezioniTests(APITestCase):
         sezioni = list(tessitura.sezioni_condizionali.all())
         self.assertEqual(len(sezioni), 2)
         manuals = [s for s in sezioni if s.modalita == "manuale"]
-        self.assertEqual(manuals[0].etichetta, "Canto")
+        self.assertEqual(manuals[0].etichetta, "Intensifica")
         self.assertEqual(manuals[0].statistiche_base.count(), 1)

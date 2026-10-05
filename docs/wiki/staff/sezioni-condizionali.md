@@ -9,9 +9,9 @@ Due famiglie:
 | Tecnica | Come si attiva la sezione | Cosa può cambiare |
 |---------|---------------------------|-------------------|
 | **Infusione** | Solo in automatico: il personaggio (o l’oggetto forgiato) soddisfa i requisiti | Testo, statistiche della formula, modificatori al PG o solo all’oggetto |
-| **Tessitura** | Automatico (requisiti del PG) **oppure** facoltativo (il giocatore accende un flag, es. Canto / Ballo) | Testo e statistiche della formula. I flag si possono combinare |
+| **Tessitura** | Automatico (requisiti del PG) **oppure** facoltativo (il giocatore accende un flag con etichetta libera) | Testo e statistiche della formula. I flag si possono combinare |
 
-I requisiti automatici sono gli stessi degli altri editor staff (manifesti, accessi): aura, statistica, caratteristica, abilità, Korp, carriera, carica. Non sono limitati a Canto/Ballo né all’Aura Arcana.
+I requisiti automatici sono gli stessi degli altri editor staff (manifesti, accessi): aura, statistica, caratteristica, abilità, Korp, carriera, carica. Non sono limitati a una sola aura.
 
 ---
 
@@ -21,9 +21,8 @@ Dashboard staff → tool **Tessiture** oppure **Infusioni** → apri o crea la t
 
 | Pulsante | Cosa fa |
 |----------|---------|
-| **+ Sezione** | Aggiunge una sezione automatica (requisiti del personaggio). |
-| **+ Canto** | Solo tessiture: sezione facoltativa già etichettata «Canto». |
-| **+ Ballo** | Solo tessiture: sezione facoltativa «Ballo» con *Sostituisci il bersaglio* già acceso (esplosione al posto del tocco). |
+| **+ Sezione** | Aggiunge una sezione automatica (requisiti del personaggio). Sulle tessiture puoi poi passare a **Facoltativa** con il selettore. |
+| **+ Facoltativa** | Solo tessiture: crea subito una sezione a flag giocatore. L’**etichetta** la scrivi tu (nome libero del chip). |
 
 Salva la tecnica come sempre. Le sezioni viaggiano con il catalogo (sync master ↔ replica).
 
@@ -70,14 +69,14 @@ Sulla tessitura ogni sezione ha una **modalità**.
 | Modalità | Quando scatta | Cosa vede il giocatore |
 |----------|---------------|------------------------|
 | **Automatica (requisiti PG)** | Il personaggio soddisfa **Attiva se** | Sulla scheda i numeri si **fondono nella formula principale**. Nel catalogo resta un riquadro «Se Aura Magica > 1» con la formula variante. |
-| **Facoltativa (flag giocatore)** | Il giocatore preme il chip (Canto, Ballo, …). Eventuale prerequisito automatico opzionale | La formula base **non cambia**. Sotto compaiono tutte le varianti (*Se Canto*, *Se Ballo*, *Se Canto e Ballo*). I chip filtrano quale variante mostrare. |
+| **Facoltativa (flag giocatore)** | Il giocatore preme il chip (nome = etichetta che hai scritto). Eventuale prerequisito automatico opzionale | La formula base **non cambia**. Sotto compaiono tutte le varianti (*Se A*, *Se B*, *Se A e B*). I chip filtrano quale variante mostrare. |
 
 ### Campi extra delle tessiture
 
 | Campo | Uso |
 |-------|-----|
-| **Etichetta flag** | Solo sezioni facoltative. È il nome del chip (es. `Canto`). Diventa anche il flag nelle formule `{if}`: `Canto` → `{if canto}`, `Ballo` → `{if ballo}`. |
-| **Prerequisito automatico (opzionale)** | Sulle sezioni facoltative: il chip compare solo se il PG soddisfa anche questo (es. abilità «Canto rituale»). Lascia i requisiti vuoti se chiunque può accendere il flag. |
+| **Etichetta flag** | Solo sezioni facoltative. Nome libero del chip (scelto dallo staff). Diventa anche il flag nelle formule `{if}`: slug in minuscolo senza spazi. |
+| **Prerequisito automatico (opzionale)** | Sulle sezioni facoltative: il chip compare solo se il PG soddisfa anche questo (es. un’abilità). Lascia i requisiti vuoti se chiunque può accendere il flag. |
 | **Sostituisci il bersaglio** | Azzera i parametri di bersaglio della formula base (`tocco`, `dardo`, `flusso`, `cono`, `esplos`, `tutti`) e applica quelli della sezione. Serve per passare da tocco a esplosione senza sommare i due. |
 
 Le tessiture **non** hanno modificatori generali di sezione (quelli restano sulle infusioni).
@@ -93,15 +92,15 @@ Sulla scheda, **Condizioni facoltative**:
 
 ---
 
-## 4. Ricetta da copiare — 1 fuoco, +4 se canti, area se balli
+## 4. Ricetta da copiare — danno base + flag danno + flag area
 
-Tecnica: tessitura di attacco.
+Tecnica: tessitura di attacco. Le etichette dei flag le scegli tu; qui usiamo `Intensifica` e `Ampia` solo come nomi di esempio.
 
 ### Formula base
 
 Nella formula della tessitura (builder o campo formula):
 
-- danno: statistica `dannigen` = **1** (fuoco / danno generico);
+- danno: statistica `dannigen` = **1**;
 - bersaglio: **Tocco** (o quello che usi di default).
 
 Testo libero della tessitura: la descrizione sempre visibile.
@@ -111,29 +110,31 @@ Testo libero della tessitura: la descrizione sempre visibile.
 Solo se vuoi che l’aura alzi il danno da sola, senza flag.
 
 1. **+ Sezione**, modalità **Automatica**.
-2. **Attiva se**: *Aura / punteggio* → *Aura Magica* `>` `1` (o un’altra aura: Arcana, Elementale, …).
+2. **Attiva se**: *Aura / punteggio* → *Aura Magica* `>` `1` (o un’altra aura).
 3. Statistiche base: `dannigen` = 2 (si **somma** al 1 della base → 3 sulla scheda di chi ha l’aura).
 4. Testo addizionale: «Potenziata dall’aura magica.»
 
 Senza personaggio (catalogo) compare il riquadro *Se Aura Magica > 1*. Sulla scheda di chi non ha l’aura il riquadro non c’è e la formula resta a 1.
 
-### Sezione 2 — Canto (facoltativa)
+### Sezione 2 — facoltativa (più danno)
 
-1. **+ Canto** (oppure **+ Sezione** → **Facoltativa**, etichetta `Canto`).
-2. Requisiti vuoti, se tutti possono cantare.
-3. Statistiche base: `dannigen` = **4** (si somma: 1+4 = 5, oppure 3+4 se l’aura automatica è già attiva).
-4. *Sostituisci il bersaglio* spento.
-5. Testo: «Se canti il danno aumenta.»
+1. **+ Facoltativa** (o **+ Sezione** → **Facoltativa**).
+2. Etichetta libera, es. `Intensifica`.
+3. Requisiti vuoti, se tutti possono usarla.
+4. Statistiche base: `dannigen` = **4** (si somma: 1+4 = 5, oppure 3+4 se l’aura automatica è già attiva).
+5. *Sostituisci il bersaglio* spento.
+6. Testo: descrizione dell’effetto quando il flag è attivo.
 
-Nella formula puoi anche scrivere `{if canto}…{endif}`: il blocco compare solo nelle varianti che includono Canto.
+Nella formula puoi anche scrivere `{if intensifica}…{endif}`: il blocco compare solo nelle varianti che includono quel flag.
 
-### Sezione 3 — Ballo (facoltativa)
+### Sezione 3 — facoltativa (cambia bersaglio)
 
-1. **+ Ballo**.
-2. Requisiti vuoti.
-3. Accendi **Sostituisci il bersaglio**.
-4. Statistiche base: `esplos` = **1**. Se l’esplosione di default (5 m) non basta, aggiungi anche il parametro di area usato in catalogo (es. `area` = 5) come statistica della sezione.
-5. Testo: «Se balli l’attacco è ad area.»
+1. **+ Facoltativa**.
+2. Etichetta libera, es. `Ampia`.
+3. Requisiti vuoti.
+4. Accendi **Sostituisci il bersaglio**.
+5. Statistiche base: `esplos` = **1**. Se l’esplosione di default (5 m) non basta, aggiungi anche il parametro di area usato in catalogo (es. `area` = 5) come statistica della sezione.
+6. Testo: descrizione dell’effetto ad area.
 
 *Sostituisci il bersaglio* toglie il tocco della base e mette l’esplosione. Senza quella spunta tocco ed esplosione resterebbero entrambi.
 
@@ -143,13 +144,13 @@ Nel catalogo (nessun PG):
 
 - formula base: 1 danno, tocco;
 - riquadro automatico *Se Aura Magica > 1* (se l’hai creata);
-- *Se Canto*, *Se Ballo*, *Se Canto e Ballo*.
+- *Se Intensifica*, *Se Ampia*, *Se Intensifica e Ampia* (con i nomi che hai scelto).
 
 Sulla scheda di un PG con Aura Magica alta:
 
 - formula principale già a 3 (1+2);
-- chip Canto / Ballo;
-- varianti 7 (3+4) se canta, area se balla, entrambe se attiva i due chip.
+- chip con le tue etichette;
+- varianti aggiornate quando attiva uno o entrambi i chip.
 
 ---
 
@@ -173,12 +174,12 @@ Senza requisiti la sezione automatica è sempre considerata attiva (nel catalogo
 
 ## 6. Formule `{if}` e flag
 
-L’etichetta della sezione facoltativa diventa un flag in minuscolo, senza spazi (`Canto rituale` → `canto_rituale`).
+L’etichetta della sezione facoltativa diventa un flag in minuscolo, senza spazi (`Rito solare` → `rito_solare`).
 
 Nella formula o nel testo puoi scrivere:
 
 ```text
-{dannigen|:N}{if canto} (cantando){endif}{if ballo} ad area{endif}
+{dannigen|:N}{if intensifica} (potenziato){endif}{if ampia} ad area{endif}
 ```
 
 Il pezzo tra `{if …}` e `{endif}` compare solo se quel flag è acceso in quella variante. I chip del giocatore e le combinazioni usano lo stesso meccanismo.
