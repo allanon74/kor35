@@ -418,6 +418,8 @@ class TessituraSezioneCondizionaleInline(admin.StackedInline):
     fields = ('ordine', 'modalita', 'etichetta', 'sostituisci_bersaglio', 'condizioni', 'testo')
     verbose_name = "Sezione condizionale"
     verbose_name_plural = "Sezioni condizionali (auto o facoltative)"
+
+class TessituraStatisticaBaseInline(StatisticaBasePivotInline):
     model = TessituraStatisticaBase; form = TessituraStatisticaBaseForm; fk_name = 'tessitura'
 
 class AttivataStatisticaBaseInline(StatisticaBasePivotInline):
