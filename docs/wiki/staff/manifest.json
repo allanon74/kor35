@@ -65,6 +65,12 @@
       "titolo": "Contratti — impostare modelli e slot",
       "source": "contratti.md",
       "ordine": 40
+    },
+    {
+      "slug": "staff-sezioni-condizionali",
+      "titolo": "Tessiture e infusioni condizionali",
+      "source": "sezioni-condizionali.md",
+      "ordine": 45
     }
   ]
 }

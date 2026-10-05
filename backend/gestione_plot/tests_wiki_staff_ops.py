@@ -38,6 +38,7 @@ class WikiStaffOpsSyncTests(TestCase):
         self.assertIn("staff-test-offline-omada", slugs)
         self.assertIn("staff-card-studio-sette-elegie", slugs)
         self.assertIn("staff-contratti", slugs)
+        self.assertIn("staff-sezioni-condizionali", slugs)
 
         parent = PaginaRegolamento.objects.get(slug="staff-operativita-tecnica")
         self.assertTrue(parent.visibile_solo_staff)
@@ -93,6 +94,15 @@ class WikiStaffOpsSyncTests(TestCase):
         self.assertIn("Contratti come cliente", contratti_page.contenuto)
         self.assertIn("post_tetto_evento", contratti_page.contenuto)
         self.assertIn("conto deposito", contratti_page.contenuto)
+
+        sezioni_page = PaginaRegolamento.objects.get(slug="staff-sezioni-condizionali")
+        self.assertEqual(sezioni_page.parent_id, parent.id)
+        self.assertTrue(sezioni_page.visibile_solo_staff)
+        self.assertIn("Sezioni condizionali", sezioni_page.contenuto)
+        self.assertIn("Facoltativa", sezioni_page.contenuto)
+        self.assertIn("Sostituisci il bersaglio", sezioni_page.contenuto)
+        self.assertIn("Aura Magica", sezioni_page.contenuto)
+        self.assertIn("forgiatura", sezioni_page.contenuto)
 
     def test_pilot_eventi_condition_uses_sottosistema_nome(self):
         from types import SimpleNamespace
