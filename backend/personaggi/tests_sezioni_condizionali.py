@@ -223,3 +223,151 @@ class StaffInfusioneSezioniTests(APITestCase):
         oggetto = Oggetto.objects.get(pk=r.data["id"])
         self.assertEqual(oggetto.sezioni_condizionali.count(), 1)
         self.assertTrue(OggettoSezioneCondizionale.objects.filter(oggetto=oggetto).exists())
+
+
+class TessituraSezioniCondizionaliTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="tes-sez-user", password="x")
+        self.pg = Personaggio.objects.create(nome="PG Tess Sez", proprietario=self.user)
+        self.ca = Punteggio.objects.create(nome="Forza TessSez", sigla="FTS", tipo=CARATTERISTICA)
+        self.aura_mag = Punteggio.objects.create(nome="Aura Magica TessSez", sigla="AMT", tipo=AURA)
+        self.aura_req = Punteggio.objects.create(nome="Aura Arcana TessSez", sigla="AAT", tipo=AURA)
+        self.stat_danno = Statistica.objects.create(
+            nome="Danni gen TessSez", sigla="DGT", parametro="dannigen", valore_base_predefinito=0
+        )
+        grant = Abilita.objects.create(nome="Grant AMT", caratteristica=self.ca, costo_pc=0, costo_crediti=0)
+        abilita_punteggio.objects.create(abilita=grant, punteggio=self.aura_mag, valore=5)
+        PersonaggioAbilita.objects.create(personaggio=self.pg, abilita=grant)
+
+        from personaggi.models import (
+            SEZIONE_MODALITA_AUTO,
+            SEZIONE_MODALITA_MANUALE,
+            Tessitura,
+            TessituraSezioneCondizionale,
+            TessituraSezioneStatisticaBase,
+            TessituraStatisticaBase,
+        )
+
+        self.tessitura = Tessitura.objects.create(
+            nome="Brace Cantata",
+            testo="Una fiamma.",
+            formula="{dannigen|:N}{if canto} CANTO{endif}{if ballo} BALLO{endif}",
+            aura_richiesta=self.aura_req,
+        )
+        TessituraStatisticaBase.objects.create(
+            tessitura=self.tessitura, statistica=self.stat_danno, valore_base=1
+        )
+        sez_auto = TessituraSezioneCondizionale.objects.create(
+            tessitura=self.tessitura,
+            ordine=0,
+            modalita=SEZIONE_MODALITA_AUTO,
+            testo="Potenziata dall'aura magica.",
+            condizioni={
+                "operator": "AND",
+                "requisiti": [{"tipo": "punteggio", "nome": "Aura Magica TessSez", "min": 1, "op": "gt"}],
+            },
+        )
+        TessituraSezioneStatisticaBase.objects.create(
+            sezione=sez_auto, statistica=self.stat_danno, valore_base=2
+        )
+        sez_canto = TessituraSezioneCondizionale.objects.create(
+            tessitura=self.tessitura,
+            ordine=1,
+            modalita=SEZIONE_MODALITA_MANUALE,
+            etichetta="Canto",
+            testo="Se canti il danno aumenta.",
+            condizioni={"operator": "AND", "requisiti": []},
+        )
+        TessituraSezioneStatisticaBase.objects.create(
+            sezione=sez_canto, statistica=self.stat_danno, valore_base=4
+        )
+        TessituraSezioneCondizionale.objects.create(
+            tessitura=self.tessitura,
+            ordine=2,
+            modalita=SEZIONE_MODALITA_MANUALE,
+            etichetta="Ballo",
+            testo="Se balli l'attacco è ad area.",
+            condizioni={"operator": "AND", "requisiti": []},
+        )
+
+    def test_catalogo_mostra_varianti_auto_e_manuali(self):
+        html = self.tessitura.TestoFormattato
+        self.assertIn("Una fiamma", html)
+        self.assertIn("Aura Magica TessSez", html)
+        self.assertIn("Se Canto", html)
+        self.assertIn("Se Ballo", html)
+        self.assertIn("Se Canto e Ballo", html)
+        self.assertIn("CANTO", html)
+        self.assertIn("BALLO", html)
+
+    def test_personaggio_merge_auto_nella_formula_principale(self):
+        html = self.pg.get_testo_formattato_per_item(self.tessitura)
+        self.assertIn("Potenziata dall'aura magica", html)
+        self.assertNotIn("Aura Magica TessSez", html)
+        self.assertIn("tre", html.lower())
+        self.assertIn("Se Canto", html)
+        self.assertIn("kor-formula-variante", html)
+
+    def test_personaggio_senza_aura_non_vede_sezione_auto(self):
+        pg2 = Personaggio.objects.create(nome="PG Senza Aura", proprietario=self.user)
+        html = pg2.get_testo_formattato_per_item(self.tessitura)
+        self.assertNotIn("Potenziata dall'aura magica", html)
+        self.assertIn("Se Canto", html)
+
+
+class StaffTessituraSezioniTests(APITestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="staff-tes-sez", password="x", is_staff=True, is_superuser=True
+        )
+        self.client.force_authenticate(user=self.staff)
+        self.campagna, _ = Campagna.objects.get_or_create(
+            slug="kor35",
+            defaults={"nome": "Kor35", "is_default": True, "is_base": True, "attiva": True},
+        )
+        self.aura = Punteggio.objects.create(nome="Aura Staff TessSez", sigla="AST", tipo=AURA)
+        self.stat = Statistica.objects.create(
+            nome="Danno Staff TessSez", sigla="DST", parametro="dannigen", valore_base_predefinito=0
+        )
+        self.headers = {"HTTP_X_CAMPAGNA": self.campagna.slug}
+
+    def test_create_tessitura_con_sezioni_auto_e_manuale(self):
+        payload = {
+            "nome": "Tess sezioni nested",
+            "testo": "base",
+            "formula": "{dannigen|:N}",
+            "aura_richiesta": self.aura.id,
+            "sezioni_condizionali": [
+                {
+                    "ordine": 0,
+                    "modalita": "auto",
+                    "testo": "Bonus se aura alta",
+                    "condizioni": {
+                        "operator": "AND",
+                        "requisiti": [{"tipo": "punteggio", "nome": "Aura Staff TessSez", "min": 1, "op": "gt"}],
+                    },
+                    "statistiche_base": [{"statistica": self.stat.id, "valore_base": 2}],
+                },
+                {
+                    "ordine": 1,
+                    "modalita": "manuale",
+                    "etichetta": "Canto",
+                    "testo": "Se canti",
+                    "condizioni": {"operator": "AND", "requisiti": []},
+                    "statistiche_base": [{"statistica": self.stat.id, "valore_base": 4}],
+                    "sostituisci_bersaglio": False,
+                },
+            ],
+        }
+        r = self.client.post(
+            "/api/personaggi/api/staff/tessiture/", payload, format="json", **self.headers
+        )
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
+        from personaggi.models import Tessitura
+
+        tessitura = Tessitura.objects.get(pk=r.data["id"])
+        sezioni = list(tessitura.sezioni_condizionali.all())
+        self.assertEqual(len(sezioni), 2)
+        manuals = [s for s in sezioni if s.modalita == "manuale"]
+        self.assertEqual(manuals[0].etichetta, "Canto")
+        self.assertEqual(manuals[0].statistiche_base.count(), 1)

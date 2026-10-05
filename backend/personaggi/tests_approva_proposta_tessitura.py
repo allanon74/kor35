@@ -19,7 +19,9 @@ from personaggi.models import (
     STATO_PROPOSTA_APPROVATA,
     STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_TESSITURA,
+    SEZIONE_MODALITA_MANUALE,
     Tessitura,
+    TessituraSezioneCondizionale,
     TipologiaPersonaggio,
 )
 
@@ -87,6 +89,7 @@ class ApprovaPropostaTessituraTests(TestCase):
             'abilita_temporanea': None,
             'statistiche_base': [],
             'costi_attivazione': [],
+            'sezioni_condizionali': [],
             'non_acquistabile': False,
             'escluso_negozio_ufficiale': False,
             'non_vendibile': False,
@@ -160,6 +163,7 @@ class TessituraStaffEditorTests(TestCase):
             'componenti': [{'caratteristica': self.caratteristica.id, 'valore': 1}],
             'statistiche_base': [],
             'costi_attivazione': [],
+            'sezioni_condizionali': [],
             'non_acquistabile': False,
             'escluso_negozio_ufficiale': False,
             'non_vendibile': False,
@@ -209,6 +213,31 @@ class TessituraStaffEditorTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.content)
         tessitura.refresh_from_db()
         self.assertEqual(tessitura.formula, '')
+
+    def test_modifica_senza_sezioni_non_cancella_le_esistenti(self):
+        tessitura = Tessitura.objects.create(
+            nome='Tessitura Con Flag', aura_richiesta=self.aura, formula='Aura + 1'
+        )
+        TessituraSezioneCondizionale.objects.create(
+            tessitura=tessitura,
+            ordine=0,
+            modalita=SEZIONE_MODALITA_MANUALE,
+            etichetta='Canto',
+            testo='Se canti.',
+            condizioni={'operator': 'AND', 'requisiti': []},
+        )
+
+        resp = self.client.patch(
+            f'/api/personaggi/api/staff/tessiture/{tessitura.pk}/',
+            {'formula': 'Aura + 3'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        tessitura.refresh_from_db()
+        self.assertEqual(tessitura.formula, 'Aura + 3')
+        self.assertEqual(tessitura.sezioni_condizionali.count(), 1)
+        self.assertEqual(tessitura.sezioni_condizionali.first().etichetta, 'Canto')
 
     def test_opzioni_semantiche_espongono_il_template_di_default(self):
         resp = self.client.get('/api/personaggi/api/staff/formula-semantic-options/')

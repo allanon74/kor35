@@ -21,6 +21,7 @@ from .models import (
     InfusioneCaratteristica, TessituraCaratteristica,
     InfusioneStatisticaBase, TessituraStatisticaBase,
     InfusioneSezioneCondizionale, OggettoSezioneCondizionale,
+    TessituraSezioneCondizionale,
     PersonaggioInfusione, PersonaggioTessitura, PersonaggioModelloAura,
     PersonaggioAttivata,
     InfusionePluginModel, TessituraPluginModel,
@@ -410,6 +411,13 @@ class OggettoSezioneCondizionaleInline(admin.StackedInline):
     fields = ('ordine', 'condizioni', 'testo')
     verbose_name = "Sezione condizionale"
     verbose_name_plural = "Sezioni condizionali (testo/stats se requisito)"
+
+class TessituraSezioneCondizionaleInline(admin.StackedInline):
+    model = TessituraSezioneCondizionale
+    extra = 0
+    fields = ('ordine', 'modalita', 'etichetta', 'sostituisci_bersaglio', 'condizioni', 'testo')
+    verbose_name = "Sezione condizionale"
+    verbose_name_plural = "Sezioni condizionali (auto o facoltative)"
 
 class TessituraStatisticaBaseInline(StatisticaBasePivotInline):
     model = TessituraStatisticaBase; form = TessituraStatisticaBaseForm; fk_name = 'tessitura'
@@ -1197,7 +1205,7 @@ class TessituraAdmin(SModelAdmin):
     list_display = ('id', 'nome', 'aura_richiesta', 'livello', 'elemento_principale'); search_fields = ['nome']
     readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
     # MODIFICA: Usiamo TessituraCaratteristicaInline
-    inlines = [TessituraCaratteristicaInline, TessituraStatisticaBaseInline]
+    inlines = [TessituraCaratteristicaInline, TessituraStatisticaBaseInline, TessituraSezioneCondizionaleInline]
     exclude = ('statistiche_base', 'statistiche', 'caratteristiche'); summernote_fields = ['testo', 'formula']; autocomplete_fields = ['aura_richiesta', 'elemento_principale']
     
     def get_form(self, request, obj=None, **kwargs):
