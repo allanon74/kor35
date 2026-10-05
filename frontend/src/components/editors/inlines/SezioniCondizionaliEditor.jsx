@@ -87,7 +87,6 @@ const SezioniCondizionaliEditor = ({
             >
               + Facoltativa
             </button>
-            {/* etichetta libera: nessun preset di gioco hardcoded */}
           )}
           <button
             type="button"
