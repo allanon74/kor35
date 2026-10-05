@@ -3642,7 +3642,7 @@ class TessituraSezioneCondizionale(SyncableModel, models.Model):
 
     - modalita=auto: si attiva da sola se il PG soddisfa `condizioni`
       (es. Aura Magica > 1).
-    - modalita=manuale: il giocatore la accende a mano (es. «Canto», «Ballo»);
+    - modalita=manuale: il giocatore la accende a mano (etichetta libera);
       `condizioni` resta un eventuale prerequisito automatico.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

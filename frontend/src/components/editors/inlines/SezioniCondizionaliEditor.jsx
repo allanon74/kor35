@@ -70,28 +70,23 @@ const SezioniCondizionaliEditor = ({
           </h3>
           <p className="text-[11px] text-gray-400 mt-1">
             {isTessitura
-              ? 'Bonus di formula visibili se il personaggio soddisfa un requisito automatico (es. Aura Magica > 1) oppure se il giocatore attiva un flag facoltativo (es. Canto, Ballo).'
+              ? 'Bonus di formula visibili se il personaggio soddisfa un requisito automatico (es. Aura Magica > 1) oppure se il giocatore attiva un flag facoltativo (etichetta libera scelta dallo staff).'
               : 'Testo extra, statistiche base e modificatori visibili/attivi solo se il personaggio soddisfa la condizione (es. Aura Magica > 2).'}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 shrink-0">
           {isTessitura && (
-            <>
-              <button
-                type="button"
-                onClick={() => commit([...list, emptySezione(list.length, { modalita: 'manuale', etichetta: 'Canto', condizioni: { operator: 'AND', requisiti: [] } })])}
-                className="text-xs bg-amber-700 hover:bg-amber-600 px-3 py-2 rounded font-bold min-h-11"
-              >
-                + Canto
-              </button>
-              <button
-                type="button"
-                onClick={() => commit([...list, emptySezione(list.length, { modalita: 'manuale', etichetta: 'Ballo', sostituisci_bersaglio: true, condizioni: { operator: 'AND', requisiti: [] } })])}
-                className="text-xs bg-amber-700 hover:bg-amber-600 px-3 py-2 rounded font-bold min-h-11"
-              >
-                + Ballo
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => commit([...list, emptySezione(list.length, {
+                modalita: 'manuale',
+                etichetta: '',
+                condizioni: { operator: 'AND', requisiti: [] },
+              })])}
+              className="text-xs bg-amber-700 hover:bg-amber-600 px-3 py-2 rounded font-bold min-h-11"
+            >
+              + Facoltativa
+            </button>
           )}
           <button
             type="button"
@@ -157,13 +152,13 @@ const SezioniCondizionaliEditor = ({
                 {sezione.modalita === 'manuale' && (
                   <div className="space-y-2">
                     <label className="text-[10px] text-gray-500 uppercase font-black block tracking-tighter">
-                      Etichetta flag (es. Canto, Ballo)
+                      Etichetta flag (libera)
                     </label>
                     <input
                       className="w-full min-h-11 bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white"
                       value={sezione.etichetta || ''}
                       onChange={(e) => updateAt(idx, { etichetta: e.target.value })}
-                      placeholder="Canto"
+                      placeholder="Nome condizione"
                     />
                     <label className="flex items-center gap-2 text-[11px] text-cyan-200 cursor-pointer min-h-11">
                       <input

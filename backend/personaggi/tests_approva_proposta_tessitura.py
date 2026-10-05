@@ -222,8 +222,8 @@ class TessituraStaffEditorTests(TestCase):
             tessitura=tessitura,
             ordine=0,
             modalita=SEZIONE_MODALITA_MANUALE,
-            etichetta='Canto',
-            testo='Se canti.',
+            etichetta='Intensifica',
+            testo='Se intensifichi.',
             condizioni={'operator': 'AND', 'requisiti': []},
         )
 
@@ -237,7 +237,7 @@ class TessituraStaffEditorTests(TestCase):
         tessitura.refresh_from_db()
         self.assertEqual(tessitura.formula, 'Aura + 3')
         self.assertEqual(tessitura.sezioni_condizionali.count(), 1)
-        self.assertEqual(tessitura.sezioni_condizionali.first().etichetta, 'Canto')
+        self.assertEqual(tessitura.sezioni_condizionali.first().etichetta, 'Intensifica')
 
     def test_opzioni_semantiche_espongono_il_template_di_default(self):
         resp = self.client.get('/api/personaggi/api/staff/formula-semantic-options/')

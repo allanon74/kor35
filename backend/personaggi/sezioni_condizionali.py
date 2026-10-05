@@ -312,7 +312,7 @@ def html_sezioni_append(item, personaggio, *, context=None, formula=None, statis
 
 
 def html_varianti_manuali_tessitura(item, personaggio, *, context=None, formula=None, statistiche_base=None) -> str:
-    """Formule extra per le condizioni facoltative (canto, ballo, …) e loro combinazioni."""
+    """Formule extra per le condizioni facoltative (flag giocatore) e loro combinazioni."""
     from .models import formatta_testo_generico
 
     manuals = sezioni_manuali_disponibili(item, personaggio)
