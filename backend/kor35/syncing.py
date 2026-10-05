@@ -1,12 +1,14 @@
 import uuid
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, Iterator, Literal
 
 from django.apps import apps
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.files.base import File
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 
 
@@ -91,6 +93,68 @@ def json_safe_for_sync(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)):
         return value
     return str(value)
+
+
+def coerce_sync_scalar_value(field: models.Field, value: Any) -> Any:
+    """
+    Il payload JSON serializza datetime/decimal/UUID come stringhe.
+    Senza conversione, `Model.save()` che fa aritmetica su DateTimeField
+    (es. StaffCompito.scadenza - timedelta) alza TypeError e il record resta defer.
+    """
+    if isinstance(field, (models.ForeignKey, models.OneToOneField, models.FileField)):
+        return value
+    if value is None:
+        return None
+    if value == "" and isinstance(
+        field,
+        (models.DateTimeField, models.DateField, models.TimeField, models.DecimalField),
+    ):
+        return None
+    if not isinstance(
+        field,
+        (
+            models.DateTimeField,
+            models.DateField,
+            models.TimeField,
+            models.DecimalField,
+            models.UUIDField,
+        ),
+    ):
+        return value
+    try:
+        return field.to_python(value)
+    except (TypeError, ValueError, ValidationError):
+        if isinstance(field, models.DateTimeField) and isinstance(value, str):
+            parsed = parse_datetime(value)
+            if parsed is not None:
+                if timezone.is_naive(parsed) and timezone.is_aware(timezone.now()):
+                    return timezone.make_aware(parsed, timezone.get_current_timezone())
+                return parsed
+        return value
+
+
+def restore_auto_now_add_from_sync(
+    model: type[models.Model], obj: models.Model | None, update_data: dict[str, Any]
+) -> None:
+    """
+    `auto_now_add` ignora il valore passato a `update_or_create` in creazione.
+    Senza questo, `created_at` diventa l'istante dell'apply e i countdown
+    (deadline - created) sugli eventi di pilotaggio risultano enormi o negativi.
+    """
+    if obj is None or not update_data:
+        return
+    patch: dict[str, Any] = {}
+    for field in model._meta.concrete_fields:
+        if not getattr(field, "auto_now_add", False):
+            continue
+        if field.name not in update_data:
+            continue
+        val = update_data[field.name]
+        if val is None:
+            continue
+        patch[field.name] = val
+    if patch:
+        model.objects.filter(pk=obj.pk).update(**patch)
 
 
 def expand_paginaregolamento_queryset_with_ancestors(model: type[models.Model], qs):
@@ -553,6 +617,49 @@ _MTICHILD_PATCH_DENYLIST = frozenset(
     }
 )
 
+# Eccezione alla denylist / al skip per payload stale: campi staff/catalogo sulla
+# tabella figlia che devono convergere anche se un touch locale (M2M, inventario,
+# login) ha reso `updated_at` più recente. Prestigio e punti allineamento usano
+# max-wins così un premio assegnato sul master non viene perso, e un premio
+# assegnato sull'edge durante l'evento non viene ribassato da un pull stale.
+_MTI_CHILD_ALWAYS_SYNC_FIELDS = {
+    "personaggi.personaggio": frozenset(
+        {
+            "prestigio",
+            "punti_luminosi",
+            "punti_oscuri",
+            "punti_grigi",
+        }
+    ),
+    "personaggi.carriera": frozenset(
+        {
+            "fattore_task_crediti",
+            "fattore_task_prestigio",
+            "sottoscrive_contratti",
+            "slot_contratto_base",
+            "bonus_crediti_evento",
+        }
+    ),
+}
+
+_MTI_CHILD_MAX_WINS_FIELDS = frozenset(
+    {
+        "prestigio",
+        "punti_luminosi",
+        "punti_oscuri",
+        "punti_grigi",
+    }
+)
+
+
+def _mti_remote_numeric_wins(remote_value: Any, local_value: Any) -> bool:
+    try:
+        remote_n = Decimal(str(remote_value))
+        local_n = Decimal(str(local_value if local_value is not None else 0))
+    except (InvalidOperation, TypeError, ValueError):
+        return False
+    return remote_n > local_n
+
 
 def try_apply_mti_child_fields_when_skipped(
     local_obj: models.Model,
@@ -575,17 +682,23 @@ def try_apply_mti_child_fields_when_skipped(
     Se il record locale è più recente del payload (remote < local), non applicare:
     altrimenti un mirror/edge in ritardo può azzerare modifiche già salvate sul Master
     (es. usa_effetto_temporaneo su Tessitura).
+
+    Eccezione: `_MTI_CHILD_ALWAYS_SYNC_FIELDS` (prestigio, fattori KORP). Senza di essa
+    un touch locale sul Personaggio/Carriera lascia il mirror con timestamp più nuovo
+    e valori staff/catalogo vecchi; la denylist Personaggio bloccherebbe anche il
+    caso di timestamp uguale. Prestigio/punti: solo se il remoto è maggiore.
     """
     label = local_obj._meta.label_lower
-    if label in _MTICHILD_PATCH_DENYLIST:
-        return "noop"
-    if not local_obj._meta.parents:
-        return "noop"
-    if (
+    always_fields = _MTI_CHILD_ALWAYS_SYNC_FIELDS.get(label, frozenset())
+    denied = label in _MTICHILD_PATCH_DENYLIST
+    stale_remote = (
         remote_updated_at is not None
         and local_updated_at is not None
         and remote_updated_at < local_updated_at
-    ):
+    )
+    if not local_obj._meta.parents:
+        return "noop"
+    if (denied or stale_remote) and not always_fields:
         return "noop"
 
     patch: dict[str, Any] = {}
@@ -595,6 +708,8 @@ def try_apply_mti_child_fields_when_skipped(
         if isinstance(field, models.ForeignKey) and getattr(field.remote_field, "parent_link", False):
             continue
         if field.name not in row:
+            continue
+        if (denied or stale_remote) and field.name not in always_fields:
             continue
         value = row[field.name]
         if isinstance(field, models.ForeignKey):
@@ -608,7 +723,11 @@ def try_apply_mti_child_fields_when_skipped(
                 patch[field.name] = resolved
             continue
 
+        value = coerce_sync_scalar_value(field, value)
         current = getattr(local_obj, field.name)
+        if field.name in _MTI_CHILD_MAX_WINS_FIELDS and (denied or stale_remote):
+            if not _mti_remote_numeric_wins(value, current):
+                continue
         if json_safe_for_sync(current) != json_safe_for_sync(value):
             patch[field.name] = value
 
