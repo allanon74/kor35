@@ -22,6 +22,7 @@ Pagine Wiki **solo staff** generate da sorgenti versionate in `docs/wiki/staff/`
 | `componenti-nave-riparazione.md` | Pagina «Componenti nave — stiva e riparazione» (`staff-componenti-nave-riparazione`) |
 | `card-studio-sette-elegie.md` | Pagina «Card Studio — carta Sette Elegie» (`staff-card-studio-sette-elegie`) |
 | `contratti.md` | Pagina «Contratti — impostare modelli e slot» (`staff-contratti`) |
+| `sezioni-condizionali.md` | Pagina «Tessiture e infusioni condizionali» (`staff-sezioni-condizionali`) |
 
 Parent menu: slug `staff-operativita-tecnica`, titolo **Operatività tecnica**.
 
