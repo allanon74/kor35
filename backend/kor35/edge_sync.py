@@ -19,10 +19,12 @@ from rest_framework.views import APIView
 from kor35.syncing import (
     apply_natural_pk_precheck,
     build_model_sync_records,
+    coerce_sync_scalar_value,
     ensure_qrcode_natural_pk_aligned,
     find_pilot_catalog_counterpart,
     lww_update_existing,
     pagina_regolamento_sync_field_allowed,
+    restore_auto_now_add_from_sync,
     touch_sync_updated_at,
     try_apply_mti_child_fields_when_skipped,
     try_apply_pagina_regolamento_structure_when_skipped,
@@ -413,7 +415,7 @@ class EdgeSyncView(APIView):
                         return "defer"
                 update_data[field.name] = resolved
             else:
-                update_data[field.name] = value
+                update_data[field.name] = coerce_sync_scalar_value(field, value)
 
         m2m_updates = {}
         for field_name, raw_list in m2m_raw.items():
@@ -529,6 +531,7 @@ class EdgeSyncView(APIView):
         for field_name, related_list in m2m_updates.items():
             getattr(obj, field_name).set(related_list)
 
+        restore_auto_now_add_from_sync(model, obj, update_data)
         if remote_updated_at and obj is not None:
             model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
         return "applied"

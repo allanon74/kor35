@@ -79,6 +79,33 @@ Campi sulla tabella figlia (`usa_effetto_temporaneo`, `oggetto_runtime_config`, 
 
 Identificare un record: **`sync_id`**, non l’`id` numerico (diverso tra ambienti).
 
+## DateTime nel payload e `save()` dei modelli
+
+Export JSON: i `DateTimeField` diventano stringhe ISO. All’apply vanno riconvertiti **prima** di `update_or_create`/`save()` (`coerce_sync_scalar_value` in `kor35/syncing.py`). Senza conversione, un `save()` che fa aritmetica su datetime (es. `StaffCompito.scadenza - timedelta`) alza `TypeError`, il record resta *defer* e il cursore `since` avanza comunque: i compiti spariscono dal delta e **non tornano** finché non fai un pull completo.
+
+`auto_now_add` su `created_at` ignora il valore remoto in creazione: dopo l’apply si riallinea col payload (`restore_auto_now_add_from_sync`). Altrimenti gli eventi runtime di pilotaggio (`EventoAttivoSessione`) sul mirror hanno `created_at` = istante sync e `deadline_at` originale, quindi countdown di migliaia di secondi (o negativi).
+
+Recupero dopo il fix (sul nodo replica, **dopo** il deploy del backend):
+
+```bash
+make sync-db-full ENV=mirror
+# oppure da PC: make mirror-pi-pull  poi sul Pi:
+# make sync-db-full ENV=mirror
+```
+
+Sintomo nei log: `gestione_plot.staffcompito: TypeError: unsupported operand type(s) for -: 'str' and 'datetime.timedelta'`.
+
+## Prestigio, punti allineamento e fattori KORP
+
+`Personaggio` è in denylist MTI (stato di gioco live): un touch locale su inventario/M2M rende `updated_at` più nuovo del master e LWW salta gli scalari, lasciando il mirror con Prestigio/punti vecchi. Stesso schema sui campi catalogo di `Carriera` (`fattore_task_*`, `sottoscrive_contratti`, slot, bonus).
+
+All’apply, se il record viene saltato per timestamp:
+
+- **prestigio / punti luminosi-oscuri-grigi**: si applica il valore remoto solo se è *maggiore* (max-wins: recupera i premi staff sul master, non ribassa un premio assegnato sull’edge).
+- **fattori KORP / contratti sulla Carriera**: si allineano dal payload anche se locale è più recente (catalogo: edit sul master).
+
+Dopo il deploy del backend sulla replica, `make sync-db-full ENV=mirror` **prima** del push verso il master, così il mirror recupera i valori staff e non rispedisce Prestigio=1 o fattori 1.00.
+
 ## Comandi utili
 
 ```bash

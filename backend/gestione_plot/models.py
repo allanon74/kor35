@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from django.db import models
 from django.conf import settings
+from django.utils.dateparse import parse_datetime
 from django.core.validators import MinValueValidator
 from personaggi.models import Personaggio, Manifesto, Inventario, QrCode, Tier, Punteggio
 from kor35.syncing import SyncableModel
@@ -1697,8 +1698,14 @@ class StaffCompito(SyncableModel, models.Model):
         return self.titolo
 
     def refresh_preavviso_at(self):
-        if self.scadenza and self.preavviso_minuti:
-            self.preavviso_at = self.scadenza - timedelta(minutes=int(self.preavviso_minuti))
+        scadenza = self.scadenza
+        if isinstance(scadenza, str):
+            parsed = parse_datetime(scadenza)
+            if parsed is not None:
+                scadenza = parsed
+                self.scadenza = parsed
+        if scadenza and self.preavviso_minuti:
+            self.preavviso_at = scadenza - timedelta(minutes=int(self.preavviso_minuti))
         else:
             self.preavviso_at = None
 
