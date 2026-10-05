@@ -387,6 +387,8 @@ urlpatterns = [
     path('api/staff/proposte/valutazione/', ProposteValutazioneList.as_view(), name='staff-proposte-valutazione'),
     
     path('api/staff/proposta/<int:pk>/rifiuta/', RifiutaPropostaView.as_view(), name='staff-rifiuta-proposta'),
+    # Alias: la lista è su `proposte/` (plurale); il client ha già chiamato questo path in produzione.
+    path('api/staff/proposte/<int:pk>/rifiuta/', RifiutaPropostaView.as_view(), name='staff-rifiuta-proposta-alias'),
     path('api/staff/proposta/<int:pk>/approva/', ApprovaPropostaView.as_view(), name='staff-approva-proposta'),
     path('api/staff/messages/', StaffMessageListView.as_view(), name='staff-messages'),
     path('api/staff/oggetti-senza-posizione/', views_staff.OggettiSenzaPosizioneView.as_view(), name='staff-oggetti-senza-posizione'),

@@ -2938,7 +2938,7 @@ export const staffGetProposteInValutazione = (onLogout) => {
  */
 export const staffRifiutaProposta = (propostaId, noteStaff, onLogout) => {
   return fetchAuthenticated(
-    `/api/personaggi/api/staff/proposte/${propostaId}/rifiuta/`,
+    `/api/personaggi/api/staff/proposta/${propostaId}/rifiuta/`,
     {
       method: 'POST',
       body: JSON.stringify({ note_staff: noteStaff })
