@@ -10,12 +10,15 @@ const emptyCondizioni = () => ({
   requisiti: [{ tipo: 'punteggio', nome: '', min: 2, op: 'gt' }],
 });
 
-const emptySezione = (ordine = 0) => ({
+const emptySezione = (ordine = 0, extras = {}) => ({
   ordine,
   testo: '',
-  condizioni: emptyCondizioni(),
-  statistiche_base: [],
-  modificatori: [],
+  modalita: extras.modalita || 'auto',
+  etichetta: extras.etichetta || '',
+  sostituisci_bersaglio: !!extras.sostituisci_bersaglio,
+  condizioni: extras.condizioni || emptyCondizioni(),
+  statistiche_base: extras.statistiche_base || [],
+  modificatori: extras.modificatori || [],
 });
 
 const emptyBaseRow = () => ({ statistica: null, valore_base: 0 });
@@ -31,9 +34,11 @@ const SezioniCondizionaliEditor = ({
   statsOptions = [],
   onChange,
   onLogout,
+  variant = 'infusione',
 }) => {
   const { lookup, loading: lookupLoading } = useRequisitiAccessoLookup(onLogout);
   const list = Array.isArray(items) ? items : [];
+  const isTessitura = variant === 'tessitura';
 
   const commit = (next) => onChange(next.map((s, idx) => ({ ...s, ordine: idx })));
 
@@ -64,17 +69,38 @@ const SezioniCondizionaliEditor = ({
             Sezioni condizionali
           </h3>
           <p className="text-[11px] text-gray-400 mt-1">
-            Testo extra, statistiche base e modificatori visibili/attivi solo se il personaggio
-            soddisfa la condizione (es. Aura Magica &gt; 2).
+            {isTessitura
+              ? 'Bonus di formula visibili se il personaggio soddisfa un requisito automatico (es. Aura Magica > 1) oppure se il giocatore attiva un flag facoltativo (es. Canto, Ballo).'
+              : 'Testo extra, statistiche base e modificatori visibili/attivi solo se il personaggio soddisfa la condizione (es. Aura Magica > 2).'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => commit([...list, emptySezione(list.length)])}
-          className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-2 rounded font-bold shrink-0 min-h-11"
-        >
-          + Sezione
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+          {isTessitura && (
+            <>
+              <button
+                type="button"
+                onClick={() => commit([...list, emptySezione(list.length, { modalita: 'manuale', etichetta: 'Canto', condizioni: { operator: 'AND', requisiti: [] } })])}
+                className="text-xs bg-amber-700 hover:bg-amber-600 px-3 py-2 rounded font-bold min-h-11"
+              >
+                + Canto
+              </button>
+              <button
+                type="button"
+                onClick={() => commit([...list, emptySezione(list.length, { modalita: 'manuale', etichetta: 'Ballo', sostituisci_bersaglio: true, condizioni: { operator: 'AND', requisiti: [] } })])}
+                className="text-xs bg-amber-700 hover:bg-amber-600 px-3 py-2 rounded font-bold min-h-11"
+              >
+                + Ballo
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => commit([...list, emptySezione(list.length, isTessitura ? { condizioni: emptyCondizioni() } : {})])}
+            className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-2 rounded font-bold min-h-11"
+          >
+            + Sezione
+          </button>
+        </div>
       </div>
 
       {list.length === 0 && (
@@ -106,12 +132,59 @@ const SezioniCondizionaliEditor = ({
               </div>
             </div>
 
+            {isTessitura && (
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <label className="flex items-center gap-2 text-xs text-indigo-100 min-h-11 px-3 py-2 rounded border border-indigo-500/40 bg-indigo-950/40 cursor-pointer">
+                    <input
+                      type="radio"
+                      name={`sezione-mod-${idx}`}
+                      checked={(sezione.modalita || 'auto') === 'auto'}
+                      onChange={() => updateAt(idx, { modalita: 'auto' })}
+                    />
+                    Automatica (requisiti PG)
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-amber-100 min-h-11 px-3 py-2 rounded border border-amber-500/40 bg-amber-950/40 cursor-pointer">
+                    <input
+                      type="radio"
+                      name={`sezione-mod-${idx}`}
+                      checked={sezione.modalita === 'manuale'}
+                      onChange={() => updateAt(idx, { modalita: 'manuale' })}
+                    />
+                    Facoltativa (flag giocatore)
+                  </label>
+                </div>
+                {sezione.modalita === 'manuale' && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] text-gray-500 uppercase font-black block tracking-tighter">
+                      Etichetta flag (es. Canto, Ballo)
+                    </label>
+                    <input
+                      className="w-full min-h-11 bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white"
+                      value={sezione.etichetta || ''}
+                      onChange={(e) => updateAt(idx, { etichetta: e.target.value })}
+                      placeholder="Canto"
+                    />
+                    <label className="flex items-center gap-2 text-[11px] text-cyan-200 cursor-pointer min-h-11">
+                      <input
+                        type="checkbox"
+                        className="accent-cyan-500"
+                        checked={!!sezione.sostituisci_bersaglio}
+                        onChange={(e) => updateAt(idx, { sostituisci_bersaglio: e.target.checked })}
+                      />
+                      Sostituisci il bersaglio della formula (es. esplosione al posto del tocco)
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+
             <RequisitiGruppoEditor
               value={sezione.condizioni || emptyCondizioni()}
               onChange={(condizioni) => updateAt(idx, { condizioni })}
               lookup={lookup}
               lookupLoading={lookupLoading}
-              label="Attiva se"
+              label={isTessitura && sezione.modalita === 'manuale' ? 'Prerequisito automatico (opzionale)' : 'Attiva se'}
             />
 
             <RichTextEditor
@@ -164,6 +237,7 @@ const SezioniCondizionaliEditor = ({
               ))}
             </div>
 
+            {!isTessitura && (
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
@@ -227,6 +301,7 @@ const SezioniCondizionaliEditor = ({
                 </div>
               ))}
             </div>
+            )}
           </div>
         ))}
       </div>

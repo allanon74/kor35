@@ -34,6 +34,7 @@ const ALLOWED_DATA_ATTR = new Set([
     'data-table-style',
     'data-custom-style',
     'data-placeholder',
+    'data-flags',
 ]);
 
 /**

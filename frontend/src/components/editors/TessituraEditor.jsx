@@ -9,6 +9,8 @@ import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import ActivationCostInline from './inlines/ActivationCostInline';
+import SezioniCondizionaliEditor from './inlines/SezioniCondizionaliEditor';
+import SearchableSelect from './SearchableSelect';
 import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
 
 /** Garantisce che l'abilità già salvata compaia nel select anche se fuori dalla prima pagina API. */
@@ -72,6 +74,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     durata_effetto_secondi: 0,
     oggetto_runtime_config_str: '',
     costi_attivazione: [],
+    sezioni_condizionali: [],
   };
 
   const hydrateForm = (data) => {
@@ -178,6 +181,23 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
           statistica: row.statistica?.id || row.statistica,
           costo: parseInt(row.costo ?? 1, 10) || 1,
         })).filter((row) => row.statistica && row.costo > 0),
+        sezioni_condizionali: (formData.sezioni_condizionali || []).map((sez, idx) => ({
+          ordine: idx,
+          testo: sez.testo || '',
+          modalita: sez.modalita === 'manuale' ? 'manuale' : 'auto',
+          etichetta: sez.etichetta || '',
+          sostituisci_bersaglio: !!sez.sostituisci_bersaglio,
+          condizioni: sez.condizioni && typeof sez.condizioni === 'object'
+            ? sez.condizioni
+            : { operator: 'AND', requisiti: [] },
+          statistiche_base: (sez.statistiche_base || [])
+            .map((sb) => {
+              const sId = sb.statistica?.id || sb.statistica;
+              if (!sId) return null;
+              return { statistica: sId, valore_base: Number(sb.valore_base) || 0 };
+            })
+            .filter(Boolean),
+        })),
       };
       if (formData.oggetto_runtime_config_str && String(formData.oggetto_runtime_config_str).trim()) {
         try {
@@ -384,6 +404,14 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         items={formData.statistiche_base || []} 
         options={statsOptions} 
         onChange={(i, f, v) => updateInline('statistiche_base', i, f, v)} 
+      />
+
+      <SezioniCondizionaliEditor
+        variant="tessitura"
+        items={formData.sezioni_condizionali || []}
+        statsOptions={statsOptions}
+        onLogout={onLogout}
+        onChange={(sezioni_condizionali) => setFormData({ ...formData, sezioni_condizionali })}
       />
 
       <FormulaBuilderModal

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import PunteggioDisplay from './PunteggioDisplay.jsx';
 import RichHtml from './RichHtml';
@@ -27,6 +27,21 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica', char = null })
   const componentiRows = Array.isArray(tecnica.componenti) && tecnica.componenti.length > 0
     ? tecnica.componenti
     : (Array.isArray(tecnica.mattoni) ? tecnica.mattoni.map((m) => ({ caratteristica: m.mattone, valore: m.valore })) : []);
+  const manualFlags = useMemo(
+    () => (tecnica.sezioni_condizionali || []).filter((s) => s.modalita === 'manuale'),
+    [tecnica.sezioni_condizionali]
+  );
+  const [activeManualIds, setActiveManualIds] = useState([]);
+  const activeFlagsKey = useMemo(
+    () => [...activeManualIds].map(String).sort().join(','),
+    [activeManualIds]
+  );
+  const toggleManual = (id) => {
+    const sid = String(id);
+    setActiveManualIds((prev) => (
+      prev.includes(sid) ? prev.filter((x) => x !== sid) : [...prev, sid]
+    ));
+  };
 
   return (
     <div 
@@ -104,11 +119,51 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica', char = null })
                 </div>
               </div>
             )}
+            {manualFlags.length > 0 && (
+              <div className="rounded-md border border-amber-800/40 bg-amber-950/20 p-3 space-y-2">
+                <div className="text-xs font-bold text-amber-300 uppercase tracking-wider">
+                  Condizioni facoltative
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  Attiva i flag per filtrare la formula. Senza selezione vedi tutte le varianti.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {manualFlags.map((sez) => {
+                    const sid = String(sez.id);
+                    const on = activeManualIds.includes(sid);
+                    return (
+                      <button
+                        key={sid}
+                        type="button"
+                        onClick={() => toggleManual(sid)}
+                        className={`min-h-11 px-3 py-2 rounded-lg text-sm font-bold border ${
+                          on
+                            ? 'bg-amber-600 border-amber-400 text-white'
+                            : 'bg-gray-900 border-gray-600 text-gray-200'
+                        }`}
+                      >
+                        {sez.etichetta || 'Azione'}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {testoDescrizione ? (
+            <div
+              className={activeFlagsKey ? 'kor-tessitura-filtro' : ''}
+              data-active-flags={activeFlagsKey}
+            >
+              {activeFlagsKey ? (
+                <style>
+                  {`.kor-tessitura-filtro[data-active-flags="${activeFlagsKey}"] .kor-formula-variante:not([data-flags="${activeFlagsKey}"]){display:none;}`}
+                </style>
+              ) : null}
             <RichHtml
                 content={testoDescrizione}
                 className="text-gray-200 text-base leading-relaxed prose prose-invert prose-base max-w-none break-words prose-p:my-2 prose-li:my-1"
             />
+            </div>
             ) : (
             <p className="text-gray-500 italic text-base">Nessuna descrizione disponibile.</p>
             )}

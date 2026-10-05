@@ -88,6 +88,7 @@ from .models import (
     InfusioneSezioneCondizionale, InfusioneSezioneStatistica,
     InfusioneSezioneStatisticaBase,
     OggettoSezioneCondizionale, OggettoSezioneStatistica, OggettoSezioneStatisticaBase,
+    TessituraSezioneCondizionale, TessituraSezioneStatisticaBase,
     CerimonialeCaratteristica,
     OggettoBase, OggettoBaseStatisticaBase, OggettoBaseModificatore, 
     ForgiaturaInCorso, 
@@ -1368,6 +1369,30 @@ class InfusioneSezioneCondizionaleSerializer(serializers.Serializer):
         }
 
 
+class TessituraSezioneCondizionaleSerializer(InfusioneSezioneCondizionaleSerializer):
+    def to_internal_value(self, data):
+        out = super().to_internal_value(data)
+        raw = dict(data or {})
+        from .sezioni_condizionali import tessitura_sezione_extra_from_raw
+        out.update(tessitura_sezione_extra_from_raw(raw))
+        return out
+
+    def to_representation(self, instance):
+        return {
+            "id": str(instance.id),
+            "ordine": instance.ordine,
+            "testo": instance.testo or "",
+            "condizioni": instance.condizioni or {},
+            "modalita": instance.modalita or "auto",
+            "etichetta": instance.etichetta or "",
+            "sostituisci_bersaglio": bool(instance.sostituisci_bersaglio),
+            "statistiche_base": _SezioneStatisticaBaseEditorSerializer(
+                instance.statistiche_base.select_related("statistica").all(), many=True
+            ).data,
+            "modificatori": [],
+        }
+
+
 class OggettoSezioneCondizionaleSerializer(InfusioneSezioneCondizionaleSerializer):
     pass
 
@@ -1967,6 +1992,7 @@ class TessituraSerializer(serializers.ModelSerializer):
     # Gestione Costi
     costo_pieno = serializers.SerializerMethodField()
     costo_effettivo = serializers.SerializerMethodField()
+    sezioni_condizionali = TessituraSezioneCondizionaleSerializer(many=True, read_only=True)
 
     class Meta:
         model = Tessitura
@@ -1977,6 +2003,7 @@ class TessituraSerializer(serializers.ModelSerializer):
             'componenti', # NEW
             'statistiche_base',
             'costi_attivazione',
+            'sezioni_condizionali',
             'costo_crediti', 'costo_pieno', 'costo_effettivo',
             'usa_effetto_temporaneo', 'abilita_temporanea', 'durata_effetto_secondi', 'oggetto_runtime_config',
             'non_acquistabile',
@@ -2269,6 +2296,7 @@ class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
     componenti = TessituraCaratteristicaSerializer(many=True, required=False)
     statistiche_base = TessituraStatisticaBaseSerializer(many=True, required=False, source='tessiturastatisticabase_set')
     costi_attivazione = TessituraCostoAttivazioneSerializer(many=True, required=False)
+    sezioni_condizionali = TessituraSezioneCondizionaleSerializer(many=True, required=False)
     livello = serializers.IntegerField(read_only=True) # Campo calcolato per la lista
 
     class Meta:
@@ -2281,6 +2309,9 @@ class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         rep['aura_richiesta'] = PunteggioSmallSerializer(instance.aura_richiesta).data if instance.aura_richiesta else None
         rep['elemento_principale'] = PunteggioSmallSerializer(instance.elemento_principale).data if instance.elemento_principale else None
         rep['abilita_temporanea'] = AbilitaSmallForPrereqSerializer(instance.abilita_temporanea).data if instance.abilita_temporanea else None
+        rep['sezioni_condizionali'] = TessituraSezioneCondizionaleSerializer(
+            instance.sezioni_condizionali.order_by('ordine', 'created_at'), many=True
+        ).data
         rep.update(_qr_fields_for_avista(instance))
         return rep
 
@@ -2289,8 +2320,10 @@ class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         comp = validated_data.pop('componenti', [])
         s_base = validated_data.pop('tessiturastatisticabase_set', [])
         costi = validated_data.pop('costi_attivazione', [])
+        sezioni = validated_data.pop('sezioni_condizionali', [])
         instance = Tessitura.objects.create(**validated_data)
         self.handle_nested_data(instance, comp, s_base, None, costi)
+        self._sync_sezioni(instance, sezioni)
         return instance
     
     @transaction.atomic
@@ -2298,10 +2331,24 @@ class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         comp = validated_data.pop('componenti', None)
         s_base = validated_data.pop('tessiturastatisticabase_set', None)
         costi = validated_data.pop('costi_attivazione', None)
+        sezioni = validated_data.pop('sezioni_condizionali', None)
 
         instance = super().update(instance, validated_data)
         self.handle_nested_data(instance, comp, s_base, None, costi)
+        self._sync_sezioni(instance, sezioni)
         return instance
+
+    def _sync_sezioni(self, instance, sezioni):
+        from .sezioni_condizionali import sync_sezioni_nested, tessitura_sezione_extra_from_raw
+        sync_sezioni_nested(
+            instance,
+            sezioni,
+            sezione_model=TessituraSezioneCondizionale,
+            base_model=TessituraSezioneStatisticaBase,
+            mod_model=None,
+            parent_fk_name='tessitura',
+            extra_from_raw=tessitura_sezione_extra_from_raw,
+        )
 
 class CerimonialeFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMasterMixin):
     componenti = CerimonialeCaratteristicaSerializer(many=True, required=False)
@@ -3650,6 +3697,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             "tessiturastatisticabase_set__statistica",
             "costi_attivazione__statistica",
             "componenti__caratteristica",
+            "sezioni_condizionali__statistiche_base__statistica",
         )
         tessiture_ids = list(tessiture.values_list("id", flat=True))
         if not tessiture_ids:

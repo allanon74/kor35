@@ -3389,24 +3389,32 @@ class Tessitura(Tecnica):
         return self.livello * base
         
     @property
-    def TestoFormattato(self): 
+    def TestoFormattato(self):
+        from .sezioni_condizionali import (
+            contesto_formula_tessitura,
+            html_sezioni_append,
+            html_varianti_manuali_tessitura,
+            merge_statistiche_base,
+            sezioni_auto_attive,
+        )
+        stats_raw = self.tessiturastatisticabase_set.select_related('statistica').order_by(
+            '-statistica__formula', 'statistica__ordine', 'statistica__nome'
+        ).all()
+        ctx = contesto_formula_tessitura(self)
+        stats = merge_statistiche_base(stats_raw, sezioni_auto_attive(self, None))
         base = formatta_testo_generico(
             self.testo,
             formula=self.formula,
-            statistiche_base=self.tessiturastatisticabase_set.select_related('statistica').order_by(
-                '-statistica__formula', 'statistica__ordine', 'statistica__nome'
-            ).all(),
-            context={
-                'elemento': self.elemento_principale,
-                'livello': self.livello,
-                'aura': self.aura_richiesta,
-                'formula_kind': FORMULA_SCOPE_WEAVE,
-                'allow_implicit_formula_source': False,
-                'formula_builder_selezioni': self.formula_builder_selezioni or {},
-                'attack_formula_template': self.formula,
-            },
+            statistiche_base=stats,
+            context=ctx,
         )
-        return base + formatta_html_costi_attivazione_tessitura(self)
+        extra = html_sezioni_append(
+            self, None, context=ctx, formula=self.formula, statistiche_base=stats_raw
+        )
+        extra += html_varianti_manuali_tessitura(
+            self, None, context=ctx, formula=self.formula, statistiche_base=stats_raw
+        )
+        return base + extra + formatta_html_costi_attivazione_tessitura(self)
     
 class Cerimoniale(Tecnica):
     """
@@ -3618,6 +3626,83 @@ class InfusioneSezioneStatistica(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.statistica}: {self.valore}"
+
+
+SEZIONE_MODALITA_AUTO = "auto"
+SEZIONE_MODALITA_MANUALE = "manuale"
+SEZIONE_MODALITA_CHOICES = [
+    (SEZIONE_MODALITA_AUTO, "Automatica (requisiti del personaggio)"),
+    (SEZIONE_MODALITA_MANUALE, "Facoltativa (il giocatore la attiva)"),
+]
+
+
+class TessituraSezioneCondizionale(SyncableModel, models.Model):
+    """
+    Blocco extra su tessitura: testo + statistiche formula.
+
+    - modalita=auto: si attiva da sola se il PG soddisfa `condizioni`
+      (es. Aura Magica > 1).
+    - modalita=manuale: il giocatore la accende a mano (es. «Canto», «Ballo»);
+      `condizioni` resta un eventuale prerequisito automatico.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tessitura = models.ForeignKey(
+        Tessitura, on_delete=models.CASCADE, related_name="sezioni_condizionali"
+    )
+    ordine = models.PositiveIntegerField(default=0)
+    modalita = models.CharField(
+        max_length=12,
+        choices=SEZIONE_MODALITA_CHOICES,
+        default=SEZIONE_MODALITA_AUTO,
+        db_index=True,
+    )
+    etichetta = models.CharField(
+        max_length=80,
+        blank=True,
+        default="",
+        help_text="Nome della condizione facoltativa (es. Canto, Ballo). Usato anche come flag in {if canto}.",
+    )
+    testo = models.TextField("Testo addizionale", blank=True, default="")
+    condizioni = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Gruppo requisiti AND/OR: {"operator":"AND"|"OR","requisiti":[...]}.',
+    )
+    sostituisci_bersaglio = models.BooleanField(
+        default=False,
+        help_text="Se attivo, le stats bersaglio di questa sezione (esplos, tocco, …) sostituiscono quelle della formula base.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["ordine", "created_at"]
+        verbose_name = "Sezione condizionale tessitura"
+        verbose_name_plural = "Sezioni condizionali tessitura"
+
+    def __str__(self):
+        return f"Sezione {self.ordine} di {self.tessitura_id}"
+
+
+class TessituraSezioneStatisticaBase(SyncableModel, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sezione = models.ForeignKey(
+        TessituraSezioneCondizionale,
+        on_delete=models.CASCADE,
+        related_name="statistiche_base",
+    )
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore_base = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("sezione", "statistica")
+        verbose_name = "Statistica base sezione tessitura"
+        verbose_name_plural = "Statistiche base sezioni tessitura"
+
+    def __str__(self):
+        return f"{self.statistica}: {self.valore_base}"
 
 
 class TessituraCostoAttivazione(SyncableModel, models.Model):
@@ -8397,7 +8482,14 @@ class Personaggio(Inventario):
     def get_testo_formattato_per_item(self, item):
         if not item: return ""
         testo_finale=""
-        from .sezioni_condizionali import html_sezioni_append, statistiche_base_per_item
+        from .sezioni_condizionali import (
+            contesto_formula_tessitura,
+            html_sezioni_append,
+            html_varianti_manuali_tessitura,
+            merge_statistiche_base,
+            sezioni_auto_attive,
+            statistiche_base_per_item,
+        )
         
         if isinstance(item, Oggetto):
             stats = statistiche_base_per_item(item, self)
@@ -8435,11 +8527,26 @@ class Personaggio(Inventario):
             )
         
         elif isinstance(item, Tessitura):
-            stats = item.tessiturastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
+            stats_raw = item.tessiturastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
+            stats = merge_statistiche_base(stats_raw, sezioni_auto_attive(item, self))
             formula_text = item.formula or ""
+            ctx = contesto_formula_tessitura(item)
+
+            def _append_sezioni_tessitura(html, context=None):
+                ctx_use = context or ctx
+                extra = html_sezioni_append(
+                    item, self, context=ctx_use, formula=formula_text, statistiche_base=stats_raw
+                )
+                extra += html_varianti_manuali_tessitura(
+                    item, self, context=ctx_use, formula=formula_text, statistiche_base=stats
+                )
+                return (html or "") + extra
+
             if "{elem}" not in formula_text:
-                ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale, 'formula_kind': FORMULA_SCOPE_WEAVE}
-                testo_finale =  formatta_testo_generico(item.testo, formula=formula_text, statistiche_base=stats, personaggio=self, context=ctx)
+                testo_finale = formatta_testo_generico(
+                    item.testo, formula=formula_text, statistiche_base=stats, personaggio=self, context=ctx
+                )
+                testo_finale = _append_sezioni_tessitura(testo_finale)
             else:
                 modello = self.modello_aura_per(item.aura_richiesta)
                 elementi_map = {} 
@@ -8476,25 +8583,35 @@ class Personaggio(Inventario):
 
                 elementi_da_calcolare = list(elementi_map.values())
                 if not elementi_da_calcolare:
-                    ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': None, 'formula_kind': FORMULA_SCOPE_WEAVE}
-                    return formatta_testo_generico(item.testo, formula=item.formula, statistiche_base=stats, personaggio=self, context=ctx)
+                    ctx_empty = contesto_formula_tessitura(item, elemento=None)
+                    return _append_sezioni_tessitura(
+                        formatta_testo_generico(
+                            item.testo, formula=item.formula, statistiche_base=stats, personaggio=self, context=ctx_empty
+                        ),
+                        ctx_empty,
+                    )
 
-                ctx_base = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale, 'formula_kind': FORMULA_SCOPE_WEAVE}
+                ctx_base = contesto_formula_tessitura(item)
                 descrizione_html = formatta_testo_generico(item.testo, formula=None, statistiche_base=stats, personaggio=self, context=ctx_base)
                 
                 formule_html = []
                 for elem in elementi_da_calcolare:
                     val_caratt = 0
                     if elem.caratteristica_relativa: val_caratt = self.caratteristiche_base.get(elem.caratteristica_relativa.nome, 0)
-                    ctx_loop = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': elem, 'caratteristica_associata_valore': val_caratt, 'formula_kind': FORMULA_SCOPE_WEAVE}
+                    ctx_loop = contesto_formula_tessitura(
+                        item, elemento=elem, caratteristica_associata_valore=val_caratt
+                    )
                     risultato_formula = formatta_testo_generico(None, formula=item.formula, statistiche_base=stats, personaggio=self, context=ctx_loop, solo_formula=True)
                     valore_pura_formula = risultato_formula.replace("<strong>Formula:</strong>", "").strip()
                     if valore_pura_formula:
                         block = f"<div style='margin-top: 4px; padding: 4px 8px; border-left: 3px solid {elem.colore}; background-color: rgba(255,255,255,0.05); border-radius: 0 4px 4px 0;'><span style='color: {elem.colore}; font-weight: bold; margin-right: 6px;'>{elem.nome}:</span>{valore_pura_formula}</div>"
                         formule_html.append(block)
 
-                if formule_html: return f"{descrizione_html}<hr style='margin: 10px 0; border: 0; border-top: 1px dashed #555;'/><div style='font-size: 0.95em;'><strong>Formule:</strong>{''.join(formule_html)}</div>"
-                testo_finale =  descrizione_html
+                if formule_html:
+                    return _append_sezioni_tessitura(
+                        f"{descrizione_html}<hr style='margin: 10px 0; border: 0; border-top: 1px dashed #555;'/><div style='font-size: 0.95em;'><strong>Formule:</strong>{''.join(formule_html)}</div>"
+                    )
+                testo_finale = _append_sezioni_tessitura(descrizione_html)
         
         if isinstance(item, Abilita):
             stats = item.abilitastatistica_set.select_related('statistica').order_by(
