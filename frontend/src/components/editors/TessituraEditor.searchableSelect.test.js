@@ -1,4 +1,6 @@
 /**
+ * @vitest-environment node
+ *
  * Regressione: import di ./SearchableSelect + const locale omonimo
  * faceva fallire `vite build` e bloccava il deploy.
  */
