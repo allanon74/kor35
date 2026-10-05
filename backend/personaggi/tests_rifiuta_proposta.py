@@ -36,7 +36,7 @@ class RifiutaPropostaStaffTests(TestCase):
         )
         self.tipologia = TipologiaPersonaggio.objects.create(nome='Standard Rifiuta TES')
         self.staff = User.objects.create_user(
-            username='staff_rifiuta_tes', password='x', is_staff=True
+            username='staff_rifiuta_tes', password='x', is_staff=True, is_superuser=True
         )
         self.giocatore = User.objects.create_user(username='player_rifiuta_tes', password='x')
         self.aura = Punteggio.objects.create(nome='Aura Rifiuta', sigla='ARF', tipo=AURA)
