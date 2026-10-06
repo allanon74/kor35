@@ -34,6 +34,7 @@ import { isNativeApp } from '../lib/nativePlatform';
 import { ensureAppServiceWorker } from '../lib/appServiceWorker';
 import { canAccessModuloMode, getModuloAccesso } from '../lib/campagnaModuli';
 import { htmlToPlainText } from '../utils/htmlSanitizer';
+import { mergeActiveTimers, normalizeTimerRow, timerStateKey } from '../utils/activeTimers';
 
 import { 
   usePunteggi, 
@@ -154,12 +155,14 @@ export const CharacterProvider = ({ children, onLogout }) => {
   const [activeTimers, setActiveTimers] = useState({});
 
   const updateTimerState = useCallback((timerData) => {
+    const normalized = normalizeTimerRow(timerData);
+    if (!normalized) return;
+    const key = timerStateKey(normalized);
     setActiveTimers(prev => ({
         ...prev,
-        [timerData.nome]: {
-            ...timerData,
-            endTime: new Date(timerData.data_fine || timerData.endsAt || timerData.endTime).getTime(),
-            variant: timerData.variant || prev[timerData.nome]?.variant,
+        [key]: {
+            ...normalized,
+            variant: normalized.variant || prev[key]?.variant,
         }
     }));
   }, []);
@@ -172,7 +175,32 @@ export const CharacterProvider = ({ children, onLogout }) => {
     });
   }, []);
 
-  // --- FETCH INIZIALE TIMER ATTIVI ---
+  // Rilegge i timer all'apertura, al cambio PG, al ritorno in foreground e al cambio pagina.
+  // Il countdown poi corre in locale: niente sync di rete ogni secondo.
+  const refreshActiveTimers = useCallback(async () => {
+    try {
+      const qs = selectedCharacterId ? `?personaggio_id=${selectedCharacterId}` : '';
+      const data = await fetchAuthenticated(`/api/personaggi/api/timers/active/${qs}`, onLogout);
+      if (Array.isArray(data)) {
+        setActiveTimers((prev) => mergeActiveTimers(prev, data));
+      }
+    } catch (err) {
+      console.error('Errore caricamento timer', err);
+    }
+  }, [onLogout, selectedCharacterId]);
+
+  useEffect(() => {
+    refreshActiveTimers();
+  }, [refreshActiveTimers]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshActiveTimers();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refreshActiveTimers]);
+
   const refreshCampaigns = useCallback(async () => {
     try {
       const list = await getCampaigns(onLogout);
@@ -243,22 +271,6 @@ export const CharacterProvider = ({ children, onLogout }) => {
       clearInterval(interval);
     };
   }, [onLogout]);
-
-  useEffect(() => {
-    const loadInitialTimers = async () => {
-      try {
-        const qs = selectedCharacterId ? `?personaggio_id=${selectedCharacterId}` : '';
-        const data = await fetchAuthenticated(`/api/personaggi/api/timers/active/${qs}`, onLogout);
-        if (Array.isArray(data)) {
-          data.forEach(t => updateTimerState(t));
-        }
-      } catch (err) {
-        console.error("Errore caricamento timer iniziali", err);
-      }
-    };
-    loadInitialTimers();
-  }, [onLogout, updateTimerState, selectedCharacterId]);
-
 
   // --- REACT QUERY HOOKS ---
   
@@ -789,14 +801,18 @@ export const CharacterProvider = ({ children, onLogout }) => {
         if (action === 'TIMER_INNESCO_SYNC' && payload) {
             const ids = payload.recipient_personaggio_ids || [];
             const myId = parseInt(selectedCharacterId, 10);
-            if (!ids.length || ids.includes(myId)) {
+            const destinatari = ids.map((id) => Number(id));
+            if (!destinatari.length || destinatari.includes(myId)) {
               updateTimerState({
+                id: payload.id,
                 nome: payload.nome,
                 data_fine: payload.data_fine,
                 alert_suono: true,
                 // Push scadenza: worker server (dispatch_timer_expiry), evita doppia Notification locale
                 notifica_push: false,
                 messaggio_in_app: true,
+                segnale_luminoso: payload.segnale_luminoso !== false,
+                source: 'innesco_timer',
               });
             }
         }
@@ -908,6 +924,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
     setActiveTimers,
     updateTimerState,
     removeTimerState,
+    refreshActiveTimers,
     
     isLoading: isLoadingList || isLoadingDetail || isLoadingPunteggi || isLoadingStatContainers || mutatingCount > 0,
     isLoadingList,
@@ -977,6 +994,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
     activeTimers,
     updateTimerState,
     removeTimerState,
+    refreshActiveTimers,
     isLoadingList,
     isLoadingDetail,
     isLoadingPunteggi,

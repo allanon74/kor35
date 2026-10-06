@@ -2692,10 +2692,14 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
     target_ere_ids = serializers.SerializerMethodField()
     target_regioni_ids = serializers.SerializerMethodField()
     target_korps_ids = serializers.SerializerMethodField()
+    target_evento_id = serializers.SerializerMethodField()
+    target_personaggi = serializers.SerializerMethodField()
     campagna = serializers.PrimaryKeyRelatedField(read_only=True)
-    has_qrcode = serializers.BooleanField(read_only=True)
-    qrcode_id = serializers.CharField(read_only=True, allow_null=True)
-    minigioco_usa_default = serializers.BooleanField(read_only=True, default=False)
+    gruppo_id = serializers.UUIDField(read_only=True)
+    ordine_istanza = serializers.IntegerField(read_only=True)
+    has_qrcode = serializers.SerializerMethodField()
+    qrcode_id = serializers.SerializerMethodField()
+    minigioco_usa_default = serializers.SerializerMethodField()
 
     class Meta:
         model = InnescoTimer
@@ -2709,14 +2713,44 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
             "rigenera_cariche_ogni_secondi",
             "segnale_luminoso",
             "campagna",
+            "gruppo_id",
+            "etichetta_istanza",
+            "ordine_istanza",
+            "target_evento_id",
             "target_ere_ids",
             "target_regioni_ids",
             "target_korps_ids",
+            "target_personaggi",
             "has_qrcode",
             "qrcode_id",
             "minigioco_usa_default",
         )
-        read_only_fields = ("campagna", "target_ere_ids", "target_regioni_ids", "target_korps_ids")
+        read_only_fields = (
+            "campagna",
+            "gruppo_id",
+            "ordine_istanza",
+            "target_evento_id",
+            "target_ere_ids",
+            "target_regioni_ids",
+            "target_korps_ids",
+            "target_personaggi",
+        )
+
+    def get_target_evento_id(self, obj):
+        return obj.target_evento_id
+
+    def get_has_qrcode(self, obj):
+        annotated = getattr(obj, "has_qrcode", None)
+        if annotated is not None:
+            return bool(annotated)
+        return bool(getattr(obj, "qrcode_id", None))
+
+    def get_qrcode_id(self, obj):
+        valore = getattr(obj, "qrcode_id", None)
+        return str(valore) if valore else None
+
+    def get_minigioco_usa_default(self, obj):
+        return bool(getattr(obj, "minigioco_usa_default", False))
 
     def get_target_ere_ids(self, obj):
         return list(obj.target_ere.values_list("id", flat=True))
@@ -2726,6 +2760,16 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
 
     def get_target_korps_ids(self, obj):
         return list(obj.target_korps.values_list("id", flat=True))
+
+    def get_target_personaggi(self, obj):
+        righe = []
+        for pg in obj.target_personaggi.select_related("proprietario").all():
+            user = pg.proprietario
+            giocatore = ""
+            if user is not None:
+                giocatore = (user.get_full_name() or "").strip() or user.username
+            righe.append({"id": pg.id, "nome": pg.nome, "giocatore": giocatore})
+        return righe
 
 
 class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
