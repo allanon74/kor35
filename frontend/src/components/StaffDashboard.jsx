@@ -43,6 +43,7 @@ const EraManager = lazy(() => import('./editors/EraManager'));
 const CarriereKorpsManager = lazy(() => import('./editors/CarriereKorpsManager'));
 const DichiarazioniGlossarioManager = lazy(() => import('./editors/DichiarazioniGlossarioManager'));
 const StatisticaManager = lazy(() => import('./editors/StatisticaManager'));
+const AuraManager = lazy(() => import('./editors/AuraManager'));
 const ArcanaProfilesTab = lazy(() => import('./editors/ArcanaProfilesTab'));
 const CampaignManager = lazy(() => import('./editors/CampaignManager'));
 const ManifestoManager = lazy(() => import('./editors/ManifestoManager'));
@@ -99,6 +100,7 @@ const STAFF_COMPONENT_MAP = {
     'creazione-guidata': CreazioneGuidataStaffManager,
     'dichiarazioni-glossario': DichiarazioniGlossarioManager,
     statistiche: StatisticaManager,
+    aure: AuraManager,
     'arcana-profiles': ArcanaProfilesTab,
     campagne: CampaignManager,
     maintenance: MaintenanceModePanel,

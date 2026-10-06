@@ -40,6 +40,7 @@ KNOWN_STAFF_TOOL_IDS = frozenset({
     "creazione-guidata",
     "dichiarazioni-glossario",
     "statistiche",
+    "aure",
     "arcana-profiles",
     "campagne",
     "maintenance",
@@ -109,6 +110,7 @@ DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
                 "carriere-korps",
                 "dichiarazioni-glossario",
                 "statistiche",
+                "aure",
             ],
         },
         {

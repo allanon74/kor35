@@ -29,6 +29,8 @@ from .models import (
     PersonaggioCarrieraMembership, CarrieraTierSblocco,
     Dichiarazione,
     Statistica,
+    Aura,
+    AURA,
     DEFAULT_WEAVE_FORMULA_TEMPLATE,
     Campagna, CampagnaFeaturePolicy,
     RegolaTransazioneCategoria,
@@ -76,6 +78,7 @@ from .serializers import (
     PersonaggioCarrieraMembershipStaffSerializer,
     DichiarazioneStaffSerializer,
     StatisticaStaffSerializer,
+    AuraStaffSerializer,
     ManifestoStaffSerializer,
     NodoStaffSerializer,
     NodoRewardConfigStaffSerializer,
@@ -1032,6 +1035,27 @@ class StatisticaStaffViewSet(viewsets.ModelViewSet):
         if sigla.startswith("0") and len(sigla) >= 2:
             return Response(
                 {"error": "Statistica di sistema (sigla 0…): non eliminabile da questa maschera."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+class AuraStaffViewSet(viewsets.ModelViewSet):
+    """CRUD catalogo Aure (Staff). Proxy Punteggio con tipo AU."""
+    queryset = Aura.objects.filter(tipo=AURA).prefetch_related(
+        'aure_infusione_consentite',
+    ).order_by('ordine', 'nome')
+    serializer_class = AuraStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    pagination_class = None
+    search_fields = ['nome', 'sigla']
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        sigla = (obj.sigla or "").upper()
+        if sigla.startswith("0") and len(sigla) >= 2:
+            return Response(
+                {"error": "Aura di sistema (sigla 0…): non eliminabile da questa maschera."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return super().destroy(request, *args, **kwargs)

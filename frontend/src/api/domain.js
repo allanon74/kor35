@@ -2586,6 +2586,30 @@ export const staffDeleteStatistica = (id, onLogout) => {
     }, onLogout);
 };
 
+export const staffGetAure = (onLogout) => {
+    return fetchAuthenticated('/api/personaggi/api/staff/aure/', { method: 'GET' }, onLogout);
+};
+
+export const staffCreateAura = (data, onLogout) => {
+    return fetchAuthenticated('/api/personaggi/api/staff/aure/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+};
+
+export const staffUpdateAura = (id, data, onLogout) => {
+    return fetchAuthenticated(`/api/personaggi/api/staff/aure/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+};
+
+export const staffDeleteAura = (id, onLogout) => {
+    return fetchAuthenticated(`/api/personaggi/api/staff/aure/${id}/`, {
+        method: 'DELETE',
+    }, onLogout);
+};
+
 export const createPersonaggio = (data, onLogout) => {
     return fetchAuthenticated('/api/personaggi/api/gestione-personaggi/', {
         method: 'POST',
