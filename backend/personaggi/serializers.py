@@ -2426,6 +2426,7 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
     aura_infusione = serializers.PrimaryKeyRelatedField(queryset=Punteggio.objects.filter(tipo='AU'), required=False, allow_null=True)
     personaggio_nome = serializers.CharField(source='personaggio.nome', read_only=True)
     autore_nome = serializers.CharField(source='staff_creatore.username', read_only=True)
+    giocatore_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = PropostaTecnica
@@ -2438,12 +2439,19 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
             'costo_invio_pagato', 'note_staff', 'data_creazione',
             'slot_corpo_permessi', 'tipo_risultato_atteso', 
             'prerequisiti', 'svolgimento', 'effetto', 'spiegazione_teorie', 'permetti_vendita',
-            'personaggio_nome', 'autore_nome',
+            'personaggio_nome', 'giocatore_nome', 'autore_nome',
         )
         read_only_fields = ('stato', 'costo_invio_pagato', 'note_staff', 'data_creazione', 'livello', 'livello_suggerito', 'totale_mattoni_minimi')
         extra_kwargs = {
             'tipo_risultato_atteso': {'required': False, 'allow_null': True}
         }
+
+    def get_giocatore_nome(self, obj):
+        user = getattr(getattr(obj, 'personaggio', None), 'proprietario', None)
+        if not user:
+            return ''
+        full = f"{user.first_name or ''} {user.last_name or ''}".strip()
+        return full or user.username or ''
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
