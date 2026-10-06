@@ -31,6 +31,11 @@ from .models import (
     Statistica,
     Aura,
     AURA,
+    Caratteristica,
+    ModelloAura,
+    STATISTICA,
+    CARATTERISTICA,
+    MATTONE,
     DEFAULT_WEAVE_FORMULA_TEMPLATE,
     Campagna, CampagnaFeaturePolicy,
     RegolaTransazioneCategoria,
@@ -79,6 +84,10 @@ from .serializers import (
     DichiarazioneStaffSerializer,
     StatisticaStaffSerializer,
     AuraStaffSerializer,
+    CaratteristicaStaffSerializer,
+    MattoneStaffSerializer,
+    ModelloAuraStaffSerializer,
+    PunteggioResiduoStaffSerializer,
     ManifestoStaffSerializer,
     NodoStaffSerializer,
     NodoRewardConfigStaffSerializer,
@@ -1056,6 +1065,83 @@ class AuraStaffViewSet(viewsets.ModelViewSet):
         if sigla.startswith("0") and len(sigla) >= 2:
             return Response(
                 {"error": "Aura di sistema (sigla 0…): non eliminabile da questa maschera."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+class CaratteristicaStaffViewSet(viewsets.ModelViewSet):
+    queryset = Caratteristica.objects.filter(tipo=CARATTERISTICA).prefetch_related(
+        'modificatori_dati__statistica_modificata',
+    ).order_by('ordine', 'nome')
+    serializer_class = CaratteristicaStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    pagination_class = None
+    search_fields = ['nome', 'sigla']
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        sigla = (obj.sigla or "").upper()
+        if sigla.startswith("0") and len(sigla) >= 2:
+            return Response(
+                {"error": "Caratteristica di sistema (sigla 0…): non eliminabile da questa maschera."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+class MattoneStaffViewSet(viewsets.ModelViewSet):
+    queryset = Mattone.objects.select_related(
+        'aura', 'caratteristica_associata',
+    ).prefetch_related('mattonestatistica_set__statistica').order_by(
+        'aura__ordine', 'ordine', 'nome',
+    )
+    serializer_class = MattoneStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    pagination_class = None
+    search_fields = ['nome', 'sigla']
+    filterset_fields = ['aura']
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        sigla = (obj.sigla or "").upper()
+        if sigla.startswith("0") and len(sigla) >= 2:
+            return Response(
+                {"error": "Mattone di sistema (sigla 0…): non eliminabile da questa maschera."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+class ModelloAuraStaffViewSet(viewsets.ModelViewSet):
+    queryset = ModelloAura.objects.select_related('aura', 'elemento_secondario').prefetch_related(
+        'mattoni_proibiti', 'mattoni_obbligatori',
+        'req_doppia_rel__requisito', 'req_mattone_rel__requisito', 'req_caratt_rel__requisito',
+    ).order_by('aura__ordine', 'nome')
+    serializer_class = ModelloAuraStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    pagination_class = None
+    search_fields = ['nome', 'aura__nome']
+    filterset_fields = ['aura']
+
+
+class PunteggioResiduoStaffViewSet(viewsets.ModelViewSet):
+    """Elementi, condizioni, culti, vie, arti, archetipi, castoni, nodi, kata."""
+    queryset = Punteggio.objects.exclude(
+        tipo__in=(STATISTICA, AURA, CARATTERISTICA, MATTONE),
+    ).exclude(is_mattone=True).order_by('tipo', 'ordine', 'nome')
+    serializer_class = PunteggioResiduoStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    pagination_class = None
+    search_fields = ['nome', 'sigla']
+    filterset_fields = ['tipo']
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        sigla = (obj.sigla or "").upper()
+        if sigla.startswith("0") and len(sigla) >= 2:
+            return Response(
+                {"error": "Punteggio di sistema (sigla 0…): non eliminabile da questa maschera."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return super().destroy(request, *args, **kwargs)
