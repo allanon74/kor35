@@ -716,6 +716,19 @@ class StatisticaSerializer(serializers.ModelSerializer):
         fields = ('id', 'nome', 'sigla', 'parametro', 'valore_base_predefinito', 'formula', 'is_risorsa_pool')
 
 
+class StatisticaStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Statistica
+        fields = (
+            'id', 'nome', 'sigla', 'parametro', 'descrizione', 'ordine', 'colore',
+            'formula', 'is_primaria', 'is_costo', 'is_tempo', 'is_numero',
+            'is_risorsa_pool', 'valore_predefinito', 'valore_base_predefinito',
+            'pool_corrente_default_pieno_se_assente',
+            'auto_recupero_attivo', 'auto_recupero_intervallo_secondi', 'auto_recupero_step',
+            'massimo_pool_sigla',
+        )
+
+
 class PunteggioSerializer(serializers.ModelSerializer):
     produce_mod = serializers.SerializerMethodField()
     produce_materia = serializers.SerializerMethodField()

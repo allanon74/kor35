@@ -28,6 +28,7 @@ from .models import (
     Era, Prefettura, Regione, Korp, Carriera, TipoCarriera, Carica,
     PersonaggioCarrieraMembership, CarrieraTierSblocco,
     Dichiarazione,
+    Statistica,
     DEFAULT_WEAVE_FORMULA_TEMPLATE,
     Campagna, CampagnaFeaturePolicy,
     RegolaTransazioneCategoria,
@@ -74,6 +75,7 @@ from .serializers import (
     TipoCarrieraStaffSerializer, CarrieraStaffSerializer, CaricaStaffSerializer,
     PersonaggioCarrieraMembershipStaffSerializer,
     DichiarazioneStaffSerializer,
+    StatisticaStaffSerializer,
     ManifestoStaffSerializer,
     NodoStaffSerializer,
     NodoRewardConfigStaffSerializer,
@@ -1014,6 +1016,25 @@ class DichiarazioneStaffViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaffOrMaster]
     filterset_fields = ['tipo']
     search_fields = ['nome', 'dichiarazione', 'descrizione']
+
+
+class StatisticaStaffViewSet(viewsets.ModelViewSet):
+    """CRUD catalogo Statistiche (Staff)."""
+    queryset = Statistica.objects.all().order_by('-formula', 'ordine', 'nome')
+    serializer_class = StatisticaStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    pagination_class = None
+    search_fields = ['nome', 'sigla', 'parametro']
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        sigla = (obj.sigla or "").upper()
+        if sigla.startswith("0") and len(sigla) >= 2:
+            return Response(
+                {"error": "Statistica di sistema (sigla 0…): non eliminabile da questa maschera."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 class EraStaffViewSet(viewsets.ModelViewSet):
