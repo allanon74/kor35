@@ -797,8 +797,8 @@ const InventoryTab = ({ onLogout }) => {
   };
 
   const handleRecharge = (item) => {
-      const { mancanti, unitario, totale } = dettaglioRicarica(item);
-      const costoLabel = mancanti > 1 ? `${totale} CR (${mancanti} × ${unitario})` : `${totale} CR`;
+      const { totale } = dettaglioRicarica(item);
+      const costoLabel = `${totale} CR`;
       const metodo = item.testo_ricarica || "Standard";
       if (window.confirm(`Ricaricare ${item.nome}?\nCosto: ${costoLabel}\nMetodo: ${metodo}`)) {
           rechargeMutation.mutate(

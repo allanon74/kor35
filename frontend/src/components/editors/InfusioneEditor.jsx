@@ -305,7 +305,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
           <div className="p-3 sm:p-5 bg-indigo-900/5 space-y-4 border-t border-indigo-500/10 animate-in slide-in-from-top-2 duration-200 min-w-0">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Select label="Statistica Cariche" value={currentCaricheId} options={statsOptions} onChange={v => setFormData({...formData, statistica_cariche: v ? parseInt(v, 10) : null})} />
-                <Input label="Costo Ricarica (Crediti)" type="number" value={formData.costo_ricarica_crediti} onChange={v => setFormData({...formData, costo_ricarica_crediti: v})} />
+                <Input label="Costo ricarica completa (CR)" type="number" value={formData.costo_ricarica_crediti} onChange={v => setFormData({...formData, costo_ricarica_crediti: v})} />
                 <Input label="Durata Attivazione (sec)" type="number" value={formData.durata_attivazione} onChange={v => setFormData({...formData, durata_attivazione: v})} />
             </div>
             <RichTextEditor label="Metodo e Note di Ricarica" value={formData.metodo_ricarica} onChange={v => setFormData({...formData, metodo_ricarica: v})} />

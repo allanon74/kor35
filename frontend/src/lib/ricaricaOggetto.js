@@ -1,4 +1,4 @@
-/** Costo della ricarica: una volta per ogni carica mancante. */
+/** Costo forfait per riportare l'oggetto al massimo, indipendente dalle cariche mancanti. */
 export function dettaglioRicarica(item) {
   const massime = Number(item?.cariche_massime || 0);
   const attuali = Number(item?.cariche_attuali || 0);
@@ -10,7 +10,7 @@ export function dettaglioRicarica(item) {
   return {
     mancanti,
     unitario: unit,
-    totale: mancanti * unit,
+    totale: mancanti > 0 ? unit : 0,
   };
 }
 

@@ -1191,7 +1191,7 @@ class InfusioneAdmin(SModelAdmin):
             'fields': ('slot_corpo_permessi',), 
             'description': "Definisci dove può essere installato l'oggetto (solo per Innesti/Mutazioni)."
         }),
-        ('Logica Ricarica & Durata', {'fields': ('statistica_cariche', 'metodo_ricarica', 'costo_ricarica_crediti', 'durata_attivazione'), 'description': "Definisci qui come l'oggetto generato gestisce le cariche."}),
+        ('Logica Ricarica & Durata', {'fields': ('statistica_cariche', 'metodo_ricarica', 'costo_ricarica_crediti', 'durata_attivazione'), 'description': "Il costo ricarica è un forfait: si paga una volta per riportare l'oggetto al massimo, indipendentemente dalle cariche mancanti."}),
     )
     
     def get_form(self, request, obj=None, **kwargs):
