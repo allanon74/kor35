@@ -160,7 +160,7 @@ export function StaffModalTabs({ tabs, active, onChange }) {
           key={t.id}
           type="button"
           onClick={() => onChange?.(t.id)}
-          className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wide ${
+          className={`min-h-11 px-3 py-2 rounded text-xs font-bold uppercase tracking-wide ${
             active === t.id ? 'bg-amber-700 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
           }`}
         >

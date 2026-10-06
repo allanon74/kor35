@@ -305,7 +305,7 @@ export default function PoolPersonaggiManager({ onLogout }) {
               >
                 <div className="min-w-0">
                   <div className="font-bold text-white break-words">{pool.nome}</div>
-                  <div className={`${staffMutedClass} text-xs`}>
+                  <div className={`${staffMutedClass} text-xs break-words`}>
                     Attivi: {pool.attivi_count ?? 0} · Sorteggi: {pool.sorteggi_count ?? 0} · Range {pool.sorteggio_min}–{pool.sorteggio_max} · fattore {pool.fattore_peso}
                     {pool.statistica_sigla ? ` · tab ${pool.statistica_sigla}` : ''}
                     {pool.max_sorteggi_giorno ? ` · max ${pool.max_sorteggi_giorno} usi PG/giorno` : ''}
@@ -330,7 +330,9 @@ export default function PoolPersonaggiManager({ onLogout }) {
             <StaffModalTabs
               tabs={TABS.map((t) => ({
                 ...t,
-                count: t.id === 'personaggi' && isSaved ? attiviVis : undefined,
+                count: t.id === 'personaggi' && isSaved
+                  ? (personaggi.length ? attiviVis : editing?.attivi_count)
+                  : undefined,
               }))}
               active={tab}
               onChange={onChangeTab}
@@ -415,21 +417,25 @@ export default function PoolPersonaggiManager({ onLogout }) {
               <p className="text-[11px] text-gray-500">
                 Se la statistica del PG è &gt; 0 compare una tab con il nome del pool. Il tetto vale solo per le attivazioni lanciate dai personaggi; lo staff sorteggia senza limiti e senza consumare questi usi. 0 = pulsante giocatore disattivo.
               </p>
-              <label className="flex min-h-11 items-center gap-2 text-sm text-gray-200">
+              <label className="flex min-h-11 items-start gap-2 text-sm text-gray-200">
                 <input
                   type="checkbox"
+                  className="mt-1 shrink-0"
                   checked={form.escludi_png}
                   onChange={(e) => setForm((p) => ({ ...p, escludi_png: e.target.checked }))}
                 />
-                Nascondi PnG nella tab personaggi
+                <span className="min-w-0 break-words">Nascondi PnG nella tab personaggi</span>
               </label>
-              <label className="flex min-h-11 items-center gap-2 text-sm text-gray-200">
+              <label className="flex min-h-11 items-start gap-2 text-sm text-gray-200">
                 <input
                   type="checkbox"
+                  className="mt-1 shrink-0"
                   checked={form.invio_prioritario}
                   onChange={(e) => setForm((p) => ({ ...p, invio_prioritario: e.target.checked }))}
                 />
-                Messaggio prioritario (overlay a schermo pieno + allarme fino a «Ho letto e compreso»)
+                <span className="min-w-0 break-words">
+                  Messaggio prioritario (overlay a schermo pieno + allarme fino a «Ho letto e compreso»)
+                </span>
               </label>
               <div className="flex flex-col sm:flex-row gap-2">
                 <button type="button" className={`${staffPrimaryBtnClass} min-h-11`} disabled={salvataggio} onClick={salva}>
