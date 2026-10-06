@@ -14,6 +14,7 @@ import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import ActivationCostInline from './inlines/ActivationCostInline';
 import SezioniCondizionaliEditor from './inlines/SezioniCondizionaliEditor';
 import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
+import { caratteristichePersonaggio } from '../../lib/caratteristicheScheda';
 
 const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -332,7 +333,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
       {/* 6. COMPONENTI CARATTERISTICHE */}
       <CharacteristicInline 
         items={formData.componenti || []} 
-        options={punteggiList.filter(p => p.tipo === 'CA')}
+        options={caratteristichePersonaggio(punteggiList)}
         onAdd={() => setFormData({...formData, componenti: [...(formData.componenti || []), {caratteristica:'', valore:1}]})}
         onChange={(i, f, v) => updateInline('componenti', i, f, v)}
         onRemove={(i) => setFormData({...formData, componenti: formData.componenti.filter((_, idx) => idx !== i)})}

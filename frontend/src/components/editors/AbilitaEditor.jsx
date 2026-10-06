@@ -7,6 +7,7 @@ import SearchableSelect from './SearchableSelect';
 import EditorSaveActions from './EditorSaveActions';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
+import { caratteristichePersonaggio } from '../../lib/caratteristicheScheda';
 
 const DURATA_OPTIONS = ['O1H', 'DAY', 'EVT'];
 const TIPO_MOD_OPTIONS = ['ADD', 'MOL'];
@@ -280,7 +281,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
         });
     };
 
-    const caratteristiche = punteggi.filter(p => p.tipo === 'CA' || p.tipo === 'CO');
+    const caratteristiche = caratteristichePersonaggio(punteggi);
     const aure = punteggi.filter(p => p.tipo === 'AU');
     const allStats = punteggi.filter(p => p.tipo === 'ST');
 

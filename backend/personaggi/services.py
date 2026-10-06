@@ -25,7 +25,7 @@ from .models import (
     FALLBACK_STAT_COSTO_CONSUMABILI, FALLBACK_STAT_NUMERO_CONSUMABILI,
     FALLBACK_STAT_TEMPO_CREAZIONE_CONSUMABILI, FALLBACK_STAT_DURATA_CONSUMABILI,
     TessituraEffettoRuntime, TessituraOggettoRuntime, AbilitaStatistica,
-    Statistica,
+    Statistica, statistica_chiave_modificatore,
 )
 
 
@@ -628,7 +628,8 @@ class GestioneOggettiService:
                 statistica=infusione.statistica_cariche
             ).first()
             valore_base = stat_base_link.valore_base if stat_base_link else infusione.statistica_cariche.valore_base_predefinito
-            mods = proprietario.modificatori_calcolati.get(infusione.statistica_cariche.parametro, {'add': 0.0, 'mol': 1.0})
+            chiave = statistica_chiave_modificatore(infusione.statistica_cariche)
+            mods = proprietario.modificatori_calcolati.get(chiave, {'add': 0.0, 'mol': 1.0}) if chiave else {'add': 0.0, 'mol': 1.0}
             cariche_iniziali = int(round((valore_base + mods['add']) * mods['mol']))
             cariche_iniziali = max(0, cariche_iniziali)
 
@@ -1529,13 +1530,14 @@ class CreazioneConsumabileService:
         )
         # Bonus da abilità (es. Alchimia Avanzata Extra → AbilitaStatistica NCO +1).
         # Si usa solo la parte ADD dei modificatori, non il valore_base di NCO.
-        nco = Statistica.objects.filter(sigla="NCO").only("parametro").first()
+        nco = Statistica.objects.filter(sigla="NCO").only("parametro", "sigla").first()
         bonus_nco = 0
-        if nco and nco.parametro:
+        chiave_nco = statistica_chiave_modificatore(nco)
+        if chiave_nco:
             try:
                 bonus_nco = int(
                     float(
-                        (personaggio.modificatori_calcolati.get(nco.parametro) or {}).get("add", 0)
+                        (personaggio.modificatori_calcolati.get(chiave_nco) or {}).get("add", 0)
                         or 0
                     )
                 )

@@ -11,15 +11,17 @@ from .models import (
     EffettoCasuale, TipologiaEffetto, ConsumabilePersonaggio,
     Oggetto, OggettoInInventario, Personaggio, Statistica,
     TIPO_EFFETTO_OGGETTO, TIPO_EFFETTO_TESSITURA, TIPO_OGGETTO_FISICO,
-    formatta_testo_generico,
+    formatta_testo_generico, statistica_chiave_modificatore,
 )
 
 
 def _build_context_valori_predefiniti(effetto):
     """Costruisce il contesto con valori predefiniti (valore_base_predefinito) per tutte le statistiche."""
     ctx = {}
-    for stat in Statistica.objects.filter(parametro__isnull=False).exclude(parametro__exact=''):
-        ctx[stat.parametro] = stat.valore_base_predefinito
+    for stat in Statistica.objects.all():
+        chiave = statistica_chiave_modificatore(stat)
+        if chiave:
+            ctx[chiave] = stat.valore_base_predefinito
     return ctx
 
 

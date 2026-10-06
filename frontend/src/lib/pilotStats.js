@@ -9,7 +9,7 @@ export function getStatValueBySigla(characterData, punteggiList, sigla) {
   );
   if (!stat?.nome) return 0;
   const base = Number(characterData.punteggi_base?.[stat.nome] ?? 0);
-  const param = stat.parametro;
+  const param = stat.parametro || stat.sigla || null;
   const mod = param && characterData.modificatori_calcolati?.[param]
     ? characterData.modificatori_calcolati[param]
     : { add: 0, mol: 1 };

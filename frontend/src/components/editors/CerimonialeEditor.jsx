@@ -7,6 +7,7 @@ import EditorSaveActions from './EditorSaveActions';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
+import { caratteristichePersonaggio } from '../../lib/caratteristicheScheda';
 
 const MATTONI_PER_LIVELLO_CERIMONIALE = 5;
 const livelloSuggeritoCerimoniale = (totaleMattoni) =>
@@ -173,7 +174,7 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
 
       <CharacteristicInline 
         items={formData.componenti || []} 
-        options={punteggiList.filter(p => p.tipo === 'CA')}
+        options={caratteristichePersonaggio(punteggiList)}
         onAdd={() => setFormData({...formData, componenti: [...(formData.componenti || []), {caratteristica:'', valore:1}]})}
         onChange={(i, f, v) => updateInline('componenti', i, f, v)}
         onRemove={(i) => setFormData({...formData, componenti: formData.componenti.filter((_, idx) => idx !== i)})}
