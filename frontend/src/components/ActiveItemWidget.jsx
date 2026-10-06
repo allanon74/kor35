@@ -4,6 +4,8 @@ import { useCharacter } from './CharacterContext';
 import { useOptimisticUseItem, useOptimisticRecharge } from '../hooks/useGameData';
 import ActivationCostPreview from './ActivationCostPreview';
 import { evaluateActivationCosts } from '../lib/activationCostUtils';
+import { dettaglioRicarica } from '../lib/ricaricaOggetto';
+import { emitToast } from '../utils/toastBus';
 import { useSharedNowTs } from '../hooks/useSharedNowTs';
 
 const ActiveItemWidget = ({ item, onUpdate }) => {
@@ -44,15 +46,23 @@ const ActiveItemWidget = ({ item, onUpdate }) => {
     };
 
     const handleRecharge = () => {
-        if (window.confirm(`Ricaricare ${item.nome}?\nCosto: ${item.costo_ricarica} CR\nMetodo: ${item.testo_ricarica}`)) {
-            rechargeMutation.mutate({ 
-                oggetto_id: item.id, 
-                charId: selectedCharacterData.id 
+        const { mancanti, unitario, totale } = dettaglioRicarica(item);
+        const costoLabel = mancanti > 1 ? `${totale} CR (${mancanti} × ${unitario})` : `${totale} CR`;
+        if (window.confirm(`Ricaricare ${item.nome}?\nCosto: ${costoLabel}\nMetodo: ${item.testo_ricarica}`)) {
+            rechargeMutation.mutate({
+                oggetto_id: item.id,
+                charId: selectedCharacterData.id,
             }, {
-                // CORREZIONE QUI: Chiamiamo onUpdate anche per la ricarica
                 onSuccess: () => {
                     if (onUpdate) onUpdate();
-                }
+                },
+                onError: (err) => {
+                    emitToast({
+                        type: 'error',
+                        title: 'Ricarica fallita',
+                        message: err?.message || 'Impossibile ricaricare l\'oggetto.',
+                    });
+                },
             });
         }
     };
@@ -166,7 +176,7 @@ const ActiveItemWidget = ({ item, onUpdate }) => {
                         className="flex items-center gap-1 bg-yellow-900/10 hover:bg-yellow-900/30 text-yellow-500 hover:text-yellow-200 px-2 py-0.5 rounded border border-transparent hover:border-yellow-700/50 transition-all text-[10px] disabled:opacity-40 disabled:cursor-not-allowed"
                         title={item.testo_ricarica}
                     >
-                        <RefreshCw size={10} /> {item.costo_ricarica} CR
+                        <RefreshCw size={10} /> {dettaglioRicarica(item).totale} CR
                     </button>
                 )}
             </div>

@@ -1555,33 +1555,14 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
         ).data
 
     def get_cariche_massime(self, obj):
-        if not obj.infusione_generatrice or not obj.infusione_generatrice.statistica_cariche:
+        from .models import calcola_cariche_massime_da_infusione, proprietario_effettivo_oggetto
+
+        infusione = obj.infusione_generatrice
+        if not infusione or not infusione.statistica_cariche:
             return 0
-        
-        # Logica di calcolo identica a 'crea_oggetto_da_infusione'
-        # Serve il proprietario per i modificatori
-        proprietario = obj.inventario_corrente.personaggio_ptr if hasattr(obj.inventario_corrente, 'personaggio_ptr') else None
-        
-        if not proprietario and obj.inventario_corrente and hasattr(obj.inventario_corrente, 'personaggio_ptr'):
-            proprietario = obj.inventario_corrente.personaggio_ptr
+        personaggio = self.context.get("personaggio") or proprietario_effettivo_oggetto(obj)
+        return calcola_cariche_massime_da_infusione(infusione, personaggio)
 
-        stat_def = obj.infusione_generatrice.statistica_cariche
-        
-        # 1. Valore Base (dall'infusione o dal default della stat)
-        # Cerchiamo se l'infusione ha un override specifico per questa statistica
-        stat_base_link = obj.infusione_generatrice.infusionestatisticabase_set.filter(statistica=stat_def).first()
-        valore_base = stat_base_link.valore_base if stat_base_link else stat_def.valore_base_predefinito
-
-        # 2. Modificatori Personaggio (se presente)
-        if proprietario:
-            # Nota: modificatori_calcolati è una property cached del model Personaggio
-            chiave = statistica_chiave_modificatore(stat_def)
-            mods = proprietario.modificatori_calcolati.get(chiave, {'add': 0.0, 'mol': 1.0}) if chiave else {'add': 0.0, 'mol': 1.0}
-            valore_finale = int(round((valore_base + mods['add']) * mods['mol']))
-            return max(0, valore_finale)
-        
-        return valore_base
-    
     def get_attacco_base_effettivo(self, obj):
         # Formula «effettiva»: vuota se oggetto o infusione generatrice non ne hanno una.
         return obj.formula_attacco_effettiva or None
@@ -1863,32 +1844,13 @@ class OggettoSerializer(serializers.ModelSerializer):
         return 0
 
     def get_cariche_massime(self, obj):
-        if not obj.infusione_generatrice or not obj.infusione_generatrice.statistica_cariche:
+        from .models import calcola_cariche_massime_da_infusione, proprietario_effettivo_oggetto
+
+        infusione = obj.infusione_generatrice
+        if not infusione or not infusione.statistica_cariche:
             return 0
-        
-        # Logica di calcolo identica a 'crea_oggetto_da_infusione'
-        # Serve il proprietario per i modificatori
-        proprietario = obj.inventario_corrente.personaggio_ptr if hasattr(obj.inventario_corrente, 'personaggio_ptr') else None
-        
-        if not proprietario and obj.inventario_corrente and hasattr(obj.inventario_corrente, 'personaggio_ptr'):
-            proprietario = obj.inventario_corrente.personaggio_ptr
-
-        stat_def = obj.infusione_generatrice.statistica_cariche
-        
-        # 1. Valore Base (dall'infusione o dal default della stat)
-        # Cerchiamo se l'infusione ha un override specifico per questa statistica
-        stat_base_link = obj.infusione_generatrice.infusionestatisticabase_set.filter(statistica=stat_def).first()
-        valore_base = stat_base_link.valore_base if stat_base_link else stat_def.valore_base_predefinito
-
-        # 2. Modificatori Personaggio (se presente)
-        if proprietario:
-            # Nota: modificatori_calcolati è una property cached del model Personaggio
-            chiave = statistica_chiave_modificatore(stat_def)
-            mods = proprietario.modificatori_calcolati.get(chiave, {'add': 0.0, 'mol': 1.0}) if chiave else {'add': 0.0, 'mol': 1.0}
-            valore_finale = int(round((valore_base + mods['add']) * mods['mol']))
-            return max(0, valore_finale)
-        
-        return valore_base
+        personaggio = self.context.get("personaggio") or proprietario_effettivo_oggetto(obj)
+        return calcola_cariche_massime_da_infusione(infusione, personaggio)
 
     def get_durata_totale(self, obj):
         return obj.infusione_generatrice.durata_attivazione if obj.infusione_generatrice else 0

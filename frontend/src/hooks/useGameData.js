@@ -43,6 +43,7 @@ import {
   getStatisticaContainers,
 } from '../api';
 import { getRevision, setRevision } from '../queryRevisionStore';
+import { dettaglioRicarica, findOggettoInInventario, patchCaricheInOggetti } from '../lib/ricaricaOggetto';
 
 /**
  * Se la revisione server coincide con l'ultima nota, riusa i dati in cache React Query
@@ -643,26 +644,66 @@ export const useOptimisticUseItem = () => {
 
 // D. RICARICA OGGETTO
 export const useOptimisticRecharge = () => {
-    return useOptimisticAction(
-        ['personaggio'],
-        async ({ oggetto_id, charId }) => {
-             return fetchAuthenticated('/api/personaggi/api/game/ricarica_oggetto/', {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({ oggetto_id, charId }) => {
+            return fetchAuthenticated('/api/personaggi/api/game/ricarica_oggetto/', {
                 method: 'POST',
-                body: JSON.stringify({ oggetto_id, char_id: charId })
+                body: JSON.stringify({ oggetto_id, char_id: charId }),
             });
         },
-        (oldData, { oggetto_id }) => {
-            if (!oldData.oggetti) return oldData;
-            return {
-                ...oldData,
-                oggetti: oldData.oggetti.map(obj => 
-                    obj.id === oggetto_id 
-                    ? { ...obj, cariche_attuali: obj.cariche_massime } 
-                    : obj
-                )
-            };
-        }
-    );
+        onMutate: async (variables) => {
+            const charId = String(variables.charId);
+            const queryKey = ['personaggio', charId];
+            await queryClient.cancelQueries({ queryKey });
+            const previousData = queryClient.getQueryData(queryKey);
+            if (previousData?.oggetti) {
+                const item = findOggettoInInventario(previousData.oggetti, variables.oggetto_id);
+                const costo = item ? dettaglioRicarica(item).totale : 0;
+                queryClient.setQueryData(queryKey, {
+                    ...previousData,
+                    crediti: Number(previousData.crediti || 0) - costo,
+                    oggetti: patchCaricheInOggetti(previousData.oggetti, variables.oggetto_id, (obj) => ({
+                        ...obj,
+                        cariche_attuali: obj.cariche_massime,
+                        data_fine_attivazione: null,
+                    })),
+                });
+            }
+            return { previousData, queryKey };
+        },
+        onError: (_err, _vars, context) => {
+            if (context?.previousData) {
+                queryClient.setQueryData(context.queryKey, context.previousData);
+            }
+        },
+        onSuccess: (data, _variables, context) => {
+            if (!context?.queryKey) return;
+            if (!data?.id) {
+                if (context.previousData) {
+                    queryClient.setQueryData(context.queryKey, context.previousData);
+                }
+                return;
+            }
+            queryClient.setQueryData(context.queryKey, (old) => {
+                const { personaggio, costo_pagato: _costo, ...oggettoPatch } = data;
+                if (personaggio) {
+                    return mergePersonaggioGameCache(old, personaggio, { oggettoPatch });
+                }
+                if (!old?.oggetti || !oggettoPatch?.id) return old;
+                return {
+                    ...old,
+                    oggetti: patchCaricheInOggetti(old.oggetti, oggettoPatch.id, (obj) => ({ ...obj, ...oggettoPatch })),
+                };
+            });
+        },
+        onSettled: (_data, _error, _variables, context) => {
+            if (context?.queryKey) {
+                queryClient.invalidateQueries({ queryKey: context.queryKey });
+            }
+        },
+    });
 };
 
 // E. ASSEMBLAGGIO
