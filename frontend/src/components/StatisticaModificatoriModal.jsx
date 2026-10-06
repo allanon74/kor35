@@ -13,11 +13,12 @@ const StatisticaModificatoriModal = ({ punteggio, personaggioId, onClose, onLogo
         setLoading(true);
         setError(null);
         
-        const url = `/api/personaggi/api/personaggi/${personaggioId}/modificatori-dettagliati/?parametro=${punteggio.parametro}`;
+        const chiave = punteggio.parametro || punteggio.sigla;
+        const url = `/api/personaggi/api/personaggi/${personaggioId}/modificatori-dettagliati/?parametro=${chiave}`;
         const response = await fetchAuthenticated(url, { method: 'GET' }, onLogout);
         
         // La risposta è un oggetto con una chiave uguale al parametro
-        const datiParametro = response[punteggio.parametro];
+        const datiParametro = response[chiave];
         
         if (datiParametro) {
           setDettagli(datiParametro);
@@ -32,7 +33,7 @@ const StatisticaModificatoriModal = ({ punteggio, personaggioId, onClose, onLogo
       }
     };
 
-    if (punteggio?.parametro && personaggioId) {
+    if ((punteggio?.parametro || punteggio?.sigla) && personaggioId) {
       fetchDettagli();
     }
   }, [punteggio, personaggioId, onLogout]);

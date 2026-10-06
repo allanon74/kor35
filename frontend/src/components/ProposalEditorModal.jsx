@@ -12,6 +12,7 @@ import {
 } from '../api';
 import { confirmCloseIfDirty } from '../hooks/useDirtyModalClose';
 import IconaPunteggio from './IconaPunteggio';
+import { caratteristichePersonaggio } from '../lib/caratteristicheScheda';
 
 // Costanti Slot Corporei (Invariate)
 const BODY_SLOTS = [
@@ -127,7 +128,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                     setAvailableAuras(validAuras);
 
                     // Filtriamo rigorosamente per tipo 'CA' (Caratteristiche)
-                    const validChars = allData.filter(p => p.tipo === 'CA');
+                    const validChars = caratteristichePersonaggio(allData);
                     setAvailableCharacteristics(validChars);
                 }
 

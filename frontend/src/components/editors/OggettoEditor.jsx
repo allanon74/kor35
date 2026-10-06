@@ -10,6 +10,7 @@ import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import SearchableSelect from './SearchableSelect';
 import SezioniCondizionaliEditor from './inlines/SezioniCondizionaliEditor';
+import { caratteristichePersonaggio } from '../../lib/caratteristicheScheda';
 import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
 
 const TIPO_CHOICES = [
@@ -327,7 +328,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
         onChange={(sezioni_condizionali) => setFormData({ ...formData, sezioni_condizionali })}
       />
 
-      <CharacteristicInline items={formData.componenti} options={punteggiList.filter(p => p.tipo === 'CA')} onAdd={() => setFormData({...formData, componenti: [...formData.componenti, {caratteristica:'', valore:1}]})} onChange={(i,f,v) => {const n=[...formData.componenti]; n[i][f]=v; setFormData({...formData, componenti:n});}} onRemove={i => setFormData({...formData, componenti: formData.componenti.filter((_,idx)=>idx!==i)})} />
+      <CharacteristicInline items={formData.componenti} options={caratteristichePersonaggio(punteggiList)} onAdd={() => setFormData({...formData, componenti: [...formData.componenti, {caratteristica:'', valore:1}]})} onChange={(i,f,v) => {const n=[...formData.componenti]; n[i][f]=v; setFormData({...formData, componenti:n});}} onRemove={i => setFormData({...formData, componenti: formData.componenti.filter((_,idx)=>idx!==i)})} />
 
       <StaffMinigiocoQrSection qrcodeId={formData.qrcode_id} onLogout={onLogout} />
 

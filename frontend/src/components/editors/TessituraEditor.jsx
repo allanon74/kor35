@@ -11,6 +11,7 @@ import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import ActivationCostInline from './inlines/ActivationCostInline';
 import SezioniCondizionaliEditor from './inlines/SezioniCondizionaliEditor';
 import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
+import { caratteristichePersonaggio } from '../../lib/caratteristicheScheda';
 
 /** Garantisce che l'abilità già salvata compaia nel select anche se fuori dalla prima pagina API. */
 const mergeAbilitaTemporaneaOption = (rows, selected) => {
@@ -393,7 +394,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
 
       <CharacteristicInline 
         items={formData.componenti || []} 
-        options={punteggiList.filter(p => p.tipo === 'CA')}
+        options={caratteristichePersonaggio(punteggiList)}
         onAdd={() => setFormData({...formData, componenti: [...(formData.componenti || []), {caratteristica:'', valore:1}]})}
         onChange={(i, f, v) => updateInline('componenti', i, f, v)}
         onRemove={(i) => setFormData({...formData, componenti: formData.componenti.filter((_, idx) => idx !== i)})}

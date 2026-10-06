@@ -7,6 +7,7 @@ import {
   staffGetCarriere,
   staffGetKorps,
 } from '../api';
+import { caratteristichePersonaggio } from '../lib/caratteristicheScheda';
 
 const emptyLookup = () => ({
   abilita: [],
@@ -42,7 +43,7 @@ export function useRequisitiAccessoLookup(onLogout, merge = {}) {
         setLoaded({
           statistiche: Array.isArray(stats) ? stats : stats?.results || [],
           auras: pList.filter((p) => p.tipo === 'AU'),
-          caratteristiche: pList.filter((p) => p.tipo === 'CA'),
+          caratteristiche: caratteristichePersonaggio(pList),
           korps: Array.isArray(korps) ? korps : korps?.results || [],
           carriere: Array.isArray(carriere) ? carriere : carriere?.results || [],
           cariche: Array.isArray(cariche) ? cariche : cariche?.results || [],

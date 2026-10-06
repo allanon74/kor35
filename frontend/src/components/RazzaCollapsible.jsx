@@ -3,6 +3,7 @@ import { X, Loader2, ChevronDown } from 'lucide-react';
 import PunteggioDisplay from './PunteggioDisplay';
 import RichHtml from './RichHtml';
 import { useOptimisticAcquireAbilita } from '../hooks/useGameData';
+import { caratteristichePersonaggio } from '../lib/caratteristicheScheda';
 
 const PREFIX_ARCH = 'archetipo - ';
 const PREFIX_FORMA = 'forma - ';
@@ -27,7 +28,7 @@ function isTrattoAuraInnita(ab) {
 
 /** Punteggi caratteristica escludendo i contributi punteggio_acquisito delle abilità indicate */
 function caratteristicheEscludendoAbilita(punteggiBase, punteggiList, abilitaPossedute, excludeIds) {
-  const caNames = new Set((punteggiList || []).filter((p) => p.tipo === 'CA').map((p) => p.nome));
+  const caNames = new Set(caratteristichePersonaggio(punteggiList).map((p) => p.nome));
   const scores = {};
   for (const [k, v] of Object.entries(punteggiBase || {})) {
     if (caNames.has(k)) scores[k] = Number(v) || 0;

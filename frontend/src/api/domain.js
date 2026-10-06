@@ -2550,6 +2550,30 @@ export const staffDeleteDichiarazione = (id, onLogout) => {
     }, onLogout);
 };
 
+export const staffGetStatistiche = (onLogout) => {
+    return fetchAuthenticated('/api/personaggi/api/staff/statistiche/', { method: 'GET' }, onLogout);
+};
+
+export const staffCreateStatistica = (data, onLogout) => {
+    return fetchAuthenticated('/api/personaggi/api/staff/statistiche/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+};
+
+export const staffUpdateStatistica = (id, data, onLogout) => {
+    return fetchAuthenticated(`/api/personaggi/api/staff/statistiche/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+};
+
+export const staffDeleteStatistica = (id, onLogout) => {
+    return fetchAuthenticated(`/api/personaggi/api/staff/statistiche/${id}/`, {
+        method: 'DELETE',
+    }, onLogout);
+};
+
 export const createPersonaggio = (data, onLogout) => {
     return fetchAuthenticated('/api/personaggi/api/gestione-personaggi/', {
         method: 'POST',
