@@ -83,37 +83,48 @@ export function StaffListToolbar({ title, count, onAdd, addLabel = 'Nuovo' }) {
 export function StaffListRow({
   onEdit,
   onDelete,
+  onRowClick,
+  extraActions = null,
   deleteConfirm = 'Eliminare questo elemento?',
   children,
   className = '',
 }) {
-  const handleDelete = () => {
+  const handleDelete = (event) => {
+    event?.stopPropagation?.();
     if (!onDelete) return;
     if (window.confirm(deleteConfirm)) onDelete();
   };
+  const openRow = onRowClick || onEdit;
   return (
     <li
-      className={`flex items-start gap-2 rounded border border-gray-800 bg-gray-900/40 px-2 py-2 hover:border-gray-700 ${className}`}
+      className={`flex items-start gap-2 rounded border border-gray-800 bg-gray-900/40 px-2 py-2 hover:border-gray-700 ${
+        openRow ? 'cursor-pointer' : ''
+      } ${className}`}
+      onClick={openRow || undefined}
     >
-      <div className="flex shrink-0 gap-0.5 pt-0.5">
+      <div
+        className="flex shrink-0 flex-wrap gap-0.5 pt-0.5"
+        onClick={(event) => event.stopPropagation()}
+      >
         {onEdit && (
           <button
             type="button"
             title="Modifica"
             onClick={onEdit}
-            className="rounded p-1 text-sky-400 hover:bg-gray-800"
+            className="min-h-11 min-w-11 rounded p-1 text-sky-400 hover:bg-gray-800"
           >
-            <Pencil size={14} />
+            <Pencil size={16} />
           </button>
         )}
+        {extraActions}
         {onDelete && (
           <button
             type="button"
             title="Elimina"
             onClick={handleDelete}
-            className="rounded p-1 text-red-400 hover:bg-gray-800"
+            className="min-h-11 min-w-11 rounded p-1 text-red-400 hover:bg-gray-800"
           >
-            <Trash2 size={14} />
+            <Trash2 size={16} />
           </button>
         )}
       </div>
