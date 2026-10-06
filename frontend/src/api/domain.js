@@ -1987,6 +1987,18 @@ export const staffUpdateInnescoTimer = (id, data, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/innesco-timer/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 export const staffDeleteInnescoTimer = (id, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/innesco-timer/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffInnescoTimerEventi = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/innesco-timer/eventi-opzioni/', { method: 'GET' }, onLogout);
+export const staffAggiungiIstanzeInnescoTimer = (id, quante, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/innesco-timer/${id}/aggiungi-istanze/`, {
+    method: 'POST',
+    body: JSON.stringify({ quante }),
+  }, onLogout);
+export const ackInnescoTimerScaduto = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/timers/active/ack/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }, onLogout);
 
 // --- Pool QR randomico / Trappola / Serie ---
 export const staffGetRandomQrPools = (onLogout) =>

@@ -211,10 +211,26 @@ def permessi_oggetto_inventario_qr(personaggio, oggetto) -> Dict[str, Any]:
 
 
 def personaggio_match_innesco_timer(personaggio, innesco) -> bool:
+    """True se il PG deve vedere il countdown di questo innesco."""
     from .models import InnescoTimer, PersonaggioCarrieraMembership
 
-    if innesco.modalita_target == InnescoTimer.INNESCO_TARGET_GLOBAL:
+    mode = innesco.modalita_target
+    if mode == InnescoTimer.INNESCO_TARGET_GLOBAL:
         return True
+    if mode == InnescoTimer.INNESCO_TARGET_EVENTO:
+        if not innesco.target_evento_id:
+            return False
+        return personaggio.eventi_partecipati.filter(pk=innesco.target_evento_id).exists()
+    if mode == InnescoTimer.INNESCO_TARGET_KORP:
+        if not innesco.target_korps.exists():
+            return False
+        return PersonaggioCarrieraMembership.objects.filter(
+            personaggio=personaggio,
+            data_a__isnull=True,
+            carriera__in=innesco.target_korps.all(),
+        ).exists()
+    if mode == InnescoTimer.INNESCO_TARGET_PERSONAGGI:
+        return innesco.target_personaggi.filter(pk=personaggio.pk).exists()
 
     checks: List[bool] = []
     if innesco.target_ere.exists():
@@ -236,11 +252,13 @@ def personaggio_match_innesco_timer(personaggio, innesco) -> bool:
 
 def _broadcast_timer_innesco(
     *,
+    innesco_id,
     nome: str,
     data_fine,
     segnale_luminoso: bool,
     recipient_personaggio_ids: List[int],
 ):
+    """Un solo messaggio all'avvio: i client contano in locale fino a data_fine."""
     channel_layer = get_channel_layer()
     if not channel_layer:
         return
@@ -251,9 +269,11 @@ def _broadcast_timer_innesco(
             "message": {
                 "action": "TIMER_INNESCO_SYNC",
                 "payload": {
+                    "id": f"innesco:{innesco_id}",
                     "nome": nome,
                     "data_fine": data_fine.isoformat(),
                     "segnale_luminoso": segnale_luminoso,
+                    "source": "innesco_timer",
                     "recipient_personaggio_ids": recipient_personaggio_ids,
                 },
             },
@@ -266,13 +286,13 @@ def attiva_innesco_timer_per_personaggio(
     innesco,
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
-    Aggiorna stato cariche, imposta countdown e invia push websocket ai destinatari mirati.
+    Aggiorna stato cariche, imposta countdown e invia un push websocket ai destinatari.
+
+    Chi scansiona il QR fa partire il timer anche se il suo PG non è tra i destinatari
+    (il QR è l'innesco; il sottoinsieme riceve il countdown).
     Ritorna (payload risposta scan, errore).
     """
-    from .models import InnescoTimer, Personaggio, StatoInnescoTimerPersonaggio
-
-    if not personaggio_match_innesco_timer(personaggio, innesco):
-        return None, "Il tuo personaggio non rientra nel target di questo innesco timer."
+    from .models import InnescoTimer, StatoInnescoTimerPersonaggio
 
     now = timezone.now()
     max_c = int(innesco.max_cariche or 0)
@@ -308,16 +328,7 @@ def attiva_innesco_timer_per_personaggio(
                 stato.ciclo_iniziato_at = now
         stato.save()
 
-    # destinatari broadcast
-    if innesco.modalita_target == InnescoTimer.INNESCO_TARGET_GLOBAL:
-        ids = list(Personaggio.objects.filter(tipologia__giocante=True).values_list("id", flat=True)[:5000])
-    else:
-        ids = []
-        for pg in Personaggio.objects.filter(tipologia__giocante=True).select_related(
-            "era", "prefettura", "prefettura__regione"
-        ):
-            if personaggio_match_innesco_timer(pg, innesco):
-                ids.append(pg.id)
+    ids = recipient_personaggio_ids_for_innesco(innesco)
 
     InnescoTimer.objects.filter(pk=innesco.pk).update(
         broadcast_data_fine=stato.data_fine,
@@ -325,6 +336,7 @@ def attiva_innesco_timer_per_personaggio(
     )
 
     _broadcast_timer_innesco(
+        innesco_id=innesco.pk,
         nome=innesco.nome,
         data_fine=stato.data_fine,
         segnale_luminoso=innesco.segnale_luminoso,
@@ -332,6 +344,7 @@ def attiva_innesco_timer_per_personaggio(
     )
 
     return {
+        "id": f"innesco:{innesco.pk}",
         "nome": innesco.nome,
         "scadenza": stato.data_fine,
         "segnale_luminoso": innesco.segnale_luminoso,
@@ -340,48 +353,103 @@ def attiva_innesco_timer_per_personaggio(
 
 
 def recipient_personaggio_ids_for_innesco(innesco) -> List[int]:
-    """Stessa lista destinatari usata al broadcast di attivazione."""
+    """PG giocanti che devono vedere il countdown di questa istanza."""
     from .models import InnescoTimer, Personaggio
 
-    if innesco.modalita_target == InnescoTimer.INNESCO_TARGET_GLOBAL:
+    base = Personaggio.objects.filter(tipologia__giocante=True)
+    mode = innesco.modalita_target
+    if mode == InnescoTimer.INNESCO_TARGET_GLOBAL:
+        return list(base.values_list("id", flat=True)[:5000])
+    if mode == InnescoTimer.INNESCO_TARGET_EVENTO:
+        if not innesco.target_evento_id:
+            return []
         return list(
-            Personaggio.objects.filter(tipologia__giocante=True).values_list("id", flat=True)[:5000]
+            base.filter(eventi_partecipati=innesco.target_evento_id).values_list("id", flat=True)[:5000]
         )
+    if mode == InnescoTimer.INNESCO_TARGET_KORP:
+        korp_ids = list(innesco.target_korps.values_list("pk", flat=True))
+        if not korp_ids:
+            return []
+        return list(
+            base.filter(
+                carriere_membership__data_a__isnull=True,
+                carriere_membership__carriera_id__in=korp_ids,
+            )
+            .distinct()
+            .values_list("id", flat=True)[:5000]
+        )
+    if mode == InnescoTimer.INNESCO_TARGET_PERSONAGGI:
+        pg_ids = list(innesco.target_personaggi.values_list("pk", flat=True))
+        if not pg_ids:
+            return []
+        return list(base.filter(pk__in=pg_ids).values_list("id", flat=True)[:5000])
+
     ids: List[int] = []
-    for pg in Personaggio.objects.filter(tipologia__giocante=True).select_related(
-        "era", "prefettura", "prefettura__regione"
-    ):
+    for pg in base.select_related("era", "prefettura", "prefettura__regione"):
         if personaggio_match_innesco_timer(pg, innesco):
             ids.append(pg.id)
+        if len(ids) >= 5000:
+            break
     return ids
+
+
+# Finestra in cui la schermata «scaduto» resta finché il giocatore non preme Ok.
+INNESCO_ACK_WINDOW = timedelta(hours=24)
+
+
+def _innesco_timer_row(inn, data_fine, *, scaduto: bool) -> Dict[str, Any]:
+    return {
+        "id": f"innesco:{inn.pk}",
+        "nome": inn.nome,
+        "data_fine": data_fine.isoformat(),
+        "alert_suono": True,
+        "notifica_push": False,  # push scadenza gestita server-side
+        "messaggio_in_app": True,
+        "segnale_luminoso": bool(inn.segnale_luminoso),
+        "source": "innesco_timer",
+        "scaduto": scaduto,
+        "richiede_ack": True,
+    }
 
 
 def active_innesco_timer_rows_for_personaggio(personaggio) -> List[Dict[str, Any]]:
     """
-    Timer innesco ancora in corso, visibili al PG (stesso filtro del broadcast WS).
-    Preferisce broadcast_data_fine sul modello; fallback su stati scanner.
+    Countdown ancora in corso e scadenze non confermate (schermata rossa fino a Ok).
+
+    Non è un poll al secondo: il client rilegge questa lista all'apertura e al cambio pagina.
+    Il tempo residuo si calcola in locale da ``data_fine``.
     """
-    from .models import InnescoTimer, StatoInnescoTimerPersonaggio
+    from .models import InnescoTimer, InnescoTimerAck, StatoInnescoTimerPersonaggio
 
     if personaggio is None:
         return []
 
     now = timezone.now()
     rows_by_innesco: Dict[Any, Dict[str, Any]] = {}
+    ack_pairs = set(
+        InnescoTimerAck.objects.filter(personaggio=personaggio).values_list(
+            "innesco_timer_id", "data_fine"
+        )
+    )
 
     for inn in InnescoTimer.objects.filter(broadcast_data_fine__gt=now):
         if not personaggio_match_innesco_timer(personaggio, inn):
             continue
-        rows_by_innesco[inn.pk] = {
-            "id": f"innesco:{inn.pk}",
-            "nome": inn.nome,
-            "data_fine": inn.broadcast_data_fine.isoformat(),
-            "alert_suono": True,
-            "notifica_push": False,  # push scadenza gestita server-side
-            "messaggio_in_app": True,
-            "segnale_luminoso": bool(inn.segnale_luminoso),
-            "source": "innesco_timer",
-        }
+        rows_by_innesco[inn.pk] = _innesco_timer_row(inn, inn.broadcast_data_fine, scaduto=False)
+
+    scaduti_da = now - INNESCO_ACK_WINDOW
+    for inn in InnescoTimer.objects.filter(
+        broadcast_data_fine__isnull=False,
+        broadcast_data_fine__lte=now,
+        broadcast_data_fine__gt=scaduti_da,
+    ):
+        if inn.pk in rows_by_innesco:
+            continue
+        if (inn.pk, inn.broadcast_data_fine) in ack_pairs:
+            continue
+        if not personaggio_match_innesco_timer(personaggio, inn):
+            continue
+        rows_by_innesco[inn.pk] = _innesco_timer_row(inn, inn.broadcast_data_fine, scaduto=True)
 
     # Fallback: attivazioni precedenti alla migrazione campi broadcast_*
     qs = (
@@ -393,18 +461,11 @@ def active_innesco_timer_rows_for_personaggio(personaggio) -> List[Dict[str, Any
         inn = st.innesco_timer
         if inn.pk in rows_by_innesco:
             continue
+        if inn.broadcast_data_fine:
+            continue
         if not personaggio_match_innesco_timer(personaggio, inn):
             continue
-        rows_by_innesco[inn.pk] = {
-            "id": f"innesco:{inn.pk}",
-            "nome": inn.nome,
-            "data_fine": st.data_fine.isoformat(),
-            "alert_suono": True,
-            "notifica_push": False,
-            "messaggio_in_app": True,
-            "segnale_luminoso": bool(inn.segnale_luminoso),
-            "source": "innesco_timer",
-        }
+        rows_by_innesco[inn.pk] = _innesco_timer_row(inn, st.data_fine, scaduto=False)
     return list(rows_by_innesco.values())
 
 

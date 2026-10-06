@@ -5106,14 +5106,24 @@ class MinigiocoQrSession(SyncableModel, models.Model):
 
 class InnescoTimer(A_vista):
     """
-    Innesco timer personale (e broadcast mirato) collegabile a un QrCode come altre A_vista.
+    Innesco timer collegabile a un QrCode come altre A_vista.
+
+    Più righe con lo stesso ``gruppo_id`` sono istanze identiche (stessi destinatari,
+    stessa durata, stesso nome). Ogni istanza ha il proprio QR e il proprio countdown:
+    la scansione di un QR non resetta le altre istanze del gruppo.
     """
 
     INNESCO_TARGET_GLOBAL = "globale"
+    INNESCO_TARGET_EVENTO = "evento"
+    INNESCO_TARGET_KORP = "korp"
+    INNESCO_TARGET_PERSONAGGI = "personaggi"
     INNESCO_TARGET_FILTRI = "filtri"
     INNESCO_TARGET_CHOICES = [
-        (INNESCO_TARGET_GLOBAL, "Tutti i giocatori"),
-        (INNESCO_TARGET_FILTRI, "Solo era / regione / KORP selezionate"),
+        (INNESCO_TARGET_GLOBAL, "A tutti"),
+        (INNESCO_TARGET_EVENTO, "Solo giocatori presenti all'evento"),
+        (INNESCO_TARGET_KORP, "Solo KORP"),
+        (INNESCO_TARGET_PERSONAGGI, "Lista di personaggi"),
+        (INNESCO_TARGET_FILTRI, "Filtri era / regione / KORP"),
     ]
 
     modalita_target = models.CharField(
@@ -5122,6 +5132,21 @@ class InnescoTimer(A_vista):
         default=INNESCO_TARGET_GLOBAL,
         db_index=True,
     )
+    gruppo_id = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        db_index=True,
+        verbose_name="Gruppo istanze",
+        help_text="Istanze con lo stesso gruppo condividono nome, durata e destinatari.",
+    )
+    etichetta_istanza = models.CharField(
+        max_length=80,
+        blank=True,
+        default="",
+        verbose_name="Etichetta istanza",
+        help_text="Nome staff della singola istanza (es. QR nord). I giocatori vedono il nome del timer.",
+    )
+    ordine_istanza = models.PositiveIntegerField(default=1, verbose_name="Ordine istanza")
     durata_secondi = models.PositiveIntegerField(default=60, verbose_name="Durata countdown (secondi)")
     max_cariche = models.PositiveIntegerField(
         default=1,
@@ -5160,9 +5185,24 @@ class InnescoTimer(A_vista):
         default=get_default_campagna_id,
         db_index=True,
     )
+    target_evento = models.ForeignKey(
+        "gestione_plot.Evento",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="innesco_timers",
+        verbose_name="Evento (presenti)",
+        help_text="Con modalità evento: solo i PG in «partecipanti» di questo evento.",
+    )
     target_ere = models.ManyToManyField("Era", blank=True, related_name="innesco_timers")
     target_regioni = models.ManyToManyField("Regione", blank=True, related_name="innesco_timers")
     target_korps = models.ManyToManyField("Korp", blank=True, related_name="innesco_timers")
+    target_personaggi = models.ManyToManyField(
+        "Personaggio",
+        blank=True,
+        related_name="innesco_timers_mirati",
+        verbose_name="Personaggi destinatari",
+    )
 
     class Meta:
         verbose_name = "Innesco timer (QR)"
@@ -5201,6 +5241,46 @@ class StatoInnescoTimerPersonaggio(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.personaggio_id} / {self.innesco_timer_id} fino {self.data_fine}"
+
+
+class InnescoTimerAck(SyncableModel, models.Model):
+    """
+    Il giocatore ha chiuso la schermata «timer scaduto» per una specifica scadenza.
+    Finché non esiste l'ack, il client continua a mostrare la schermata anche dopo un reload.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="ack_innesco_timer",
+    )
+    innesco_timer = models.ForeignKey(
+        InnescoTimer,
+        on_delete=models.CASCADE,
+        related_name="ack_personaggi",
+    )
+    data_fine = models.DateTimeField(
+        verbose_name="Scadenza confermata",
+        help_text="broadcast_data_fine dell'istanza al momento della conferma.",
+    )
+
+    class Meta:
+        verbose_name = "Ack scadenza innesco timer"
+        verbose_name_plural = "Ack scadenze innesco timer"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("personaggio", "innesco_timer", "data_fine"),
+                name="uq_innesco_timer_ack_pg_fine",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["personaggio", "innesco_timer"], name="innesco_ack_pg_it"),
+        ]
+
+    def __str__(self):
+        return f"ack {self.personaggio_id} / {self.innesco_timer_id} @ {self.data_fine}"
 
 
 def _default_tipi_minigioco_pool():

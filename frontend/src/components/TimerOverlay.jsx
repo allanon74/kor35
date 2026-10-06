@@ -1,124 +1,186 @@
-import React, { useEffect, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSharedNowTs } from '../hooks/useSharedNowTs';
+import { ackInnescoTimerScaduto } from '../api';
+import { installTimerAlarmUnlock, playTimerAlarm } from '../lib/timerAlarm';
+import { nextTimerCorner, TIMER_CORNERS } from '../utils/activeTimers';
 
-const SingleTimer = ({ timer, onExpire }) => {
+const CORNER_STORAGE_KEY = 'kor35-timer-corner';
+
+const CORNER_CLASS = {
+  tr: 'top-[calc(var(--kor-safe-top,0px)+4.5rem)] right-3 items-end',
+  br: 'bottom-[calc(env(safe-area-inset-bottom,0px)+5.5rem)] right-3 items-end',
+  bl: 'bottom-[calc(env(safe-area-inset-bottom,0px)+5.5rem)] left-3 items-start',
+  tl: 'top-[calc(var(--kor-safe-top,0px)+4.5rem)] left-3 items-start',
+};
+
+function readCorner() {
+  try {
+    const saved = localStorage.getItem(CORNER_STORAGE_KEY);
+    if (TIMER_CORNERS.includes(saved)) return saved;
+  } catch {
+    /* storage non disponibile */
+  }
+  return 'tr';
+}
+
+const formatLeft = (seconds) => {
+  const s = Math.max(0, seconds);
+  const mins = Math.floor(s / 60);
+  const secs = s % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+const expiryKey = (timer) => `${timer.key}|${timer.endTime}`;
+
+const SingleTimer = ({ timer, onMove }) => {
   const nowTs = useSharedNowTs();
   const timeLeft = Math.max(0, Math.floor((timer.endTime - nowTs) / 1000));
   const isDanger = timer.variant === 'danger';
-  const expiredOnce = useRef(false);
-
-  useEffect(() => {
-    if (timeLeft <= 0 && !expiredOnce.current) {
-      expiredOnce.current = true;
-      onExpire(timer);
-    }
-  }, [timeLeft, timer, onExpire]);
-
-  const format = (s) => {
-    const mins = Math.floor(s / 60);
-    const secs = s % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  if (isDanger) {
-    return (
-      <div className="bg-red-950/95 text-white p-4 rounded-xl mb-2 border-2 border-red-500 shadow-[0_0_24px_rgba(239,68,68,0.45)] flex justify-between items-center min-w-[220px] backdrop-blur-sm ring-2 ring-red-400/40 animate-pulse">
-        <div className="flex flex-col">
-          <span className="text-[11px] text-red-300 uppercase font-black tracking-[0.2em] leading-none mb-1">
-            Trappola
-          </span>
-          <span className="text-sm font-bold uppercase truncate max-w-[140px]">{timer.nome}</span>
-        </div>
-        <div className="flex flex-col items-end ml-4">
-          <span className="font-mono text-2xl font-black text-red-300 drop-shadow-[0_0_12px_rgba(248,113,113,0.7)]">
-            {format(timeLeft)}
-          </span>
-        </div>
-      </div>
-    );
-  }
+  const glow = timer.segnale_luminoso !== false;
 
   return (
-    <div className="bg-gray-800/95 text-white p-3 rounded-xl mb-2 border-l-4 border-amber-500 shadow-2xl flex justify-between items-center min-w-40 backdrop-blur-sm ring-1 ring-white/10 animate-slide-in-right">
-      <div className="flex flex-col">
-        <span className="text-[10px] text-gray-400 uppercase font-black tracking-tighter leading-none mb-1">Timer Attivo</span>
-        <span className="text-xs font-bold uppercase truncate max-w-[100px]">{timer.nome}</span>
+    <button
+      type="button"
+      onClick={onMove}
+      className={`pointer-events-auto mb-2 min-h-11 w-[min(92vw,280px)] rounded-2xl border-2 px-4 py-3 text-left text-white shadow-2xl backdrop-blur-sm ${
+        isDanger
+          ? 'border-red-400 bg-red-950/95 shadow-[0_0_24px_rgba(239,68,68,0.45)]'
+          : 'border-amber-400 bg-gray-950/95 shadow-[0_0_22px_rgba(251,191,36,0.35)]'
+      } ${glow ? 'animate-pulse' : ''}`}
+      title="Tocca per spostare il timer in un altro angolo"
+      aria-label={`Timer ${timer.nome}, ${formatLeft(timeLeft)} rimanenti. Tocca per spostarlo.`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className={`text-[10px] font-black uppercase tracking-[0.18em] ${isDanger ? 'text-red-300' : 'text-amber-300'}`}>
+            {isDanger ? 'Trappola' : 'Timer'}
+          </div>
+          <div className="truncate text-base font-black uppercase">{timer.nome}</div>
+        </div>
+        <div className={`font-mono text-3xl font-black tabular-nums ${isDanger ? 'text-red-200' : 'text-amber-300'}`}>
+          {formatLeft(timeLeft)}
+        </div>
       </div>
-      <div className="flex flex-col items-end ml-4">
-        <span className="font-mono text-lg font-bold text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]">
-          {format(timeLeft)}
-        </span>
-      </div>
-    </div>
+    </button>
   );
 };
 
-export const TimerOverlay = ({ activeTimers, onRemove }) => {
-  
-  // Funzione ricorsiva per riprodurre il suono N volte
-  const playSoundSequence = useCallback((remaining) => {
-    if (remaining <= 0) return;
-    
-    const audio = new Audio('/sounds/alert.mp3');
-    
-    // Quando il suono finisce, chiama se stessa riducendo il contatore
-    audio.onended = () => playSoundSequence(remaining - 1);
-    
-    audio.play().catch(err => {
-      // I browser bloccano l'audio se l'utente non ha ancora interagito con la pagina
-      console.warn("Riproduzione audio bloccata dal browser. Richiesta interazione utente.", err);
+export const TimerOverlay = ({ activeTimers, onRemove, personaggioId, onLogout }) => {
+  const nowTs = useSharedNowTs();
+  const [corner, setCorner] = useState(readCorner);
+  const [modal, setModal] = useState(null);
+  const dismissed = useRef(new Set());
+  const alarmed = useRef(new Set());
+
+  useEffect(() => {
+    installTimerAlarmUnlock();
+  }, []);
+
+  const moveCorner = useCallback(() => {
+    setCorner((prev) => {
+      const next = nextTimerCorner(prev);
+      try {
+        localStorage.setItem(CORNER_STORAGE_KEY, next);
+      } catch {
+        /* ignora */
+      }
+      return next;
     });
   }, []);
 
-  const handleExpire = (timer) => {
-    // 1. Alert Sonoro (Ripetuto 3 volte)
-    if (timer.alert_suono) {
-      playSoundSequence(3);
-    }
+  const running = Object.entries(activeTimers || {})
+    .map(([key, timer]) => ({ key, ...timer }))
+    .filter((timer) => timer.endTime > nowTs && !timer.scaduto);
 
-    // 2. Notifica di Sistema (Browser Push)
-    // Utilizza l'API nativa del browser se i permessi sono concessi
-    if (timer.notifica_push && "Notification" in window && Notification.permission === "granted") {
-        try {
-            new Notification(`Timer Scaduto: ${timer.nome}`, {
-                body: timer.variant === 'danger'
-                  ? `La trappola "${timer.nome}" è scaduta.`
-                  : `Il countdown per la tipologia "${timer.nome}" è terminato.`,
-                icon: '/pwa-192x192.png'
-            });
-        } catch (e) { console.error("Errore invio notifica sistema:", e); }
+  useEffect(() => {
+    if (modal) return undefined;
+    const due = Object.entries(activeTimers || {})
+      .map(([key, timer]) => ({ key, ...timer }))
+      .filter((timer) => timer.scaduto || (timer.endTime && nowTs >= timer.endTime))
+      .filter((timer) => !dismissed.current.has(expiryKey(timer)));
+    if (!due.length) return undefined;
+    const first = due[0];
+    if (first.messaggio_in_app === false) {
+      dismissed.current.add(expiryKey(first));
+      onRemove?.(first.key);
+      return undefined;
     }
+    const mark = expiryKey(first);
+    if (!alarmed.current.has(mark) && first.alert_suono !== false) {
+      alarmed.current.add(mark);
+      playTimerAlarm();
+    }
+    setModal(first);
+    return undefined;
+  }, [activeTimers, nowTs, modal, onRemove]);
 
-    // 3. Messaggio In-App (Alert popup)
-    if (timer.messaggio_in_app) {
-      // Usiamo un piccolo delay per non bloccare l'inizio della sequenza audio
-      setTimeout(() => {
-        alert(
-          timer.variant === 'danger'
-            ? `ATTENZIONE: La trappola "${timer.nome}" è scaduta!`
-            : `ATTENZIONE: Il timer "${timer.nome}" è scaduto!`
+  const confirmExpired = async () => {
+    if (!modal) return;
+    const current = modal;
+    dismissed.current.add(expiryKey(current));
+    setModal(null);
+    const rawId = String(current.id || current.key || '');
+    if (rawId.startsWith('innesco:') && personaggioId) {
+      try {
+        await ackInnescoTimerScaduto(
+          {
+            personaggio_id: personaggioId,
+            innesco_id: rawId.slice('innesco:'.length),
+            id: rawId,
+            data_fine: new Date(current.endTime).toISOString(),
+          },
+          onLogout,
         );
-      }, 200);
+      } catch (err) {
+        console.warn('Ack timer non registrato', err);
+      }
     }
-
-    // Rimuove il timer dallo stato globale in CharacterContext
-    onRemove(timer.nome);
+    onRemove?.(current.key);
   };
 
-  if (Object.keys(activeTimers).length === 0) return null;
+  const chip = running.length > 0 && typeof document !== 'undefined'
+    ? createPortal(
+      <div className={`fixed z-[180] flex max-w-[min(92vw,280px)] flex-col pointer-events-none ${CORNER_CLASS[corner] || CORNER_CLASS.tr}`}>
+        {running.map((timer) => (
+          <SingleTimer key={timer.key} timer={timer} onMove={moveCorner} />
+        ))}
+      </div>,
+      document.body,
+    )
+    : null;
+
+  const expiredScreen = modal && typeof document !== 'undefined'
+    ? createPortal(
+      <div
+        className="fixed inset-0 z-[220] flex flex-col items-center justify-center bg-black/95 px-5 py-8 text-center"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="timer-scaduto-titolo"
+      >
+        <h1
+          id="timer-scaduto-titolo"
+          className="max-w-[18ch] break-words text-4xl font-black uppercase leading-tight text-red-600 sm:text-6xl"
+        >
+          Timer {modal.nome} scaduto!
+        </h1>
+        <button
+          type="button"
+          onClick={confirmExpired}
+          className="mt-10 min-h-12 min-w-36 rounded-xl bg-red-700 px-8 py-3 text-lg font-black text-white"
+        >
+          Ok
+        </button>
+      </div>,
+      document.body,
+    )
+    : null;
 
   return (
-    <div className="fixed top-20 right-4 z-9999 pointer-events-none flex flex-col items-end max-w-[280px]">
-      <div className="pointer-events-auto">
-        {Object.values(activeTimers).map(t => (
-          <SingleTimer 
-            key={t.nome} 
-            timer={t} 
-            onExpire={handleExpire} 
-          />
-        ))}
-      </div>
-    </div>
+    <>
+      {chip}
+      {expiredScreen}
+    </>
   );
 };
 

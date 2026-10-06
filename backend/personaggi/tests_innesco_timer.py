@@ -77,18 +77,49 @@ class InnescoTimerBehaviorTests(TestCase):
         nomi = [row["nome"] for row in r.data]
         self.assertIn("Allarme Globale", nomi)
 
-    def test_active_timers_non_include_scaduti(self):
+    def test_scaduto_resta_finche_il_giocatore_non_preme_ok(self):
         payload, err = qr_logic.attiva_innesco_timer_per_personaggio(self.pg, self.innesco)
         self.assertIsNone(err)
+        from personaggi.innesco_timer_ops import ack_innesco_timer_scaduto
         from personaggi.models import StatoInnescoTimerPersonaggio
 
+        fine = timezone.now() - timedelta(seconds=5)
         StatoInnescoTimerPersonaggio.objects.filter(
             personaggio=self.pg, innesco_timer=self.innesco
-        ).update(data_fine=timezone.now() - timedelta(seconds=5))
+        ).update(data_fine=fine)
         InnescoTimer.objects.filter(pk=self.innesco.pk).update(
-            broadcast_data_fine=timezone.now() - timedelta(seconds=5),
+            broadcast_data_fine=fine,
             broadcast_push_inviata=False,
         )
+        rows = qr_logic.active_innesco_timer_rows_for_personaggio(self.pg2)
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["scaduto"])
+        self.assertEqual(rows[0]["id"], f"innesco:{self.innesco.pk}")
+
+        ack_innesco_timer_scaduto(self.pg2, self.innesco, fine)
+        self.assertEqual(qr_logic.active_innesco_timer_rows_for_personaggio(self.pg2), [])
+
+        client2 = APIClient()
+        client2.force_authenticate(self.user2)
+        self.innesco.refresh_from_db()
+        # Nuova scadenza non ancora confermata da user2 è già ackata sopra.
+        # Una seconda attivazione deve ricomparire finché non c'è un nuovo Ok.
+        InnescoTimer.objects.filter(pk=self.innesco.pk).update(
+            broadcast_data_fine=timezone.now() - timedelta(seconds=2),
+            broadcast_push_inviata=False,
+        )
+        rows_new = qr_logic.active_innesco_timer_rows_for_personaggio(self.pg2)
+        self.assertEqual(len(rows_new), 1)
+        r = client2.post(
+            "/api/personaggi/api/timers/active/ack/",
+            {
+                "personaggio_id": self.pg2.id,
+                "innesco_id": self.innesco.id,
+                "data_fine": rows_new[0]["data_fine"],
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
         self.assertEqual(qr_logic.active_innesco_timer_rows_for_personaggio(self.pg2), [])
 
     @patch("personaggi.timer_expiry_push._send_webpush_to_users")
@@ -121,3 +152,89 @@ class InnescoTimerBehaviorTests(TestCase):
             stats = dispatch_expired_innesco_pushes()
             self.assertEqual(stats["dispatched"], 0)
             mock_send.assert_not_called()
+
+    def test_target_korp_evento_e_lista_personaggi(self):
+        from personaggi.models import (
+            Korp,
+            PersonaggioCarrieraMembership,
+            TIER_3,
+            TipoCarriera,
+        )
+        from gestione_plot.models import Evento
+
+        tipo_korp, _ = TipoCarriera.objects.get_or_create(codice="korp", defaults={"nome": "KORP"})
+        korp = Korp.objects.create(
+            nome="KORP Timer Test",
+            descrizione="",
+            tipo=TIER_3,
+            tipo_carriera=tipo_korp,
+        )
+        PersonaggioCarrieraMembership.objects.create(
+            personaggio=self.pg2,
+            carriera=korp,
+            tipo_carriera=tipo_korp,
+        )
+        self.innesco.modalita_target = InnescoTimer.INNESCO_TARGET_KORP
+        self.innesco.save()
+        self.innesco.target_korps.add(korp)
+
+        payload, err = qr_logic.attiva_innesco_timer_per_personaggio(self.pg, self.innesco)
+        self.assertIsNone(err)
+        ids = set(payload["recipient_personaggio_ids"])
+        self.assertIn(self.pg2.id, ids)
+        self.assertNotIn(self.pg.id, ids)
+        self.assertEqual(qr_logic.active_innesco_timer_rows_for_personaggio(self.pg), [])
+        self.assertEqual(len(qr_logic.active_innesco_timer_rows_for_personaggio(self.pg2)), 1)
+
+        now = timezone.now()
+        evento = Evento.objects.create(
+            titolo="Evento timer",
+            data_inizio=now,
+            data_fine=now + timedelta(days=1),
+        )
+        evento.partecipanti.add(self.pg)
+        self.innesco.modalita_target = InnescoTimer.INNESCO_TARGET_EVENTO
+        self.innesco.target_evento = evento
+        self.innesco.save()
+        payload, err = qr_logic.attiva_innesco_timer_per_personaggio(self.pg2, self.innesco)
+        self.assertIsNone(err)
+        ids = set(payload["recipient_personaggio_ids"])
+        self.assertIn(self.pg.id, ids)
+        self.assertNotIn(self.pg2.id, ids)
+
+        self.innesco.modalita_target = InnescoTimer.INNESCO_TARGET_PERSONAGGI
+        self.innesco.target_evento = None
+        self.innesco.save()
+        self.innesco.target_personaggi.set([self.pg2])
+        payload, err = qr_logic.attiva_innesco_timer_per_personaggio(self.pg, self.innesco)
+        self.assertIsNone(err)
+        ids = set(payload["recipient_personaggio_ids"])
+        self.assertEqual(ids, {self.pg2.id})
+
+    def test_istanze_hanno_qr_e_countdown_separati_e_condividono_i_dati(self):
+        from personaggi.innesco_timer_ops import aggiungi_istanze, propaga_campi_gruppo
+
+        extra = aggiungi_istanze(self.innesco, 1)[0]
+        self.assertEqual(str(extra.gruppo_id), str(self.innesco.gruppo_id))
+        self.assertNotEqual(extra.pk, self.innesco.pk)
+        qr_extra = QrCode.objects.create(vista=extra)
+
+        r = self.client.get(
+            f"/api/personaggi/api/qrcode/{self.qr.id}/",
+            {"personaggio_id": self.pg.id},
+        )
+        self.assertEqual(r.status_code, 200)
+        self.innesco.refresh_from_db()
+        extra.refresh_from_db()
+        self.assertIsNotNone(self.innesco.broadcast_data_fine)
+        self.assertIsNone(extra.broadcast_data_fine)
+        self.assertEqual(qr_extra.vista_id, extra.pk)
+
+        self.innesco.nome = "Allarme rinominato"
+        self.innesco.durata_secondi = 30
+        self.innesco.save()
+        propaga_campi_gruppo(self.innesco)
+        extra.refresh_from_db()
+        self.assertEqual(extra.nome, "Allarme rinominato")
+        self.assertEqual(extra.durata_secondi, 30)
+        self.assertIsNone(extra.broadcast_data_fine)

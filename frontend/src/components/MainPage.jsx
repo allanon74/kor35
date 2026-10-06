@@ -301,8 +301,9 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     selectedCharacterData,
     refreshCharacterData,
     punteggiList,
-    activeTimers,      
-    removeTimerState,  
+    activeTimers,
+    removeTimerState,
+    refreshActiveTimers,  
     selectCharacter,
     setPreferredCharacter,
     fetchPersonaggi,
@@ -321,6 +322,10 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     canSeeStaffCompiti,
     canAccessModulo,
   } = useCharacter();
+
+  useEffect(() => {
+    refreshActiveTimers?.();
+  }, [activeTab, refreshActiveTimers]);
 
   const { aperti: compitiAperti } = useMieiStaffCompiti(onLogout, { enabled: !!canSeeStaffCompiti });
   const compitiApertiCount = compitiAperti.length;
@@ -1466,7 +1471,12 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
       
       {/* --- TIMER OVERLAY --- */}
-      <TimerOverlay activeTimers={activeTimers} onRemove={removeTimerState} />
+      <TimerOverlay
+        activeTimers={activeTimers}
+        onRemove={removeTimerState}
+        personaggioId={selectedCharacterId}
+        onLogout={onLogout}
+      />
 
       {selectedCharacterData && auraInnataRecord && (
         <RazzaModal

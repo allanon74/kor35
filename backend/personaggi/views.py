@@ -1664,6 +1664,7 @@ class QrCodeDetailView(APIView):
                     "tipo_modello": "timer_innesco",
                     "messaggio": f"Innesco timer «{inn_timer.nome}» avviato.",
                     "dati": {
+                        "id": payload.get("id"),
                         "nome": payload["nome"],
                         "scadenza": payload["scadenza"].isoformat() if payload.get("scadenza") else None,
                         "segnale_luminoso": payload.get("segnale_luminoso", True),
@@ -5103,7 +5104,37 @@ class ActiveTimersViewSet(viewsets.ReadOnlyModelViewSet):
                         }
                     )
                 rows.extend(qr_logic.active_innesco_timer_rows_for_personaggio(pg))
-        return Response(rows) 
+        return Response(rows)
+
+    @action(detail=False, methods=["post"], url_path="ack")
+    def ack(self, request):
+        """Il giocatore ha premuto Ok sulla schermata «timer scaduto»."""
+        from personaggi.innesco_timer_ops import ack_innesco_timer_scaduto
+
+        raw_pid = request.data.get("personaggio_id")
+        raw_inn = request.data.get("innesco_id")
+        if raw_inn is None and request.data.get("id"):
+            token = str(request.data.get("id"))
+            raw_inn = token.split(":", 1)[1] if token.startswith("innesco:") else token
+        try:
+            pid = int(raw_pid)
+            inn_id = int(raw_inn)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "personaggio_id e innesco_id richiesti."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        pg = Personaggio.objects.filter(pk=pid, proprietario=request.user).first()
+        if pg is None:
+            return Response({"error": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        inn = InnescoTimer.objects.filter(pk=inn_id).first()
+        if inn is None:
+            return Response({"error": "Innesco timer non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        if not qr_logic.personaggio_match_innesco_timer(pg, inn):
+            return Response({"error": "Timer non destinato a questo personaggio."}, status=status.HTTP_403_FORBIDDEN)
+        ack_innesco_timer_scaduto(pg, inn, request.data.get("data_fine"))
+        return Response({"ok": True})
+
 class StatisticaViewSet(viewsets.ReadOnlyModelViewSet):
     """Visualizza l'elenco delle statistiche tecniche disponibili"""
     queryset = Statistica.objects.all()

@@ -53,7 +53,7 @@ from .models import (
     ConfigurazioneLivelloAura,
     Cerimoniale, CerimonialeCaratteristica,
     TipologiaTimer, TimerQrCode, StatoTimerAttivo,
-    InnescoTimer, QrInventarioScanSession, StatoInnescoTimerPersonaggio,
+    InnescoTimer, InnescoTimerAck, QrInventarioScanSession, StatoInnescoTimerPersonaggio,
     RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect,
     Trappola, StatoTrappolaPersonaggio, SerieCollezione, SerieImmagine, SerieAssegnazione, SerieQr,
     TipologiaEffetto, EffettoCasuale, ConsumabilePersonaggio, CreazioneConsumabileInCorso,
@@ -923,9 +923,21 @@ class NodoRewardConfigAdmin(SModelAdmin):
 
 @admin.register(InnescoTimer)
 class InnescoTimerAdmin(SModelAdmin):
-    list_display = ("id", "nome", "modalita_target", "durata_secondi", "max_cariche", "campagna")
+    list_display = (
+        "id",
+        "nome",
+        "etichetta_istanza",
+        "ordine_istanza",
+        "modalita_target",
+        "durata_secondi",
+        "max_cariche",
+        "campagna",
+    )
+    list_filter = ("modalita_target", "campagna")
+    search_fields = ("nome", "etichetta_istanza")
     summernote_fields = ["testo"]
-    filter_horizontal = ("target_ere", "target_regioni", "target_korps")
+    filter_horizontal = ("target_ere", "target_regioni", "target_korps", "target_personaggi")
+    raw_id_fields = ("target_evento",)
 
 
 @admin.register(QrInventarioScanSession)
@@ -937,6 +949,12 @@ class QrInventarioScanSessionAdmin(admin.ModelAdmin):
 @admin.register(StatoInnescoTimerPersonaggio)
 class StatoInnescoTimerPersonaggioAdmin(admin.ModelAdmin):
     list_display = ("id", "personaggio", "innesco_timer", "data_fine", "cariche_usate_ciclo")
+
+
+@admin.register(InnescoTimerAck)
+class InnescoTimerAckAdmin(admin.ModelAdmin):
+    list_display = ("id", "personaggio", "innesco_timer", "data_fine", "created_at")
+    raw_id_fields = ("personaggio", "innesco_timer")
 
 
 @admin.register(RandomQrPool)
