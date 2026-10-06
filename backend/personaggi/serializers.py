@@ -80,7 +80,7 @@ from .models import (
     abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, NodoRewardConfig, A_vista, Mattone, InnescoTimer,
     RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect, Trappola, SerieCollezione, SerieAssegnazione, SerieImmagine, SerieQr,
     MinigiocoPattern, MinigiocoPatternEntry, MinigiocoSezioneDefault, MinigiocoQrConfig,
-    AURA, 
+    AURA, Aura, 
     Infusione, Tessitura, 
     # NUOVI MODELLI INTERMEDI
     InfusioneCaratteristica, TessituraCaratteristica, PropostaTecnicaCaratteristica,
@@ -717,16 +717,83 @@ class StatisticaSerializer(serializers.ModelSerializer):
 
 
 class StatisticaStaffSerializer(serializers.ModelSerializer):
+    """Campi propri di Statistica + anagrafica Punteggio (nome/sigla/colore).
+
+    Non include i campi da catalogo Aura (produce_*, stat_costo_*, aure_infusione_*):
+    stanno sul tipo AU e si editano nella maschera staff Aure.
+    """
+
     class Meta:
         model = Statistica
         fields = (
             'id', 'nome', 'sigla', 'parametro', 'descrizione', 'ordine', 'colore',
-            'formula', 'is_primaria', 'is_costo', 'is_tempo', 'is_numero',
+            'formula', 'tipo_modificatore', 'is_primaria', 'is_costo', 'is_tempo', 'is_numero',
             'is_risorsa_pool', 'valore_predefinito', 'valore_base_predefinito',
             'pool_corrente_default_pieno_se_assente',
             'auto_recupero_attivo', 'auto_recupero_intervallo_secondi', 'auto_recupero_step',
             'massimo_pool_sigla',
         )
+
+
+_AURA_STAFF_STAT_FK = (
+    'stat_costo_creazione_infusione',
+    'stat_costo_creazione_tessitura',
+    'stat_costo_acquisto_infusione',
+    'stat_costo_acquisto_tessitura',
+    'stat_costo_invio_proposta_infusione',
+    'stat_costo_invio_proposta_tessitura',
+    'stat_costo_forgiatura',
+    'stat_tempo_forgiatura',
+    'stat_costo_creazione_oggetto',
+    'stat_costo_creazione_mod',
+    'stat_costo_creazione_innesto',
+    'stat_costo_creazione_mutazione',
+    'stat_costo_acquisto_cerimoniale',
+    'stat_costo_creazione_cerimoniale',
+    'stat_costo_invio_proposta_cerimoniale',
+    'stat_costo_consumabili',
+    'stat_numero_consumabili',
+    'stat_tempo_creazione_consumabili',
+    'stat_durata_consumabili',
+)
+
+
+class AuraStaffSerializer(serializers.ModelSerializer):
+    """Catalogo Aura (Punteggio tipo AU): flag produzione, costi, infusioni consentite."""
+
+    aure_infusione_consentite = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Punteggio.objects.filter(tipo=AURA),
+        required=False,
+    )
+
+    class Meta:
+        model = Aura
+        fields = (
+            'id',
+            'nome',
+            'sigla',
+            'descrizione',
+            'ordine',
+            'colore',
+            'tipo',
+            'is_soprannaturale',
+            'is_generica',
+            'permette_infusioni',
+            'permette_tessiture',
+            'permette_cerimoniali',
+            'produce_aumenti',
+            'produce_potenziamenti',
+            'nome_tipo_aumento',
+            'nome_tipo_potenziamento',
+            'nome_tipo_tessitura',
+            'spegne_a_zero_cariche',
+            'potenziamenti_multi_slot',
+            'aure_infusione_consentite',
+            *_AURA_STAFF_STAT_FK,
+        )
+        read_only_fields = ('tipo',)
+        extra_kwargs = {name: {'allow_null': True, 'required': False} for name in _AURA_STAFF_STAT_FK}
 
 
 class PunteggioSerializer(serializers.ModelSerializer):

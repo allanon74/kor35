@@ -33,6 +33,7 @@ import {
   FileSignature,
   Dices,
   BarChart3,
+  Flame,
 } from 'lucide-react';
 
 /** Icone consentite per i gruppi del menu (allineate al backend). */
@@ -83,6 +84,7 @@ export const STAFF_TOOL_ICON_MAP = {
   Phone,
   Dices,
   BarChart3,
+  Flame,
 };
 
 /**
@@ -120,6 +122,7 @@ export const STAFF_TOOLS_REGISTRY = {
   'creazione-guidata': { id: 'creazione-guidata', label: 'Creazione guidata PG', icon: Sparkles, color: 'bg-violet-900', componentKey: 'creazione-guidata' },
   'dichiarazioni-glossario': { id: 'dichiarazioni-glossario', label: 'Dichiarazioni e glossario', icon: BookText, color: 'bg-emerald-700', componentKey: 'dichiarazioni-glossario' },
   statistiche: { id: 'statistiche', label: 'Statistiche', icon: BarChart3, color: 'bg-blue-800', componentKey: 'statistiche' },
+  aure: { id: 'aure', label: 'Aure', icon: Flame, color: 'bg-violet-700', componentKey: 'aure' },
   'arcana-profiles': { id: 'arcana-profiles', label: 'Profili Arcana SSO', icon: Shield, color: 'bg-indigo-800', componentKey: 'arcana-profiles' },
   campagne: { id: 'campagne', label: 'Campagne', icon: Globe2, color: 'bg-emerald-800', componentKey: 'campagne' },
   maintenance: { id: 'maintenance', label: 'Maintenance mode', icon: Shield, color: 'bg-amber-700', componentKey: 'maintenance' },
@@ -161,7 +164,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       tool_ids: [
         'mostri', 'abilita', 'cerimoniali', 'tessiture', 'infusioni',
         'oggetti', 'oggetti-base', 'tabelle', 'effetti-casuali',
-        'ere-prefetture', 'carriere-korps', 'dichiarazioni-glossario', 'statistiche',
+        'ere-prefetture', 'carriere-korps', 'dichiarazioni-glossario', 'statistiche', 'aure',
       ],
     },
     {

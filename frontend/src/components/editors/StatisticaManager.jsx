@@ -18,6 +18,7 @@ const EMPTY_FORM = {
   ordine: 0,
   colore: '#1976D2',
   formula: false,
+  tipo_modificatore: 'ADD',
   is_primaria: false,
   is_costo: false,
   is_tempo: false,
@@ -64,6 +65,9 @@ const StatisticaFormPanel = ({ value, onClose, onSave, statusMessage = '', statu
       <p className="text-xs text-gray-400">
         Se <span className="font-mono">parametro</span> è vuoto, al salvataggio viene copiata la sigla.
         Senza parametro i bonus delle abilità non si applicano in scheda.
+        Produzione oggetti, costi tessitura/infusione e aure infusione stanno sul catalogo{' '}
+        <strong className="text-gray-200">Aure</strong>, non qui: i flag costo/tempo/numero
+        rendono questa statistica selezionabile in quella maschera.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
@@ -136,6 +140,17 @@ const StatisticaFormPanel = ({ value, onClose, onSave, statusMessage = '', statu
         value={form.descrizione || ''}
         onChange={(e) => set({ descrizione: e.target.value })}
       />
+      <div>
+        <label className="text-xs text-gray-500 uppercase font-bold">Tipo modificatore predefinito</label>
+        <select
+          className="w-full min-h-11 bg-gray-800 border border-gray-700 rounded p-2 text-white"
+          value={form.tipo_modificatore || 'ADD'}
+          onChange={(e) => set({ tipo_modificatore: e.target.value })}
+        >
+          <option value="ADD">Additivo (+N)</option>
+          <option value="MOL">Moltiplicativo (xN)</option>
+        </select>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <Flag label="Formula" checked={form.formula} onChange={(v) => set({ formula: v })} />
         <Flag label="Primaria (scheda)" checked={form.is_primaria} onChange={(v) => set({ is_primaria: v })} />
@@ -290,6 +305,7 @@ const StatisticaManager = ({ onLogout }) => {
       ordine: Number(form.ordine || 0),
       colore: form.colore || '#1976D2',
       formula: !!form.formula,
+      tipo_modificatore: form.tipo_modificatore === 'MOL' ? 'MOL' : 'ADD',
       is_primaria: !!form.is_primaria,
       is_costo: !!form.is_costo,
       is_tempo: !!form.is_tempo,
