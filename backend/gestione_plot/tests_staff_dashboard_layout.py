@@ -136,4 +136,12 @@ class StaffDashboardLayoutTests(SimpleTestCase):
         layout = default_staff_dashboard_layout()
         comunicazione_tools = layout["groups"][3]["tool_ids"]
         self.assertIn("rubriche", comunicazione_tools)
+
+    def test_pool_pg_tool_nel_default(self):
+        from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
+
+        self.assertIn("pool-pg", KNOWN_STAFF_TOOL_IDS)
+        layout = default_staff_dashboard_layout()
+        comunicazione_tools = layout["groups"][3]["tool_ids"]
+        self.assertIn("pool-pg", comunicazione_tools)
         validate_staff_dashboard_layout(layout)

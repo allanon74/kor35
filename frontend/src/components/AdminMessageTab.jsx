@@ -6,13 +6,17 @@ import {
     getAdminSentMessages, 
     fetchStaffMessages, 
     searchPersonaggi,
-    fetchAuthenticated,
     markStaffMessageAsRead,
-    deleteStaffMessage
+    deleteStaffMessage,
+    getStaffMessaggiModelli,
+    createStaffMessaggioModello,
+    deleteStaffMessaggioModello,
+    getStaffPoolPgMeta,
+    postMessaggioEventoInvio,
 } from '../api';
 import RichTextEditor from './RichTextEditor';
 import RichTextDisplay from './RichTextDisplay';
-import { Mail, Users, Shield, Search, X, RefreshCw, Trash2, Eye, EyeOff, Reply, Send } from 'lucide-react';
+import { Mail, Users, Shield, Search, X, RefreshCw, Trash2, Eye, EyeOff, Reply, Send, Calendar, BookmarkPlus } from 'lucide-react';
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ');
@@ -31,11 +35,15 @@ const AdminMessageTab = ({ onLogout }) => {
     const [optimisticReadStates, setOptimisticReadStates] = useState({}); // Optimistic UI
 
     // --- STATI TAB COMPONI ---
-    const [targetType, setTargetType] = useState('broadcast'); // 'broadcast', 'group', 'single'
+    const [targetType, setTargetType] = useState('broadcast'); // 'broadcast', 'group', 'single', 'evento'
     const [selectedGroup, setSelectedGroup] = useState('tutti');
     const [singleRecipient, setSingleRecipient] = useState(null); // Oggetto PG selezionato
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
+    const [eventi, setEventi] = useState([]);
+    const [selectedEventoId, setSelectedEventoId] = useState('');
+    const [modelli, setModelli] = useState([]);
+    const [modelloNome, setModelloNome] = useState('');
     
     const [title, setTitle] = useState('');
     const [text, setText] = useState('');
@@ -52,6 +60,8 @@ const AdminMessageTab = ({ onLogout }) => {
         if (canAccessStaffInbox) {
             loadInbox();
             loadHistory();
+            loadModelli();
+            loadEventi();
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [canAccessStaffInbox]);
@@ -142,6 +152,59 @@ const AdminMessageTab = ({ onLogout }) => {
         }
     };
 
+    const loadModelli = async () => {
+        try {
+            const data = await getStaffMessaggiModelli(onLogout);
+            setModelli(Array.isArray(data) ? data : []);
+        } catch (err) {
+            console.error('Errore modelli messaggio:', err);
+        }
+    };
+
+    const loadEventi = async () => {
+        try {
+            const data = await getStaffPoolPgMeta(onLogout);
+            setEventi(Array.isArray(data?.eventi) ? data.eventi : []);
+            if (data?.evento_in_corso_id && !selectedEventoId) {
+                setSelectedEventoId(String(data.evento_in_corso_id));
+            }
+        } catch (err) {
+            console.error('Errore elenco eventi:', err);
+        }
+    };
+
+    const handleApplyModello = (mod) => {
+        setTitle(mod.titolo || '');
+        setText(mod.testo || '');
+        setFeedback({ type: 'success', msg: `Modello «${mod.nome}» caricato. Puoi modificarlo prima di inviare.` });
+    };
+
+    const handleSaveModello = async () => {
+        const nome = modelloNome.trim() || title.trim();
+        if (!nome || !text.trim()) {
+            setFeedback({ type: 'error', msg: 'Per salvare un modello servono un nome (o oggetto) e un testo.' });
+            return;
+        }
+        try {
+            await createStaffMessaggioModello({ nome, titolo: title, testo: text }, onLogout);
+            setModelloNome('');
+            setFeedback({ type: 'success', msg: `Modello «${nome}» salvato.` });
+            loadModelli();
+        } catch (err) {
+            setFeedback({ type: 'error', msg: err.message || 'Impossibile salvare il modello.' });
+        }
+    };
+
+    const handleDeleteModello = async (mod) => {
+        if (!window.confirm(`Eliminare il modello «${mod.nome}»?`)) return;
+        try {
+            await deleteStaffMessaggioModello(mod.id, onLogout);
+            loadModelli();
+        } catch (err) {
+            setFeedback({ type: 'error', msg: err.message || 'Eliminazione fallita.' });
+        }
+    };
+
     // Gestione Ricerca PG (per invio singolo)
     useEffect(() => {
         const delayDebounceFn = setTimeout(async () => {
@@ -174,23 +237,32 @@ const AdminMessageTab = ({ onLogout }) => {
             setFeedback({ type: 'error', msg: 'Devi selezionare un destinatario per l\'invio singolo.' });
             return;
         }
+        if (targetType === 'evento' && !selectedEventoId) {
+            setFeedback({ type: 'error', msg: 'Seleziona un evento per l\'invio agli iscritti.' });
+            return;
+        }
 
         setIsSending(true);
 
         try {
             if (targetType === 'single') {
-                // Invio Singolo (Messaggio diretto Staff -> PG)
-                // Usa l'endpoint standard dei messaggi, forzando il tipo STAFF
-                await fetchAuthenticated('/api/personaggi/api/messaggi/', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        destinatario_personaggio: singleRecipient.id,
-                        titolo: title,
-                        testo: text,
-                        tipo_messaggio: 'STAFF', // Importante per far apparire la formattazione staff
-                        mittente_is_staff: true
-                    })
+                await postMessaggioEventoInvio({
+                    destinatario_id: singleRecipient.id,
+                    titolo: title,
+                    testo: text,
                 }, onLogout);
+            } else if (targetType === 'evento') {
+                const res = await postMessaggioEventoInvio({
+                    evento_id: selectedEventoId,
+                    titolo: title,
+                    testo: text,
+                }, onLogout);
+                setFeedback({ type: 'success', msg: `Inviate ${res.inviati} copie individuali agli iscritti.` });
+                setTitle('');
+                setText('');
+                loadHistory();
+                setIsSending(false);
+                return;
             } else {
                 // Invio Broadcast o Gruppo (Usa la tua API postBroadcastMessage esistente)
                 const payload = {
@@ -381,17 +453,20 @@ const AdminMessageTab = ({ onLogout }) => {
                           */}
                           <div className="shrink-0 max-h-[38vh] overflow-y-auto custom-scrollbar p-4 pb-3 space-y-3">
                             {/* TARGET SELECTOR */}
-                            <div className="grid grid-cols-3 gap-2 bg-gray-800 p-1.5 rounded-lg border border-gray-700">
-                                {['broadcast', 'group', 'single'].map((type) => (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-gray-800 p-1.5 rounded-lg border border-gray-700">
+                                {[
+                                    { type: 'broadcast', label: 'Tutti', icon: Send },
+                                    { type: 'group', label: 'Gruppo', icon: Users },
+                                    { type: 'single', label: 'Singolo', icon: Mail },
+                                    { type: 'evento', label: 'Iscritti evento', icon: Calendar },
+                                ].map(({ type, label, icon: Icon }) => (
                                     <label 
                                         key={type} 
-                                        className={`flex items-center justify-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm font-bold capitalize ${targetType === type ? 'bg-indigo-600 text-white shadow' : 'hover:bg-gray-700 text-gray-400'}`}
+                                        className={`flex min-h-11 items-center justify-center gap-2 p-2 rounded cursor-pointer transition-colors text-xs sm:text-sm font-bold ${targetType === type ? 'bg-indigo-600 text-white shadow' : 'hover:bg-gray-700 text-gray-400'}`}
                                     >
                                         <input type="radio" name="target" value={type} checked={targetType === type} onChange={() => setTargetType(type)} className="hidden" />
-                                        {type === 'broadcast' && <Send size={16} />}
-                                        {type === 'group' && <Users size={16} />}
-                                        {type === 'single' && <Mail size={16} />}
-                                        {type === 'broadcast' ? 'Tutti' : type === 'group' ? 'Gruppo' : 'Singolo'}
+                                        <Icon size={16} />
+                                        {label}
                                     </label>
                                 ))}
                             </div>
@@ -457,9 +532,76 @@ const AdminMessageTab = ({ onLogout }) => {
                                         )}
                                     </div>
                                 )}
+                                {targetType === 'evento' && (
+                                    <div className="bg-gray-800 p-3 rounded-lg border border-gray-700">
+                                        <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">Evento (iscritti)</label>
+                                        <select
+                                            value={selectedEventoId}
+                                            onChange={(e) => setSelectedEventoId(e.target.value)}
+                                            className="w-full min-h-11 bg-gray-900 border border-gray-600 text-white rounded p-2 focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                                        >
+                                            <option value="">— Seleziona evento —</option>
+                                            {eventi.map((ev) => (
+                                                <option key={ev.id} value={ev.id}>
+                                                    {ev.in_corso ? '● ' : ''}{ev.titolo}
+                                                    {ev.data_inizio ? ` (${new Date(ev.data_inizio).toLocaleDateString()})` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className="text-[11px] text-gray-500 mt-1">
+                                            Ogni iscritto riceve una copia individuale in inbox, con notifica.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
 
-                            {/* CAMPI TESTO */}
+                            <div className="bg-gray-800/80 p-3 rounded-lg border border-gray-700 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-bold text-gray-400 uppercase">Modelli</span>
+                                    <span className="text-[10px] text-gray-500">Clicca per compilare titolo e testo</span>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {modelli.length === 0 && (
+                                        <span className="text-[11px] text-gray-500">Nessun modello salvato.</span>
+                                    )}
+                                    {modelli.map((mod) => (
+                                        <span key={mod.id} className="inline-flex items-center max-w-full">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleApplyModello(mod)}
+                                                className="min-h-11 truncate max-w-[11rem] rounded-l-lg bg-emerald-900/70 hover:bg-emerald-800 px-3 text-xs font-bold text-emerald-100"
+                                                title={mod.titolo}
+                                            >
+                                                {mod.nome}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDeleteModello(mod)}
+                                                className="min-h-11 rounded-r-lg bg-red-950/80 hover:bg-red-900 px-2 text-red-300"
+                                                aria-label={`Elimina modello ${mod.nome}`}
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    <input
+                                        type="text"
+                                        value={modelloNome}
+                                        onChange={(e) => setModelloNome(e.target.value)}
+                                        placeholder="Nome modello (opzionale, usa l'oggetto)"
+                                        className="min-h-11 flex-1 bg-gray-900 border border-gray-600 text-white rounded px-2 text-sm"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveModello}
+                                        className="min-h-11 inline-flex items-center justify-center gap-1 rounded-lg bg-gray-700 hover:bg-gray-600 px-3 text-xs font-bold text-white"
+                                    >
+                                        <BookmarkPlus size={14} /> Salva modello
+                                    </button>
+                                </div>
+                            </div>
                             <div>
                                 <input
                                     type="text"

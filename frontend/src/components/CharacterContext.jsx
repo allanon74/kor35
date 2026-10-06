@@ -25,6 +25,7 @@ import {
   getGiocoEventoStato,
 } from '../api';
 import NotificationPopup from './NotificationPopup';
+import PriorityMessageOverlay from './PriorityMessageOverlay';
 import { putOfflineGameStateSnapshot, putOfflineCharacterDetail } from '../lib/offlineGameStateDb';
 import { putOfflineMessages, getOfflineMessages } from '../lib/offlineMessagesDb';
 import { isWebPushSupported } from '../lib/webpush';
@@ -740,6 +741,19 @@ export const CharacterProvider = ({ children, onLogout }) => {
         const action = inner?.action;
         const payload = inner?.payload || inner;
 
+        if (action === 'MSG_PRIORITARIO') {
+          const destId = inner?.destinatario_id != null ? String(inner.destinatario_id) : '';
+          if (destId && destId === String(selectedCharacterId || '')) {
+            window.dispatchEvent(new CustomEvent('kor35:msg-prioritario', {
+              detail: {
+                esito_id: inner.esito_id,
+                titolo: inner.titolo,
+                testo: inner.testo,
+              },
+            }));
+          }
+        }
+
         if (action && String(action).startsWith('VOCE_')) {
           window.dispatchEvent(new CustomEvent('kor35:voce', { detail: inner }));
           // Solo il chiamato (o staff verso_staff) riceve toast OS: il chiamante
@@ -843,6 +857,9 @@ export const CharacterProvider = ({ children, onLogout }) => {
              return;
            }
            if (msg.action && String(msg.action).startsWith('VOCE_')) {
+             return;
+           }
+           if (msg.action === 'MSG_PRIORITARIO') {
              return;
            }
            const myId = String(selectedCharacterId || '');
@@ -1009,6 +1026,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
           window.dispatchEvent(new CustomEvent('kor35:open-messaggi'));
         }}
       />
+      <PriorityMessageOverlay personaggioId={selectedCharacterId} onLogout={onLogout} />
     </CharacterContext.Provider>
   );
 };

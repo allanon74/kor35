@@ -1,7 +1,7 @@
 from django.urls import path, include
 # from rest_framework.authtoken.views import obtain_auth_token
 
-from . import views, views_staff, views_serie, views_scommesse, views_carte, views_carte_platform, watch_views, views_economia, views_notifiche, chiamate_views, views_contratti
+from . import views, views_staff, views_serie, views_scommesse, views_carte, views_carte_platform, watch_views, views_economia, views_notifiche, chiamate_views, views_contratti, views_pool_pg
 from rest_framework import routers
 
 from rest_framework.routers import DefaultRouter
@@ -146,6 +146,16 @@ router.register(r'korp', KorpViewSet, basename='korp')
 router.register(r'carriere', CarrieraViewSet, basename='carriere')
 router.register(r'segni-zodiacali', SegnoZodiacaleViewSet, basename='segni-zodiacali')
 router.register(r'staff/campagne', views.CampagnaAdminViewSet, basename='staff-campagne')
+router.register(
+    r'staff/messaggi-modelli',
+    views_pool_pg.MessaggioModelloStaffViewSet,
+    basename='staff-messaggi-modelli',
+)
+router.register(
+    r'staff/pool-pg',
+    views_pool_pg.PersonaggioPoolStaffViewSet,
+    basename='staff-pool-pg',
+)
 router.register(r'staff/campagne-utenti', views.CampagnaUtenteAdminViewSet, basename='staff-campagne-utenti')
 router.register(r'staff/campagne-feature-policy', views.CampagnaFeaturePolicyAdminViewSet, basename='staff-campagne-feature-policy')
 router.register(r'staff/scommesse/sport', views_scommesse.SportScommesseStaffViewSet, basename='staff-scommesse-sport')
@@ -291,6 +301,21 @@ urlpatterns = [
     path('api/messaggi/<int:messaggio_id>/rispondi/', views.RispondiMessaggioView.as_view(), name='api_rispondi_messaggio'),
     path('api/messaggi/broadcast/send/', views.MessaggioBroadcastCreateView.as_view(), name='api_messaggi_broadcast_send'),
     path('api/messaggi/admin/sent/', views.MessaggioAdminSentListView.as_view(), name='api_messaggi_admin_sent'),
+    path(
+        'api/messaggi/staff/evento-invio/',
+        views_pool_pg.MessaggioEventoInvioView.as_view(),
+        name='api_messaggi_evento_invio',
+    ),
+    path(
+        'api/sorteggio-ack/pending/',
+        views_pool_pg.SorteggioAckPendingView.as_view(),
+        name='api_sorteggio_ack_pending',
+    ),
+    path(
+        'api/sorteggio-ack/<uuid:esito_id>/conferma/',
+        views_pool_pg.SorteggioAckConfermaView.as_view(),
+        name='api_sorteggio_ack_conferma',
+    ),
     path('api/messaggi/<int:pk>/<str:action_type>/', views.MessaggioActionView.as_view(), name='messaggio-azione'),
     path('api/webpush/subscribe/', views.WebPushSubscribeView.as_view(), name='api_webpush_subscribe'),
     path('api/fcm/register/', views.FcmRegisterView.as_view(), name='api_fcm_register'),
