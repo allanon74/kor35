@@ -2598,6 +2598,45 @@ export const staffDeleteAura = (id, onLogout) => {
     }, onLogout);
 };
 
+const staffCatalogCrud = (path) => ({
+    list: (onLogout) => fetchAuthenticated(`/api/personaggi/api/staff/${path}/`, { method: 'GET' }, onLogout),
+    create: (data, onLogout) => fetchAuthenticated(`/api/personaggi/api/staff/${path}/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout),
+    update: (id, data, onLogout) => fetchAuthenticated(`/api/personaggi/api/staff/${path}/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout),
+    remove: (id, onLogout) => fetchAuthenticated(`/api/personaggi/api/staff/${path}/${id}/`, {
+        method: 'DELETE',
+    }, onLogout),
+});
+
+const caratteristicheCrud = staffCatalogCrud('caratteristiche');
+export const staffGetCaratteristiche = caratteristicheCrud.list;
+export const staffCreateCaratteristica = caratteristicheCrud.create;
+export const staffUpdateCaratteristica = caratteristicheCrud.update;
+export const staffDeleteCaratteristica = caratteristicheCrud.remove;
+
+const mattoniCrud = staffCatalogCrud('mattoni');
+export const staffGetMattoni = mattoniCrud.list;
+export const staffCreateMattone = mattoniCrud.create;
+export const staffUpdateMattone = mattoniCrud.update;
+export const staffDeleteMattone = mattoniCrud.remove;
+
+const modelliAuraCrud = staffCatalogCrud('modelli-aura');
+export const staffGetModelliAura = modelliAuraCrud.list;
+export const staffCreateModelloAura = modelliAuraCrud.create;
+export const staffUpdateModelloAura = modelliAuraCrud.update;
+export const staffDeleteModelloAura = modelliAuraCrud.remove;
+
+const punteggiResiduiCrud = staffCatalogCrud('punteggi');
+export const staffGetPunteggiResidui = punteggiResiduiCrud.list;
+export const staffCreatePunteggioResiduo = punteggiResiduiCrud.create;
+export const staffUpdatePunteggioResiduo = punteggiResiduiCrud.update;
+export const staffDeletePunteggioResiduo = punteggiResiduiCrud.remove;
+
 export const createPersonaggio = (data, onLogout) => {
     return fetchAuthenticated('/api/personaggi/api/gestione-personaggi/', {
         method: 'POST',

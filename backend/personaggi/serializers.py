@@ -77,10 +77,11 @@ from .models import (
     statistica_chiave_modificatore, 
     QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, Punteggio, Tabella, 
     TipologiaPersonaggio, abilita_tier, abilita_requisito, abilita_sbloccata, 
-    abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, NodoRewardConfig, A_vista, Mattone, InnescoTimer,
+    abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, NodoRewardConfig, A_vista, Mattone, Caratteristica, CaratteristicaModificatore, InnescoTimer,
     RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect, Trappola, SerieCollezione, SerieAssegnazione, SerieImmagine, SerieQr,
     MinigiocoPattern, MinigiocoPatternEntry, MinigiocoSezioneDefault, MinigiocoQrConfig,
-    AURA, Aura, 
+    AURA, Aura, CARATTERISTICA, ELEMENTO, STATISTICA,
+    CONDIZIONE, CULTO, VIA, ARTE, ARCHETIPO, CASTONE, NODO, KATA, MATTONE,
     Infusione, Tessitura, 
     # NUOVI MODELLI INTERMEDI
     InfusioneCaratteristica, TessituraCaratteristica, PropostaTecnicaCaratteristica,
@@ -794,6 +795,227 @@ class AuraStaffSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ('tipo',)
         extra_kwargs = {name: {'allow_null': True, 'required': False} for name in _AURA_STAFF_STAT_FK}
+
+
+PUNTEGGI_TIPI_CON_MASCHERA_DEDICATA = (STATISTICA, AURA, CARATTERISTICA)
+PUNTEGGI_TIPI_RESIDUI = (ELEMENTO, CONDIZIONE, CULTO, VIA, ARTE, ARCHETIPO, CASTONE, NODO, KATA)
+
+
+def _sync_simple_children(manager, rows, build_kwargs):
+    manager.all().delete()
+    for row in rows or []:
+        kwargs = build_kwargs(row)
+        if kwargs is None:
+            continue
+        manager.create(**kwargs)
+
+
+class CaratteristicaModificatoreStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CaratteristicaModificatore
+        fields = ('id', 'statistica_modificata', 'modificatore', 'ogni_x_punti')
+        extra_kwargs = {'id': {'required': False}}
+        validators = []
+
+
+class CaratteristicaStaffSerializer(serializers.ModelSerializer):
+    """Proxy Punteggio tipo CA + modificatori verso statistiche."""
+
+    modificatori = CaratteristicaModificatoreStaffSerializer(
+        source='modificatori_dati', many=True, required=False,
+    )
+
+    class Meta:
+        model = Caratteristica
+        fields = (
+            'id', 'nome', 'sigla', 'descrizione', 'ordine', 'colore', 'tipo',
+            'modificatori',
+        )
+        read_only_fields = ('tipo',)
+
+    def create(self, validated_data):
+        mods = validated_data.pop('modificatori_dati', [])
+        validated_data['tipo'] = CARATTERISTICA
+        obj = Caratteristica.objects.create(**validated_data)
+        self._sync_modificatori(obj, mods)
+        return obj
+
+    def update(self, instance, validated_data):
+        mods = validated_data.pop('modificatori_dati', None)
+        validated_data['tipo'] = CARATTERISTICA
+        instance = super().update(instance, validated_data)
+        if mods is not None:
+            self._sync_modificatori(instance, mods)
+        return instance
+
+    def _sync_modificatori(self, instance, rows):
+        _sync_simple_children(
+            instance.modificatori_dati,
+            rows,
+            lambda row: {
+                'statistica_modificata': row['statistica_modificata'],
+                'modificatore': row.get('modificatore') or 1,
+                'ogni_x_punti': row.get('ogni_x_punti') or 1,
+            } if row.get('statistica_modificata') else None,
+        )
+
+
+class MattoneStatisticaStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MattoneStatistica
+        fields = ('id', 'statistica', 'valore', 'tipo_modificatore')
+        extra_kwargs = {'id': {'required': False}}
+        validators = []
+
+
+class MattoneStaffSerializer(serializers.ModelSerializer):
+    statistiche_mod = MattoneStatisticaStaffSerializer(
+        source='mattonestatistica_set', many=True, required=False,
+    )
+    aura_nome = serializers.CharField(source='aura.nome', read_only=True)
+    caratteristica_nome = serializers.CharField(source='caratteristica_associata.nome', read_only=True)
+
+    class Meta:
+        model = Mattone
+        fields = (
+            'id', 'nome', 'sigla', 'tipo', 'ordine', 'colore',
+            'aura', 'aura_nome', 'caratteristica_associata', 'caratteristica_nome', 'indice_componente',
+            'descrizione_mattone', 'dichiarazione',
+            'funzionamento_metatalento', 'descrizione_metatalento', 'testo_addizionale',
+            'mostra_classi_arma', 'statistiche_mod',
+        )
+        extra_kwargs = {
+            'indice_componente': {'allow_null': True, 'required': False},
+            'tipo': {'required': False},
+        }
+
+    def create(self, validated_data):
+        stats = validated_data.pop('mattonestatistica_set', [])
+        validated_data.setdefault('tipo', MATTONE)
+        obj = Mattone.objects.create(**validated_data)
+        self._sync_stats(obj, stats)
+        return obj
+
+    def update(self, instance, validated_data):
+        stats = validated_data.pop('mattonestatistica_set', None)
+        instance = super().update(instance, validated_data)
+        if stats is not None:
+            self._sync_stats(instance, stats)
+        return instance
+
+    def _sync_stats(self, instance, rows):
+        _sync_simple_children(
+            instance.mattonestatistica_set,
+            rows,
+            lambda row: {
+                'statistica': row['statistica'],
+                'valore': row.get('valore') or 0,
+                'tipo_modificatore': row.get('tipo_modificatore') or 'ADD',
+            } if row.get('statistica') else None,
+        )
+
+
+class ModelloAuraRequisitoStaffSerializer(serializers.Serializer):
+    requisito = serializers.PrimaryKeyRelatedField(queryset=Punteggio.objects.all())
+    valore = serializers.IntegerField(default=1)
+
+
+class ModelloAuraStaffSerializer(serializers.ModelSerializer):
+    aura_nome = serializers.CharField(source='aura.nome', read_only=True)
+    mattoni_proibiti = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Mattone.objects.all(), required=False,
+    )
+    mattoni_obbligatori = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Mattone.objects.all(), required=False,
+    )
+    requisiti_doppia = ModelloAuraRequisitoStaffSerializer(
+        source='req_doppia_rel', many=True, required=False,
+    )
+    requisiti_mattone = ModelloAuraRequisitoStaffSerializer(
+        source='req_mattone_rel', many=True, required=False,
+    )
+    requisiti_caratt = ModelloAuraRequisitoStaffSerializer(
+        source='req_caratt_rel', many=True, required=False,
+    )
+
+    class Meta:
+        model = ModelloAura
+        fields = (
+            'id', 'nome', 'aura', 'aura_nome', 'descrizione',
+            'mattoni_proibiti', 'mattoni_obbligatori',
+            'usa_doppia_formula', 'elemento_secondario', 'usa_condizione_doppia',
+            'requisiti_doppia',
+            'usa_formula_per_mattone', 'usa_condizione_mattone',
+            'requisiti_mattone',
+            'usa_formula_per_caratteristica', 'usa_condizione_caratt',
+            'requisiti_caratt',
+        )
+        extra_kwargs = {
+            'elemento_secondario': {'allow_null': True, 'required': False},
+        }
+
+    def create(self, validated_data):
+        nested = self._pop_nested(validated_data)
+        m2m_proib = validated_data.pop('mattoni_proibiti', [])
+        m2m_obb = validated_data.pop('mattoni_obbligatori', [])
+        obj = ModelloAura.objects.create(**validated_data)
+        obj.mattoni_proibiti.set(m2m_proib)
+        obj.mattoni_obbligatori.set(m2m_obb)
+        self._sync_requisiti(obj, nested)
+        return obj
+
+    def update(self, instance, validated_data):
+        nested = self._pop_nested(validated_data)
+        m2m_proib = validated_data.pop('mattoni_proibiti', None)
+        m2m_obb = validated_data.pop('mattoni_obbligatori', None)
+        instance = super().update(instance, validated_data)
+        if m2m_proib is not None:
+            instance.mattoni_proibiti.set(m2m_proib)
+        if m2m_obb is not None:
+            instance.mattoni_obbligatori.set(m2m_obb)
+        self._sync_requisiti(instance, nested)
+        return instance
+
+    def _pop_nested(self, validated_data):
+        return {
+            'doppia': validated_data.pop('req_doppia_rel', None),
+            'mattone': validated_data.pop('req_mattone_rel', None),
+            'caratt': validated_data.pop('req_caratt_rel', None),
+        }
+
+    def _sync_requisiti(self, instance, nested):
+        mapping = {
+            'doppia': instance.req_doppia_rel,
+            'mattone': instance.req_mattone_rel,
+            'caratt': instance.req_caratt_rel,
+        }
+        for key, manager in mapping.items():
+            rows = nested.get(key)
+            if rows is None:
+                continue
+            _sync_simple_children(
+                manager,
+                rows,
+                lambda row: {
+                    'requisito': row['requisito'],
+                    'valore': row.get('valore') or 1,
+                } if row.get('requisito') else None,
+            )
+
+
+class PunteggioResiduoStaffSerializer(serializers.ModelSerializer):
+    """Punteggi senza maschera dedicata (non ST/AU/CA, non mattoni MTI)."""
+
+    class Meta:
+        model = Punteggio
+        fields = ('id', 'nome', 'sigla', 'tipo', 'ordine', 'colore', 'descrizione')
+
+    def validate_tipo(self, value):
+        if value not in PUNTEGGI_TIPI_RESIDUI:
+            raise serializers.ValidationError(
+                "Tipo non ammesso qui: usa le maschere Statistiche, Aure, Caratteristiche o Mattoni."
+            )
+        return value
 
 
 class PunteggioSerializer(serializers.ModelSerializer):

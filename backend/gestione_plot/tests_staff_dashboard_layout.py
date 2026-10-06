@@ -155,6 +155,16 @@ class StaffDashboardLayoutTests(SimpleTestCase):
         self.assertIn("aure", database_tools)
         validate_staff_dashboard_layout(layout)
 
+    def test_catalogo_punteggi_tools_nel_default(self):
+        from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
+
+        layout = default_staff_dashboard_layout()
+        database_tools = layout["groups"][1]["tool_ids"]
+        for tool_id in ("caratteristiche", "mattoni", "modelli-aura", "punteggi"):
+            self.assertIn(tool_id, KNOWN_STAFF_TOOL_IDS)
+            self.assertIn(tool_id, database_tools)
+        validate_staff_dashboard_layout(layout)
+
     def test_pool_pg_tool_nel_default(self):
         from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
 
