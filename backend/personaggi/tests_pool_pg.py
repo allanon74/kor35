@@ -57,8 +57,10 @@ class StaffPoolPgApiTests(TestCase):
             slug="kor35", nome="KOR35", attiva=True, is_default=True, is_base=True
         )
         self.staff = User.objects.create_user(username="pool_staff", password="x")
-        CampagnaUtente.objects.create(
-            user=self.staff, campagna=self.campagna, ruolo=CAMPAGNA_ROLE_STAFFER, attivo=True
+        CampagnaUtente.objects.update_or_create(
+            user=self.staff,
+            campagna=self.campagna,
+            defaults={"ruolo": CAMPAGNA_ROLE_STAFFER, "attivo": True},
         )
         self.player = User.objects.create_user(
             username="maria_user", password="x", first_name="Maria", last_name="Rossi"
@@ -121,7 +123,9 @@ class StaffPoolPgApiTests(TestCase):
         inbox.credentials(HTTP_AUTHORIZATION=f"Token {ptoken.key}", HTTP_X_CAMPAGNA="kor35")
         listed = inbox.get(f"/api/personaggi/api/messaggi/?personaggio_id={self.pg.id}")
         self.assertEqual(listed.status_code, 200)
-        ids = [m["id"] for m in listed.json()]
+        payload = listed.json()
+        rows = payload if isinstance(payload, list) else payload.get("results") or []
+        ids = [m["id"] for m in rows]
         self.assertIn(msg.id, ids)
 
     def test_pool_sorteggio_pesato_e_ack(self):
