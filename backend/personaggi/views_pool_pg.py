@@ -24,6 +24,7 @@ from personaggi.models import (
     PersonaggioPoolMembro,
     PersonaggioPoolSorteggio,
     PersonaggioPoolSorteggioEsito,
+    Statistica,
 )
 from personaggi.pool_sorteggio import (
     PLACEHOLDER_CAMPI,
@@ -33,9 +34,12 @@ from personaggi.pool_sorteggio import (
     evento_in_corso,
     giocatore_display_name,
     membri_attivi_qs,
+    payload_pool_giocatore,
     peso_sorteggio,
     placeholder_context,
+    pool_visibile_per_personaggio,
     render_placeholders,
+    rimanenti_attivazioni_giocatore,
 )
 from personaggi.views import _get_active_campaign
 
@@ -58,6 +62,146 @@ def _crea_messaggio_staff_individuale(*, mittente, personaggio, titolo, testo, c
         campagna=campagna,
         salva_in_cronologia=True,
     )
+
+
+def esegui_sorteggio_pool(
+    *,
+    pool,
+    campagna,
+    mittente,
+    n_min=None,
+    n_max=None,
+    origine=PersonaggioPoolSorteggio.ORIGINE_STAFF,
+    avviato_da_personaggio=None,
+):
+    """Estrazione pesata condivisa tra staff e attivazione giocatore.
+
+    In caso di errore restituisce una Response DRF; altrimenti il payload JSON.
+    """
+    try:
+        n_min = int(n_min if n_min is not None else pool.sorteggio_min)
+        n_max = int(n_max if n_max is not None else pool.sorteggio_max)
+    except (TypeError, ValueError):
+        return Response({"error": "Numeri di sorteggio non validi."}, status=400)
+    if n_min < 1:
+        return Response({"error": "Il minimo deve essere almeno 1."}, status=400)
+    if n_max < n_min:
+        n_min, n_max = n_max, n_min
+    attivi = list(membri_attivi_qs(pool))
+    if not attivi:
+        return Response({"error": "Nessun personaggio attivo nel pool."}, status=400)
+    if n_max > len(attivi):
+        n_max = len(attivi)
+    if n_min > n_max:
+        n_min = n_max
+    k = random.randint(n_min, n_max)
+    counts = conteggi_sorteggi_pool(pool)
+    fattore = float(pool.fattore_peso)
+    candidati = [(pg, peso_sorteggio(fattore, counts.get(pg.id, 0))) for pg in attivi]
+    estratti = campiona_pesato(candidati, k)
+    evento = evento_in_corso()
+    prioritario = bool(pool.invio_prioritario)
+    now = timezone.now()
+    titolo_default = (
+        "Sorteggio staff"
+        if origine == PersonaggioPoolSorteggio.ORIGINE_STAFF
+        else f"Sorteggio {pool.nome}"
+    )
+
+    with transaction.atomic():
+        sorteggio = PersonaggioPoolSorteggio.objects.create(
+            pool=pool,
+            campagna=campagna,
+            creato_da=mittente,
+            origine=origine,
+            avviato_da_personaggio=avviato_da_personaggio,
+            evento=evento,
+            n_min=n_min,
+            n_max=n_max,
+            n_estratti=len(estratti),
+            fattore_usato=pool.fattore_peso,
+            prioritario=prioritario,
+            messaggio_titolo_snapshot=pool.messaggio_titolo,
+            messaggio_testo_snapshot=pool.messaggio_testo,
+        )
+        esiti_payload = []
+        for pg in estratti:
+            pregressi = counts.get(pg.id, 0)
+            peso = peso_sorteggio(fattore, pregressi)
+            ctx = placeholder_context(personaggio=pg, pool=pool, evento=evento, when=now)
+            titolo = render_placeholders(pool.messaggio_titolo or titolo_default, ctx)
+            testo = render_placeholders(pool.messaggio_testo or "", ctx)
+            messaggio = None
+            if (pool.messaggio_titolo or "").strip() or (pool.messaggio_testo or "").strip():
+                messaggio = _crea_messaggio_staff_individuale(
+                    mittente=mittente,
+                    personaggio=pg,
+                    titolo=titolo,
+                    testo=testo or titolo,
+                    campagna=campagna,
+                )
+            esito = PersonaggioPoolSorteggioEsito.objects.create(
+                sorteggio=sorteggio,
+                pool=pool,
+                personaggio=pg,
+                peso=Decimal(str(round(peso, 6))),
+                sorteggi_pregressi=pregressi,
+                messaggio=messaggio,
+                ack_richiesto=prioritario,
+            )
+            if prioritario and pg.proprietario_id:
+                _ws_prioritario(
+                    pg.proprietario_id,
+                    {
+                        "action": "MSG_PRIORITARIO",
+                        "esito_id": str(esito.id),
+                        "messaggio_id": messaggio.id if messaggio else None,
+                        "titolo": titolo,
+                        "testo": testo or titolo,
+                        "destinatario_id": pg.id,
+                        "tipo": "INDV",
+                    },
+                )
+            esiti_payload.append(
+                {
+                    "id": str(esito.id),
+                    "personaggio_id": pg.id,
+                    "personaggio_nome": pg.nome,
+                    "giocatore_nome": giocatore_display_name(pg.proprietario),
+                    "peso": str(esito.peso),
+                    "sorteggi_pregressi": pregressi,
+                    "messaggio_id": messaggio.id if messaggio else None,
+                    "ack_richiesto": prioritario,
+                }
+            )
+
+    return {
+        "sorteggio_id": str(sorteggio.id),
+        "n_estratti": len(estratti),
+        "n_min": n_min,
+        "n_max": n_max,
+        "evento_id": evento.id if evento else None,
+        "evento_titolo": evento.titolo if evento else "",
+        "prioritario": prioritario,
+        "origine": origine,
+        "esiti": esiti_payload,
+    }
+
+
+def _personaggio_richiedente(request):
+    personaggio_id = request.query_params.get("personaggio_id") or request.data.get(
+        "personaggio_id"
+    )
+    if not personaggio_id:
+        return None, Response({"error": "personaggio_id obbligatorio."}, status=400)
+    pg = Personaggio.objects.filter(
+        pk=personaggio_id,
+        proprietario=request.user,
+        eliminato_at__isnull=True,
+    ).first()
+    if not pg:
+        return None, Response({"error": "Personaggio non trovato."}, status=404)
+    return pg, None
 
 
 class MessaggioModelloStaffSerializer(serializers.ModelSerializer):
@@ -150,6 +294,8 @@ class MessaggioEventoInvioView(APIView):
 class PersonaggioPoolSerializer(serializers.ModelSerializer):
     attivi_count = serializers.SerializerMethodField()
     sorteggi_count = serializers.SerializerMethodField()
+    statistica_sigla = serializers.SerializerMethodField()
+    statistica_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = PersonaggioPool
@@ -163,12 +309,24 @@ class PersonaggioPoolSerializer(serializers.ModelSerializer):
             "messaggio_titolo",
             "messaggio_testo",
             "invio_prioritario",
+            "max_sorteggi_giorno",
+            "statistica",
+            "statistica_sigla",
+            "statistica_nome",
             "created_at",
             "updated_at",
             "attivi_count",
             "sorteggi_count",
         )
-        read_only_fields = ("id", "created_at", "updated_at", "attivi_count", "sorteggi_count")
+        read_only_fields = (
+            "id",
+            "created_at",
+            "updated_at",
+            "attivi_count",
+            "sorteggi_count",
+            "statistica_sigla",
+            "statistica_nome",
+        )
 
     def get_attivi_count(self, obj):
         if getattr(obj, "attivi_count", None) is not None:
@@ -184,24 +342,13 @@ class PersonaggioPoolSerializer(serializers.ModelSerializer):
             return 0
         return obj.sorteggi.count()
 
-    class Meta:
-        model = PersonaggioPool
-        fields = (
-            "id",
-            "nome",
-            "escludi_png",
-            "sorteggio_min",
-            "sorteggio_max",
-            "fattore_peso",
-            "messaggio_titolo",
-            "messaggio_testo",
-            "invio_prioritario",
-            "created_at",
-            "updated_at",
-            "attivi_count",
-            "sorteggi_count",
-        )
-        read_only_fields = ("id", "created_at", "updated_at", "attivi_count", "sorteggi_count")
+    def get_statistica_sigla(self, obj):
+        stat = getattr(obj, "statistica", None)
+        return (stat.sigla if stat else "") or ""
+
+    def get_statistica_nome(self, obj):
+        stat = getattr(obj, "statistica", None)
+        return (stat.nome if stat else "") or ""
 
     def validate(self, attrs):
         smin = attrs.get("sorteggio_min", getattr(self.instance, "sorteggio_min", 1))
@@ -222,9 +369,22 @@ class PersonaggioPoolSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"fattore_peso": "Fattore non valido."}) from exc
         if f < 0:
             raise serializers.ValidationError({"fattore_peso": "Il fattore non può essere negativo."})
+        massimo = attrs.get(
+            "max_sorteggi_giorno",
+            getattr(self.instance, "max_sorteggi_giorno", 0),
+        )
+        try:
+            massimo = int(massimo or 0)
+        except (TypeError, ValueError) as exc:
+            raise serializers.ValidationError(
+                {"max_sorteggi_giorno": "Deve essere un intero ≥ 0."}
+            ) from exc
+        if massimo < 0:
+            raise serializers.ValidationError({"max_sorteggi_giorno": "Non può essere negativo."})
         attrs["sorteggio_min"] = smin
         attrs["sorteggio_max"] = smax
         attrs["fattore_peso"] = f
+        attrs["max_sorteggi_giorno"] = massimo
         return attrs
 
 
@@ -237,6 +397,7 @@ class PersonaggioPoolStaffViewSet(viewsets.ModelViewSet):
         campagna = _get_active_campaign(self.request)
         return (
             PersonaggioPool.objects.filter(campagna=campagna)
+            .select_related("statistica")
             .annotate(
                 attivi_count=Count(
                     "membri",
@@ -277,12 +438,22 @@ class PersonaggioPoolStaffViewSet(viewsets.ModelViewSet):
             for ev in eventi
         ]
         corso = evento_in_corso()
+        statistiche = [
+            {
+                "id": st.id,
+                "sigla": st.sigla,
+                "nome": st.nome,
+                "parametro": st.parametro or "",
+            }
+            for st in Statistica.objects.order_by("ordine", "nome", "sigla")
+        ]
         return Response(
             {
                 "placeholders": PLACEHOLDER_CAMPI,
                 "eventi": payload_eventi,
                 "evento_in_corso_id": corso.id if corso else None,
                 "campagna_id": str(campagna.id) if campagna else None,
+                "statistiche": statistiche,
             }
         )
 
@@ -438,7 +609,7 @@ class PersonaggioPoolStaffViewSet(viewsets.ModelViewSet):
         pool = self.get_object()
         sorteggi = (
             PersonaggioPoolSorteggio.objects.filter(pool=pool)
-            .select_related("evento", "creato_da")
+            .select_related("evento", "creato_da", "avviato_da_personaggio")
             .prefetch_related("esiti__personaggio__proprietario", "esiti__messaggio")
             .order_by("-created_at")
         )
@@ -476,6 +647,8 @@ class PersonaggioPoolStaffViewSet(viewsets.ModelViewSet):
                     "evento_id": s.evento_id,
                     "evento_titolo": s.evento.titolo if s.evento_id else "",
                     "creato_da": s.creato_da.username if s.creato_da else "",
+                    "origine": s.origine,
+                    "avviato_da_personaggio_id": s.avviato_da_personaggio_id,
                     "esiti": esiti,
                 }
             )
@@ -490,109 +663,119 @@ class PersonaggioPoolStaffViewSet(viewsets.ModelViewSet):
             n_max = int(request.data.get("sorteggio_max", pool.sorteggio_max) or pool.sorteggio_max)
         except (TypeError, ValueError):
             return Response({"error": "Numeri di sorteggio non validi."}, status=400)
-        if n_min < 1:
-            return Response({"error": "Il minimo deve essere almeno 1."}, status=400)
-        if n_max < n_min:
-            n_min, n_max = n_max, n_min
-        attivi = list(membri_attivi_qs(pool))
-        if not attivi:
-            return Response({"error": "Nessun personaggio attivo nel pool."}, status=400)
-        if n_max > len(attivi):
-            n_max = len(attivi)
-        if n_min > n_max:
-            n_min = n_max
-        k = random.randint(n_min, n_max)
-        counts = conteggi_sorteggi_pool(pool)
-        fattore = float(pool.fattore_peso)
-        candidati = [
-            (pg, peso_sorteggio(fattore, counts.get(pg.id, 0)))
-            for pg in attivi
-        ]
-        estratti = campiona_pesato(candidati, k)
-        evento = evento_in_corso()
-        prioritario = bool(pool.invio_prioritario)
-        now = timezone.now()
+        result = esegui_sorteggio_pool(
+            pool=pool,
+            campagna=campagna,
+            mittente=request.user,
+            n_min=n_min,
+            n_max=n_max,
+            origine=PersonaggioPoolSorteggio.ORIGINE_STAFF,
+        )
+        if isinstance(result, Response):
+            return result
+        return Response(result, status=201)
 
+
+class PoolPgGiocatoreVisibiliView(APIView):
+    """Pool visibili in area personaggio (statistica del PG > 0)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        pg, err = _personaggio_richiedente(request)
+        if err:
+            return err
+        campagna = _get_active_campaign(request)
+        qs = (
+            PersonaggioPool.objects.filter(campagna=campagna, statistica__isnull=False)
+            .select_related("statistica")
+            .order_by("nome")
+        )
+        results = [
+            payload_pool_giocatore(pool, pg)
+            for pool in qs
+            if pool.campagna_id == pg.campagna_id and pool_visibile_per_personaggio(pool, pg)
+        ]
+        return Response({"results": results})
+
+
+class PoolPgGiocatoreDettaglioView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pool_id):
+        pg, err = _personaggio_richiedente(request)
+        if err:
+            return err
+        campagna = _get_active_campaign(request)
+        pool = get_object_or_404(
+            PersonaggioPool.objects.select_related("statistica"),
+            pk=pool_id,
+            campagna=campagna,
+        )
+        if not pool_visibile_per_personaggio(pool, pg):
+            return Response({"error": "Pool non visibile per questo personaggio."}, status=404)
+        return Response(payload_pool_giocatore(pool, pg, include_esiti=True))
+
+
+class PoolPgGiocatoreSorteggiaView(APIView):
+    """Attivazione giocatore: stesso sorteggio pesato dello staff, con tetto giornaliero."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pool_id):
+        pg, err = _personaggio_richiedente(request)
+        if err:
+            return err
+        campagna = _get_active_campaign(request)
         with transaction.atomic():
-            sorteggio = PersonaggioPoolSorteggio.objects.create(
+            pool = (
+                PersonaggioPool.objects.select_for_update()
+                .filter(pk=pool_id, campagna=campagna)
+                .first()
+            )
+            if not pool:
+                return Response({"error": "Pool non trovato."}, status=404)
+            if not pool_visibile_per_personaggio(pool, pg):
+                return Response(
+                    {"error": "Pool non visibile per questo personaggio."},
+                    status=404,
+                )
+            rimanenti = rimanenti_attivazioni_giocatore(pool, pg)
+            if rimanenti <= 0:
+                return Response(
+                    {
+                        "error": (
+                            "Nessuna attivazione rimanente per oggi."
+                            if pool.max_sorteggi_giorno
+                            else "Questo pool non ammette attivazioni da parte dei giocatori."
+                        )
+                    },
+                    status=400,
+                )
+            result = esegui_sorteggio_pool(
                 pool=pool,
                 campagna=campagna,
-                creato_da=request.user,
-                evento=evento,
-                n_min=n_min,
-                n_max=n_max,
-                n_estratti=len(estratti),
-                fattore_usato=pool.fattore_peso,
-                prioritario=prioritario,
-                messaggio_titolo_snapshot=pool.messaggio_titolo,
-                messaggio_testo_snapshot=pool.messaggio_testo,
+                mittente=request.user,
+                origine=PersonaggioPoolSorteggio.ORIGINE_GIOCATORE,
+                avviato_da_personaggio=pg,
             )
-            esiti_payload = []
-            for pg in estratti:
-                pregressi = counts.get(pg.id, 0)
-                peso = peso_sorteggio(fattore, pregressi)
-                ctx = placeholder_context(
-                    personaggio=pg, pool=pool, evento=evento, when=now
-                )
-                titolo = render_placeholders(pool.messaggio_titolo or "Sorteggio staff", ctx)
-                testo = render_placeholders(pool.messaggio_testo or "", ctx)
-                messaggio = None
-                if (pool.messaggio_titolo or "").strip() or (pool.messaggio_testo or "").strip():
-                    messaggio = _crea_messaggio_staff_individuale(
-                        mittente=request.user,
-                        personaggio=pg,
-                        titolo=titolo,
-                        testo=testo or titolo,
-                        campagna=campagna,
-                    )
-                esito = PersonaggioPoolSorteggioEsito.objects.create(
-                    sorteggio=sorteggio,
-                    pool=pool,
-                    personaggio=pg,
-                    peso=Decimal(str(round(peso, 6))),
-                    sorteggi_pregressi=pregressi,
-                    messaggio=messaggio,
-                    ack_richiesto=prioritario,
-                )
-                if prioritario and pg.proprietario_id:
-                    _ws_prioritario(
-                        pg.proprietario_id,
-                        {
-                            "action": "MSG_PRIORITARIO",
-                            "esito_id": str(esito.id),
-                            "messaggio_id": messaggio.id if messaggio else None,
-                            "titolo": titolo,
-                            "testo": testo or titolo,
-                            "destinatario_id": pg.id,
-                            "tipo": "INDV",
-                        },
-                    )
-                esiti_payload.append(
-                    {
-                        "id": str(esito.id),
-                        "personaggio_id": pg.id,
-                        "personaggio_nome": pg.nome,
-                        "giocatore_nome": giocatore_display_name(pg.proprietario),
-                        "peso": str(esito.peso),
-                        "sorteggi_pregressi": pregressi,
-                        "messaggio_id": messaggio.id if messaggio else None,
-                        "ack_richiesto": prioritario,
-                    }
-                )
-
-        return Response(
+        if isinstance(result, Response):
+            return result
+        payload = payload_pool_giocatore(pool, pg, include_esiti=True)
+        payload.update(
             {
-                "sorteggio_id": str(sorteggio.id),
-                "n_estratti": len(estratti),
-                "n_min": n_min,
-                "n_max": n_max,
-                "evento_id": evento.id if evento else None,
-                "evento_titolo": evento.titolo if evento else "",
-                "prioritario": prioritario,
-                "esiti": esiti_payload,
-            },
-            status=201,
+                "sorteggio_id": result["sorteggio_id"],
+                "n_estratti": result["n_estratti"],
+                "esiti": [
+                    {
+                        "id": e["id"],
+                        "personaggio_nome": e["personaggio_nome"],
+                    }
+                    for e in result.get("esiti") or []
+                ],
+            }
         )
+        return Response(payload, status=201)
 
 
 class SorteggioAckPendingView(APIView):

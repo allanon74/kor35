@@ -21,10 +21,19 @@ from personaggi.models import (
     Personaggio,
     PersonaggioPool,
     PersonaggioPoolMembro,
+    PersonaggioPoolSorteggio,
     PersonaggioPoolSorteggioEsito,
+    PersonaggioStatisticaBase,
+    Statistica,
     TipologiaPersonaggio,
 )
-from personaggi.pool_sorteggio import campiona_pesato, peso_sorteggio, render_placeholders
+from personaggi.pool_sorteggio import (
+    campiona_pesato,
+    peso_sorteggio,
+    pool_visibile_per_personaggio,
+    render_placeholders,
+    rimanenti_attivazioni_giocatore,
+)
 
 
 class PesoSorteggioUnitTests(TestCase):
@@ -224,3 +233,195 @@ class StaffPoolPgApiTests(TestCase):
         self.assertTrue(rows[self.pg.id]["attivo"])
         self.assertFalse(rows[nuovo.id]["attivo"])
         self.assertAlmostEqual(peso_sorteggio(Decimal("0.8"), 0), 1.0)
+
+    def test_staff_salva_statistica_e_tetto_giornaliero(self):
+        stat = Statistica.objects.create(
+            nome="Pool Q",
+            sigla="P0Q",
+            parametro="P0Q",
+            valore_base_predefinito=0,
+        )
+        res = self.client.post(
+            "/api/personaggi/api/staff/pool-pg/",
+            {
+                "nome": "Estrazioni P01",
+                "sorteggio_min": 1,
+                "sorteggio_max": 1,
+                "max_sorteggi_giorno": 2,
+                "statistica": stat.id,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201, res.content)
+        body = res.json()
+        self.assertEqual(body["max_sorteggi_giorno"], 2)
+        self.assertEqual(body["statistica"], stat.id)
+        self.assertEqual(body["statistica_sigla"], "P0Q")
+        meta = self.client.get("/api/personaggi/api/staff/pool-pg/meta/")
+        self.assertEqual(meta.status_code, 200)
+        sigle = [s["sigla"] for s in meta.json().get("statistiche") or []]
+        self.assertIn("P0Q", sigle)
+
+
+class PoolPgGiocatoreApiTests(TestCase):
+    def setUp(self):
+        self.campagna = Campagna.objects.filter(slug="kor35").first() or Campagna.objects.create(
+            slug="kor35", nome="KOR35", attiva=True, is_default=True, is_base=True
+        )
+        self.player = User.objects.create_user(username="pool_player", password="x")
+        self.other = User.objects.create_user(username="pool_other", password="x")
+        self.pg = Personaggio.objects.create(
+            nome="Attivatore", proprietario=self.player, campagna=self.campagna
+        )
+        self.pg_other = Personaggio.objects.create(
+            nome="Altro PG", proprietario=self.other, campagna=self.campagna
+        )
+        self.stat = Statistica.objects.create(
+            nome="Pool Giocatore",
+            sigla="P0J",
+            parametro="P0J",
+            valore_base_predefinito=0,
+        )
+        PersonaggioStatisticaBase.objects.create(
+            personaggio=self.pg, statistica=self.stat, valore_base=3
+        )
+        self.pool = PersonaggioPool.objects.create(
+            nome="Tombola Plot",
+            campagna=self.campagna,
+            statistica=self.stat,
+            max_sorteggi_giorno=1,
+            sorteggio_min=1,
+            sorteggio_max=1,
+            messaggio_titolo="Estratto {{nome_personaggio}}",
+            messaggio_testo="<p>ok</p>",
+        )
+        PersonaggioPoolMembro.objects.create(pool=self.pool, personaggio=self.pg_other, attivo=True)
+        PersonaggioPoolMembro.objects.create(pool=self.pool, personaggio=self.pg, attivo=True)
+        token, _ = Token.objects.get_or_create(user=self.player)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}", HTTP_X_CAMPAGNA="kor35")
+
+    def test_visibile_solo_se_statistica_maggiore_di_zero(self):
+        self.assertTrue(pool_visibile_per_personaggio(self.pool, self.pg))
+        self.assertFalse(pool_visibile_per_personaggio(self.pool, self.pg_other))
+        listed = self.client.get(
+            f"/api/personaggi/api/pool-pg/visibili/?personaggio_id={self.pg.id}"
+        )
+        self.assertEqual(listed.status_code, 200)
+        ids = [row["id"] for row in listed.json()["results"]]
+        self.assertIn(str(self.pool.id), ids)
+        nascosto = APIClient()
+        otok, _ = Token.objects.get_or_create(user=self.other)
+        nascosto.credentials(HTTP_AUTHORIZATION=f"Token {otok.key}", HTTP_X_CAMPAGNA="kor35")
+        other_list = nascosto.get(
+            f"/api/personaggi/api/pool-pg/visibili/?personaggio_id={self.pg_other.id}"
+        )
+        self.assertEqual(other_list.json()["results"], [])
+
+    def test_attivazione_giocatore_tetto_e_ultimi(self):
+        self.assertEqual(rimanenti_attivazioni_giocatore(self.pool, self.pg), 1)
+        with patch("personaggi.views_pool_pg.campiona_pesato", return_value=[self.pg_other]):
+            draw = self.client.post(
+                f"/api/personaggi/api/pool-pg/{self.pool.id}/sorteggia/",
+                {"personaggio_id": self.pg.id},
+                format="json",
+            )
+        self.assertEqual(draw.status_code, 201, draw.content)
+        body = draw.json()
+        self.assertEqual(body["n_estratti"], 1)
+        self.assertEqual(body["rimanenti"], 0)
+        self.assertFalse(body["puo_attivare"])
+        self.assertEqual(body["ultimi_esiti"][0]["personaggio_nome"], "Altro PG")
+        self.assertNotIn("giocatore_nome", body["ultimi_esiti"][0])
+        self.assertEqual(body["esiti"][0]["personaggio_nome"], "Altro PG")
+        self.assertNotIn("giocatore_nome", body["esiti"][0])
+        sorteggio = PersonaggioPoolSorteggio.objects.get(pk=body["sorteggio_id"])
+        self.assertEqual(sorteggio.origine, PersonaggioPoolSorteggio.ORIGINE_GIOCATORE)
+        self.assertEqual(sorteggio.avviato_da_personaggio_id, self.pg.id)
+
+        denied = self.client.post(
+            f"/api/personaggi/api/pool-pg/{self.pool.id}/sorteggia/",
+            {"personaggio_id": self.pg.id},
+            format="json",
+        )
+        self.assertEqual(denied.status_code, 400)
+
+        staff = User.objects.create_user(username="pool_staff2", password="x")
+        CampagnaUtente.objects.update_or_create(
+            user=staff,
+            campagna=self.campagna,
+            defaults={"ruolo": CAMPAGNA_ROLE_STAFFER, "attivo": True},
+        )
+        sclient = APIClient()
+        stok, _ = Token.objects.get_or_create(user=staff)
+        sclient.credentials(HTTP_AUTHORIZATION=f"Token {stok.key}", HTTP_X_CAMPAGNA="kor35")
+        with patch("personaggi.views_pool_pg.campiona_pesato", return_value=[self.pg]):
+            staff_draw = sclient.post(
+                f"/api/personaggi/api/staff/pool-pg/{self.pool.id}/sorteggia/",
+                {},
+                format="json",
+            )
+        self.assertEqual(staff_draw.status_code, 201, staff_draw.content)
+        self.assertEqual(rimanenti_attivazioni_giocatore(self.pool, self.pg), 0)
+
+        detail = self.client.get(
+            f"/api/personaggi/api/pool-pg/{self.pool.id}/?personaggio_id={self.pg.id}"
+        )
+        self.assertEqual(detail.status_code, 200)
+        ultimi = detail.json()["ultimi_esiti"]
+        self.assertGreaterEqual(len(ultimi), 2)
+        self.assertEqual(ultimi[0]["personaggio_nome"], "Attivatore")
+        self.assertEqual(ultimi[1]["personaggio_nome"], "Altro PG")
+
+    def test_sorteggi_staff_non_consumano_usi_giornalieri(self):
+        staff = User.objects.create_user(username="pool_staff_libero", password="x")
+        CampagnaUtente.objects.update_or_create(
+            user=staff,
+            campagna=self.campagna,
+            defaults={"ruolo": CAMPAGNA_ROLE_STAFFER, "attivo": True},
+        )
+        sclient = APIClient()
+        stok, _ = Token.objects.get_or_create(user=staff)
+        sclient.credentials(HTTP_AUTHORIZATION=f"Token {stok.key}", HTTP_X_CAMPAGNA="kor35")
+        self.assertEqual(rimanenti_attivazioni_giocatore(self.pool, self.pg), 1)
+        for _ in range(3):
+            with patch("personaggi.views_pool_pg.campiona_pesato", return_value=[self.pg_other]):
+                staff_draw = sclient.post(
+                    f"/api/personaggi/api/staff/pool-pg/{self.pool.id}/sorteggia/",
+                    {},
+                    format="json",
+                )
+            self.assertEqual(staff_draw.status_code, 201, staff_draw.content)
+            self.assertEqual(staff_draw.json().get("origine"), "STAFF")
+        self.assertEqual(PersonaggioPoolSorteggio.objects.filter(pool=self.pool).count(), 3)
+        self.assertEqual(
+            PersonaggioPoolSorteggio.objects.filter(
+                pool=self.pool, origine=PersonaggioPoolSorteggio.ORIGINE_GIOCATORE
+            ).count(),
+            0,
+        )
+        self.assertEqual(rimanenti_attivazioni_giocatore(self.pool, self.pg), 1)
+        listed = self.client.get(
+            f"/api/personaggi/api/pool-pg/visibili/?personaggio_id={self.pg.id}"
+        )
+        row = listed.json()["results"][0]
+        self.assertEqual(row["usati_oggi"], 0)
+        self.assertEqual(row["rimanenti"], 1)
+        self.assertTrue(row["puo_attivare"])
+
+    def test_max_zero_tab_senza_attivazione(self):
+        self.pool.max_sorteggi_giorno = 0
+        self.pool.save(update_fields=["max_sorteggi_giorno", "updated_at"])
+        listed = self.client.get(
+            f"/api/personaggi/api/pool-pg/visibili/?personaggio_id={self.pg.id}"
+        )
+        rows = listed.json()["results"]
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rows[0]["puo_attivare"])
+        self.assertEqual(rows[0]["rimanenti"], 0)
+        denied = self.client.post(
+            f"/api/personaggi/api/pool-pg/{self.pool.id}/sorteggia/",
+            {"personaggio_id": self.pg.id},
+            format="json",
+        )
+        self.assertEqual(denied.status_code, 400)

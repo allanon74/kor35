@@ -561,6 +561,27 @@ export const postStaffPoolPgSorteggia = (id, payload, onLogout) =>
     onLogout,
   );
 
+export const getPoolPgGiocatoreVisibili = (personaggioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/pool-pg/visibili/?personaggio_id=${personaggioId}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const getPoolPgGiocatoreDettaglio = (poolId, personaggioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/pool-pg/${poolId}/?personaggio_id=${personaggioId}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const postPoolPgGiocatoreSorteggia = (poolId, personaggioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/pool-pg/${poolId}/sorteggia/`,
+    { method: 'POST', body: JSON.stringify({ personaggio_id: personaggioId }) },
+    onLogout,
+  );
+
 export const getSorteggioAckPending = (personaggioId, onLogout) =>
   fetchAuthenticated(
     `/api/personaggi/api/sorteggio-ack/pending/?personaggio_id=${personaggioId}`,

@@ -43,6 +43,8 @@ const vuoto = () => ({
   messaggio_titolo: '',
   messaggio_testo: '',
   invio_prioritario: false,
+  max_sorteggi_giorno: 0,
+  statistica: '',
 });
 
 function formatWhen(iso) {
@@ -59,7 +61,7 @@ export default function PoolPersonaggiManager({ onLogout }) {
   const canAccess = isCampaignStaffer || isAdmin;
 
   const [lista, setLista] = useState([]);
-  const [meta, setMeta] = useState({ eventi: [], placeholders: [], evento_in_corso_id: null });
+  const [meta, setMeta] = useState({ eventi: [], placeholders: [], evento_in_corso_id: null, statistiche: [] });
   const [caricamento, setCaricamento] = useState(true);
   const [errore, setErrore] = useState('');
   const [feedback, setFeedback] = useState('');
@@ -92,6 +94,7 @@ export default function PoolPersonaggiManager({ onLogout }) {
         eventi: metaRes?.eventi || [],
         placeholders: metaRes?.placeholders || [],
         evento_in_corso_id: metaRes?.evento_in_corso_id || null,
+        statistiche: metaRes?.statistiche || [],
       });
     } catch (e) {
       setErrore(e.message || 'Impossibile caricare i pool.');
@@ -172,6 +175,8 @@ export default function PoolPersonaggiManager({ onLogout }) {
       messaggio_titolo: pool.messaggio_titolo || '',
       messaggio_testo: pool.messaggio_testo || '',
       invio_prioritario: !!pool.invio_prioritario,
+      max_sorteggi_giorno: pool.max_sorteggi_giorno ?? 0,
+      statistica: pool.statistica ?? '',
     });
     setTab('dati');
     setUltimoSorteggio(null);
@@ -188,6 +193,8 @@ export default function PoolPersonaggiManager({ onLogout }) {
     messaggio_titolo: form.messaggio_titolo,
     messaggio_testo: form.messaggio_testo,
     invio_prioritario: !!form.invio_prioritario,
+    max_sorteggi_giorno: Number(form.max_sorteggi_giorno) || 0,
+    statistica: form.statistica === '' || form.statistica == null ? null : form.statistica,
   });
 
   const salva = async () => {
@@ -298,8 +305,10 @@ export default function PoolPersonaggiManager({ onLogout }) {
               >
                 <div className="min-w-0">
                   <div className="font-bold text-white break-words">{pool.nome}</div>
-                  <div className={`${staffMutedClass} text-xs`}>
+                  <div className={`${staffMutedClass} text-xs break-words`}>
                     Attivi: {pool.attivi_count ?? 0} · Sorteggi: {pool.sorteggi_count ?? 0} · Range {pool.sorteggio_min}–{pool.sorteggio_max} · fattore {pool.fattore_peso}
+                    {pool.statistica_sigla ? ` · tab ${pool.statistica_sigla}` : ''}
+                    {pool.max_sorteggi_giorno ? ` · max ${pool.max_sorteggi_giorno} usi PG/giorno` : ''}
                     {pool.invio_prioritario ? ' · priorità' : ''}
                   </div>
                 </div>
@@ -321,7 +330,9 @@ export default function PoolPersonaggiManager({ onLogout }) {
             <StaffModalTabs
               tabs={TABS.map((t) => ({
                 ...t,
-                count: t.id === 'personaggi' && isSaved ? attiviVis : undefined,
+                count: t.id === 'personaggi' && isSaved
+                  ? (personaggi.length ? attiviVis : editing?.attivi_count)
+                  : undefined,
               }))}
               active={tab}
               onChange={onChangeTab}
@@ -376,21 +387,55 @@ export default function PoolPersonaggiManager({ onLogout }) {
                 Default 0.8: ogni sorteggio precedente moltiplica il peso (0.8² = 0.64). 1 = probabilità fissa. Maggiore di 1 aumenta le chance di chi è già uscito.
                 Range uguale (es. 1–1) estrae un solo personaggio; 2–5 ne estrae un numero casuale in quel intervallo.
               </p>
-              <label className="flex min-h-11 items-center gap-2 text-sm text-gray-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs font-bold text-gray-300">Max usi giornalieri dei PG</span>
+                  <input
+                    type="number"
+                    min={0}
+                    className={`${staffInputClass()} min-h-11 mt-1`}
+                    value={form.max_sorteggi_giorno}
+                    onChange={(e) => setForm((p) => ({ ...p, max_sorteggi_giorno: e.target.value }))}
+                  />
+                </label>
+                <label className="block min-w-0">
+                  <span className="text-xs font-bold text-gray-300">Statistica tab giocatore</span>
+                  <select
+                    className={`${staffInputClass()} min-h-11 mt-1`}
+                    value={form.statistica}
+                    onChange={(e) => setForm((p) => ({ ...p, statistica: e.target.value }))}
+                  >
+                    <option value="">— Nessuna (tab nascosta) —</option>
+                    {(meta.statistiche || []).map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.sigla} — {st.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <p className="text-[11px] text-gray-500">
+                Se la statistica del PG è &gt; 0 compare una tab con il nome del pool. Il tetto vale solo per le attivazioni lanciate dai personaggi; lo staff sorteggia senza limiti e senza consumare questi usi. 0 = pulsante giocatore disattivo.
+              </p>
+              <label className="flex min-h-11 items-start gap-2 text-sm text-gray-200">
                 <input
                   type="checkbox"
+                  className="mt-1 shrink-0"
                   checked={form.escludi_png}
                   onChange={(e) => setForm((p) => ({ ...p, escludi_png: e.target.checked }))}
                 />
-                Nascondi PnG nella tab personaggi
+                <span className="min-w-0 break-words">Nascondi PnG nella tab personaggi</span>
               </label>
-              <label className="flex min-h-11 items-center gap-2 text-sm text-gray-200">
+              <label className="flex min-h-11 items-start gap-2 text-sm text-gray-200">
                 <input
                   type="checkbox"
+                  className="mt-1 shrink-0"
                   checked={form.invio_prioritario}
                   onChange={(e) => setForm((p) => ({ ...p, invio_prioritario: e.target.checked }))}
                 />
-                Messaggio prioritario (overlay a schermo pieno + allarme fino a «Ho letto e compreso»)
+                <span className="min-w-0 break-words">
+                  Messaggio prioritario (overlay a schermo pieno + allarme fino a «Ho letto e compreso»)
+                </span>
               </label>
               <div className="flex flex-col sm:flex-row gap-2">
                 <button type="button" className={`${staffPrimaryBtnClass} min-h-11`} disabled={salvataggio} onClick={salva}>
@@ -559,6 +604,7 @@ export default function PoolPersonaggiManager({ onLogout }) {
                     <span>{formatWhen(s.created_at)}</span>
                     <span>
                       {s.n_estratti} estratti ({s.n_min}–{s.n_max})
+                      {s.origine === 'GIOCATORE' ? ' · giocatore' : ' · staff'}
                       {s.prioritario ? ' · priorità' : ''}
                     </span>
                   </div>

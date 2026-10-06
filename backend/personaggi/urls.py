@@ -307,6 +307,21 @@ urlpatterns = [
         name='api_messaggi_evento_invio',
     ),
     path(
+        'api/pool-pg/visibili/',
+        views_pool_pg.PoolPgGiocatoreVisibiliView.as_view(),
+        name='api_pool_pg_giocatore_visibili',
+    ),
+    path(
+        'api/pool-pg/<uuid:pool_id>/',
+        views_pool_pg.PoolPgGiocatoreDettaglioView.as_view(),
+        name='api_pool_pg_giocatore_dettaglio',
+    ),
+    path(
+        'api/pool-pg/<uuid:pool_id>/sorteggia/',
+        views_pool_pg.PoolPgGiocatoreSorteggiaView.as_view(),
+        name='api_pool_pg_giocatore_sorteggia',
+    ),
+    path(
         'api/sorteggio-ack/pending/',
         views_pool_pg.SorteggioAckPendingView.as_view(),
         name='api_sorteggio_ack_pending',
