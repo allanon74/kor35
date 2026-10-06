@@ -557,8 +557,11 @@ class PersonaggioCarrieraMembershipStaffSerializer(serializers.ModelSerializer):
     personaggio = serializers.PrimaryKeyRelatedField(queryset=Personaggio.objects.all())
     carriera = serializers.PrimaryKeyRelatedField(queryset=Carriera.objects.all())
     tipo_carriera = serializers.PrimaryKeyRelatedField(queryset=TipoCarriera.objects.all())
+    # Staff: accetta anche cariche disattivate (assegnazione storica / catalogo
+    # non ripulito). Filtrare solo attiva=True produce "Pk X non valido" fuorviante
+    # quando la UI elenca tutte le cariche dallo staff endpoint.
     carica = serializers.PrimaryKeyRelatedField(
-        queryset=Carica.objects.filter(attiva=True),
+        queryset=Carica.objects.all(),
         allow_null=True,
         required=False,
     )
