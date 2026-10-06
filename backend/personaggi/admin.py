@@ -30,6 +30,8 @@ from .models import (
     Tabella, Tier, Abilita, Mattone, 
     Caratteristica, Aura, ModelloAura, MattoneStatistica, 
     Messaggio, LetturaMessaggio, Gruppo, ChiamataVocale,
+    MessaggioModelloStaff, PersonaggioPool, PersonaggioPoolMembro,
+    PersonaggioPoolSorteggio, PersonaggioPoolSorteggioEsito,
     abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, 
     abilita_prerequisito, AbilitaStatistica, CaratteristicaModificatore,
     TransazioneSospesa, STATO_TRANSAZIONE_CHOICES, STATO_TRANSAZIONE_IN_ATTESA, 
@@ -1503,6 +1505,40 @@ class MessaggioAdmin(SModelAdmin):
     def save_model(self, request, obj, form, change):
         if not obj.mittente: obj.mittente = request.user
         super().save_model(request, obj, form, change)
+
+@admin.register(MessaggioModelloStaff)
+class MessaggioModelloStaffAdmin(admin.ModelAdmin):
+    list_display = ("nome", "titolo", "campagna", "updated_at")
+    search_fields = ("nome", "titolo")
+
+
+class PersonaggioPoolMembroInline(admin.TabularInline):
+    model = PersonaggioPoolMembro
+    extra = 0
+    autocomplete_fields = ["personaggio"]
+
+
+@admin.register(PersonaggioPool)
+class PersonaggioPoolAdmin(admin.ModelAdmin):
+    list_display = ("nome", "campagna", "sorteggio_min", "sorteggio_max", "fattore_peso", "invio_prioritario")
+    search_fields = ("nome",)
+    inlines = [PersonaggioPoolMembroInline]
+
+
+@admin.register(PersonaggioPoolSorteggio)
+class PersonaggioPoolSorteggioAdmin(admin.ModelAdmin):
+    list_display = ("id", "pool", "n_estratti", "prioritario", "created_at")
+    list_filter = ("prioritario",)
+    readonly_fields = ("id", "created_at", "updated_at")
+
+
+@admin.register(PersonaggioPoolSorteggioEsito)
+class PersonaggioPoolSorteggioEsitoAdmin(admin.ModelAdmin):
+    list_display = ("id", "pool", "personaggio", "ack_richiesto", "confermato_at", "created_at")
+    list_filter = ("ack_richiesto",)
+    readonly_fields = ("id", "created_at", "updated_at", "confermato_at")
+    autocomplete_fields = ["personaggio", "messaggio"]
+
 
 @admin.register(ChiamataVocale)
 class ChiamataVocaleAdmin(admin.ModelAdmin):

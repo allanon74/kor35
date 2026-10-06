@@ -467,6 +467,114 @@ export const getAdminSentMessages = (onLogout) => {
   return fetchAuthenticated('/api/personaggi/api/messaggi/admin/sent/', { method: 'GET' }, onLogout);
 };
 
+export const getStaffMessaggiModelli = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/messaggi-modelli/', { method: 'GET' }, onLogout);
+
+export const createStaffMessaggioModello = (payload, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/messaggi-modelli/',
+    { method: 'POST', body: JSON.stringify(payload) },
+    onLogout,
+  );
+
+export const updateStaffMessaggioModello = (id, payload, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/messaggi-modelli/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(payload) },
+    onLogout,
+  );
+
+export const deleteStaffMessaggioModello = (id, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/messaggi-modelli/${id}/`,
+    { method: 'DELETE' },
+    onLogout,
+  );
+
+export const postMessaggioEventoInvio = (payload, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/messaggi/staff/evento-invio/',
+    { method: 'POST', body: JSON.stringify(payload) },
+    onLogout,
+  );
+
+export const getStaffPoolPgMeta = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/pool-pg/meta/', { method: 'GET' }, onLogout);
+
+export const getStaffPoolPgList = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/pool-pg/', { method: 'GET' }, onLogout);
+
+export const createStaffPoolPg = (payload, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/pool-pg/',
+    { method: 'POST', body: JSON.stringify(payload) },
+    onLogout,
+  );
+
+export const updateStaffPoolPg = (id, payload, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/pool-pg/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(payload) },
+    onLogout,
+  );
+
+export const deleteStaffPoolPg = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/pool-pg/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const getStaffPoolPgPersonaggi = (id, params, onLogout) => {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set('q', params.q);
+  if (params?.evento_id) qs.set('evento_id', params.evento_id);
+  if (params?.escludi_png != null) qs.set('escludi_png', params.escludi_png ? '1' : '0');
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return fetchAuthenticated(
+    `/api/personaggi/api/staff/pool-pg/${id}/personaggi/${suffix}`,
+    { method: 'GET' },
+    onLogout,
+  );
+};
+
+export const setStaffPoolPgMembro = (id, payload, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/pool-pg/${id}/membri/`,
+    { method: 'POST', body: JSON.stringify(payload) },
+    onLogout,
+  );
+
+export const setStaffPoolPgMembriBulk = (id, payload, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/pool-pg/${id}/membri-bulk/`,
+    { method: 'POST', body: JSON.stringify(payload) },
+    onLogout,
+  );
+
+export const getStaffPoolPgConteggi = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/pool-pg/${id}/conteggi/`, { method: 'GET' }, onLogout);
+
+export const getStaffPoolPgLog = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/pool-pg/${id}/log/`, { method: 'GET' }, onLogout);
+
+export const postStaffPoolPgSorteggia = (id, payload, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/pool-pg/${id}/sorteggia/`,
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+    onLogout,
+  );
+
+export const getSorteggioAckPending = (personaggioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/sorteggio-ack/pending/?personaggio_id=${personaggioId}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const postSorteggioAckConferma = (esitoId, payload, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/sorteggio-ack/${esitoId}/conferma/`,
+    { method: 'POST', body: JSON.stringify(payload) },
+    onLogout,
+  );
+
 export const saveWebPushSubscription = async (subscription, onLogout) => {
   if (!subscription) {
     throw new Error('Sottoscrizione push mancante.');

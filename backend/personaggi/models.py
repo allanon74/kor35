@@ -9290,6 +9290,213 @@ class LetturaMessaggio(SyncableModel, models.Model):
     def __str__(self): return f"{self.personaggio.nome} - {self.messaggio.titolo}"
 
 
+class MessaggioModelloStaff(SyncableModel, models.Model):
+    """Testo precompilato per invii staff (broadcast, evento, pool)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.CASCADE,
+        related_name="modelli_messaggio_staff",
+        default=get_default_campagna_id,
+    )
+    nome = models.CharField(max_length=120)
+    titolo = models.CharField(max_length=150, blank=True, default="")
+    testo = models.TextField(blank=True, default="")
+    creato_da = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modelli_messaggio_staff",
+    )
+
+    class Meta:
+        ordering = ["nome"]
+        verbose_name = "Modello messaggio staff"
+        verbose_name_plural = "Modelli messaggio staff"
+
+    def __str__(self):
+        return self.nome
+
+
+class PersonaggioPool(SyncableModel, models.Model):
+    """Pool nominato di personaggi per sorteggi staff, con pesi e messaggio."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.CASCADE,
+        related_name="pool_personaggi",
+        default=get_default_campagna_id,
+    )
+    nome = models.CharField(max_length=120)
+    escludi_png = models.BooleanField(
+        default=False,
+        help_text="Se attivo, l'elenco di selezione nasconde i personaggi non giocanti.",
+    )
+    sorteggio_min = models.PositiveIntegerField(
+        default=1,
+        help_text="Numero minimo di personaggi da estrarre (estremo incluso).",
+    )
+    sorteggio_max = models.PositiveIntegerField(
+        default=1,
+        help_text="Numero massimo di personaggi da estrarre. Se uguale al minimo, estrazione fissa.",
+    )
+    fattore_peso = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        default=Decimal("0.8000"),
+        help_text=(
+            "Peso = fattore ^ sorteggi_pregressi. Default 0.8 (meno chance se già estratti). "
+            "1 = probabilità costante. >1 = più chance dopo ogni estrazione."
+        ),
+    )
+    messaggio_titolo = models.CharField(max_length=150, blank=True, default="")
+    messaggio_testo = models.TextField(
+        blank=True,
+        default="",
+        help_text="Rich text con placeholder {{nome_personaggio}}, {{nome_giocatore}}, {{nome_evento}}, …",
+    )
+    invio_prioritario = models.BooleanField(
+        default=False,
+        help_text="Oltre all'inbox, overlay a schermo intero fino a «Ho letto e compreso» + allarme.",
+    )
+
+    class Meta:
+        ordering = ["nome"]
+        verbose_name = "Pool personaggi (sorteggio)"
+        verbose_name_plural = "Pool personaggi (sorteggio)"
+
+    def __str__(self):
+        return self.nome
+
+    def clean(self):
+        super().clean()
+        if self.sorteggio_min < 1:
+            raise ValidationError({"sorteggio_min": "Il minimo deve essere almeno 1."})
+        if self.sorteggio_max < self.sorteggio_min:
+            raise ValidationError({"sorteggio_max": "Il massimo non può essere inferiore al minimo."})
+
+
+class PersonaggioPoolMembro(SyncableModel, models.Model):
+    """Flag di attivazione: i PG nuovi restano implicitamente disattivi (nessuna riga)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    pool = models.ForeignKey(PersonaggioPool, on_delete=models.CASCADE, related_name="membri")
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="pool_sorteggio_membri",
+    )
+    attivo = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Membro pool personaggi"
+        verbose_name_plural = "Membri pool personaggi"
+        constraints = [
+            models.UniqueConstraint(fields=["pool", "personaggio"], name="uniq_pool_pg_membro"),
+        ]
+
+    def __str__(self):
+        stato = "attivo" if self.attivo else "disattivo"
+        return f"{self.pool.nome} · {self.personaggio_id} ({stato})"
+
+
+class PersonaggioPoolSorteggio(SyncableModel, models.Model):
+    """Un'estrazione (batch) da un pool."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    pool = models.ForeignKey(PersonaggioPool, on_delete=models.CASCADE, related_name="sorteggi")
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.CASCADE,
+        related_name="sorteggi_pool_personaggi",
+        default=get_default_campagna_id,
+    )
+    creato_da = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sorteggi_pool_personaggi",
+    )
+    evento = models.ForeignKey(
+        "gestione_plot.Evento",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sorteggi_pool_personaggi",
+    )
+    n_min = models.PositiveIntegerField(default=1)
+    n_max = models.PositiveIntegerField(default=1)
+    n_estratti = models.PositiveIntegerField(default=0)
+    fattore_usato = models.DecimalField(max_digits=8, decimal_places=4, default=Decimal("0.8000"))
+    prioritario = models.BooleanField(default=False)
+    messaggio_titolo_snapshot = models.CharField(max_length=150, blank=True, default="")
+    messaggio_testo_snapshot = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Sorteggio pool personaggi"
+        verbose_name_plural = "Sorteggi pool personaggi"
+
+    def __str__(self):
+        return f"{self.pool_id} · {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class PersonaggioPoolSorteggioEsito(SyncableModel, models.Model):
+    """Singolo personaggio estratto, con peso, messaggio e eventuale conferma lettura."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sorteggio = models.ForeignKey(
+        PersonaggioPoolSorteggio,
+        on_delete=models.CASCADE,
+        related_name="esiti",
+    )
+    pool = models.ForeignKey(
+        PersonaggioPool,
+        on_delete=models.CASCADE,
+        related_name="esiti",
+    )
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="sorteggi_pool_esiti",
+    )
+    peso = models.DecimalField(max_digits=14, decimal_places=6, default=Decimal("1"))
+    sorteggi_pregressi = models.PositiveIntegerField(default=0)
+    messaggio = models.ForeignKey(
+        Messaggio,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="esiti_sorteggio_pool",
+    )
+    ack_richiesto = models.BooleanField(default=False)
+    confermato_at = models.DateTimeField(null=True, blank=True)
+    confermato_user_agent = models.CharField(max_length=256, blank=True, default="")
+    confermato_ip = models.GenericIPAddressField(null=True, blank=True)
+    confermato_dispositivo = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Esito sorteggio pool"
+        verbose_name_plural = "Esiti sorteggio pool"
+        indexes = [
+            models.Index(fields=["pool", "personaggio"], name="poolpg_esito_pg_idx"),
+            models.Index(fields=["ack_richiesto", "confermato_at"], name="poolpg_ack_conf_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.pool_id} → {self.personaggio_id}"
+
+
 class ChiamataVocale(models.Model):
     """
     Sessione vocale live (WebRTC). Resta locale al nodo: non è nel registry

@@ -31,6 +31,7 @@ import {
   Calendar,
   Phone,
   FileSignature,
+  Dices,
 } from 'lucide-react';
 
 /** Icone consentite per i gruppi del menu (allineate al backend). */
@@ -79,6 +80,7 @@ export const STAFF_TOOL_ICON_MAP = {
   Puzzle,
   Calendar,
   Phone,
+  Dices,
 };
 
 /**
@@ -119,6 +121,7 @@ export const STAFF_TOOLS_REGISTRY = {
   campagne: { id: 'campagne', label: 'Campagne', icon: Globe2, color: 'bg-emerald-800', componentKey: 'campagne' },
   maintenance: { id: 'maintenance', label: 'Maintenance mode', icon: Shield, color: 'bg-amber-700', componentKey: 'maintenance' },
   messaggi: { id: 'messaggi', label: 'Messaggi staff', icon: MessageSquare, color: 'bg-emerald-600', componentKey: 'messaggi' },
+  'pool-pg': { id: 'pool-pg', label: 'Pool e sorteggi', icon: Dices, color: 'bg-emerald-800', componentKey: 'pool-pg' },
   chiamate: { id: 'chiamate', label: 'Centralino vocale', icon: Phone, color: 'bg-emerald-700', componentKey: 'chiamate' },
   scommesse: { id: 'scommesse', label: 'Scommesse', icon: Trophy, color: 'bg-amber-600', componentKey: 'scommesse' },
   'manuali-pdf': { id: 'manuali-pdf', label: 'Manuali PDF', icon: FileText, color: 'bg-rose-800', componentKey: 'manuali-pdf' },
@@ -174,7 +177,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       palette: 'emerald',
       order: 3,
       collapsed_default: false,
-      tool_ids: ['messaggi', 'chiamate', 'social-report', 'rubriche'],
+      tool_ids: ['messaggi', 'chiamate', 'social-report', 'rubriche', 'pool-pg'],
     },
     {
       id: 'sistema',
@@ -190,7 +193,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
 };
 
 const GLOBAL_ONLY_TOOLS = new Set(['arcana-profiles', 'campagne', 'maintenance']);
-const STAFFER_TOOLS = new Set(['messaggi', 'chiamate', 'plot', 'tasks', 'contratti', 'app-links', 'calendario-compiti', 'rubriche']);
+const STAFFER_TOOLS = new Set(['messaggi', 'chiamate', 'plot', 'tasks', 'contratti', 'app-links', 'calendario-compiti', 'rubriche', 'pool-pg']);
 const MASTER_EXCLUDED = new Set(['campagne', 'arcana-profiles', 'maintenance']);
 const HEAD_EXCLUDED = new Set(['arcana-profiles', 'maintenance']);
 

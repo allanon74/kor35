@@ -65,6 +65,7 @@ const StaffAppLinksPanel = lazy(() => import('./editors/StaffAppLinksPanel'));
 const StaffCalendarioCompitiManager = lazy(() => import('./editors/StaffCalendarioCompitiManager'));
 const StaffRubricheManager = lazy(() => import('./editors/StaffRubricheManager'));
 const ChiamateVocaliStaffTab = lazy(() => import('./editors/ChiamateVocaliStaffTab'));
+const PoolPersonaggiManager = lazy(() => import('./editors/PoolPersonaggiManager'));
 
 const STAFF_COMPONENT_MAP = {
     plot: PlotTab,
@@ -100,6 +101,7 @@ const STAFF_COMPONENT_MAP = {
     campagne: CampaignManager,
     maintenance: MaintenanceModePanel,
     messaggi: AdminMessageTab,
+    'pool-pg': PoolPersonaggiManager,
     chiamate: ChiamateVocaliStaffTab,
     scommesse: ScommesseManager,
     'manuali-pdf': ManualePdfManager,

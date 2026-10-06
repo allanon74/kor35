@@ -5191,8 +5191,10 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
         if campagna:
             validated_data['campagna'] = campagna
         
-        # Se è un messaggio staff, imposta tipo_messaggio a STAFF
-        if validated_data.get('is_staff_message'):
+        # Staff → PG: inbox del giocatore (INDV). PG → staff: tipo STAFF (posta staff).
+        if validated_data.get('is_staff_message') and validated_data.get('destinatario_personaggio'):
+            validated_data['tipo_messaggio'] = Messaggio.TIPO_INDIVIDUALE
+        elif validated_data.get('is_staff_message'):
             validated_data['tipo_messaggio'] = Messaggio.TIPO_STAFF
         else:
             validated_data['tipo_messaggio'] = Messaggio.TIPO_INDIVIDUALE
