@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Users, Briefcase, Shield } from 'lucide-react';
 import MasterGenericList from './MasterGenericList';
-import EditorSaveActions from './EditorSaveActions';
 import SearchableSelect from './SearchableSelect';
+import StaffEditorModal from './StaffEditorModal';
 import {
   staffGetTipiCarriera,
   staffGetCarriere,
@@ -21,10 +21,15 @@ import {
   getPersonaggiEditList,
   staffGetAbilitaListAll,
 } from '../../api';
-import {
-  ItalianDateTimeInput,
-} from '../ItalianDateTimeInputs';
+import { ItalianDateTimeInput } from '../ItalianDateTimeInputs';
 import { localDateTimeToApiIso } from '../../utils/italianDateTime';
+import {
+  LabeledField,
+  StaffFieldGrid,
+  StaffSection,
+  staffInputClass,
+} from '../../staff/StaffCrudUi';
+import { StaffToolHeader, StaffToolShell } from '../../staff/StaffToolShell';
 
 const TABS = [
   { id: 'org', label: 'Carriere / KORP', icon: Briefcase },
@@ -32,7 +37,93 @@ const TABS = [
   { id: 'membership', label: 'Appartenenze', icon: Users },
 ];
 
-function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabili, abilitaOptions, statusMessage, statusType }) {
+const WIKI_TIER_OPTS = [
+  { id: 'T1', nome: 'T1' },
+  { id: 'T2', nome: 'T2' },
+  { id: 'T3', nome: 'T3' },
+  { id: 'T4', nome: 'T4' },
+];
+
+const inputCls = staffInputClass('min-h-11');
+
+function tipoFromForm(tipi, form) {
+  const id = form?.tipo_carriera || form?.tipo_carriera_id;
+  return (tipi || []).find((t) => String(t.id) === String(id)) || null;
+}
+
+function formatTierOptionLabel(tier) {
+  if (!tier) return '';
+  const tipo = tier.tipo ? String(tier.tipo).toUpperCase() : '';
+  return tipo ? `${tipo} · ${tier.nome}` : tier.nome;
+}
+
+function groupTiersByTipo(rows) {
+  const map = new Map();
+  (rows || []).forEach((t) => {
+    const key = t.tipo || 'Altro';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(t);
+  });
+  return [...map.entries()].sort(([a], [b]) => String(a).localeCompare(String(b)));
+}
+
+function ChipRemoveButton({ onClick, label }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md text-red-400 hover:bg-red-950/40 hover:text-red-300"
+      aria-label={label}
+      title={label}
+    >
+      <X size={16} />
+    </button>
+  );
+}
+
+function SelectedChip({ children, onRemove, removeLabel }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 rounded-lg border border-gray-600 bg-gray-800 py-0.5 pl-2 pr-0.5 text-sm text-gray-100">
+      <span className="min-w-0 break-words">{children}</span>
+      <ChipRemoveButton onClick={onRemove} label={removeLabel} />
+    </span>
+  );
+}
+
+function ChipMultiSelect({
+  options,
+  pendingValue,
+  onAdd,
+  emptyText,
+  placeholder,
+  children,
+}) {
+  return (
+    <div>
+      <SearchableSelect
+        options={options}
+        value={pendingValue}
+        onChange={(v) => onAdd(v)}
+        placeholder={placeholder}
+        minOptionsForSearch={0}
+      />
+      <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-gray-700 bg-gray-950/40 p-2">
+        {children || <p className="text-xs text-gray-500">{emptyText}</p>}
+      </div>
+    </div>
+  );
+}
+
+function CarrieraModal({
+  isOpen,
+  onClose,
+  onSave,
+  value,
+  tipi,
+  tiersSelezionabili,
+  abilitaOptions,
+  saving,
+}) {
   const [form, setForm] = useState(value || {});
   const [tierToAdd, setTierToAdd] = useState(null);
   const [abilitaToAdd, setAbilitaToAdd] = useState(null);
@@ -49,6 +140,9 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
     setAbilitaToAdd(null);
   }, [value]);
 
+  const selectedTipo = useMemo(() => tipoFromForm(tipi, form), [tipi, form]);
+  const isKorp = selectedTipo?.codice === 'korp';
+
   const tiersById = useMemo(
     () => new Map((tiersSelezionabili || []).map((t) => [String(t.id), t])),
     [tiersSelezionabili],
@@ -56,6 +150,21 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
   const abilitaById = useMemo(
     () => new Map((abilitaOptions || []).map((a) => [String(a.id), a])),
     [abilitaOptions],
+  );
+
+  const selectedTierRows = (form.tiers_sblocco_ids || [])
+    .map((id) => tiersById.get(String(id)))
+    .filter(Boolean);
+  const selectedAbilitaRows = (form.abilita_default_ids || [])
+    .map((id) => abilitaById.get(String(id)))
+    .filter(Boolean);
+  const tierGroups = groupTiersByTipo(selectedTierRows);
+
+  const tierOptionsDisponibili = (tiersSelezionabili || [])
+    .filter((t) => !(form.tiers_sblocco_ids || []).map(String).includes(String(t.id)))
+    .map((t) => ({ ...t, nome: formatTierOptionLabel(t) }));
+  const abilitaOptionsDisponibili = (abilitaOptions || []).filter(
+    (a) => !(form.abilita_default_ids || []).map(String).includes(String(a.id)),
   );
 
   if (!isOpen) return null;
@@ -92,189 +201,237 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
     setForm({ ...form, abilita_default_ids: current.map((x) => Number(x)) });
   };
 
-  const selectedTierRows = (form.tiers_sblocco_ids || [])
-    .map((id) => tiersById.get(String(id)))
-    .filter(Boolean);
-  const selectedAbilitaRows = (form.abilita_default_ids || [])
-    .map((id) => abilitaById.get(String(id)))
-    .filter(Boolean);
-
-  const tierOptionsDisponibili = (tiersSelezionabili || []).filter(
-    (t) => !(form.tiers_sblocco_ids || []).map(String).includes(String(t.id)),
-  );
-  const abilitaOptionsDisponibili = (abilitaOptions || []).filter(
-    (a) => !(form.abilita_default_ids || []).map(String).includes(String(a.id)),
-  );
-
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-xl bg-gray-900 border border-gray-700 rounded-xl">
-        <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-          <h3 className="text-lg font-bold text-white">{form?.id ? 'Modifica' : 'Nuova'} carriera</h3>
-          <button type="button" onClick={onClose}><X className="text-gray-400" size={18} /></button>
-        </div>
-        <div className="p-4 space-y-3">
-          <input
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            placeholder="Nome"
-            value={form.nome || ''}
-            onChange={(e) => setForm({ ...form, nome: e.target.value })}
-          />
-          <textarea
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white min-h-[90px]"
-            placeholder="Descrizione"
-            value={form.descrizione || ''}
-            onChange={(e) => setForm({ ...form, descrizione: e.target.value })}
-          />
-          <label className="block text-xs text-gray-400 mb-1">Tipo carriera</label>
-          <SearchableSelect
-            options={tipi}
-            value={form.tipo_carriera || form.tipo_carriera_id || null}
-            onChange={(v) => setForm({ ...form, tipo_carriera: v, tipo_carriera_id: v })}
-            placeholder="Tipo (KORP, Professione, …)"
-          />
-          <p className="text-xs text-gray-500">
-            Le professioni restano tier T3 in wiki. Qui associ i <strong>tier di abilità</strong> sbloccabili
-            per i membri; per inserire le singole abilità in un tier usa{' '}
-            <strong>Database regole → Tabelle</strong>.
+    <StaffEditorModal
+      title={form?.id ? 'Modifica carriera / KORP' : 'Nuova carriera / KORP'}
+      onClose={onClose}
+      onSave={() => onSave(form, 'save_close')}
+      saveLabel="Salva"
+      saving={saving}
+      wide
+      size="lg"
+      footerExtra={
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => onSave(form, 'save_continue')}
+          className="min-h-11 w-full rounded-lg bg-violet-900/70 px-4 py-2 text-sm font-semibold text-violet-100 hover:bg-violet-800 disabled:opacity-50 sm:w-auto"
+        >
+          Salva e continua
+        </button>
+      }
+    >
+      <div className="space-y-4" data-testid="carriera-edit-form">
+        <StaffSection
+          title="Identità"
+          hint="Nome e tipo visibili in scheda PG, wiki e filtri staff. Il livello wiki non è il catalogo di abilità più sotto."
+        >
+          <StaffFieldGrid>
+            <LabeledField label="Nome" required hint="Come compare in elenchi, requisiti e profilo.">
+              <input
+                className={inputCls}
+                value={form.nome || ''}
+                onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                placeholder="Es. Forze di Sicurezza, Medico…"
+              />
+            </LabeledField>
+            <LabeledField
+              label="Tipo"
+              required
+              hint="KORP = organizzazione (task, contratti, gradi). Professione = mestiere del PG. Altri tipi seguono lo stesso schema."
+            >
+              <SearchableSelect
+                options={tipi}
+                value={form.tipo_carriera || form.tipo_carriera_id || null}
+                onChange={(v) => setForm({ ...form, tipo_carriera: v, tipo_carriera_id: v })}
+                placeholder="KORP, Professione, …"
+              />
+            </LabeledField>
+            <LabeledField
+              label="Livello in wiki"
+              hint="Voce catalogo (di solito T3). Non sblocca abilità: quelli sono i cataloghi T1–T4 nella sezione sotto."
+            >
+              <SearchableSelect
+                options={WIKI_TIER_OPTS}
+                value={form.tipo || 'T3'}
+                onChange={(v) => setForm({ ...form, tipo: v || 'T3' })}
+                placeholder="T3"
+              />
+            </LabeledField>
+          </StaffFieldGrid>
+          <LabeledField label="Descrizione" hint="Testo staff / wiki. Può restare vuoto.">
+            <textarea
+              className={staffInputClass('min-h-[96px]')}
+              value={form.descrizione || ''}
+              onChange={(e) => setForm({ ...form, descrizione: e.target.value })}
+              placeholder="Ruolo nell’ambientazione…"
+            />
+          </LabeledField>
+        </StaffSection>
+
+        <StaffSection
+          title="Soldi all’evento"
+          hint="Somma fissa di crediti data all’inizio di ogni evento ai membri attivi. Si aggiunge al bonus della carica. 0 = nessun extra."
+        >
+          <StaffFieldGrid>
+            <LabeledField
+              label="Bonus crediti evento"
+              hint="Crediti extra per appartenenza a questa carriera/KORP, indipendenti dalle task."
+            >
+              <input
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                className={inputCls}
+                value={form.bonus_crediti_evento ?? 0}
+                onChange={(e) => setForm({ ...form, bonus_crediti_evento: e.target.value })}
+              />
+            </LabeledField>
+          </StaffFieldGrid>
+        </StaffSection>
+
+        {isKorp ? (
+          <StaffSection
+            title="Task della KORP"
+            hint="Moltiplicatori sulle ricompense delle missioni di questa KORP, solo per i membri attivi. Prestigio non arriva da cariche o carriere: solo staff, eventi e task."
+          >
+            <StaffFieldGrid>
+              <LabeledField
+                label="Fattore crediti delle task"
+                hint="1 = normale, 2 = crediti doppi, 0 = le task di questa KORP non danno crediti."
+              >
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  inputMode="decimal"
+                  className={inputCls}
+                  value={form.fattore_task_crediti ?? 1}
+                  onChange={(e) => setForm({ ...form, fattore_task_crediti: e.target.value })}
+                />
+              </LabeledField>
+              <LabeledField
+                label="Fattore prestigio delle task"
+                hint="Indipendente dai crediti. 3 = prestigio triplo, 0 = nessun prestigio da queste task."
+              >
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  inputMode="decimal"
+                  className={inputCls}
+                  value={form.fattore_task_prestigio ?? 1}
+                  onChange={(e) => setForm({ ...form, fattore_task_prestigio: e.target.value })}
+                />
+              </LabeledField>
+            </StaffFieldGrid>
+          </StaffSection>
+        ) : (
+          <p className="rounded-lg border border-gray-800 bg-gray-950/40 px-3 py-2 text-[11px] leading-snug text-gray-500">
+            Fattori task e contratti si impostano solo se il tipo è KORP. Con il tipo attuale restano i valori di default (fattore 1, niente sottoscrizione).
           </p>
-          <input
-            type="number"
-            step="0.01"
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            placeholder="Bonus crediti evento (carriera/KORP)"
-            value={form.bonus_crediti_evento ?? 0}
-            onChange={(e) => setForm({ ...form, bonus_crediti_evento: e.target.value })}
-          />
-          <label className="block text-xs text-gray-400 mb-1">Fattore task Crediti (KORP)</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            placeholder="Fattore task Crediti (es. 2 = Crediti doppi)"
-            value={form.fattore_task_crediti ?? 1}
-            onChange={(e) => setForm({ ...form, fattore_task_crediti: e.target.value })}
-          />
-          <label className="block text-xs text-gray-400 mb-1">Fattore task Prestigio (KORP)</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            placeholder="Fattore task Prestigio (es. 3 = Prestigio triplo, 0 = nessun Prestigio)"
-            value={form.fattore_task_prestigio ?? 1}
-            onChange={(e) => setForm({ ...form, fattore_task_prestigio: e.target.value })}
-          />
-          <p className="text-xs text-gray-500">
-            Moltiplicatori indipendenti applicati alle ricompense delle task di questa KORP
-            per i suoi membri attivi. Il Prestigio arriva solo da staff, eventi e task:
-            cariche e carriere non lo assegnano.
-          </p>
-          <label className="flex items-center gap-2 text-sm text-gray-300">
-            <input
-              type="checkbox"
-              checked={!!form.sottoscrive_contratti}
-              onChange={(e) => setForm({ ...form, sottoscrive_contratti: e.target.checked })}
-            />
-            Sottoscrive contratti
-          </label>
-          <input
-            type="number"
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            placeholder="Slot contratto di base (prima di carica e SCT)"
-            value={form.slot_contratto_base ?? 3}
-            onChange={(e) => setForm({ ...form, slot_contratto_base: e.target.value })}
-          />
-          <div>
-            <div className="text-xs text-gray-400 mb-2">Tier abilità sbloccabili per i membri</div>
-            <SearchableSelect
-              options={tierOptionsDisponibili}
-              value={tierToAdd}
-              onChange={(v) => {
-                setTierToAdd(v);
-                addTier(v);
-              }}
-              placeholder="Cerca tier da aggiungere…"
-              minOptionsForSearch={0}
-            />
-            <div className="mt-2 max-h-40 overflow-y-auto border border-gray-700 rounded p-2 flex flex-wrap gap-2">
-              {selectedTierRows.length === 0 ? (
-                <p className="text-xs text-gray-500">Nessun tier selezionato</p>
-              ) : (
-                selectedTierRows.map((t) => (
-                  <span
-                    key={t.id}
-                    className="inline-flex items-center gap-2 px-2 py-1 rounded bg-gray-800 border border-gray-700 text-sm text-gray-200"
-                  >
-                    <span className="text-gray-500 text-xs">{t.tipo}</span>
-                    <span>{t.nome}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeTier(t.id)}
-                      className="text-red-400 hover:text-red-300"
-                      title="Rimuovi tier"
-                    >
-                      <X size={14} />
-                    </button>
-                  </span>
-                ))
-              )}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-400 mb-2">
-              Abilità assegnate automaticamente ai membri attivi
-            </div>
-            <p className="text-xs text-gray-500 mb-2">
-              Es. perk sconto forgiatura (CFG MOL 0.5 con limite aura ATE/AIN). All&apos;ingresso in KORP/carriera
-              vengono aggiunte senza costo; alla chiusura membership vengono rimosse.
-            </p>
-            <SearchableSelect
-              options={abilitaOptionsDisponibili}
-              value={abilitaToAdd}
-              onChange={(v) => {
-                setAbilitaToAdd(v);
-                addAbilitaDefault(v);
-              }}
-              placeholder="Cerca abilità da aggiungere…"
-              minOptionsForSearch={0}
-            />
-            <div className="mt-2 max-h-40 overflow-y-auto border border-gray-700 rounded p-2 flex flex-wrap gap-2">
-              {selectedAbilitaRows.length === 0 ? (
-                <p className="text-xs text-gray-500">Nessuna abilità selezionata</p>
-              ) : (
-                selectedAbilitaRows.map((a) => (
-                  <span
+        )}
+
+        {isKorp ? (
+          <StaffSection
+            title="Contratti"
+            hint="Quanti modelli può proporre un membro e se questa KORP è parte contraente."
+          >
+            <label className="flex min-h-11 items-start gap-2 text-sm text-gray-200">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={!!form.sottoscrive_contratti}
+                onChange={(e) => setForm({ ...form, sottoscrive_contratti: e.target.checked })}
+              />
+              <span>
+                <span className="font-semibold">Sottoscrive contratti</span>
+                <span className="mt-0.5 block text-[11px] text-gray-500">
+                  I membri possono proporre i modelli di contratto di questa KORP.
+                </span>
+              </span>
+            </label>
+            {form.sottoscrive_contratti ? (
+              <LabeledField
+                label="Slot contratto di base"
+                hint="Slot del proponente all’ingresso, prima del bonus della carica e della statistica SCT."
+              >
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  className={inputCls}
+                  value={form.slot_contratto_base ?? 3}
+                  onChange={(e) => setForm({ ...form, slot_contratto_base: e.target.value })}
+                />
+              </LabeledField>
+            ) : null}
+          </StaffSection>
+        ) : null}
+
+        <StaffSection
+          title="Cataloghi di abilità sbloccabili"
+          hint="Tabelle T1–T4 i cui acquisti sono riservati ai membri attivi. Non è una lista di abilità: per inserire le skill in un catalogo usa Database regole → Tabelle."
+        >
+          <ChipMultiSelect
+            options={tierOptionsDisponibili}
+            pendingValue={tierToAdd}
+            onAdd={addTier}
+            placeholder="Cerca un catalogo (es. T2 · Combattente)…"
+            emptyText="Nessun catalogo: i membri non sbloccano acquisti riservati da questa carriera."
+          >
+            {selectedTierRows.length === 0 ? null : (
+              <div className="space-y-3">
+                {tierGroups.map(([tipo, rows]) => (
+                  <div key={tipo}>
+                    <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-violet-300">
+                      Catalogo {tipo}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {rows.map((t) => (
+                        <SelectedChip
+                          key={t.id}
+                          onRemove={() => removeTier(t.id)}
+                          removeLabel={`Rimuovi ${t.nome}`}
+                        >
+                          {t.nome}
+                        </SelectedChip>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ChipMultiSelect>
+        </StaffSection>
+
+        <StaffSection
+          title="Abilità automatiche (perk)"
+          hint="Assegnate senza costo all’ingresso e rimosse alla chiusura membership. Es. sconto forgiatura. Non sostituiscono i cataloghi sopra."
+        >
+          <ChipMultiSelect
+            options={abilitaOptionsDisponibili}
+            pendingValue={abilitaToAdd}
+            onAdd={addAbilitaDefault}
+            placeholder="Cerca un’abilità da assegnare in automatico…"
+            emptyText="Nessuna perk automatica."
+          >
+            {selectedAbilitaRows.length === 0 ? null : (
+              <div className="flex flex-wrap gap-2">
+                {selectedAbilitaRows.map((a) => (
+                  <SelectedChip
                     key={a.id}
-                    className="inline-flex items-center gap-2 px-2 py-1 rounded bg-gray-800 border border-gray-700 text-sm text-gray-200"
+                    onRemove={() => removeAbilitaDefault(a.id)}
+                    removeLabel={`Rimuovi ${a.nome}`}
                   >
-                    <span>{a.nome}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeAbilitaDefault(a.id)}
-                      className="text-red-400 hover:text-red-300"
-                      title="Rimuovi abilità"
-                    >
-                      <X size={14} />
-                    </button>
-                  </span>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="p-4 border-t border-gray-700">
-          <EditorSaveActions
-            onSave={() => onSave(form, 'save_close')}
-            onSaveAndContinue={() => onSave(form, 'save_continue')}
-            onCancel={onClose}
-            statusMessage={statusMessage}
-            statusType={statusType}
-          />
-        </div>
+                    {a.nome}
+                  </SelectedChip>
+                ))}
+              </div>
+            )}
+          </ChipMultiSelect>
+        </StaffSection>
       </div>
-    </div>
+    </StaffEditorModal>
   );
 }
 
@@ -288,7 +445,7 @@ function caricaIncludesCarriera(carica, carrieraId) {
   return ids.map(String).includes(String(carrieraId));
 }
 
-function CaricaModal({ isOpen, onClose, onSave, value, carriereOptions, statusMessage, statusType }) {
+function CaricaModal({ isOpen, onClose, onSave, value, carriereOptions, saving }) {
   const [form, setForm] = useState(value || {});
   const [carrieraToAdd, setCarrieraToAdd] = useState(null);
   useEffect(() => {
@@ -337,92 +494,130 @@ function CaricaModal({ isOpen, onClose, onSave, value, carriereOptions, statusMe
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-lg bg-gray-900 border border-gray-700 rounded-xl max-h-[90vh] overflow-y-auto">
-        <div className="p-4 border-b border-gray-700 flex justify-between">
-          <h3 className="text-lg font-bold text-white">{form?.id ? 'Modifica' : 'Nuova'} carica</h3>
-          <button type="button" onClick={onClose}><X className="text-gray-400" size={18} /></button>
-        </div>
-        <div className="p-4 space-y-3">
-          <div>
-            <div className="text-xs text-gray-400 mb-2">Dipartimenti (carriere / KORP)</div>
-            <SearchableSelect
-              options={carriereDisponibili}
-              value={carrieraToAdd}
-              onChange={(v) => {
-                setCarrieraToAdd(v);
-                addCarriera(v);
-              }}
-              placeholder="Aggiungi dipartimento…"
-              minOptionsForSearch={0}
+    <StaffEditorModal
+      title={form?.id ? 'Modifica carica' : 'Nuova carica'}
+      onClose={onClose}
+      onSave={() => onSave(form, 'save_close')}
+      saveLabel="Salva"
+      saving={saving}
+      wide
+    >
+      <div className="space-y-4" data-testid="carica-edit-form">
+        <StaffSection
+          title="Identità"
+          hint="La carica è il grado (Capitano, Recluta…). Vale in uno o più dipartimenti."
+        >
+          <LabeledField label="Nome carica" required hint="Come compare su scheda PG e InstaFame.">
+            <input
+              className={inputCls}
+              value={form.nome || ''}
+              onChange={(e) => setForm({ ...form, nome: e.target.value })}
+              placeholder="Es. Tenente, Capo reparto…"
             />
-            <div className="mt-2 max-h-36 overflow-y-auto border border-gray-700 rounded p-2 flex flex-wrap gap-2">
-              {selectedCarriereRows.length === 0 ? (
-                <p className="text-xs text-gray-500">Nessun dipartimento — seleziona almeno uno.</p>
-              ) : (
-                selectedCarriereRows.map((c) => (
-                  <span
+          </LabeledField>
+          <StaffFieldGrid>
+            <LabeledField
+              label="Ordine in elenco"
+              hint="Numero più basso = più in alto nelle liste. Serve a ordinare i gradi, non è un rango di gioco."
+            >
+              <input
+                type="number"
+                inputMode="numeric"
+                className={inputCls}
+                value={form.ordine ?? 0}
+                onChange={(e) => setForm({ ...form, ordine: parseInt(e.target.value || '0', 10) })}
+              />
+            </LabeledField>
+            <label className="flex min-h-11 items-start gap-2 self-end pb-1 text-sm text-gray-200">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={form.attiva !== false}
+                onChange={(e) => setForm({ ...form, attiva: e.target.checked })}
+              />
+              <span>
+                <span className="font-semibold">Carica attiva</span>
+                <span className="mt-0.5 block text-[11px] text-gray-500">
+                  Se spenta non viene proposta nelle nuove appartenenze.
+                </span>
+              </span>
+            </label>
+          </StaffFieldGrid>
+        </StaffSection>
+
+        <StaffSection
+          title="Dipartimenti"
+          hint="KORP o professioni in cui esiste questo grado. Obbligatorio almeno uno (la stessa carica può coprire più reparti)."
+        >
+          <ChipMultiSelect
+            options={carriereDisponibili}
+            pendingValue={carrieraToAdd}
+            onAdd={addCarriera}
+            placeholder="Aggiungi un dipartimento…"
+            emptyText="Nessun dipartimento: seleziona almeno una carriera o KORP."
+          >
+            {selectedCarriereRows.length === 0 ? null : (
+              <div className="flex flex-wrap gap-2">
+                {selectedCarriereRows.map((c) => (
+                  <SelectedChip
                     key={c.id}
-                    className="inline-flex items-center gap-2 px-2 py-1 rounded bg-gray-800 border border-gray-700 text-sm text-gray-200"
+                    onRemove={() => removeCarriera(c.id)}
+                    removeLabel={`Rimuovi ${c.nome}`}
                   >
-                    <span>{c.nome}</span>
-                    <button type="button" className="text-red-400 hover:text-red-300" onClick={() => removeCarriera(c.id)}>
-                      <X size={14} />
-                    </button>
-                  </span>
-                ))
-              )}
-            </div>
-          </div>
-          <input
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            placeholder="Nome carica"
-            value={form.nome || ''}
-            onChange={(e) => setForm({ ...form, nome: e.target.value })}
-          />
-          <input
-            type="number"
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            placeholder="Bonus stipendio evento"
-            value={form.bonus_stipendio_evento ?? 0}
-            onChange={(e) => setForm({ ...form, bonus_stipendio_evento: e.target.value })}
-          />
-          <input
-            type="number"
-            step="0.01"
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            placeholder="Bonus crediti evento (carica)"
-            value={form.bonus_crediti_evento ?? 0}
-            onChange={(e) => setForm({ ...form, bonus_crediti_evento: e.target.value })}
-          />
-          <input
-            type="number"
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            placeholder="Bonus slot di contratto (0 sul grado d'ingresso, può essere negativo)"
-            value={form.bonus_slot_contratto ?? 0}
-            onChange={(e) => setForm({ ...form, bonus_slot_contratto: e.target.value })}
-          />
-          <input
-            type="number"
-            className="w-32 bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            value={form.ordine ?? 0}
-            onChange={(e) => setForm({ ...form, ordine: parseInt(e.target.value || '0', 10) })}
-          />
-          <label className="flex items-center gap-2 text-sm text-gray-300">
-            <input type="checkbox" checked={!!form.attiva} onChange={(e) => setForm({ ...form, attiva: e.target.checked })} />
-            Attiva
-          </label>
-        </div>
-        <div className="p-4 border-t border-gray-700">
-          <EditorSaveActions
-            onSave={() => onSave(form, 'save_close')}
-            onCancel={onClose}
-            statusMessage={statusMessage}
-            statusType={statusType}
-          />
-        </div>
+                    {c.nome}
+                  </SelectedChip>
+                ))}
+              </div>
+            )}
+          </ChipMultiSelect>
+        </StaffSection>
+
+        <StaffSection
+          title="Economia e contratti"
+          hint="Valori sommati a quelli della carriera/KORP, per i PG che hanno questa carica attiva."
+        >
+          <StaffFieldGrid cols={3}>
+            <LabeledField
+              label="Bonus stipendio evento"
+              hint="Soldi (stipendio) extra a inizio evento. 0 = nessun extra."
+            >
+              <input
+                type="number"
+                inputMode="decimal"
+                className={inputCls}
+                value={form.bonus_stipendio_evento ?? 0}
+                onChange={(e) => setForm({ ...form, bonus_stipendio_evento: e.target.value })}
+              />
+            </LabeledField>
+            <LabeledField
+              label="Bonus crediti evento"
+              hint="Crediti extra a inizio evento, in aggiunta a quelli della carriera/KORP."
+            >
+              <input
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                className={inputCls}
+                value={form.bonus_crediti_evento ?? 0}
+                onChange={(e) => setForm({ ...form, bonus_crediti_evento: e.target.value })}
+              />
+            </LabeledField>
+            <LabeledField
+              label="Bonus slot contratto"
+              hint="Si somma agli slot di base della KORP. 0 sul grado d’ingresso; può essere negativo."
+            >
+              <input
+                type="number"
+                inputMode="numeric"
+                className={inputCls}
+                value={form.bonus_slot_contratto ?? 0}
+                onChange={(e) => setForm({ ...form, bonus_slot_contratto: e.target.value })}
+              />
+            </LabeledField>
+          </StaffFieldGrid>
+        </StaffSection>
       </div>
-    </div>
+    </StaffEditorModal>
   );
 }
 
@@ -435,8 +630,7 @@ function MembershipModal({
   tipi,
   personaggiOptions,
   cariche,
-  statusMessage,
-  statusType,
+  saving,
 }) {
   const [form, setForm] = useState(value || {});
   const [chiudiKorpPrecedenti, setChiudiKorpPrecedenti] = useState(true);
@@ -484,79 +678,120 @@ function MembershipModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-xl bg-gray-900 border border-gray-700 rounded-xl max-h-[90vh] overflow-y-auto">
-        <div className="p-4 border-b border-gray-700 flex justify-between">
-          <h3 className="text-lg font-bold text-white">{form?.id ? 'Modifica' : 'Nuova'} appartenenza</h3>
-          <button type="button" onClick={onClose}><X className="text-gray-400" size={18} /></button>
-        </div>
-        <div className="p-4 space-y-3">
-          <label className="block text-xs text-gray-400 mb-1">Personaggio</label>
-          <SearchableSelect
-            options={personaggiOptions}
-            value={form.personaggio || null}
-            onChange={(v) => setForm({ ...form, personaggio: v })}
-            placeholder="Cerca personaggio (nome o giocatore)…"
-          />
-          <label className="block text-xs text-gray-400 mb-1">Tipo</label>
-          <SearchableSelect
-            options={tipi}
-            value={tipoId || null}
-            onChange={(v) => setForm({ ...form, tipo_carriera: v, carriera: null, carica: null })}
-            placeholder="KORP o Professione…"
-          />
-          <label className="block text-xs text-gray-400 mb-1">Carica (opzionale)</label>
-          <SearchableSelect
-            options={caricheOptions}
-            value={form.carica || form.carica_id || null}
-            onChange={(v) => setForm({ ...form, carica: v, carriera: null, carriera_id: null })}
-            placeholder="Carica militare…"
-          />
+    <StaffEditorModal
+      title={form?.id ? 'Modifica appartenenza' : 'Nuova appartenenza'}
+      onClose={onClose}
+      onSave={() =>
+        onSave(
+          { ...form, chiudi_korp_precedenti: chiudiKorpPrecedenti, espandi_tutte_carriere: espandiTutteCarriere },
+          'save_close',
+        )
+      }
+      saveLabel="Salva"
+      saving={saving}
+      wide
+    >
+      <div className="space-y-4" data-testid="membership-edit-form">
+        <StaffSection
+          title="Chi e dove"
+          hint="Un’appartenenza lega un personaggio a una carriera o KORP, con carica opzionale e periodo di validità."
+        >
+          <LabeledField label="Personaggio" required hint="Cerca per nome PG o giocatore.">
+            <SearchableSelect
+              options={personaggiOptions}
+              value={form.personaggio || null}
+              onChange={(v) => setForm({ ...form, personaggio: v })}
+              placeholder="Cerca personaggio…"
+            />
+          </LabeledField>
+          <StaffFieldGrid>
+            <LabeledField
+              label="Tipo"
+              required
+              hint="Filtra l’elenco carriere. KORP e professione sono indipendenti: un PG può avere entrambe."
+            >
+              <SearchableSelect
+                options={tipi}
+                value={tipoId || null}
+                onChange={(v) => setForm({ ...form, tipo_carriera: v, carriera: null, carica: null })}
+                placeholder="KORP o Professione…"
+              />
+            </LabeledField>
+            <LabeledField
+              label="Carica (opzionale)"
+              hint="Grado in quel dipartimento. Puoi partire dalla carica: i dipartimenti collegati compaiono sotto."
+            >
+              <SearchableSelect
+                options={caricheOptions}
+                value={form.carica || form.carica_id || null}
+                onChange={(v) => setForm({ ...form, carica: v, carriera: null, carriera_id: null })}
+                placeholder="Nessuna carica…"
+              />
+            </LabeledField>
+          </StaffFieldGrid>
           {selectedCarica && carriereDaCarica.length > 0 ? (
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-400">
               Dipartimenti di questa carica:{' '}
-              <span className="text-gray-300">{carriereDaCarica.map((c) => c.nome).join(', ')}</span>
+              <span className="text-gray-200">{carriereDaCarica.map((c) => c.nome).join(', ')}</span>
             </p>
           ) : null}
           {!form.id && selectedCarica && carriereDaCarica.length > 1 ? (
-            <label className="flex items-start gap-2 p-3 rounded-lg border border-indigo-700/50 bg-indigo-950/30 text-sm text-indigo-100">
+            <label className="flex min-h-11 items-start gap-2 rounded-lg border border-indigo-700/50 bg-indigo-950/30 p-3 text-sm text-indigo-100">
               <input
                 type="checkbox"
-                className="mt-0.5"
+                className="mt-1"
                 checked={espandiTutteCarriere}
                 onChange={(e) => setEspandiTutteCarriere(e.target.checked)}
               />
               <span>
                 Crea un&apos;appartenenza per <strong>ogni</strong> dipartimento della carica ({carriereDaCarica.length}).
-                Lascia deselezionato per scegliere un solo dipartimento sotto.
+                Togli la spunta per sceglierne uno solo nel campo sotto.
               </span>
             </label>
           ) : null}
-          <label className="block text-xs text-gray-400 mb-1">Carriera / KORP {espansioneAttiva ? '(opzionale — espansione automatica)' : ''}</label>
-          <SearchableSelect
-            options={carriereFiltrate}
-            value={carrieraId || null}
-            onChange={(v) => {
-              const row = carriereOptions.find((c) => String(c.id) === String(v));
-              setForm({
-                ...form,
-                carriera: v,
-                tipo_carriera: row?.tipo_carriera || form.tipo_carriera,
-              });
-            }}
-            placeholder={espansioneAttiva ? 'Opzionale se espandi tutti i dipartimenti' : 'Cerca professione o KORP…'}
-            disabled={espansioneAttiva || (!tipoId && carriereFiltrate.length === 0)}
-          />
-          <label className="flex items-center gap-2 text-sm text-gray-200">
+          <LabeledField
+            label={espansioneAttiva ? 'Carriera / KORP (opzionale)' : 'Carriera / KORP'}
+            required={!espansioneAttiva}
+            hint={
+              espansioneAttiva
+                ? 'Lascia vuoto: verrà creata un’appartenenza per ogni dipartimento della carica.'
+                : 'Organizzazione o mestiere a cui appartiene il PG.'
+            }
+          >
+            <SearchableSelect
+              options={carriereFiltrate}
+              value={carrieraId || null}
+              onChange={(v) => {
+                const row = carriereOptions.find((c) => String(c.id) === String(v));
+                setForm({
+                  ...form,
+                  carriera: v,
+                  tipo_carriera: row?.tipo_carriera || form.tipo_carriera,
+                });
+              }}
+              placeholder={espansioneAttiva ? 'Opzionale con espansione automatica' : 'Cerca professione o KORP…'}
+              disabled={espansioneAttiva || (!tipoId && carriereFiltrate.length === 0)}
+            />
+          </LabeledField>
+        </StaffSection>
+
+        <StaffSection title="Visibilità e periodo">
+          <label className="flex min-h-11 items-start gap-2 text-sm text-gray-200">
             <input
               type="checkbox"
+              className="mt-1"
               checked={form.visibile_social !== false}
               onChange={(e) => setForm({ ...form, visibile_social: e.target.checked })}
             />
-            Carica visibile sul profilo social InstaFame
+            <span>
+              <span className="font-semibold">Carica visibile su InstaFame</span>
+              <span className="mt-0.5 block text-[11px] text-gray-500">
+                Se spento, il grado non compare sul profilo social del PG.
+              </span>
+            </span>
           </label>
           {isKorp && !form.id && (
-            <label className="flex items-start gap-2 p-3 rounded-lg border border-amber-600/50 bg-amber-950/30 text-sm text-amber-100">
+            <label className="flex min-h-11 items-start gap-2 rounded-lg border border-amber-600/50 bg-amber-950/30 p-3 text-sm text-amber-100">
               <input
                 type="checkbox"
                 className="mt-1"
@@ -564,45 +799,30 @@ function MembershipModal({
                 onChange={(e) => setChiudiKorpPrecedenti(e.target.checked)}
               />
               <span>
-                <strong>Molto consigliato:</strong> chiudi la KORP attiva precedente di questo personaggio
-                impostando <code className="text-amber-200">data_a</code> adesso.
+                <strong>Chiudi la KORP precedente</strong> di questo personaggio (imposta la data di fine adesso).
+                Consigliato: un PG ha di solito una sola KORP attiva.
               </span>
             </label>
           )}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs text-gray-500">Data da</label>
+          <StaffFieldGrid>
+            <LabeledField label="Data inizio" hint="Da quando l’appartenenza è valida.">
               <ItalianDateTimeInput
-                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white text-sm"
+                className="flex min-h-11 w-full items-center rounded border border-gray-600 bg-gray-900 px-2 py-1.5 text-sm text-white"
                 value={form.data_da || ''}
                 onChange={(v) => setForm({ ...form, data_da: localDateTimeToApiIso(v) })}
               />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500">Data a (vuoto = attiva)</label>
+            </LabeledField>
+            <LabeledField label="Data fine" hint="Vuoto = ancora in corso. Compila per chiudere l’appartenenza.">
               <ItalianDateTimeInput
-                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white text-sm"
+                className="flex min-h-11 w-full items-center rounded border border-gray-600 bg-gray-900 px-2 py-1.5 text-sm text-white"
                 value={form.data_a || ''}
                 onChange={(v) => setForm({ ...form, data_a: localDateTimeToApiIso(v) })}
               />
-            </div>
-          </div>
-        </div>
-        <div className="p-4 border-t border-gray-700">
-          <EditorSaveActions
-            onSave={() =>
-              onSave(
-                { ...form, chiudi_korp_precedenti: chiudiKorpPrecedenti, espandi_tutte_carriere: espandiTutteCarriere },
-                'save_close',
-              )
-            }
-            onCancel={onClose}
-            statusMessage={statusMessage}
-            statusType={statusType}
-          />
-        </div>
+            </LabeledField>
+          </StaffFieldGrid>
+        </StaffSection>
       </div>
-    </div>
+    </StaffEditorModal>
   );
 }
 
@@ -614,12 +834,12 @@ export default function CarriereKorpsManager({ onLogout }) {
   const [memberships, setMemberships] = useState([]);
   const [personaggi, setPersonaggi] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [statusType, setStatusType] = useState('success');
   const [modalCarriera, setModalCarriera] = useState(null);
   const [modalCarica, setModalCarica] = useState(null);
   const [modalMembership, setModalMembership] = useState(null);
-  const [filtroTipo, setFiltroTipo] = useState('');
   const [tiersSelezionabili, setTiersSelezionabili] = useState([]);
   const [abilitaOptions, setAbilitaOptions] = useState([]);
 
@@ -655,11 +875,6 @@ export default function CarriereKorpsManager({ onLogout }) {
     loadAll();
   }, [loadAll]);
 
-  const carriereFiltered = useMemo(() => {
-    if (!filtroTipo) return carriere;
-    return carriere.filter((c) => c.tipo_carriera_codice === filtroTipo);
-  }, [carriere, filtroTipo]);
-
   const carriereSelectOptions = useMemo(
     () =>
       carriere.map((c) => ({
@@ -688,20 +903,27 @@ export default function CarriereKorpsManager({ onLogout }) {
         getSortValue: (x) => x.tipo_carriera_nome || x.tipo_carriera_codice || '',
         render: (x) => x.tipo_carriera_nome || x.tipo_carriera_codice || '—',
       },
-      { key: 'tier_wiki', header: 'Tier wiki', getSortValue: (x) => x.tipo || '', render: (x) => x.tipo || '—', align: 'center', width: 90 },
+      {
+        key: 'tier_wiki',
+        header: 'Livello wiki',
+        getSortValue: (x) => x.tipo || '',
+        render: (x) => x.tipo || '—',
+        align: 'center',
+        width: 110,
+      },
       {
         key: 'bonus_cr',
-        header: 'Bonus CR',
+        header: 'Bonus crediti',
         getSortValue: (x) => Number(x.bonus_crediti_evento || 0),
         render: (x) => Number(x.bonus_crediti_evento || 0).toFixed(2),
         align: 'center',
-        width: 100,
+        width: 120,
       },
       {
         key: 'tier_sblocco',
-        header: 'Tier sblocco',
+        header: 'Cataloghi',
         getSortValue: (x) => x.tiers_sblocco_dettaglio?.length ?? 0,
-        render: (x) => (x.tiers_sblocco_dettaglio?.length ?? 0),
+        render: (x) => x.tiers_sblocco_dettaglio?.length ?? 0,
         align: 'center',
         width: 100,
       },
@@ -709,7 +931,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         key: 'perk_auto',
         header: 'Perk auto',
         getSortValue: (x) => x.abilita_default_dettaglio?.length ?? 0,
-        render: (x) => (x.abilita_default_dettaglio?.length ?? 0),
+        render: (x) => x.abilita_default_dettaglio?.length ?? 0,
         align: 'center',
         width: 90,
       },
@@ -729,19 +951,19 @@ export default function CarriereKorpsManager({ onLogout }) {
       },
       {
         key: 'bonus_stipendio',
-        header: 'Bonus stipendio',
+        header: 'Stipendio',
         getSortValue: (x) => Number(x.bonus_stipendio_evento || 0),
         render: (x) => Number(x.bonus_stipendio_evento || 0),
         align: 'center',
-        width: 120,
+        width: 100,
       },
       {
         key: 'bonus_cr',
-        header: 'Bonus CR',
+        header: 'Crediti',
         getSortValue: (x) => Number(x.bonus_crediti_evento || 0),
         render: (x) => Number(x.bonus_crediti_evento || 0).toFixed(2),
         align: 'center',
-        width: 100,
+        width: 90,
       },
       { key: 'ordine', header: 'Ordine', getSortValue: (x) => x.ordine ?? 0, render: (x) => x.ordine ?? 0, align: 'center', width: 80 },
       {
@@ -759,12 +981,7 @@ export default function CarriereKorpsManager({ onLogout }) {
 
   const membershipSearchText = useCallback(
     (item) =>
-      [
-        item.personaggio_nome,
-        item.carriera_nome,
-        item.carica_nome,
-        item.tipo_carriera_codice,
-      ]
+      [item.personaggio_nome, item.carriera_nome, item.carica_nome, item.tipo_carriera_codice]
         .filter(Boolean)
         .join(' '),
     [],
@@ -882,6 +1099,7 @@ export default function CarriereKorpsManager({ onLogout }) {
 
   const saveCarriera = async (form, mode) => {
     try {
+      setSaving(true);
       const payload = {
         nome: form.nome,
         descrizione: form.descrizione || '',
@@ -906,6 +1124,8 @@ export default function CarriereKorpsManager({ onLogout }) {
     } catch (e) {
       setStatusMessage(e.message);
       setStatusType('error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -916,6 +1136,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         setStatusType('error');
         return;
       }
+      setSaving(true);
       const payload = {
         carriere_ids: form.carriere_ids,
         nome: form.nome,
@@ -934,6 +1155,8 @@ export default function CarriereKorpsManager({ onLogout }) {
     } catch (e) {
       setStatusMessage(e.message);
       setStatusType('error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -954,6 +1177,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         setStatusType('error');
         return;
       }
+      setSaving(true);
       const payload = {
         personaggio: form.personaggio,
         carriera: carrieraIdLocal || undefined,
@@ -981,6 +1205,8 @@ export default function CarriereKorpsManager({ onLogout }) {
     } catch (e) {
       setStatusMessage(e.message);
       setStatusType('error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -989,129 +1215,131 @@ export default function CarriereKorpsManager({ onLogout }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 text-white">
-      <div className="p-4 border-b border-gray-800 flex flex-wrap gap-2 items-center">
-        <h2 className="text-xl font-bold mr-4">Carriere, KORP e cariche</h2>
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm ${
-              tab === id ? 'bg-violet-600' : 'bg-gray-800 hover:bg-gray-700'
-            }`}
-          >
-            <Icon size={14} />
-            {label}
-          </button>
-        ))}
-        {tab === 'org' && (
-          <select
-            className="ml-auto bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm"
-            value={filtroTipo}
-            onChange={(e) => setFiltroTipo(e.target.value)}
-          >
-            <option value="">Tutti i tipi</option>
-            {tipi.map((t) => (
-              <option key={t.codice} value={t.codice}>{t.nome}</option>
-            ))}
-          </select>
-        )}
-      </div>
+    <StaffToolShell fill>
+      <StaffToolHeader
+        title="Carriere, KORP e cariche"
+        description="Cataloghi: organizzazioni e mestieri, gradi, e chi appartiene a cosa. I numeri cambiano soldi, task e contratti dei PG."
+        icon={<Users size={22} />}
+      >
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm ${
+                tab === id ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-200 hover:bg-gray-700'
+              }`}
+            >
+              <Icon size={16} />
+              {label}
+            </button>
+          ))}
+        </div>
+      </StaffToolHeader>
 
       {statusMessage && (
-        <div className={`mx-4 mt-2 px-3 py-2 rounded text-sm ${statusType === 'error' ? 'bg-red-900/50 text-red-200' : 'bg-green-900/40 text-green-200'}`}>
+        <div
+          className={`mx-3 mt-2 rounded px-3 py-2 text-sm sm:mx-4 ${
+            statusType === 'error' ? 'bg-red-900/50 text-red-200' : 'bg-green-900/40 text-green-200'
+          }`}
+        >
           {statusMessage}
         </div>
       )}
 
-      <div className="flex-1 min-h-0 p-4 h-full">
+      <div className="min-h-0 flex-1 p-3 sm:p-4">
         {tab === 'org' && (
-          <div className="h-full">
-          <MasterGenericList
-            title="Carriere e KORP"
-            items={carriereFiltered}
-            columns={carrieraColumns}
-            loading={loading}
-            persistKey="staff-carriere-korps-org"
-            filterConfig={carrieraFilterConfig}
-            addLabel="Nuova carriera"
-            emptyMessage="Nessuna carriera trovata."
-            onAdd={() =>
-              setModalCarriera({
-                tipo: 'T3',
-                tipo_carriera: tipi.find((t) => t.codice === 'professione')?.id,
-                tiers_sblocco_ids: [],
-              })
-            }
-            onEdit={(item) =>
-              setModalCarriera({
-                ...item,
-                tipo_carriera:
-                  item.tipo_carriera || tipi.find((t) => t.codice === item.tipo_carriera_codice)?.id,
-              })
-            }
-            onDelete={async (id) => {
-              await staffDeleteCarriera(id, onLogout);
-              await loadAll();
-            }}
-          />
+          <div className="h-full min-h-0">
+            <MasterGenericList
+              title="Carriere e KORP"
+              items={carriere}
+              columns={carrieraColumns}
+              loading={loading}
+              persistKey="staff-carriere-korps-org"
+              filterConfig={carrieraFilterConfig}
+              addLabel="Nuova carriera"
+              emptyMessage="Nessuna carriera trovata."
+              onAdd={() =>
+                setModalCarriera({
+                  tipo: 'T3',
+                  tipo_carriera: tipi.find((t) => t.codice === 'professione')?.id,
+                  tiers_sblocco_ids: [],
+                  abilita_default_ids: [],
+                  bonus_crediti_evento: 0,
+                  fattore_task_crediti: 1,
+                  fattore_task_prestigio: 1,
+                  slot_contratto_base: 3,
+                })
+              }
+              onEdit={(item) =>
+                setModalCarriera({
+                  ...item,
+                  tipo_carriera:
+                    item.tipo_carriera || tipi.find((t) => t.codice === item.tipo_carriera_codice)?.id,
+                })
+              }
+              onDelete={async (id) => {
+                await staffDeleteCarriera(id, onLogout);
+                await loadAll();
+              }}
+            />
           </div>
         )}
         {tab === 'cariche' && (
-          <div className="h-full">
-          <MasterGenericList
-            title="Cariche"
-            items={cariche}
-            columns={caricaColumns}
-            loading={loading}
-            persistKey="staff-carriere-korps-cariche"
-            filterConfig={caricaFilterConfig}
-            addLabel="Nuova carica"
-            emptyMessage="Nessuna carica definita."
-            onAdd={() => setModalCarica({ attiva: true, ordine: 0 })}
-            onEdit={(item) =>
-              setModalCarica({
-                ...item,
-                carriere_ids: item.carriere_ids || item.carriere || (item.carriera ? [item.carriera] : []),
-              })
-            }
-            onDelete={async (id) => {
-              await staffDeleteCarica(id, onLogout);
-              await loadAll();
-            }}
-          />
+          <div className="h-full min-h-0">
+            <MasterGenericList
+              title="Cariche"
+              items={cariche}
+              columns={caricaColumns}
+              loading={loading}
+              persistKey="staff-carriere-korps-cariche"
+              filterConfig={caricaFilterConfig}
+              addLabel="Nuova carica"
+              emptyMessage="Nessuna carica definita."
+              onAdd={() => setModalCarica({ attiva: true, ordine: 0 })}
+              onEdit={(item) =>
+                setModalCarica({
+                  ...item,
+                  carriere_ids: item.carriere_ids || item.carriere || (item.carriera ? [item.carriera] : []),
+                })
+              }
+              onDelete={async (id) => {
+                await staffDeleteCarica(id, onLogout);
+                await loadAll();
+              }}
+            />
           </div>
         )}
         {tab === 'membership' && (
-          <div className="h-full">
-          <MasterGenericList
-            title="Appartenenze PG"
-            items={memberships}
-            columns={membershipColumns}
-            loading={loading}
-            persistKey="staff-carriere-korps-membership"
-            filterConfig={membershipFilterConfig}
-            addLabel="Nuova appartenenza"
-            emptyMessage="Nessuna appartenenza registrata."
-            searchPlaceholder="Cerca personaggio, giocatore, KORP, carriera o carica…"
-            getSearchText={membershipSearchText}
-            getItemLabel={membershipItemLabel}
-            onAdd={() => setModalMembership({})}
-            onEdit={(item) =>
-              setModalMembership({
-                ...item,
-                personaggio: item.personaggio,
-                carriera: item.carriera,
-                tipo_carriera: item.tipo_carriera,
-                carica: item.carica,
-              })
-            }
-            onDelete={async (id) => {
-              await staffDeleteCarriereMembership(id, onLogout);
-              await loadAll();
-            }}
-          />
+          <div className="h-full min-h-0">
+            <MasterGenericList
+              title="Appartenenze PG"
+              items={memberships}
+              columns={membershipColumns}
+              loading={loading}
+              persistKey="staff-carriere-korps-membership"
+              filterConfig={membershipFilterConfig}
+              addLabel="Nuova appartenenza"
+              emptyMessage="Nessuna appartenenza registrata."
+              searchPlaceholder="Cerca personaggio, giocatore, KORP, carriera o carica…"
+              getSearchText={membershipSearchText}
+              getItemLabel={membershipItemLabel}
+              onAdd={() => setModalMembership({})}
+              onEdit={(item) =>
+                setModalMembership({
+                  ...item,
+                  personaggio: item.personaggio,
+                  carriera: item.carriera,
+                  tipo_carriera: item.tipo_carriera,
+                  carica: item.carica,
+                })
+              }
+              onDelete={async (id) => {
+                await staffDeleteCarriereMembership(id, onLogout);
+                await loadAll();
+              }}
+            />
           </div>
         )}
       </div>
@@ -1124,8 +1352,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         tipi={tipi}
         tiersSelezionabili={tiersSelezionabili}
         abilitaOptions={abilitaOptions}
-        statusMessage={statusMessage}
-        statusType={statusType}
+        saving={saving}
       />
       <CaricaModal
         isOpen={!!modalCarica}
@@ -1133,8 +1360,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         onSave={saveCarica}
         value={modalCarica}
         carriereOptions={carriereSelectOptions}
-        statusMessage={statusMessage}
-        statusType={statusType}
+        saving={saving}
       />
       <MembershipModal
         isOpen={!!modalMembership}
@@ -1145,9 +1371,8 @@ export default function CarriereKorpsManager({ onLogout }) {
         tipi={tipi}
         personaggiOptions={personaggiSelectOptions}
         cariche={cariche}
-        statusMessage={statusMessage}
-        statusType={statusType}
+        saving={saving}
       />
-    </div>
+    </StaffToolShell>
   );
 }
