@@ -1387,6 +1387,32 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
     return "".join(parts)
 
 
+def personaggio_da_inventario(inventario):
+    """Personaggio collegato a un Inventario (riga MTI), oppure None."""
+    if inventario is None:
+        return None
+    if isinstance(inventario, Personaggio):
+        return inventario
+    try:
+        return inventario.personaggio
+    except Personaggio.DoesNotExist:
+        return None
+
+
+def proprietario_effettivo_oggetto(oggetto):
+    """
+    Chi paga e subisce i modificatori dell'oggetto.
+    Le mod montate non hanno inventario proprio: si risale all'host.
+    """
+    pg = personaggio_da_inventario(getattr(oggetto, "inventario_corrente", None))
+    if pg is not None:
+        return pg
+    host = getattr(oggetto, "ospitato_su", None)
+    if host is None:
+        return None
+    return personaggio_da_inventario(getattr(host, "inventario_corrente", None))
+
+
 def calcola_cariche_massime_da_infusione(infusione, personaggio=None):
     """
     Tetto cariche da statistica_cariche dell'infusione:

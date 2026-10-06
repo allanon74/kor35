@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.utils import timezone
@@ -23,6 +25,7 @@ from .models import (
     PersonaggioAbilita,
     Infusione,
     InfusioneCostoAttivazione,
+    InfusioneStatisticaBase,
     PersonaggioStatisticaBase,
     Punteggio,
     SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI,
@@ -1717,3 +1720,122 @@ class PhysicalSlotCapacityTests(TestCase):
         oggetto.sposta_in_inventario(self.pg)
         with self.assertRaises(Exception):
             GestioneOggettiService.equipaggia_oggetto(self.pg, oggetto, slot_key="armor")
+
+
+class RicaricaOggettoCaricheInfusioneTests(APITestCase):
+    """
+    Il tetto di ricarica è il valore base dell'infusione, non il default di catalogo
+    della statistica. Caso reale: CAT valore_base_predefinito=3, infusione=10.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="ricarica-user", password="x")
+        self.client.force_authenticate(user=self.user)
+        self.pg = Personaggio.objects.create(nome="PG Ricarica", proprietario=self.user)
+        self.pg.modifica_crediti(Decimal("200"), "fondi test ricarica")
+        self.aura = Punteggio.objects.create(nome="Aura Ricarica", sigla="ARC", tipo=AURA)
+        self.stat_cariche = Statistica.objects.create(
+            nome="Cariche tecnologiche test",
+            sigla="CAT",
+            parametro="cariche",
+            valore_base_predefinito=3,
+            valore_predefinito=0,
+        )
+        self.infusione = Infusione.objects.create(
+            nome="Scan test",
+            aura_richiesta=self.aura,
+            testo="x",
+            statistica_cariche=self.stat_cariche,
+            costo_ricarica_crediti=20,
+        )
+        InfusioneStatisticaBase.objects.create(
+            infusione=self.infusione,
+            statistica=self.stat_cariche,
+            valore_base=10,
+        )
+        self.oggetto = Oggetto.objects.create(
+            nome="Mod di Scan test",
+            tipo_oggetto=TIPO_OGGETTO_MOD,
+            infusione_generatrice=self.infusione,
+            aura=self.aura,
+            is_tecnologico=True,
+            cariche_attuali=3,
+        )
+        self.oggetto.sposta_in_inventario(self.pg)
+
+    def test_ricarica_usa_valore_base_infusione_non_il_catalogo(self):
+        prima = self.pg.crediti
+        r = self.client.post(
+            "/api/personaggi/api/game/ricarica_oggetto/",
+            {"oggetto_id": self.oggetto.id, "char_id": self.pg.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertNotIn("message", r.data)
+        self.oggetto.refresh_from_db()
+        pg = Personaggio.objects.get(pk=self.pg.pk)
+        self.assertEqual(self.oggetto.cariche_attuali, 10)
+        self.assertIsNone(self.oggetto.data_fine_attivazione)
+        # 7 cariche mancanti × 20 CR. Nuova istanza: il saldo in cache sul PG del setUp non si invalida.
+        self.assertEqual(pg.crediti, prima - Decimal("140"))
+        self.assertEqual(r.data.get("cariche_attuali"), 10)
+        self.assertEqual(r.data.get("costo_pagato"), 140)
+        self.assertIn("personaggio", r.data)
+
+    def test_gia_carico_non_scala_crediti(self):
+        self.oggetto.cariche_attuali = 10
+        self.oggetto.save(update_fields=["cariche_attuali"])
+        prima = self.pg.crediti
+        r = self.client.post(
+            "/api/personaggi/api/game/ricarica_oggetto/",
+            {"oggetto_id": self.oggetto.id, "char_id": self.pg.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertEqual(r.data.get("message"), "Già carico")
+        self.oggetto.refresh_from_db()
+        pg = Personaggio.objects.get(pk=self.pg.pk)
+        self.assertEqual(self.oggetto.cariche_attuali, 10)
+        self.assertEqual(pg.crediti, prima)
+
+    def test_crediti_insufficienti_non_scrive_cariche(self):
+        self.pg.modifica_crediti(-self.pg.crediti, "svuota")
+        self.pg.modifica_crediti(Decimal("10"), "pochi crediti")
+        r = self.client.post(
+            "/api/personaggi/api/game/ricarica_oggetto/",
+            {"oggetto_id": self.oggetto.id, "char_id": self.pg.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST, r.data)
+        self.oggetto.refresh_from_db()
+        self.assertEqual(self.oggetto.cariche_attuali, 3)
+
+    def test_mod_montata_ricarica_sul_proprietario_dell_host(self):
+        host = Oggetto.objects.create(
+            nome="Host test",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            is_tecnologico=True,
+        )
+        host.sposta_in_inventario(self.pg)
+        self.oggetto.ospitato_su = host
+        self.oggetto.save(update_fields=["ospitato_su", "updated_at"])
+        # La mod esce dall'inventario diretto, come in gioco.
+        from personaggi.models import OggettoInInventario
+        from django.utils import timezone as tz
+
+        track = OggettoInInventario.objects.filter(oggetto=self.oggetto, data_fine__isnull=True).first()
+        track.data_fine = tz.now()
+        track.save(update_fields=["data_fine", "updated_at"])
+
+        prima = self.pg.crediti
+        r = self.client.post(
+            f"/api/personaggi/api/oggetti/{self.oggetto.id}/ricarica/",
+            {},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.oggetto.refresh_from_db()
+        pg = Personaggio.objects.get(pk=self.pg.pk)
+        self.assertEqual(self.oggetto.cariche_attuali, 10)
+        self.assertEqual(r.data.get("costo_pagato"), 140)
+        self.assertEqual(pg.crediti, prima - Decimal("140"))
