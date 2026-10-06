@@ -46,8 +46,8 @@ const ActiveItemWidget = ({ item, onUpdate }) => {
     };
 
     const handleRecharge = () => {
-        const { mancanti, unitario, totale } = dettaglioRicarica(item);
-        const costoLabel = mancanti > 1 ? `${totale} CR (${mancanti} × ${unitario})` : `${totale} CR`;
+        const { totale } = dettaglioRicarica(item);
+        const costoLabel = `${totale} CR`;
         if (window.confirm(`Ricaricare ${item.nome}?\nCosto: ${costoLabel}\nMetodo: ${item.testo_ricarica}`)) {
             rechargeMutation.mutate({
                 oggetto_id: item.id,

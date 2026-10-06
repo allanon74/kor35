@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { dettaglioRicarica, findOggettoInInventario, patchCaricheInOggetti } from './ricaricaOggetto';
 
 describe('dettaglioRicarica', () => {
-  it('moltiplica il costo unitario per le cariche mancanti', () => {
+  it('addebita il forfait una volta, anche se manca una sola carica', () => {
     const scan = dettaglioRicarica({ cariche_attuali: 8, cariche_massime: 10, costo_ricarica: 3 });
-    expect(scan).toEqual({ mancanti: 2, unitario: 3, totale: 6 });
+    expect(scan).toEqual({ mancanti: 2, unitario: 3, totale: 3 });
 
     const traslazione = dettaglioRicarica({ cariche_attuali: 3, cariche_massime: 10, costo_ricarica: 20 });
-    expect(traslazione).toEqual({ mancanti: 7, unitario: 20, totale: 140 });
+    expect(traslazione).toEqual({ mancanti: 7, unitario: 20, totale: 20 });
+
+    const pieno = dettaglioRicarica({ cariche_attuali: 10, cariche_massime: 10, costo_ricarica: 20 });
+    expect(pieno.totale).toBe(0);
   });
 });
 

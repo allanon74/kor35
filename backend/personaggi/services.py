@@ -988,7 +988,8 @@ class GestioneOggettiService:
 
         Il tetto è lo stesso di creazione e scheda (InfusioneStatisticaBase, altrimenti
         valore_base_predefinito del catalogo, più i modificatori del personaggio).
-        Il costo è per carica mancante: mancanti * costo_ricarica_crediti.
+        costo_ricarica_crediti è un forfait: si paga una volta per riportare l'oggetto
+        al massimo, qualunque sia il numero di cariche mancanti.
 
         Ritorna un dict. Se non manca nulla, gia_carico=True e non scrive nulla.
         """
@@ -1009,7 +1010,7 @@ class GestioneOggettiService:
                 "max_cariche": max_cariche,
             }
 
-        costo = mancanti * int(infusione.costo_ricarica_crediti or 0)
+        costo = int(infusione.costo_ricarica_crediti or 0)
         if personaggio.crediti < costo:
             raise ValidationError(
                 f"Crediti insufficienti. Servono {costo} crediti, ne hai {personaggio.crediti}."

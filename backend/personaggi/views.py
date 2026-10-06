@@ -5031,6 +5031,7 @@ class GameActionsViewSet(viewsets.ViewSet):
         Il tetto non è il default di catalogo della statistica (valore_base_predefinito):
         è il valore base dell'infusione (InfusioneStatisticaBase) più i modificatori del PG,
         lo stesso numero mostrato in scheda come cariche_massime.
+        Il costo è il forfait dell'infusione, non un prezzo per carica mancante.
         """
         obj_id = request.data.get('oggetto_id')
         char_id = request.data.get('char_id')

@@ -1725,7 +1725,7 @@ class PhysicalSlotCapacityTests(TestCase):
 class RicaricaOggettoCaricheInfusioneTests(APITestCase):
     """
     Il tetto di ricarica è il valore base dell'infusione, non il default di catalogo
-    della statistica. Caso reale: CAT valore_base_predefinito=3, infusione=10.
+    della statistica. Il costo è un forfait per la ricarica completa.
     """
 
     def setUp(self):
@@ -1776,10 +1776,10 @@ class RicaricaOggettoCaricheInfusioneTests(APITestCase):
         pg = Personaggio.objects.get(pk=self.pg.pk)
         self.assertEqual(self.oggetto.cariche_attuali, 10)
         self.assertIsNone(self.oggetto.data_fine_attivazione)
-        # 7 cariche mancanti × 20 CR. Nuova istanza: il saldo in cache sul PG del setUp non si invalida.
-        self.assertEqual(pg.crediti, prima - Decimal("140"))
+        # Forfait 20 CR, anche con 7 cariche mancanti.
+        self.assertEqual(pg.crediti, prima - Decimal("20"))
         self.assertEqual(r.data.get("cariche_attuali"), 10)
-        self.assertEqual(r.data.get("costo_pagato"), 140)
+        self.assertEqual(r.data.get("costo_pagato"), 20)
         self.assertIn("personaggio", r.data)
 
     def test_gia_carico_non_scala_crediti(self):
@@ -1837,5 +1837,21 @@ class RicaricaOggettoCaricheInfusioneTests(APITestCase):
         self.oggetto.refresh_from_db()
         pg = Personaggio.objects.get(pk=self.pg.pk)
         self.assertEqual(self.oggetto.cariche_attuali, 10)
-        self.assertEqual(r.data.get("costo_pagato"), 140)
-        self.assertEqual(pg.crediti, prima - Decimal("140"))
+        self.assertEqual(r.data.get("costo_pagato"), 20)
+        self.assertEqual(pg.crediti, prima - Decimal("20"))
+
+    def test_costo_forfait_uguale_con_una_sola_carica_mancante(self):
+        self.oggetto.cariche_attuali = 9
+        self.oggetto.save(update_fields=["cariche_attuali", "updated_at"])
+        prima = self.pg.crediti
+        r = self.client.post(
+            "/api/personaggi/api/game/ricarica_oggetto/",
+            {"oggetto_id": self.oggetto.id, "char_id": self.pg.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.oggetto.refresh_from_db()
+        pg = Personaggio.objects.get(pk=self.pg.pk)
+        self.assertEqual(self.oggetto.cariche_attuali, 10)
+        self.assertEqual(r.data.get("costo_pagato"), 20)
+        self.assertEqual(pg.crediti, prima - Decimal("20"))
