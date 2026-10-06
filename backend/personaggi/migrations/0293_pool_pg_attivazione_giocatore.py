@@ -15,7 +15,8 @@ class Migration(migrations.Migration):
             field=models.PositiveIntegerField(
                 default=0,
                 help_text=(
-                    "Tetto di attivazioni giornaliere da parte dei giocatori (giorno locale). "
+                    "Tetto di attivazioni giornaliere dei personaggi (giorno locale). "
+                    "I sorteggi staff sono liberi e non entrano in questo conteggio. "
                     "0 = nessuna attivazione giocatore (la tab può comparire, il pulsante resta disattivo)."
                 ),
             ),

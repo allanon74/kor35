@@ -308,7 +308,7 @@ export default function PoolPersonaggiManager({ onLogout }) {
                   <div className={`${staffMutedClass} text-xs`}>
                     Attivi: {pool.attivi_count ?? 0} · Sorteggi: {pool.sorteggi_count ?? 0} · Range {pool.sorteggio_min}–{pool.sorteggio_max} · fattore {pool.fattore_peso}
                     {pool.statistica_sigla ? ` · tab ${pool.statistica_sigla}` : ''}
-                    {pool.max_sorteggi_giorno ? ` · max ${pool.max_sorteggi_giorno}/giorno` : ''}
+                    {pool.max_sorteggi_giorno ? ` · max ${pool.max_sorteggi_giorno} usi PG/giorno` : ''}
                     {pool.invio_prioritario ? ' · priorità' : ''}
                   </div>
                 </div>
@@ -387,7 +387,7 @@ export default function PoolPersonaggiManager({ onLogout }) {
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-xs font-bold text-gray-300">Max sorteggi/giorno (giocatori)</span>
+                  <span className="text-xs font-bold text-gray-300">Max usi giornalieri dei PG</span>
                   <input
                     type="number"
                     min={0}
@@ -413,7 +413,7 @@ export default function PoolPersonaggiManager({ onLogout }) {
                 </label>
               </div>
               <p className="text-[11px] text-gray-500">
-                Se la statistica del PG è &gt; 0 compare una tab con il nome del pool. Il tetto giornaliero conta solo le attivazioni dei giocatori (non i sorteggi staff). 0 = pulsante disattivo.
+                Se la statistica del PG è &gt; 0 compare una tab con il nome del pool. Il tetto vale solo per le attivazioni lanciate dai personaggi; lo staff sorteggia senza limiti e senza consumare questi usi. 0 = pulsante giocatore disattivo.
               </p>
               <label className="flex min-h-11 items-center gap-2 text-sm text-gray-200">
                 <input

@@ -92,8 +92,8 @@ export default function PoolSorteggioPlayerTab({ poolId, personaggioId, onLogout
         title={nome}
         subtitle={
           data?.statistica_sigla
-            ? `Attivazioni oggi: ${data.usati_oggi ?? 0}/${massimo} · ${data.statistica_sigla}`
-            : `Attivazioni oggi: ${data?.usati_oggi ?? 0}/${massimo}`
+            ? `Tue attivazioni oggi: ${data.usati_oggi ?? 0}/${massimo} · ${data.statistica_sigla}`
+            : `Tue attivazioni oggi: ${data?.usati_oggi ?? 0}/${massimo}`
         }
         actions={(
           <button
@@ -113,7 +113,7 @@ export default function PoolSorteggioPlayerTab({ poolId, personaggioId, onLogout
 
       <section className="rounded-xl border border-gray-700 bg-gray-900/60 p-4 space-y-3">
         <p className="text-sm text-gray-300">
-          Attivazioni rimanenti:{' '}
+          Tue attivazioni rimanenti:{' '}
           <span className="font-bold text-white">{rimanenti}</span>
           {massimo > 0 ? <span className="text-gray-500"> / {massimo}</span> : null}
         </p>

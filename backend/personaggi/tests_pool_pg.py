@@ -373,6 +373,42 @@ class PoolPgGiocatoreApiTests(TestCase):
         self.assertEqual(ultimi[0]["personaggio_nome"], "Attivatore")
         self.assertEqual(ultimi[1]["personaggio_nome"], "Altro PG")
 
+    def test_sorteggi_staff_non_consumano_usi_giornalieri(self):
+        staff = User.objects.create_user(username="pool_staff_libero", password="x")
+        CampagnaUtente.objects.update_or_create(
+            user=staff,
+            campagna=self.campagna,
+            defaults={"ruolo": CAMPAGNA_ROLE_STAFFER, "attivo": True},
+        )
+        sclient = APIClient()
+        stok, _ = Token.objects.get_or_create(user=staff)
+        sclient.credentials(HTTP_AUTHORIZATION=f"Token {stok.key}", HTTP_X_CAMPAGNA="kor35")
+        self.assertEqual(rimanenti_attivazioni_giocatore(self.pool, self.pg), 1)
+        for _ in range(3):
+            with patch("personaggi.views_pool_pg.campiona_pesato", return_value=[self.pg_other]):
+                staff_draw = sclient.post(
+                    f"/api/personaggi/api/staff/pool-pg/{self.pool.id}/sorteggia/",
+                    {},
+                    format="json",
+                )
+            self.assertEqual(staff_draw.status_code, 201, staff_draw.content)
+            self.assertEqual(staff_draw.json().get("origine"), "STAFF")
+        self.assertEqual(PersonaggioPoolSorteggio.objects.filter(pool=self.pool).count(), 3)
+        self.assertEqual(
+            PersonaggioPoolSorteggio.objects.filter(
+                pool=self.pool, origine=PersonaggioPoolSorteggio.ORIGINE_GIOCATORE
+            ).count(),
+            0,
+        )
+        self.assertEqual(rimanenti_attivazioni_giocatore(self.pool, self.pg), 1)
+        listed = self.client.get(
+            f"/api/personaggi/api/pool-pg/visibili/?personaggio_id={self.pg.id}"
+        )
+        row = listed.json()["results"][0]
+        self.assertEqual(row["usati_oggi"], 0)
+        self.assertEqual(row["rimanenti"], 1)
+        self.assertTrue(row["puo_attivare"])
+
     def test_max_zero_tab_senza_attivazione(self):
         self.pool.max_sorteggi_giorno = 0
         self.pool.save(update_fields=["max_sorteggi_giorno", "updated_at"])

@@ -182,6 +182,7 @@ def inizio_giorno_locale(when=None):
 
 
 def conteggio_attivazioni_giocatore_oggi(pool, personaggio, when=None) -> int:
+    """Solo batch avviati dal PG (origine GIOCATORE). I sorteggi staff non contano."""
     from personaggi.models import PersonaggioPoolSorteggio
 
     if not pool or not personaggio or not getattr(pool, "pk", None):
