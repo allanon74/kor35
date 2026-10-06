@@ -8,7 +8,7 @@ import { useCharacter } from './CharacterContext';
 import { useMieiStaffCompiti } from './StaffCompitiWidget';
 import { campagnaRuoloLabel } from '../lib/campagnaRuoli';
 import { TimerOverlay } from './TimerOverlay';
-import { getPilotNavigationConfig, fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota, carteGetStato, getMissioniEventoAttivo, contrattiGetAccesso } from '../api';
+import { getPilotNavigationConfig, fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota, carteGetStato, getMissioniEventoAttivo, contrattiGetAccesso, getPoolPgGiocatoreVisibili } from '../api';
 import packageInfo from '../../package.json';
 import { isWebPushEnabled } from '../lib/webpush';
 import { ensureAppServiceWorker } from '../lib/appServiceWorker';
@@ -20,7 +20,8 @@ Home, QrCode, Zap, TestTube2, Scroll, LogOut, Mail, Backpack,
     Menu, X, UserCog, RefreshCw, Filter, DownloadCloud, ScrollText, 
     ArrowRightLeft, Gamepad2, Loader2, ExternalLink, Tag, Users, Sparkles,
     Pin, PinOff, Briefcase, ClipboardCheck, Globe, ChevronRight, Package, Star,
-    Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard, ListTodo, Wallet, FileSignature
+    Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard, ListTodo, Wallet, FileSignature,
+    Dices
 } from 'lucide-react';
 
 // GameTab resta eager: first paint su /app/play (tab di default).
@@ -73,6 +74,17 @@ const lazyTab = (id) => lazy(TAB_LOADERS[id]);
 const HomeTab = lazyTab('home');
 const WatchTab = lazyTab('watch');
 const AdminMessageTab = lazyTab('admin_msg');
+const PoolSorteggioPlayerTab = lazy(() => import('./PoolSorteggioPlayerTab.jsx'));
+
+const POOL_PLAYER_TAB_PREFIX = 'pool-pg-';
+
+function isPoolPlayerTabId(tabId) {
+  return typeof tabId === 'string' && tabId.startsWith(POOL_PLAYER_TAB_PREFIX);
+}
+
+function poolIdFromTab(tabId) {
+  return isPoolPlayerTabId(tabId) ? tabId.slice(POOL_PLAYER_TAB_PREFIX.length) : '';
+}
 
 const preloadTabChunk = (tabId) => {
   const loader = TAB_LOADERS[tabId];
@@ -124,6 +136,7 @@ function isValidMainTabId(tabId) {
     // legacy: tab=notifiche ora vive come subtab di messaggi
     if (tabId === 'notifiche') return true;
     if (tabId === 'game' || tabId === 'home' || tabId === 'admin_msg' || tabId === 'watch') return true;
+    if (isPoolPlayerTabId(tabId)) return true;
     return AVAILABLE_TABS.some((t) => t.id === tabId);
 }
 
@@ -177,6 +190,8 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const [carteTabEnabled, setCarteTabEnabled] = useState(false);
   const [contrattiTabEnabled, setContrattiTabEnabled] = useState(false);
   const [tasksEventoAttivo, setTasksEventoAttivo] = useState(false);
+  const [poolVisibili, setPoolVisibili] = useState([]);
+  const [poolTabsReady, setPoolTabsReady] = useState(false);
   const minigiocoIntentRef = useRef(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
@@ -413,6 +428,40 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       clearInterval(timer);
     };
   }, [tasksModuloOk, onLogout, activeCampaign, selectedCharacterId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedCharacterId) {
+      setPoolVisibili([]);
+      setPoolTabsReady(true);
+      return undefined;
+    }
+    setPoolTabsReady(false);
+    const load = async () => {
+      try {
+        const data = await getPoolPgGiocatoreVisibili(selectedCharacterId, onLogout);
+        if (!cancelled) setPoolVisibili(Array.isArray(data?.results) ? data.results : []);
+      } catch {
+        if (!cancelled) setPoolVisibili([]);
+      } finally {
+        if (!cancelled) setPoolTabsReady(true);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [selectedCharacterId, onLogout, activeCampaign]);
+
+  const poolPlayerTabs = useMemo(
+    () =>
+      (poolVisibili || []).map((pool) => ({
+        id: `${POOL_PLAYER_TAB_PREFIX}${pool.id}`,
+        label: pool.nome,
+        icon: Dices,
+        poolId: pool.id,
+        isPoolTab: true,
+      })),
+    [poolVisibili],
+  );
 
   const isMainTabVisible = useCallback(
     (tab) => {
@@ -943,6 +992,12 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   }, [activeTab, stivaTabEnabled]);
 
   useEffect(() => {
+    if (!poolTabsReady || !isPoolPlayerTabId(activeTab)) return;
+    const stillVisible = poolPlayerTabs.some((t) => t.id === activeTab);
+    if (!stillVisible) setActiveTab('game');
+  }, [activeTab, poolPlayerTabs, poolTabsReady]);
+
+  useEffect(() => {
     if (activeTab === 'carte' && !carteTabEnabled) {
       setActiveTab('game');
     }
@@ -1031,6 +1086,16 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       }
     } else if (activeTab === 'admin_msg') {
       content = <AdminMessageTab onLogout={onLogout} />;
+    } else if (isPoolPlayerTabId(activeTab)) {
+      content = (
+        <div className="h-full overflow-y-auto">
+          <PoolSorteggioPlayerTab
+            poolId={poolIdFromTab(activeTab)}
+            personaggioId={selectedCharacterId}
+            onLogout={onLogout}
+          />
+        </div>
+      );
     } else {
       const tabDef = AVAILABLE_TABS.find(t => t.id === activeTab);
       if (tabDef) {
@@ -1195,7 +1260,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                     <span className="text-[10px] font-normal normal-case opacity-70"><Pin size={10} className="inline"/> fissa in basso</span>
                 </p>
                 
-                {AVAILABLE_TABS.filter(isMainTabVisible).map(tab => {
+                {[...AVAILABLE_TABS.filter(isMainTabVisible), ...poolPlayerTabs].map(tab => {
                     const isPinned = userShortcuts.includes(tab.id);
                     const isActive = activeTab === tab.id;
                     let badgeCount = 0;
@@ -1620,8 +1685,10 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
             <div className="w-px h-8 bg-gray-700 mx-1 opacity-50" aria-hidden="true"></div>
 
             {userShortcuts.map(tabId => {
-                const tab = AVAILABLE_TABS.find(t => t.id === tabId);
-                if (!tab || !isMainTabVisible(tab)) return null;
+                const tab = AVAILABLE_TABS.find(t => t.id === tabId)
+                  || poolPlayerTabs.find(t => t.id === tabId);
+                if (!tab) return null;
+                if (!tab.isPoolTab && !isMainTabVisible(tab)) return null;
                 
                 let showDot = false;
                 let dotColor = 'bg-red-500';

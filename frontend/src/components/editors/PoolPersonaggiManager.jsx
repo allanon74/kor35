@@ -43,6 +43,8 @@ const vuoto = () => ({
   messaggio_titolo: '',
   messaggio_testo: '',
   invio_prioritario: false,
+  max_sorteggi_giorno: 0,
+  statistica: '',
 });
 
 function formatWhen(iso) {
@@ -59,7 +61,7 @@ export default function PoolPersonaggiManager({ onLogout }) {
   const canAccess = isCampaignStaffer || isAdmin;
 
   const [lista, setLista] = useState([]);
-  const [meta, setMeta] = useState({ eventi: [], placeholders: [], evento_in_corso_id: null });
+  const [meta, setMeta] = useState({ eventi: [], placeholders: [], evento_in_corso_id: null, statistiche: [] });
   const [caricamento, setCaricamento] = useState(true);
   const [errore, setErrore] = useState('');
   const [feedback, setFeedback] = useState('');
@@ -92,6 +94,7 @@ export default function PoolPersonaggiManager({ onLogout }) {
         eventi: metaRes?.eventi || [],
         placeholders: metaRes?.placeholders || [],
         evento_in_corso_id: metaRes?.evento_in_corso_id || null,
+        statistiche: metaRes?.statistiche || [],
       });
     } catch (e) {
       setErrore(e.message || 'Impossibile caricare i pool.');
@@ -172,6 +175,8 @@ export default function PoolPersonaggiManager({ onLogout }) {
       messaggio_titolo: pool.messaggio_titolo || '',
       messaggio_testo: pool.messaggio_testo || '',
       invio_prioritario: !!pool.invio_prioritario,
+      max_sorteggi_giorno: pool.max_sorteggi_giorno ?? 0,
+      statistica: pool.statistica ?? '',
     });
     setTab('dati');
     setUltimoSorteggio(null);
@@ -188,6 +193,8 @@ export default function PoolPersonaggiManager({ onLogout }) {
     messaggio_titolo: form.messaggio_titolo,
     messaggio_testo: form.messaggio_testo,
     invio_prioritario: !!form.invio_prioritario,
+    max_sorteggi_giorno: Number(form.max_sorteggi_giorno) || 0,
+    statistica: form.statistica === '' || form.statistica == null ? null : form.statistica,
   });
 
   const salva = async () => {
@@ -300,6 +307,8 @@ export default function PoolPersonaggiManager({ onLogout }) {
                   <div className="font-bold text-white break-words">{pool.nome}</div>
                   <div className={`${staffMutedClass} text-xs`}>
                     Attivi: {pool.attivi_count ?? 0} · Sorteggi: {pool.sorteggi_count ?? 0} · Range {pool.sorteggio_min}–{pool.sorteggio_max} · fattore {pool.fattore_peso}
+                    {pool.statistica_sigla ? ` · tab ${pool.statistica_sigla}` : ''}
+                    {pool.max_sorteggi_giorno ? ` · max ${pool.max_sorteggi_giorno}/giorno` : ''}
                     {pool.invio_prioritario ? ' · priorità' : ''}
                   </div>
                 </div>
@@ -375,6 +384,36 @@ export default function PoolPersonaggiManager({ onLogout }) {
               <p className="text-[11px] text-gray-500">
                 Default 0.8: ogni sorteggio precedente moltiplica il peso (0.8² = 0.64). 1 = probabilità fissa. Maggiore di 1 aumenta le chance di chi è già uscito.
                 Range uguale (es. 1–1) estrae un solo personaggio; 2–5 ne estrae un numero casuale in quel intervallo.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs font-bold text-gray-300">Max sorteggi/giorno (giocatori)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    className={`${staffInputClass()} min-h-11 mt-1`}
+                    value={form.max_sorteggi_giorno}
+                    onChange={(e) => setForm((p) => ({ ...p, max_sorteggi_giorno: e.target.value }))}
+                  />
+                </label>
+                <label className="block min-w-0">
+                  <span className="text-xs font-bold text-gray-300">Statistica tab giocatore</span>
+                  <select
+                    className={`${staffInputClass()} min-h-11 mt-1`}
+                    value={form.statistica}
+                    onChange={(e) => setForm((p) => ({ ...p, statistica: e.target.value }))}
+                  >
+                    <option value="">— Nessuna (tab nascosta) —</option>
+                    {(meta.statistiche || []).map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.sigla} — {st.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <p className="text-[11px] text-gray-500">
+                Se la statistica del PG è &gt; 0 compare una tab con il nome del pool. Il tetto giornaliero conta solo le attivazioni dei giocatori (non i sorteggi staff). 0 = pulsante disattivo.
               </p>
               <label className="flex min-h-11 items-center gap-2 text-sm text-gray-200">
                 <input
@@ -559,6 +598,7 @@ export default function PoolPersonaggiManager({ onLogout }) {
                     <span>{formatWhen(s.created_at)}</span>
                     <span>
                       {s.n_estratti} estratti ({s.n_min}–{s.n_max})
+                      {s.origine === 'GIOCATORE' ? ' · giocatore' : ' · staff'}
                       {s.prioritario ? ' · priorità' : ''}
                     </span>
                   </div>

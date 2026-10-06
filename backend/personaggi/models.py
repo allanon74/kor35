@@ -9364,6 +9364,24 @@ class PersonaggioPool(SyncableModel, models.Model):
         default=False,
         help_text="Oltre all'inbox, overlay a schermo intero fino a «Ho letto e compreso» + allarme.",
     )
+    max_sorteggi_giorno = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Tetto di attivazioni giornaliere da parte dei giocatori (giorno locale). "
+            "0 = nessuna attivazione giocatore (la tab può comparire, il pulsante resta disattivo)."
+        ),
+    )
+    statistica = models.ForeignKey(
+        "Statistica",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_personaggi",
+        help_text=(
+            "Se valorizzata e il PG ha quella statistica > 0, in area personaggio compare "
+            "una tab con il nome del pool."
+        ),
+    )
 
     class Meta:
         ordering = ["nome"]
@@ -9409,6 +9427,13 @@ class PersonaggioPoolMembro(SyncableModel, models.Model):
 class PersonaggioPoolSorteggio(SyncableModel, models.Model):
     """Un'estrazione (batch) da un pool."""
 
+    ORIGINE_STAFF = "STAFF"
+    ORIGINE_GIOCATORE = "GIOCATORE"
+    ORIGINE_CHOICES = (
+        (ORIGINE_STAFF, "Staff"),
+        (ORIGINE_GIOCATORE, "Giocatore"),
+    )
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     pool = models.ForeignKey(PersonaggioPool, on_delete=models.CASCADE, related_name="sorteggi")
@@ -9417,6 +9442,20 @@ class PersonaggioPoolSorteggio(SyncableModel, models.Model):
         on_delete=models.CASCADE,
         related_name="sorteggi_pool_personaggi",
         default=get_default_campagna_id,
+    )
+    origine = models.CharField(
+        max_length=12,
+        choices=ORIGINE_CHOICES,
+        default=ORIGINE_STAFF,
+        db_index=True,
+    )
+    avviato_da_personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sorteggi_pool_avviati",
+        help_text="Personaggio che ha lanciato l'attivazione (solo origine giocatore).",
     )
     creato_da = models.ForeignKey(
         User,

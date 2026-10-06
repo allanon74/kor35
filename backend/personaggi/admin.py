@@ -1520,15 +1520,25 @@ class PersonaggioPoolMembroInline(admin.TabularInline):
 
 @admin.register(PersonaggioPool)
 class PersonaggioPoolAdmin(admin.ModelAdmin):
-    list_display = ("nome", "campagna", "sorteggio_min", "sorteggio_max", "fattore_peso", "invio_prioritario")
+    list_display = (
+        "nome",
+        "campagna",
+        "sorteggio_min",
+        "sorteggio_max",
+        "fattore_peso",
+        "max_sorteggi_giorno",
+        "statistica",
+        "invio_prioritario",
+    )
     search_fields = ("nome",)
+    autocomplete_fields = ["statistica"]
     inlines = [PersonaggioPoolMembroInline]
 
 
 @admin.register(PersonaggioPoolSorteggio)
 class PersonaggioPoolSorteggioAdmin(admin.ModelAdmin):
-    list_display = ("id", "pool", "n_estratti", "prioritario", "created_at")
-    list_filter = ("prioritario",)
+    list_display = ("id", "pool", "origine", "n_estratti", "prioritario", "created_at")
+    list_filter = ("prioritario", "origine")
     readonly_fields = ("id", "created_at", "updated_at")
 
 
