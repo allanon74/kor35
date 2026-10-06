@@ -90,7 +90,7 @@ const RichTextLinkDialog = ({ open, initialText = '', onCancel, onConfirm }) => 
 
     return (
         <div
-            className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4"
+            className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4"
             onMouseDown={(event) => {
                 if (event.target === event.currentTarget) onCancel();
             }}

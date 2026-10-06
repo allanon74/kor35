@@ -413,7 +413,7 @@ const RichTextEditor = forwardRef(function RichTextEditor({
     }), [modifyTable, openLinkDialog, runCommand, toggleFullscreen, toggleHtmlMode]);
 
     const shellClassName = isFullscreen
-        ? 'fixed inset-0 z-[60] flex flex-col bg-gray-900 border-0'
+        ? 'fixed inset-0 z-[140] flex flex-col bg-gray-900 border-0'
         : [
             'relative flex flex-col min-w-0 max-w-full overflow-hidden rounded-lg border border-gray-600 bg-gray-800',
             'focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent transition-shadow',

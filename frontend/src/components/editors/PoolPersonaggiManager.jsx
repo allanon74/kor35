@@ -13,6 +13,7 @@ import {
   updateStaffPoolPg,
 } from '../../api';
 import RichTextEditor from '../RichTextEditor';
+import ConfirmDialog from './ConfirmDialog';
 import { useCharacter } from '../CharacterContext';
 import { UiErrorState, UiLoadingState } from '../ui/AsyncState';
 import {
@@ -71,6 +72,7 @@ export default function PoolPersonaggiManager({ onLogout }) {
   const [salvataggio, setSalvataggio] = useState(false);
   const [sorteggioInCorso, setSorteggioInCorso] = useState(false);
   const [ultimoSorteggio, setUltimoSorteggio] = useState(null);
+  const [poolDaSorteggiare, setPoolDaSorteggiare] = useState(null);
 
   const [eventoFiltro, setEventoFiltro] = useState('');
   const [ricercaPg, setRicercaPg] = useState('');
@@ -242,28 +244,40 @@ export default function PoolPersonaggiManager({ onLogout }) {
     }
   };
 
-  const sorteggia = async () => {
-    if (!editing?.id) return;
+  const eseguiSorteggio = async (pool, { salvaForm = false } = {}) => {
+    if (!pool?.id) return;
     setSorteggioInCorso(true);
     setErrore('');
     try {
-      await updateStaffPoolPg(editing.id, payloadForm(), onLogout);
+      if (salvaForm && editing?.id === pool.id) {
+        await updateStaffPoolPg(editing.id, payloadForm(), onLogout);
+      }
+      const nMin = salvaForm ? form.sorteggio_min : pool.sorteggio_min;
+      const nMax = salvaForm ? form.sorteggio_max : pool.sorteggio_max;
       const res = await postStaffPoolPgSorteggia(
-        editing.id,
-        { sorteggio_min: form.sorteggio_min, sorteggio_max: form.sorteggio_max },
+        pool.id,
+        { sorteggio_min: nMin, sorteggio_max: nMax },
         onLogout,
       );
       setUltimoSorteggio(res);
-      setFeedback(`Sorteggiati ${res.n_estratti} personaggi.`);
-      setTab('log');
-      await caricaDettagliTab(editing.id, 'log');
-      await caricaDettagliTab(editing.id, 'conteggi');
+      setFeedback(`Sorteggiati ${res.n_estratti} personaggi da «${pool.nome}».`);
+      if (editing?.id === pool.id) {
+        setTab('log');
+        await caricaDettagliTab(editing.id, 'log');
+        await caricaDettagliTab(editing.id, 'conteggi');
+      }
       await caricaListe();
     } catch (e) {
       setErrore(e.message || 'Sorteggio fallito.');
     } finally {
       setSorteggioInCorso(false);
+      setPoolDaSorteggiare(null);
     }
+  };
+
+  const sorteggia = () => {
+    if (!editing?.id) return;
+    eseguiSorteggio(editing, { salvaForm: true });
   };
 
   const onChangeTab = (id) => {
@@ -302,6 +316,21 @@ export default function PoolPersonaggiManager({ onLogout }) {
                 onEdit={() => apriModifica(pool)}
                 onDelete={() => elimina(pool)}
                 deleteConfirm={`Eliminare «${pool.nome}»?`}
+                extraActions={(
+                  <button
+                    type="button"
+                    title={`Sorteggia «${pool.nome}»`}
+                    aria-label={`Sorteggia ${pool.nome}`}
+                    disabled={sorteggioInCorso}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setPoolDaSorteggiare(pool);
+                    }}
+                    className="min-h-11 min-w-11 rounded p-1 text-amber-300 hover:bg-amber-500/10 disabled:opacity-50"
+                  >
+                    <Dices size={16} />
+                  </button>
+                )}
               >
                 <div className="min-w-0">
                   <div className="font-bold text-white break-words">{pool.nome}</div>
@@ -633,6 +662,23 @@ export default function PoolPersonaggiManager({ onLogout }) {
           )}
         </div>
       </StaffFullscreenEditor>
+      <ConfirmDialog
+        open={!!poolDaSorteggiare}
+        title="Conferma sorteggio"
+        confirmLabel="Sorteggia"
+        confirmTone="default"
+        loading={sorteggioInCorso}
+        onCancel={() => !sorteggioInCorso && setPoolDaSorteggiare(null)}
+        onConfirm={() => poolDaSorteggiare && eseguiSorteggio(poolDaSorteggiare)}
+      >
+        <p className="text-sm text-gray-300 break-words">
+          Sorteggiare «{poolDaSorteggiare?.nome}»?
+          {' '}Estrae {poolDaSorteggiare?.sorteggio_min === poolDaSorteggiare?.sorteggio_max
+            ? `${poolDaSorteggiare?.sorteggio_min} personaggio${Number(poolDaSorteggiare?.sorteggio_min) === 1 ? '' : 'i'}`
+            : `da ${poolDaSorteggiare?.sorteggio_min} a ${poolDaSorteggiare?.sorteggio_max} personaggi`}
+          {' '}tra quelli attivi. I sorteggi staff non consumano gli usi giornalieri dei PG.
+        </p>
+      </ConfirmDialog>
     </StaffToolShell>
   );
 }

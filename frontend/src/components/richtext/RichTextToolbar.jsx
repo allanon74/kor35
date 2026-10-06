@@ -27,6 +27,9 @@ const PANEL_INSERT = 'insert';
 const PANEL_TABLE = 'table';
 const PANEL_EMOJI = 'emoji';
 
+/** Sopra StaffFullscreenEditor (z-110) e footer Salva (z-130), così i menu restano cliccabili. */
+export const RICH_TEXT_MENU_Z_CLASS = 'z-[145]';
+
 /** Impedisce che il click sulla toolbar rubi il focus (e quindi la selezione) all'editor. */
 const keepSelection = (event) => event.preventDefault();
 
@@ -291,7 +294,8 @@ const RichTextToolbar = ({
                 <div
                     ref={panelRef}
                     style={{ position: 'fixed', ...panelPosition }}
-                    className="z-[75] overflow-y-auto rounded-lg border border-gray-600 bg-gray-800 p-3 shadow-2xl shadow-black/60 space-y-3 custom-scrollbar"
+                    className={`${RICH_TEXT_MENU_Z_CLASS} overflow-y-auto rounded-lg border border-gray-600 bg-gray-800 p-3 shadow-2xl shadow-black/60 space-y-3 custom-scrollbar`}
+                    data-testid="rich-text-format-panel"
                 >
                     {openPanel === PANEL_BLOCK && (
                         <>
