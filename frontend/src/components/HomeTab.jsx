@@ -275,7 +275,7 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
   const computeStatValue = useCallback(
     (punteggio) => {
       if (!punteggio) return 0;
-      const parametro = punteggio.parametro || null;
+      const parametro = punteggio.parametro || punteggio.sigla || null;
       const nome = punteggio.nome;
       // Allineato a Personaggio.get_valore_statistica: base da punteggi_base (scheda, abilità,
       // punteggi dipendenti), poi modificatori globali. Senza questo, la scheda ignora RPG ecc. e
@@ -601,7 +601,7 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
             {stat_primarie
               .filter((p) => !coveredStatIds.has(p.id))
               .map((punteggio) => {
-              if (!punteggio.parametro) return null; 
+              if (!(punteggio.parametro || punteggio.sigla)) return null; 
               
               const valore_finale = computeStatValue(punteggio);
               

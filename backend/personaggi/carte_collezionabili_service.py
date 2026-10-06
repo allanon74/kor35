@@ -44,7 +44,7 @@ from personaggi.carte_collezionabili_models import (
     RELIQUIARIO_SLOTS,
     ReliquiarioSlot,
 )
-from personaggi.models import MODIFICATORE_ADDITIVO, Personaggio, Statistica
+from personaggi.models import MODIFICATORE_ADDITIVO, Personaggio, Statistica, statistica_chiave_modificatore
 from personaggi.carte_legality import (
     carta_disponibile_per_giocatori,
     carta_legale_duello,
@@ -858,8 +858,9 @@ def applica_modificatori_reliquiario(personaggio: Personaggio, add_fn) -> None:
         if stat_link.usa_condizione_text:
             if not stat_link_attivo_in_contesto(personaggio, stat_link, {}):
                 return
-        if stat_link.statistica and stat_link.statistica.parametro:
-            add_fn(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
+        chiave = statistica_chiave_modificatore(stat_link.statistica) if stat_link.statistica else None
+        if chiave:
+            add_fn(chiave, stat_link.tipo_modificatore, stat_link.valore)
 
     slots = (
         ReliquiarioSlot.objects.filter(personaggio=personaggio, carta_posseduta__isnull=False)
@@ -877,8 +878,9 @@ def applica_modificatori_reliquiario(personaggio: Personaggio, add_fn) -> None:
                 valore = 0
             if valore != 0:
                 stat = Statistica.objects.filter(sigla=sigla).first()
-                if stat and stat.parametro:
-                    add_fn(stat.parametro, MODIFICATORE_ADDITIVO, valore)
+                chiave = statistica_chiave_modificatore(stat)
+                if chiave:
+                    add_fn(chiave, MODIFICATORE_ADDITIVO, valore)
 
     if carta_ids:
         stat_qs = (

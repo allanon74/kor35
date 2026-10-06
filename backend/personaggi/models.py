@@ -1075,7 +1075,7 @@ def calcola_metatalenti(personaggio, context, mods_attivi):
             continue
         if funz in (META_VALORE_PUNTEGGIO, META_LIVELLO_INFERIORE):
             for stat_m in mattone.mattonestatistica_set.all():
-                p = stat_m.statistica.parametro
+                p = statistica_chiave_modificatore(stat_m.statistica)
                 if not p:
                     continue
                 b = float(stat_m.valore) * float(val_caratt)
@@ -1399,7 +1399,8 @@ def calcola_cariche_massime_da_infusione(infusione, personaggio=None):
     stat_base_link = infusione.infusionestatisticabase_set.filter(statistica=stat_def).first()
     valore_base = stat_base_link.valore_base if stat_base_link else stat_def.valore_base_predefinito
     if personaggio:
-        mods = personaggio.modificatori_calcolati.get(stat_def.parametro, {'add': 0.0, 'mol': 1.0})
+        chiave = statistica_chiave_modificatore(stat_def)
+        mods = personaggio.modificatori_calcolati.get(chiave, {'add': 0.0, 'mol': 1.0}) if chiave else {'add': 0.0, 'mol': 1.0}
         return max(0, int(round((valore_base + mods['add']) * mods['mol'])))
     return valore_base
 
@@ -2283,8 +2284,29 @@ class Punteggio(Tabella):
 class Caratteristica(Punteggio):
     class Meta: proxy = True; verbose_name = "Caratteristica"; verbose_name_plural = "Caratteristiche"
 
+def statistica_chiave_modificatore(stat):
+    """Chiave usata in modificatori_calcolati e formule: parametro, altrimenti sigla.
+
+    Senza questa fallback una statistica con sigla valorizzata ma parametro vuoto
+    (es. P01 «Uso Specchio Anima») non entra in punteggi_base e i +N da AbilitaStatistica
+    vengono scartati, mentre la scheda abilità continua a mostrare il bonus.
+    """
+    if stat is None:
+        return None
+    raw = (getattr(stat, "parametro", None) or "").strip()
+    if not raw:
+        raw = (getattr(stat, "sigla", None) or "").strip()
+    return raw or None
+
+
 class Statistica(Punteggio):
-    parametro = models.CharField(max_length=10, unique=True, blank=True, null=True)
+    parametro = models.CharField(
+        max_length=10,
+        unique=True,
+        blank=True,
+        null=True,
+        help_text="Chiave nei modificatori e nelle formule {PARAM}. Se vuoto, al salvataggio viene copiata la sigla.",
+    )
     valore_predefinito = models.IntegerField(default=0)
     valore_base_predefinito = models.IntegerField(default=0)
     formula = models.BooleanField(
@@ -2348,15 +2370,30 @@ class Statistica(Punteggio):
         "statistiche_temporanee. Se vuoto, il massimo è calcolato sulla stessa sigla.",
     )
 
-    def save(self, *args, **kwargs): self.tipo = STATISTICA; super().save(*args, **kwargs)
+    def save(self, *args, **kwargs):
+        self.tipo = STATISTICA
+        if not (self.parametro or "").strip():
+            sigla = (self.sigla or "").strip()
+            if sigla:
+                clash = type(self).objects.filter(parametro__iexact=sigla)
+                if self.pk:
+                    clash = clash.exclude(pk=self.pk)
+                if not clash.exists():
+                    self.parametro = sigla
+        super().save(*args, **kwargs)
+
     class Meta:
         verbose_name = "Statistica"
         verbose_name_plural = "Statistiche"
         ordering = ['-formula', 'ordine', 'nome']
     @classmethod
     def get_help_text_parametri(cls, extra_params=None):
-        stats = cls.objects.filter(parametro__isnull=False).exclude(parametro__exact='').order_by('nome')
-        items = [f"&bull; <b>{{{s.parametro}}}</b>: {s.nome}" for s in stats]
+        stats = cls.objects.all().order_by('nome')
+        items = []
+        for s in stats:
+            chiave = statistica_chiave_modificatore(s)
+            if chiave:
+                items.append(f"&bull; <b>{{{chiave}}}</b>: {s.nome}")
         if extra_params: items.extend([f"&bull; <b>{p_code}</b>: {p_desc}" for p_code, p_desc in extra_params])
         return mark_safe("<b>Variabili disponibili:</b><br>" + "<br>".join(items))
 
@@ -7172,7 +7209,9 @@ class Personaggio(Inventario):
                 "statistica_id", "valore_base"
             )
         }
-        for stat in Statistica.objects.filter(parametro__isnull=False).exclude(parametro__exact=''):
+        for stat in Statistica.objects.all():
+            if not statistica_chiave_modificatore(stat):
+                continue
             if stat.id in base_rows:
                 base_pg = int(base_rows[stat.id] or 0)
             else:
@@ -7252,7 +7291,7 @@ class Personaggio(Inventario):
         usa solo la somma in punteggi_per_nome.
         """
         stat = Statistica.objects.filter(nome=source_nome).first()
-        if not stat or not stat.parametro:
+        if not stat or not statistica_chiave_modificatore(stat):
             return int(punteggi_per_nome.get(source_nome, 0) or 0)
         self._punteggi_base_partial_for_mods = punteggi_per_nome
         try:
@@ -7519,12 +7558,13 @@ class Personaggio(Inventario):
         }
         risultato = {}
         for stat in Statistica.objects.all():
-            if not stat.parametro:
+            chiave = statistica_chiave_modificatore(stat)
+            if not chiave:
                 continue
             if stat.id in base_rows:
-                risultato[stat.parametro] = base_rows[stat.id]
+                risultato[chiave] = base_rows[stat.id]
             else:
-                risultato[stat.parametro] = stat.valore_base_predefinito
+                risultato[chiave] = stat.valore_base_predefinito
 
         self._statistiche_base_cache = risultato
         return risultato
@@ -7866,9 +7906,9 @@ class Personaggio(Inventario):
                     return
                 bonus, _detail = calcola_bonus_abilita_slot_equip(self, stat_link)
                 if bonus:
-                    _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, bonus)
+                    _add(statistica_chiave_modificatore(stat_link.statistica), stat_link.tipo_modificatore, bonus)
             elif _is_global(stat_link):
-                _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
+                _add(statistica_chiave_modificatore(stat_link.statistica), stat_link.tipo_modificatore, stat_link.valore)
 
         # 1. Abilità
         for l in AbilitaStatistica.objects.filter(
@@ -7906,7 +7946,7 @@ class Personaggio(Inventario):
             if not st_obj:
                 return 0
             base = self.punteggi_base.get(st_obj.nome, 0)
-            m = mods.get(st_obj.parametro, {'add': 0.0, 'mol': 1.0})
+            m = mods.get(statistica_chiave_modificatore(st_obj), {'add': 0.0, 'mol': 1.0})
             return (base + m['add']) * m['mol']
 
         def _apply_sezioni_oggetto(oggetto_src):
@@ -7915,8 +7955,9 @@ class Personaggio(Inventario):
                 sezioni_attive(oggetto_src, self, **eval_kw),
                 solo_oggetto_ospitante=False,
             ):
-                if mod.statistica and mod.statistica.parametro:
-                    _add(mod.statistica.parametro, mod.tipo_modificatore, mod.valore)
+                chiave = statistica_chiave_modificatore(mod.statistica) if mod.statistica else None
+                if chiave:
+                    _add(chiave, mod.tipo_modificatore, mod.valore)
 
         equip_pa_add = 0.0
 
@@ -7939,7 +7980,7 @@ class Personaggio(Inventario):
                 for stat_link in oggetto.oggettostatistica_set.all(): 
                     if _is_global(stat_link):
                         _add_equip_track(
-                            stat_link.statistica.parametro,
+                            statistica_chiave_modificatore(stat_link.statistica),
                             stat_link.tipo_modificatore,
                             stat_link.valore,
                         )
@@ -7953,7 +7994,7 @@ class Personaggio(Inventario):
                         for stat_link_pot in potenziamento.oggettostatistica_set.all(): 
                             if _is_global(stat_link_pot):
                                 _add_equip_track(
-                                    stat_link_pot.statistica.parametro,
+                                    statistica_chiave_modificatore(stat_link_pot.statistica),
                                     stat_link_pot.tipo_modificatore,
                                     stat_link_pot.valore,
                                 )
@@ -7970,7 +8011,12 @@ class Personaggio(Inventario):
                 pts = cb.get(l.caratteristica.nome, 0)
                 if pts > 0 and l.ogni_x_punti > 0:
                     b = (pts // l.ogni_x_punti) * l.modificatore
-                    if b > 0: _add(l.statistica_modificata.parametro, MODIFICATORE_ADDITIVO, b)
+                    if b > 0:
+                        _add(
+                            statistica_chiave_modificatore(l.statistica_modificata),
+                            MODIFICATORE_ADDITIVO,
+                            b,
+                        )
 
         # 4. Reliquiario carte collezionabili
         try:
@@ -7991,7 +8037,8 @@ class Personaggio(Inventario):
                 if s_sig not in stat_cache:
                     stat_cache[s_sig] = Statistica.objects.filter(sigla=s_sig).first()
                 st_obj = stat_cache[s_sig]
-                if not st_obj or not st_obj.parametro:
+                chiave = statistica_chiave_modificatore(st_obj)
+                if not chiave:
                     continue
                 tmod = m.get('tipo_modificatore') or MODIFICATORE_ADDITIVO
                 if tmod not in (MODIFICATORE_ADDITIVO, MODIFICATORE_MOLTIPLICATIVO):
@@ -8000,7 +8047,7 @@ class Personaggio(Inventario):
                     val = float(m.get('valore', 0))
                 except (TypeError, ValueError):
                     val = 0.0
-                _add(st_obj.parametro, tmod, val)
+                _add(chiave, tmod, val)
 
         # 5. Effetti temporanei da tessitura (abilita + oggetto runtime)
         runtime_qs = self.get_tessiture_runtime_attive(now_ts=now_ts)
@@ -8020,7 +8067,8 @@ class Personaggio(Inventario):
                 if s_sig not in stat_cache:
                     stat_cache[s_sig] = Statistica.objects.filter(sigla=s_sig).first()
                 st_obj = stat_cache[s_sig]
-                if not st_obj or not st_obj.parametro:
+                chiave = statistica_chiave_modificatore(st_obj)
+                if not chiave:
                     continue
                 tmod = (m.get('tipo_modificatore') or MODIFICATORE_ADDITIVO).upper()
                 if tmod not in (MODIFICATORE_ADDITIVO, MODIFICATORE_MOLTIPLICATIVO):
@@ -8029,7 +8077,7 @@ class Personaggio(Inventario):
                     val = float(m.get('valore', 0))
                 except (TypeError, ValueError):
                     val = 0.0
-                _add(st_obj.parametro, tmod, val)
+                _add(chiave, tmod, val)
         
         self._modificatori_calcolati_cache = mods
         return mods
@@ -8096,7 +8144,7 @@ class Personaggio(Inventario):
             
             if parametro not in dettagli:
                 # Recupera il valore base da statistiche_base_dict o usa 0
-                valore_base = self.statistiche_base_dict.get(parametro, 0)
+                valore_base = self.statistiche_base_dict.get(parametro, 0) if parametro else 0
                 dettagli[parametro] = {
                     'valore_base': valore_base,
                     'modificatori': [],
@@ -8135,10 +8183,10 @@ class Personaggio(Inventario):
                 bonus, detail = calcola_bonus_abilita_slot_equip(self, link)
                 if bonus:
                     fonte = f"Abilità: {link.abilita.nome} ({detail})"
-                    _add_mod(link.statistica.parametro, fonte, link.tipo_modificatore, bonus)
+                    _add_mod(statistica_chiave_modificatore(link.statistica), fonte, link.tipo_modificatore, bonus)
             elif _is_global(link):
                 fonte = f"Abilità: {link.abilita.nome}"
-                _add_mod(link.statistica.parametro, fonte, link.tipo_modificatore, link.valore)
+                _add_mod(statistica_chiave_modificatore(link.statistica), fonte, link.tipo_modificatore, link.valore)
         
         # 2. Oggetti e Innesti
         oggetti_inventario = self.get_oggetti().select_related(
@@ -8158,7 +8206,7 @@ class Personaggio(Inventario):
                 for stat_link in oggetto.oggettostatistica_set.all():
                     if _is_global(stat_link):
                         fonte = f"Oggetto: {oggetto.nome}"
-                        _add_mod(stat_link.statistica.parametro, fonte, stat_link.tipo_modificatore, stat_link.valore)
+                        _add_mod(statistica_chiave_modificatore(stat_link.statistica), fonte, stat_link.tipo_modificatore, stat_link.valore)
                 
                 # Potenziamenti (Mod/Materia)
                 for potenziamento in oggetto.potenziamenti_installati.all():
@@ -8166,7 +8214,7 @@ class Personaggio(Inventario):
                         for stat_link_pot in potenziamento.oggettostatistica_set.all():
                             if _is_global(stat_link_pot):
                                 fonte = f"Potenziamento: {potenziamento.nome} (su {oggetto.nome})"
-                                _add_mod(stat_link_pot.statistica.parametro, fonte, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
+                                _add_mod(statistica_chiave_modificatore(stat_link_pot.statistica), fonte, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
         
         # 3. Caratteristiche Base (da abilità)
         cb = self.caratteristiche_base
@@ -8179,7 +8227,7 @@ class Personaggio(Inventario):
                     bonus = (pts // link.ogni_x_punti) * link.modificatore
                     if bonus > 0:
                         fonte = f"Caratteristica: {link.caratteristica.nome} ({pts} punti)"
-                        _add_mod(link.statistica_modificata.parametro, fonte, MODIFICATORE_ADDITIVO, bonus)
+                        _add_mod(statistica_chiave_modificatore(link.statistica_modificata), fonte, MODIFICATORE_ADDITIVO, bonus)
         
         # Calcola il valore finale per ogni parametro
         for parametro, dati in dettagli.items():
@@ -8335,7 +8383,7 @@ class Personaggio(Inventario):
 
         for link in links_abilita:
             if _check_condition(link):
-                _add(link.statistica.parametro, link.tipo_modificatore, link.valore)
+                _add(statistica_chiave_modificatore(link.statistica), link.tipo_modificatore, link.valore)
 
         # --- FASE 2: OGGETTI & INNESTI ---
         for oggetto in oggetti:
@@ -8343,7 +8391,7 @@ class Personaggio(Inventario):
             # 2A. Modificatori diretti dell'oggetto
                 for stat_link in oggetto.oggettostatistica_set.all():
                     if _check_condition(stat_link):
-                        _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
+                        _add(statistica_chiave_modificatore(stat_link.statistica), stat_link.tipo_modificatore, stat_link.valore)
             
                 # 2B. Modificatori dei Potenziamenti
                 for potenziamento in oggetto.potenziamenti_installati.all():
@@ -8351,7 +8399,7 @@ class Personaggio(Inventario):
                     if potenziamento.is_active():
                         for stat_link_pot in potenziamento.oggettostatistica_set.all():
                             if _check_condition(stat_link_pot):
-                                _add(stat_link_pot.statistica.parametro, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
+                                _add(statistica_chiave_modificatore(stat_link_pot.statistica), stat_link_pot.tipo_modificatore, stat_link_pot.valore)
 
         return mods
     
@@ -8746,9 +8794,10 @@ class Personaggio(Inventario):
         """
         try:
             stat_obj = self._statistica_per_sigla(sigla)
-            if not stat_obj or not stat_obj.parametro:
+            chiave = statistica_chiave_modificatore(stat_obj)
+            if not chiave:
                 return 0
-            mods = self.modificatori_calcolati.get(stat_obj.parametro, {'add': 0, 'mol': 1.0})
+            mods = self.modificatori_calcolati.get(chiave, {'add': 0, 'mol': 1.0})
             if hasattr(self, '_punteggi_base_partial_for_mods'):
                 base = int(self._punteggi_base_partial_for_mods.get(stat_obj.nome, 0) or 0)
             else:

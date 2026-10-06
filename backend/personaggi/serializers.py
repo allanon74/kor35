@@ -73,7 +73,8 @@ from .models import ConfigurazioneLivelloAura, formatta_testo_generico, Consumab
 from . import qr_logic
 # Importa i modelli e le funzioni helper
 from .models import (
-    AbilitaStatistica, AbilitaFormulaRule, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, 
+    AbilitaStatistica, AbilitaFormulaRule, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg,
+    statistica_chiave_modificatore, 
     QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, Punteggio, Tabella, 
     TipologiaPersonaggio, abilita_tier, abilita_requisito, abilita_sbloccata, 
     abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, NodoRewardConfig, A_vista, Mattone, InnescoTimer,
@@ -950,7 +951,9 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         return obj.statistica.valore_base_predefinito if hasattr(obj, 'statistica') else 0
 
     def get_parametro(self, obj):
-        return obj.statistica.parametro if hasattr(obj, 'statistica') else None
+        if hasattr(obj, 'statistica'):
+            return statistica_chiave_modificatore(obj.statistica)
+        return None
 
     def get_has_models(self, obj):
         return obj.modelli_definiti.exists()
@@ -1559,7 +1562,8 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
         # 2. Modificatori Personaggio (se presente)
         if proprietario:
             # Nota: modificatori_calcolati è una property cached del model Personaggio
-            mods = proprietario.modificatori_calcolati.get(stat_def.parametro, {'add': 0.0, 'mol': 1.0})
+            chiave = statistica_chiave_modificatore(stat_def)
+            mods = proprietario.modificatori_calcolati.get(chiave, {'add': 0.0, 'mol': 1.0}) if chiave else {'add': 0.0, 'mol': 1.0}
             valore_finale = int(round((valore_base + mods['add']) * mods['mol']))
             return max(0, valore_finale)
         
@@ -1866,7 +1870,8 @@ class OggettoSerializer(serializers.ModelSerializer):
         # 2. Modificatori Personaggio (se presente)
         if proprietario:
             # Nota: modificatori_calcolati è una property cached del model Personaggio
-            mods = proprietario.modificatori_calcolati.get(stat_def.parametro, {'add': 0.0, 'mol': 1.0})
+            chiave = statistica_chiave_modificatore(stat_def)
+            mods = proprietario.modificatori_calcolati.get(chiave, {'add': 0.0, 'mol': 1.0}) if chiave else {'add': 0.0, 'mol': 1.0}
             valore_finale = int(round((valore_base + mods['add']) * mods['mol']))
             return max(0, valore_finale)
         
