@@ -295,13 +295,11 @@ Installazione timer systemd (sul server prod):
 ```bash
 cd /srv/kor35
 sudo make install-prod-db-backup ENV=prod RUN_NOW=1
-```
-
-Equivalente:
-
-```bash
+# oppure (se il Makefile non ha ancora il target, es. prima del deploy):
 sudo ./scripts/install_prod_db_backup.sh --keep 10 --calendar '*-*-* 06:00:00' --run-now
 ```
+
+Dopo l’install lo script imposta `/var/backups/kor35/db` come `root:deploy` mode `770`, così anche `make backup-db ENV=prod` (utente `deploy`) può scrivere senza sudo.
 
 Log ultimo run:
 

@@ -493,6 +493,9 @@ diagnose-carte:
 cleanup-legacy:
 	./scripts/cleanup_legacy_wsl_stack.sh
 
+# Dump manuale. Su prod la dir è /var/backups/kor35/db (root:deploy 770 dopo install-prod-db-backup).
+# Se vedi Permission denied: sudo ./scripts/install_prod_db_backup.sh  (sistema i permessi)
+# oppure: sudo ./scripts/backup_db_daily.sh --env prod
 backup-db:
 	./scripts/backup_db_daily.sh --env "$(ENV)"
 

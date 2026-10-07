@@ -19,6 +19,8 @@ REPO_PATH="/srv/kor35"
 BACKUP_DIR="/var/backups/kor35/db"
 BACKUP_CALENDAR="*-*-* 06:00:00"
 BACKUP_KEEP="10"
+# Gruppo con scrittura sui dump (utente deploy su prod), oltre a root per systemd.
+BACKUP_GROUP="deploy"
 ENABLE_NOW="1"
 RUN_NOW="0"
 
@@ -38,6 +40,10 @@ while [ $# -gt 0 ]; do
       ;;
     --keep)
       BACKUP_KEEP="${2:-}"
+      shift 2
+      ;;
+    --backup-group)
+      BACKUP_GROUP="${2:-}"
       shift 2
       ;;
     --no-enable)
@@ -97,8 +103,21 @@ sed -i "s|^Environment=KOR35_DB_BACKUP_DIR=.*$|Environment=KOR35_DB_BACKUP_DIR=$
 sed -i "s|^Environment=KOR35_DB_BACKUP_KEEP=.*$|Environment=KOR35_DB_BACKUP_KEEP=$BACKUP_KEEP|g" "$SYSTEMD_DIR/kor35-db-backup.service"
 sed -i "s|^Environment=KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR=.*$|Environment=KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR=$BACKUP_DIR/monthly|g" "$SYSTEMD_DIR/kor35-db-backup.service"
 
+# Parent /var/backups/kor35 deve essere raggiungibile dal gruppo deploy
+# (altrimenti `make backup-db` come utente deploy fallisce con Permission denied).
+BACKUP_PARENT="$(dirname "$BACKUP_DIR")"
 mkdir -p "$BACKUP_DIR" "$BACKUP_DIR/monthly"
-chmod 700 "$BACKUP_DIR" "$BACKUP_DIR/monthly"
+if getent group "$BACKUP_GROUP" >/dev/null 2>&1; then
+  chown root:"$BACKUP_GROUP" "$BACKUP_PARENT" "$BACKUP_DIR" "$BACKUP_DIR/monthly"
+  chmod 750 "$BACKUP_PARENT"
+  chmod 770 "$BACKUP_DIR" "$BACKUP_DIR/monthly"
+  # Dump già presenti: leggibili/scrivibili da root e dal gruppo
+  find "$BACKUP_DIR" -maxdepth 2 -type f -exec chown root:"$BACKUP_GROUP" {} +
+  find "$BACKUP_DIR" -maxdepth 2 -type f -exec chmod 640 {} +
+else
+  echo "Avviso: gruppo $BACKUP_GROUP assente, directory backup restano root-only (700)." >&2
+  chmod 700 "$BACKUP_PARENT" "$BACKUP_DIR" "$BACKUP_DIR/monthly"
+fi
 
 systemctl daemon-reload
 
@@ -116,9 +135,11 @@ echo "Repo path: $REPO_PATH"
 echo "Backup dir: $BACKUP_DIR"
 echo "Calendar: $BACKUP_CALENDAR"
 echo "Keep last: $BACKUP_KEEP"
+echo "Backup group: $BACKUP_GROUP"
 echo ""
 echo "Verifica:"
 echo "  systemctl status kor35-db-backup.timer --no-pager"
 echo "  systemctl list-timers | grep kor35-db-backup"
 echo "  journalctl -u kor35-db-backup.service -n 50 --no-pager"
 echo "  ls -lah $BACKUP_DIR"
+echo "  make backup-db ENV=prod   # dump manuale (utente deploy, senza sudo)"

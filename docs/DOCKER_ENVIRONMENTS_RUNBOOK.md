@@ -137,7 +137,11 @@ Installazione (sul server prod):
 ```bash
 cd /srv/kor35
 sudo make install-prod-db-backup ENV=prod RUN_NOW=1
+# se manca il target Make (repo non ancora aggiornato):
+sudo ./scripts/install_prod_db_backup.sh --run-now
 ```
+
+Permessi: l’installer imposta `root:deploy` + `770` su `/var/backups/kor35/db` così i dump manuali (`make backup-db ENV=prod`) funzionano come utente `deploy`. Il timer systemd continua a girare come root.
 
 Test e log:
 
