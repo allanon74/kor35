@@ -40,6 +40,11 @@ KNOWN_STAFF_TOOL_IDS = frozenset({
     "creazione-guidata",
     "dichiarazioni-glossario",
     "statistiche",
+    "aure",
+    "caratteristiche",
+    "mattoni",
+    "modelli-aura",
+    "punteggi",
     "arcana-profiles",
     "campagne",
     "maintenance",
@@ -109,6 +114,11 @@ DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
                 "carriere-korps",
                 "dichiarazioni-glossario",
                 "statistiche",
+                "caratteristiche",
+                "aure",
+                "punteggi",
+                "mattoni",
+                "modelli-aura",
             ],
         },
         {
@@ -297,11 +307,30 @@ def validate_staff_dashboard_layout(data: Any) -> dict[str, Any]:
     }
 
 
+def _merge_missing_default_tools(saved: dict[str, Any]) -> dict[str, Any]:
+    """Aggiunge nei gruppi default i tool nuovi assenti dal layout salvato (niente solo «Altro»)."""
+    default = default_staff_dashboard_layout()
+    assigned: set[str] = set(saved.get("pinned_tool_ids") or [])
+    for group in saved.get("groups") or []:
+        assigned.update(group.get("tool_ids") or [])
+    default_by_id = {group["id"]: group for group in default["groups"]}
+    for group in saved.get("groups") or []:
+        default_group = default_by_id.get(group["id"])
+        if not default_group:
+            continue
+        extra = [tid for tid in default_group["tool_ids"] if tid not in assigned]
+        if extra:
+            group["tool_ids"] = list(group.get("tool_ids") or []) + extra
+            assigned.update(extra)
+    return saved
+
+
 def effective_staff_dashboard_layout(raw: Any) -> dict[str, Any]:
-    """Merge layout salvato con default (tool/gruppi mancanti → default + sezione implicita Altro lato client)."""
+    """Merge layout salvato con default (tool/gruppi mancanti → gruppo default)."""
     if not raw:
         return default_staff_dashboard_layout()
     try:
-        return validate_staff_dashboard_layout(raw)
+        saved = validate_staff_dashboard_layout(raw)
     except ValidationError:
         return default_staff_dashboard_layout()
+    return _merge_missing_default_tools(saved)
