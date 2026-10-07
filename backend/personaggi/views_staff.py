@@ -657,6 +657,11 @@ class ProposteValutazioneList(generics.ListAPIView):
         return PropostaTecnica.objects.filter(
             stato=STATO_PROPOSTA_IN_VALUTAZIONE,
             personaggio__campagna=campagna,
+        ).select_related(
+            'personaggio__proprietario',
+            'aura',
+        ).prefetch_related(
+            'componenti__caratteristica',
         ).order_by('data_invio')
 
 class ApprovaPropostaView(APIView):
