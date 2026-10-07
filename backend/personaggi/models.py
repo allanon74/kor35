@@ -1461,14 +1461,16 @@ def genera_html_cariche(item, personaggio=None):
         durata_str = " ".join(parts)
 
     # 3. Costruzione HTML
-    # Stile inline per garantire la visualizzazione ovunque (Admin & Frontend)
+    # Stile inline per garantire la visualizzazione ovunque (Admin & Frontend).
+    # Header in una sola riga ("Totale <stat>: N") per restare leggibile anche dopo
+    # sanitize CSS del frontend (justify-content non è nella allowlist).
     box_style = "margin-top: 12px; padding: 8px 12px; border: 1px solid rgba(255,255,255,0.2); background-color: rgba(0,0,0,0.2); border-radius: 6px; font-size: 0.9em; line-height: 1.4;"
-    header_style = "color: #ffd700; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 6px; padding-bottom: 4px; display: flex; justify-content: space-between; align-items: center;"
+    header_style = "color: #ffd700; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 6px; padding-bottom: 4px;"
     row_style = "margin-bottom: 2px;"
     label_style = "color: #aaa; margin-right: 5px;"
 
     html = f"<div style='{box_style}'>"
-    html += f"<div style='{header_style}'><span>⚡ {stat.nome}</span> <span>Tot: {valore_totale}</span></div>"
+    html += f"<div style='{header_style}'>Totale {stat.nome}: {valore_totale}</div>"
     
     if source.metodo_ricarica:
         html += f"<div style='{row_style}'><span style='{label_style}'>Ricarica:</span> {source.metodo_ricarica}</div>"
@@ -1492,6 +1494,96 @@ def genera_html_cariche(item, personaggio=None):
 
     html += "</div>"
     return html
+
+
+def _ids_caratteristiche_per_montaggio(item):
+    """ID caratteristiche (mattoni) usati per le regole ClasseOggetto su Mod/Materia."""
+    if isinstance(item, Infusione):
+        return list(item.componenti.values_list('caratteristica_id', flat=True))
+    if isinstance(item, Oggetto):
+        ids = list(item.componenti.values_list('caratteristica_id', flat=True))
+        if not ids and item.infusione_generatrice_id:
+            ids = list(
+                item.infusione_generatrice.componenti.values_list('caratteristica_id', flat=True)
+            )
+        return ids
+    return []
+
+
+def _tipo_logico_montaggio(item):
+    """
+    Restituisce 'mod', 'materia' o None.
+    Allineato a GestioneOggettiService.verifica_compatibilita_hardware /
+    crea_oggetto_da_infusione (ATE → tecnologico).
+    """
+    if isinstance(item, Oggetto):
+        if item.tipo_oggetto == TIPO_OGGETTO_MATERIA:
+            return 'materia'
+        if item.tipo_oggetto == TIPO_OGGETTO_MOD:
+            return 'mod'
+        if item.tipo_oggetto == TIPO_OGGETTO_POTENZIAMENTO:
+            return 'mod' if item.is_tecnologico else 'materia'
+        return None
+
+    if isinstance(item, Infusione):
+        if getattr(item, 'tipo_risultato', None) != SCELTA_RISULTATO_POTENZIAMENTO:
+            return None
+        aura = item.aura_infusione if item.aura_infusione_id else item.aura_richiesta
+        if aura and getattr(aura, 'sigla', None) == 'ATE':
+            return 'mod'
+        return 'materia'
+
+    return None
+
+
+def classi_oggetto_compatibili_montaggio(item):
+    """
+    Classi Oggetto su cui Mod/Materia può essere montata, secondo le whitelist
+    di ClasseOggetto (mattoni_materia_permessi / limitazioni_mod).
+    Tutte le caratteristiche del componente devono essere ammesse (intersezione).
+    """
+    tipo = _tipo_logico_montaggio(item)
+    if not tipo:
+        return []
+    caratt_ids = [cid for cid in _ids_caratteristiche_per_montaggio(item) if cid]
+    if not caratt_ids:
+        return []
+
+    # Import lazy: ClasseOggetto è definito più sotto nello stesso modulo.
+    qs = ClasseOggetto.objects.all()
+    if tipo == 'materia':
+        for cid in caratt_ids:
+            qs = qs.filter(mattoni_materia_permessi=cid)
+    else:
+        for cid in caratt_ids:
+            qs = qs.filter(limitazioni_mod=cid)
+    return list(qs.order_by('nome').values_list('nome', flat=True))
+
+
+def genera_html_montaggio_classi_oggetto(item):
+    """
+    Blocco HTML: tipi di oggetto (Classi Oggetto) su cui Mod/Materia è montabile.
+    Vuoto se non applicabile o nessuna classe compatibile.
+    """
+    nomi = classi_oggetto_compatibili_montaggio(item)
+    if not nomi:
+        return ""
+
+    box_style = (
+        "margin-top: 12px; padding: 8px 12px; border: 1px solid rgba(255,255,255,0.2); "
+        "background-color: rgba(0,0,0,0.2); border-radius: 6px; font-size: 0.9em; line-height: 1.4;"
+    )
+    header_style = (
+        "color: #ffd700; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); "
+        "margin-bottom: 6px; padding-bottom: 4px;"
+    )
+    nomi_esc = ", ".join(nomi)
+    return (
+        f"<div style='{box_style}'>"
+        f"<div style='{header_style}'>Montabile su:</div>"
+        f"<div>{nomi_esc}</div>"
+        f"</div>"
+    )
 
 
 def formatta_html_costi_attivazione_tessitura(tessitura):
@@ -3372,7 +3464,12 @@ class Infusione(Tecnica):
             formula=self.formula_attacco,
         )
         extra = html_sezioni_append(self, None, context=ctx, statistiche_base=stats)
-        return base_text + extra + genera_html_cariche(self, None)
+        return (
+            base_text
+            + extra
+            + genera_html_cariche(self, None)
+            + genera_html_montaggio_classi_oggetto(self)
+        )
     
 class Tessitura(Tecnica):
     formula = models.TextField("Formula", blank=True, null=True, default=DEFAULT_WEAVE_FORMULA_TEMPLATE)
@@ -6206,7 +6303,12 @@ class Oggetto(A_vista):
             context=ctx,
         )
         extra = html_sezioni_append(self, None, context=ctx, statistiche_base=stats)
-        return base_text + extra + genera_html_cariche(self, None)
+        return (
+            base_text
+            + extra
+            + genera_html_cariche(self, None)
+            + genera_html_montaggio_classi_oggetto(self)
+        )
     
     @property
     def inventario_corrente(self):
@@ -8798,6 +8900,7 @@ class Personaggio(Inventario):
 
         if isinstance(item, (Oggetto, Infusione)):
             testo_finale += genera_html_cariche(item, self)
+            testo_finale += genera_html_montaggio_classi_oggetto(item)
 
         return testo_finale
 
