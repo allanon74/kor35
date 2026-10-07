@@ -5,6 +5,8 @@ describe('columnMobileRole', () => {
   it('rispetta mobileRole esplicito', () => {
     expect(columnMobileRole({ header: 'X', mobileRole: 'hidden' })).toBe('hidden');
     expect(columnMobileRole({ header: 'Nome', mobileRole: 'title' }, { titleAssigned: true })).toBe('title');
+    expect(columnMobileRole({ header: 'Era', mobileRole: 'subtitle' })).toBe('subtitle');
+    expect(columnMobileRole({ header: 'Cassa', mobileRole: 'meta' })).toBe('meta');
   });
 
   it('tratta colonne strette centrate come badge', () => {

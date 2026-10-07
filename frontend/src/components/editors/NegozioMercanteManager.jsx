@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Store, RefreshCw, QrCode, Pencil, Trash2, Package, Eye } from 'lucide-react';
+import { Store, RefreshCw, QrCode, Pencil, Trash2, Package, Eye, Plus } from 'lucide-react';
 import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
@@ -11,6 +11,7 @@ import NegozioReadinessBadge from '../NegozioReadinessBadge';
 import RichTextEditor from '../RichTextEditor';
 import StaffEditorModal from './StaffEditorModal';
 import MasterGenericList from './MasterGenericList';
+import { NEGOZIO_COLUMNS } from './negozioMercanteColumns';
 import SearchableSelect from './SearchableSelect';
 import {
   StaffToolShell,
@@ -146,64 +147,6 @@ const bundleToDraft = (b) => ({
     ordine: r.ordine ?? idx,
   })),
 });
-
-const NEGOZIO_COLUMNS = [
-  {
-    header: 'Nome',
-    key: 'nome',
-    sortable: true,
-    filterable: true,
-    render: (row) => <span className="font-semibold text-white">{row.nome}</span>,
-  },
-  {
-    header: 'Tipo',
-    key: 'tipo_negozio',
-    sortable: true,
-    render: (row) => (row.tipo_negozio === 'CORP' ? 'Corporativo' : 'QR'),
-  },
-  {
-    header: 'Attivo',
-    key: 'attivo',
-    sortable: true,
-    render: (row) => (
-      <span className={row.attivo ? 'text-emerald-400' : 'text-gray-500'}>
-        {row.attivo ? 'Sì' : 'No'}
-      </span>
-    ),
-  },
-  {
-    header: 'Modalità',
-    key: 'negozio_prestiti',
-    sortable: true,
-    render: (row) =>
-      row.negozio_prestiti ? (
-        <span className="text-sky-300">Prestiti (max {row.limite_prestiti_per_personaggio || 1})</span>
-      ) : (
-        <span className="text-gray-500">Vendita</span>
-      ),
-  },
-  {
-    header: 'Cassa',
-    key: 'saldo_crediti',
-    sortable: true,
-    align: 'right',
-    render: (row) => (
-      <span className="font-mono text-amber-300">{row.saldo_crediti ?? 0} CR</span>
-    ),
-  },
-  {
-    header: 'Voci',
-    key: 'voci_count',
-    sortable: true,
-    getSortValue: (row) => (row.voci || []).length,
-    render: (row) => (row.voci || []).length,
-  },
-  {
-    header: 'QR',
-    key: 'qr_code',
-    render: (row) => (row.qr_code ? `#${row.qr_code}` : '—'),
-  },
-];
 
 const NEGOZIO_FILTERS = [
   {
@@ -706,22 +649,33 @@ const NegozioMercanteManager = ({ onLogout }) => {
       <StaffToolHeader
         icon={<Store size={22} />}
         title="Negozi mercante"
-        description="Lista negozi: apri un record per dati e catalogo."
         actions={
-          <button type="button" onClick={loadNegozi} className={staffSecondaryBtnClass}>
-            <RefreshCw size={16} />
-            Aggiorna
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => openEditor(null)}
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-cyan-600 px-3 text-xs font-black uppercase text-white"
+            >
+              <Plus size={16} />
+              Nuovo
+            </button>
+            <button type="button" onClick={loadNegozi} className={`${staffSecondaryBtnClass} min-h-11`}>
+              <RefreshCw size={16} />
+              Aggiorna
+            </button>
+          </div>
         }
       />
-      <div className="flex-1 min-h-0 overflow-hidden p-4 md:p-6 flex flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 sm:p-4 md:p-6">
         <MasterGenericList
           items={negozi}
           title="Elenco"
+          showHeading={false}
+          pinnedToolbar
+          searchFirstOnMobile
+          comfortableFilters
           loading={loading}
           persistKey="negozi-mercante"
-          addLabel="Nuovo negozio"
-          onAdd={() => openEditor(null)}
           onEdit={openEditor}
           onDelete={deleteNegozio}
           onRowClick={openEditor}
@@ -737,7 +691,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
               aria-label={`Anteprima vetrina ${negozio?.nome || ''}`.trim()}
             >
               <Eye size={16} className="shrink-0" />
-              Anteprima
+              <span className="hidden sm:inline">Anteprima</span>
             </button>
           )}
           columns={NEGOZIO_COLUMNS}

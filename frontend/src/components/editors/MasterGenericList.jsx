@@ -39,6 +39,16 @@ const MasterGenericList = ({
   /** false = altezza contenuta (liste annidate). Default true per i tool full-page. */
   fill = true,
   showSearch = true,
+  showHeading = true,
+  /**
+   * Toolbar fissa e corpo lista scrollabile nel genitore flex (elenchi lunghi su telefono).
+   * Il genitore deve essere una colonna con altezza definita (`flex-1 min-h-0`).
+   */
+  pinnedToolbar = false,
+  /** Su viewport stretta la ricerca sta sopra controlli e filtri. */
+  searchFirstOnMobile = false,
+  /** Chip filtro alte almeno 44px (tap). */
+  comfortableFilters = false,
   toolbarExtra = null,
 }) => {
   const normalizedKey = (persistKey || title || '').toString().trim().toLowerCase().replace(/\s+/g, '-');
@@ -210,11 +220,21 @@ const MasterGenericList = ({
     </>
   ), [extraRowActions, onScanQr, onMinigioco, onEdit, onDelete]);
 
+  const rootClass = pinnedToolbar
+    ? 'flex min-h-0 min-w-0 flex-1 flex-col gap-2'
+    : `flex flex-col space-y-3 lg:space-y-4 min-w-0 ${fill ? 'lg:h-full' : 'min-h-[360px] lg:max-h-[75vh]'}`;
+  const toolbarOrder = searchFirstOnMobile;
+  const chipClass = comfortableFilters
+    ? 'min-h-11 px-3 inline-flex items-center rounded-lg text-xs font-bold border'
+    : 'px-2.5 py-1 rounded text-xs font-bold border';
+
   return (
-    <div className={`flex flex-col space-y-3 lg:space-y-4 min-w-0 ${fill ? 'lg:h-full' : 'min-h-[360px] lg:max-h-[75vh]'}`}>
-      <div className="flex-none bg-gray-800 p-3 lg:p-4 rounded-xl border border-gray-700 shadow-lg space-y-3 lg:space-y-4">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 lg:gap-4">
-          <h2 className="text-lg lg:text-xl font-bold text-white uppercase tracking-tighter">{title}</h2>
+    <div className={rootClass}>
+      <div className={`flex-none bg-gray-800 p-3 lg:p-4 rounded-xl border border-gray-700 shadow-lg ${toolbarOrder ? 'flex flex-col gap-3' : 'space-y-3 lg:space-y-4'}`}>
+        <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-3 lg:gap-4 ${toolbarOrder ? 'order-2 sm:order-1' : ''}`}>
+          {showHeading && title ? (
+            <h2 className="text-lg lg:text-xl font-bold text-white uppercase tracking-tighter">{title}</h2>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
             {toolbarExtra}
@@ -252,7 +272,7 @@ const MasterGenericList = ({
         </div>
 
         {sorts.length > 0 && (
-          <p className="text-[10px] uppercase tracking-wide text-gray-500">
+          <p className={`text-[10px] uppercase tracking-wide text-gray-500 ${toolbarOrder ? 'order-3' : ''}`}>
             Ordinamento:{' '}
             {sorts.map((spec, i) => {
               const col = columns.find((c, idx) => columnKey(c, idx) === spec.key);
@@ -267,12 +287,12 @@ const MasterGenericList = ({
         )}
 
         {showSearch && (
-          <div className="relative">
+          <div className={`relative ${toolbarOrder ? 'order-1 sm:order-2' : ''}`}>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
             <input
               type="text"
               placeholder={searchPlaceholder}
-              className="w-full bg-gray-950 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-sm focus:border-cyan-500 outline-none text-white transition-all placeholder:text-gray-700"
+              className="w-full min-h-11 bg-gray-950 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-sm focus:border-cyan-500 outline-none text-white transition-all placeholder:text-gray-700"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -280,7 +300,7 @@ const MasterGenericList = ({
         )}
 
         {filterConfig.length > 0 && (
-          <div className="flex flex-wrap items-end gap-x-4 gap-y-2 pt-2 border-t border-gray-700/50">
+          <div className={`flex flex-wrap items-end gap-x-4 gap-y-2 pt-2 border-t border-gray-700/50 ${toolbarOrder ? 'order-4' : ''}`}>
             {filterConfig.map((conf) => {
               const ui = resolveFilterUi(conf);
               const activeVals = activeFilters[conf.key] || [];
@@ -325,7 +345,7 @@ const MasterGenericList = ({
                           className={`transition-all duration-200 ${
                             ui === 'icon' || conf.type === 'icon'
                               ? 'p-1 rounded-full border'
-                              : 'px-2.5 py-1 rounded text-xs font-bold border'
+                              : chipClass
                           } ${
                             isActive
                               ? 'bg-cyan-600 border-cyan-400 text-white shadow-lg'
@@ -351,7 +371,7 @@ const MasterGenericList = ({
         )}
       </div>
 
-      <div className={`${fill ? 'lg:flex-1 lg:min-h-0' : ''} bg-gray-800 rounded-xl border border-gray-700 shadow-xl overflow-hidden flex flex-col min-w-0`}>
+      <div className={`${pinnedToolbar ? 'min-h-0 flex-1 overflow-x-hidden overflow-y-auto lg:overflow-hidden' : fill ? 'lg:flex-1 lg:min-h-0' : ''} bg-gray-800 rounded-xl border border-gray-700 shadow-xl ${pinnedToolbar ? '' : 'overflow-hidden'} flex flex-col min-w-0`}>
         <StaffDataTable
           columns={columns}
           items={visibleItems}
@@ -372,7 +392,7 @@ const MasterGenericList = ({
             <button
               type="button"
               onClick={() => setVisibleRowCount((n) => Math.min(n + ROW_BATCH, filteredItems.length))}
-              className="w-full py-2.5 text-xs font-bold uppercase tracking-wide text-gray-400 bg-gray-900/60 hover:bg-gray-700 border border-dashed border-gray-600 rounded-lg"
+              className="w-full min-h-11 py-2.5 text-xs font-bold uppercase tracking-wide text-gray-400 bg-gray-900/60 hover:bg-gray-700 border border-dashed border-gray-600 rounded-lg"
             >
               Carica altri ({filteredItems.length - visibleRowCount} rimanenti)
             </button>
