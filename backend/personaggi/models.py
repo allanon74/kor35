@@ -6267,23 +6267,151 @@ class Oggetto(A_vista):
         # Aggiorna il calcolo del livello basandosi sui nuovi componenti
         return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
 
+    def selezioni_formula_effettive(self):
+        """
+        Scelte del costruttore formula: prima l'istanza, poi l'infusione
+        generatrice, poi il template di listino.
+        """
+        proprie = self.formula_builder_selezioni or {}
+        if isinstance(proprie, dict) and proprie:
+            return proprie
+        infusione = self.infusione_generatrice
+        if infusione is not None:
+            sel = infusione.formula_builder_selezioni or {}
+            if isinstance(sel, dict) and sel:
+                return sel
+        base = self.oggetto_base_generatore
+        if base is not None:
+            sel = base.formula_builder_selezioni or {}
+            if isinstance(sel, dict) and sel:
+                return sel
+        return {}
+
+    def _formula_risolta_da_origini(self):
+        """
+        Testo formula autorevole.
+
+        Il default di campo (`DEFAULT_ATTACK_FORMULA_TEMPLATE`) non è una
+        formula scritta: se l'istanza ce l'ha ancora, vale l'infusione o il
+        template di listino. Così una materia con sola capacità non eredita
+        il chop di un pugnale.
+        """
+        formula = (self.attacco_base or "").strip()
+        default = DEFAULT_ATTACK_FORMULA_TEMPLATE
+        infusione = self.infusione_generatrice
+        if infusione is not None:
+            formula_inf = (infusione.formula_attacco or "").strip()
+            if not formula or formula == default:
+                formula = formula_inf
+        else:
+            base = self.oggetto_base_generatore
+            if base is not None:
+                formula_base = (base.attacco_base or "").strip()
+                if not formula or formula == default:
+                    formula = formula_base
+        if not formula or formula == default:
+            selezioni = self.selezioni_formula_effettive()
+            if isinstance(selezioni, dict) and selezioni.get("formula_type") == "capacity":
+                return ""
+        return formula or ""
+
+    @property
+    def formula_testo_effettiva(self):
+        """
+        Formula da mettere nella descrizione (anche una capacità).
+        Vuota se non c'è nulla di scritto, né sull'istanza né sull'origine.
+        """
+        return self._formula_risolta_da_origini()
+
+    def _istanza_ha_override_attacco(self):
+        """True se lo staff ha scritto un attacco sull'istanza, diverso da infusione e default."""
+        istanza = (self.attacco_base or "").strip()
+        if not istanza or istanza == DEFAULT_ATTACK_FORMULA_TEMPLATE:
+            return False
+        if istanza.lstrip().startswith("Capacità "):
+            return False
+        infusione = self.infusione_generatrice
+        if infusione is not None and istanza == (infusione.formula_attacco or "").strip():
+            return False
+        return True
+
     @property
     def formula_attacco_effettiva(self):
         """
-        Formula d'attacco da mostrare al giocatore.
+        Formula d'attacco da mostrare come attacco (badge / lista attacchi).
 
-        Vuota (= nessuna formula nel rendering) se l'oggetto non ha formula
-        oppure se l'infusione che l'ha generato ha la formula svuotata dallo
-        staff: in quel caso il template di default sull'istanza non deve
-        produrre una riga «Formula:» fantasma.
+        Non è un attacco: formula vuota, template di default non voluto,
+        oppure una capacità (`formula_type=capacity` o testo «Capacità …»).
+        Un testo scritto sull'istanza, diverso dall'infusione, resta un attacco.
         """
-        formula = (self.attacco_base or "").strip()
+        formula = self._formula_risolta_da_origini()
         if not formula:
             return ""
-        infusione = self.infusione_generatrice
-        if infusione is not None and not (infusione.formula_attacco or "").strip():
+        if self._istanza_ha_override_attacco():
+            return formula
+        if formula.lstrip().startswith("Capacità "):
+            return ""
+        selezioni = self.selezioni_formula_effettive()
+        if isinstance(selezioni, dict) and selezioni.get("formula_type") == "capacity":
             return ""
         return formula
+
+    def motivo_non_cedibile(self):
+        """
+        Perché l'oggetto non può essere allegato a un messaggio.
+        Stringa vuota se è cedibile (anche se modificato con materia o mod).
+        """
+        if self.tipo_oggetto in (
+            TIPO_OGGETTO_INNESTO,
+            TIPO_OGGETTO_MUTAZIONE,
+            TIPO_OGGETTO_AUMENTO,
+        ):
+            return "innesti e mutazioni non si inviano"
+        if (self.slot_corpo or "").strip():
+            return "è installato sul corpo"
+        if self.is_equipaggiato:
+            return "è equipaggiato"
+        if self.ospitato_su_id:
+            return "è montato su un altro oggetto"
+        return ""
+
+    def snapshot_allegato_messaggio(self):
+        """Snapshot messaggio: l'oggetto e le modifiche che restano montate."""
+        modifiche = [
+            {
+                "id": mod.id,
+                "sync_id": str(mod.sync_id),
+                "nome": mod.nome,
+                "tipo_oggetto": mod.tipo_oggetto,
+            }
+            for mod in self.potenziamenti_installati.all()
+        ]
+        nome = self.nome
+        nomi_mod = [m["nome"] for m in modifiche if m.get("nome")]
+        if nomi_mod:
+            nome = f"{self.nome} ({', '.join(nomi_mod)})"
+        return {
+            "id": self.id,
+            "sync_id": str(self.sync_id),
+            "nome": nome,
+            "tipo_oggetto": self.tipo_oggetto,
+            "modifiche": modifiche,
+        }
+
+    def trasferisci_in_inventario(self, nuovo, data=None):
+        """
+        Cede l'oggetto a un altro inventario.
+        Materia e mod già montate restano montate: non tornano nello zaino
+        e non si staccano dall'oggetto trasferito.
+        """
+        figli_ids = list(self.potenziamenti_installati.values_list("pk", flat=True))
+        self.sposta_in_inventario(nuovo, data=data)
+        if not figli_ids:
+            return
+        for figlio in type(self).objects.filter(pk__in=figli_ids):
+            if figlio.ospitato_su_id != self.pk:
+                figlio.ospitato_su_id = self.pk
+                figlio.save(update_fields=["ospitato_su", "updated_at"])
 
     @property
     def TestoFormattato(self): 
@@ -6293,12 +6421,14 @@ class Oggetto(A_vista):
             'livello': self.livello,
             'aura': self.aura,
             'item_modifiers': raccogli_modificatori_solo_oggetto(self),
-            'formula_builder_selezioni': self.formula_builder_selezioni or {},
+            'formula_builder_selezioni': self.selezioni_formula_effettive(),
             'attack_formula_template': self.formula_attacco_effettiva,
             'formula_kind': FORMULA_SCOPE_ATTACK,
         }
+        formula_testo = self.formula_testo_effettiva
         base_text = formatta_testo_generico(
             self.testo,
+            formula=formula_testo,
             statistiche_base=stats,
             context=ctx,
         )
@@ -8750,15 +8880,15 @@ class Personaggio(Inventario):
         if isinstance(item, Oggetto):
             stats = statistiche_base_per_item(item, self)
             item_mods = raccogli_modificatori_solo_oggetto(item, personaggio=self)
-            formula_oggetto = item.formula_attacco_effettiva
+            formula_oggetto = item.formula_testo_effettiva
             ctx = {
                 'livello': item.livello,
                 'aura': item.aura,
                 'item_modifiers': item_mods,
                 'formula_kind': FORMULA_SCOPE_ATTACK,
-                'attack_formula_template': formula_oggetto,
+                'attack_formula_template': item.formula_attacco_effettiva,
                 'classe_oggetto': item.classe_oggetto.nome if item.classe_oggetto else '',
-                'formula_builder_selezioni': getattr(item, 'formula_builder_selezioni', None) or {},
+                'formula_builder_selezioni': item.selezioni_formula_effettive(),
             }
             testo_finale = formatta_testo_generico(
                 item.testo,

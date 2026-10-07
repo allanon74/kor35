@@ -12,6 +12,7 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { OfflineConsultBanner } from './OfflineConsultBanner';
 import ChiamateLogPanel from './ChiamateLogPanel';
 import NotificheTab from './NotificheTab';
+import { filtraOggettiCedibili } from '../lib/oggettiMessaggio';
 
 const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, scrollToFirstUnreadNonce = 0, initialViewMode = 'chat' }) => {
   const {
@@ -57,9 +58,7 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
   const messagesEndRef = useRef(null);
   const firstUnreadRef = useRef(null);
 
-  const transferableItems = (char?.oggetti || []).filter(
-    (item) => item && item.id && item.tipo_oggetto === 'FIS' && !item.is_equipaggiato
-  );
+  const transferableItems = filtraOggettiCedibili(char?.oggetti || []);
 
   const messageSenderName = (msg) =>
     msg.mittente_personaggio_nome || msg.mittente_nome || (msg.mittente_is_staff ? 'Staff' : 'Sistema');

@@ -634,6 +634,14 @@ class GestioneOggettiService:
             cariche_iniziali = int(round((valore_base + mods['add']) * mods['mol']))
             cariche_iniziali = max(0, cariche_iniziali)
 
+        formula_inf = (infusione.formula_attacco or "").strip()
+        # CharField attacco_base è max 200: se la formula non ci sta, resta
+        # vuota e formula_testo_effettiva la rilegge dall'infusione.
+        attacco_base = formula_inf if len(formula_inf) <= 200 else ""
+        selezioni = infusione.formula_builder_selezioni or {}
+        if not isinstance(selezioni, dict):
+            selezioni = {}
+
         nuovo_oggetto = Oggetto.objects.create(
             nome=nome_finale,
             testo=infusione.testo,
@@ -644,6 +652,8 @@ class GestioneOggettiService:
             cariche_attuali=cariche_iniziali, 
             slot_corpo=None,
             is_pesante=infusione.is_pesante,
+            attacco_base=attacco_base,
+            formula_builder_selezioni=selezioni,
         )
 
         for stat_inf in infusione.infusionestatisticabase_set.all():
