@@ -25,6 +25,7 @@ import {
   staffUpdateInnescoTimer,
   staffDeleteInnescoTimer,
   staffAggiungiIstanzeInnescoTimer,
+  staffDeltaCaricheInnescoTimer,
   staffInnescoTimerEventi,
   staffGetEre,
   staffGetRegioni,
@@ -210,6 +211,7 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
   const [korpOptions, setKorpOptions] = useState([]);
   const [eventiOptions, setEventiOptions] = useState([]);
   const [quanteByGruppo, setQuanteByGruppo] = useState({});
+  const [caricheBusyId, setCaricheBusyId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -337,6 +339,18 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
     }
   };
 
+  const cambiaCariche = async (istanza, delta) => {
+    setCaricheBusyId(istanza.id);
+    try {
+      const updated = await staffDeltaCaricheInnescoTimer(istanza.id, delta, onLogout);
+      setItems((prev) => prev.map((row) => (row.id === istanza.id ? { ...row, ...updated } : row)));
+    } catch (e) {
+      setMsg(e.message || 'Errore cariche');
+    } finally {
+      setCaricheBusyId(null);
+    }
+  };
+
   const salvaEtichetta = async (istanza, valore) => {
     if ((istanza.etichetta_istanza || '') === valore) return;
     try {
@@ -369,7 +383,7 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
       </div>
       <p className="text-xs text-gray-400">
         Alla scansione parte il countdown sui telefoni dei destinatari. Puoi creare più istanze identiche:
-        ognuna ha il suo QR e il suo countdown, le modifiche al timer valgono per tutto il gruppo.
+        ognuna ha il suo QR, il suo countdown e le sue cariche del giorno. Le modifiche al timer valgono per tutto il gruppo.
       </p>
       <StaffMinigiocoPageToolbar
         pageKey={MINIGIOCO_PAGE_KEYS.innescoTimer}
@@ -388,6 +402,9 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
                   <div className="text-[11px] text-gray-400">
                     {gruppo.head.durata_secondi}s · {TARGET_LABEL[gruppo.head.modalita_target] || gruppo.head.modalita_target}
                     {' '}· {gruppo.istanze.length} {gruppo.istanze.length === 1 ? 'istanza' : 'istanze'}
+                    {Number(gruppo.head.max_cariche) > 0
+                      ? ` · ${gruppo.head.max_cariche} cariche/giorno`
+                      : ' · cariche illimitate'}
                   </div>
                 </div>
                 <button
@@ -413,6 +430,32 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
                         onBlur={(e) => salvaEtichetta(ist, e.target.value.trim())}
                       />
                     </div>
+                    {Number(ist.max_cariche) > 0 && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-gray-300">Cariche oggi</span>
+                        <button
+                          type="button"
+                          className="min-h-11 min-w-11 px-3 text-lg leading-none bg-gray-700 rounded"
+                          aria-label="Togli una carica di oggi"
+                          disabled={caricheBusyId === ist.id}
+                          onClick={() => cambiaCariche(ist, -1)}
+                        >
+                          −
+                        </button>
+                        <span className="min-w-[2rem] text-center text-sm font-semibold tabular-nums">
+                          {ist.cariche_residue_oggi ?? ist.max_cariche}
+                        </span>
+                        <button
+                          type="button"
+                          className="min-h-11 min-w-11 px-3 text-lg leading-none bg-gray-700 rounded"
+                          aria-label="Aggiungi una carica di oggi"
+                          disabled={caricheBusyId === ist.id}
+                          onClick={() => cambiaCariche(ist, 1)}
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-2">
                       <StaffMinigiocoUsaDefaultToggle
                         qrcodeId={ist.qrcode_id}
@@ -519,9 +562,10 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
               />
             </label>
             <label className="text-sm">
-              Max cariche (0 = illimitato)
+              Cariche al giorno (0 = illimitato)
               <input
                 type="number"
+                min="0"
                 className="w-full mt-1 min-h-11 px-2 py-2 rounded bg-gray-800 border border-gray-600"
                 value={editing.max_cariche}
                 onChange={(e) => setEditing({ ...editing, max_cariche: e.target.value })}
@@ -541,8 +585,12 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
               />
             </label>
           )}
+          <p className="text-[11px] text-gray-400">
+            Il residuo di oggi si regola con − e + su ogni istanza. A mezzanotte torna a questo numero.
+            La rigenerazione, se impostata, limita in più ogni singolo giocatore.
+          </p>
           <label className="block text-sm">
-            Rigenera cariche ogni (sec, vuoto = no)
+            Rigenera cariche ogni (sec, vuoto = solo il residuo del giorno)
             <input
               type="number"
               className="w-full mt-1 min-h-11 px-2 py-2 rounded bg-gray-800 border border-gray-600"

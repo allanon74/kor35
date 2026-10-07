@@ -238,3 +238,182 @@ class InnescoTimerBehaviorTests(TestCase):
         self.assertEqual(extra.nome, "Allarme rinominato")
         self.assertEqual(extra.durata_secondi, 30)
         self.assertIsNone(extra.broadcast_data_fine)
+
+
+class InnescoTimerCaricheGiornoTests(TestCase):
+    """Residuo giornaliero condiviso dall'istanza, regolabile dallo staff."""
+
+    def setUp(self):
+        self.tipo = TipologiaPersonaggio.objects.create(nome="Giocante cariche", giocante=True)
+        self.user = User.objects.create_user(username="cariche-pg", password="pass")
+        self.user2 = User.objects.create_user(username="cariche-pg2", password="pass")
+        self.staff = User.objects.create_superuser(username="cariche-staff", password="pass", email="c@example.com")
+        self.pg = Personaggio.objects.create(nome="PG Cariche", proprietario=self.user, tipologia=self.tipo)
+        self.pg2 = Personaggio.objects.create(nome="PG Cariche 2", proprietario=self.user2, tipologia=self.tipo)
+        self.innesco = InnescoTimer.objects.create(
+            nome="Timer a cariche",
+            durata_secondi=30,
+            max_cariche=2,
+            modalita_target=InnescoTimer.INNESCO_TARGET_GLOBAL,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.staff_client = APIClient()
+        self.staff_client.force_authenticate(self.staff)
+
+    def _scan(self, personaggio=None):
+        return qr_logic.attiva_innesco_timer_per_personaggio(personaggio or self.pg, self.innesco)
+
+    def test_due_giocatori_condividono_il_residuo_del_giorno(self):
+        payload, err = self._scan(self.pg)
+        self.assertIsNone(err)
+        self.assertIsNotNone(payload)
+        self.innesco.refresh_from_db()
+        self.assertEqual(self.innesco.cariche_residue, 1)
+        self.assertEqual(self.innesco.cariche_giorno, timezone.localdate())
+
+        payload, err = self._scan(self.pg2)
+        self.assertIsNone(err)
+        self.innesco.refresh_from_db()
+        self.assertEqual(self.innesco.cariche_residue, 0)
+
+        payload, err = self._scan(self.pg)
+        self.assertIsNone(payload)
+        self.assertIn("oggi", err)
+        self.innesco.refresh_from_db()
+        self.assertEqual(self.innesco.cariche_residue, 0)
+
+    def test_staff_aggiunge_e_toglie_il_residuo_di_oggi(self):
+        self._scan(self.pg)
+        self._scan(self.pg2)
+        r = self.staff_client.post(
+            f"/api/personaggi/api/staff/innesco-timer/{self.innesco.id}/cariche/",
+            {"delta": 1},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["cariche_residue_oggi"], 1)
+        payload, err = self._scan(self.pg)
+        self.assertIsNone(err)
+        self.assertIsNotNone(payload)
+
+        r = self.staff_client.post(
+            f"/api/personaggi/api/staff/innesco-timer/{self.innesco.id}/cariche/",
+            {"delta": -1},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["cariche_residue_oggi"], 0)
+        r = self.staff_client.post(
+            f"/api/personaggi/api/staff/innesco-timer/{self.innesco.id}/cariche/",
+            {"delta": -1},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["cariche_residue_oggi"], 0)
+
+        r = self.staff_client.post(
+            f"/api/personaggi/api/staff/innesco-timer/{self.innesco.id}/cariche/",
+            {"delta": 5},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["cariche_residue_oggi"], 5)
+
+        r = self.client.post(
+            f"/api/personaggi/api/staff/innesco-timer/{self.innesco.id}/cariche/",
+            {"delta": 1},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 403)
+        r = self.staff_client.post(
+            f"/api/personaggi/api/staff/innesco-timer/{self.innesco.id}/cariche/",
+            {"delta": 0},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_lista_staff_non_scrive_il_residuo(self):
+        r = self.staff_client.get("/api/personaggi/api/staff/innesco-timer/")
+        self.assertEqual(r.status_code, 200, r.content)
+        rows = r.data if isinstance(r.data, list) else r.data.get("results", [])
+        row = next(item for item in rows if item["id"] == self.innesco.id)
+        self.assertEqual(row["cariche_residue_oggi"], 2)
+        self.innesco.refresh_from_db()
+        self.assertIsNone(self.innesco.cariche_residue)
+        self.assertIsNone(self.innesco.cariche_giorno)
+
+    def test_nuovo_giorno_riparte_dal_massimo(self):
+        self.innesco.cariche_residue = 0
+        self.innesco.cariche_giorno = timezone.localdate() - timedelta(days=1)
+        self.innesco.save(update_fields=["cariche_residue", "cariche_giorno", "updated_at"])
+        payload, err = self._scan()
+        self.assertIsNone(err)
+        self.innesco.refresh_from_db()
+        self.assertEqual(self.innesco.cariche_giorno, timezone.localdate())
+        self.assertEqual(self.innesco.cariche_residue, 1)
+
+    def test_istanze_non_condividono_il_residuo(self):
+        from personaggi.innesco_timer_ops import aggiungi_istanze, propaga_campi_gruppo
+
+        altra = aggiungi_istanze(self.innesco, 1)[0]
+        self._scan()
+        self._scan(self.pg2)
+        self.innesco.refresh_from_db()
+        altra.refresh_from_db()
+        self.assertEqual(self.innesco.cariche_residue, 0)
+        self.assertIsNone(altra.cariche_residue)
+
+        payload, err = qr_logic.attiva_innesco_timer_per_personaggio(self.pg, altra)
+        self.assertIsNone(err)
+        altra.refresh_from_db()
+        self.assertEqual(altra.cariche_residue, 1)
+        self.innesco.refresh_from_db()
+        self.assertEqual(self.innesco.cariche_residue, 0)
+
+        self.innesco.nome = "Timer rinominato"
+        self.innesco.save()
+        propaga_campi_gruppo(self.innesco)
+        altra.refresh_from_db()
+        self.assertEqual(altra.nome, "Timer rinominato")
+        self.assertEqual(altra.cariche_residue, 1)
+
+    def test_cariche_illimitate_non_hanno_residuo(self):
+        self.innesco.max_cariche = 0
+        self.innesco.save(update_fields=["max_cariche", "updated_at"])
+        for _ in range(3):
+            payload, err = self._scan()
+            self.assertIsNone(err)
+            self.assertIsNotNone(payload)
+        self.innesco.refresh_from_db()
+        self.assertIsNone(self.innesco.cariche_residue)
+        r = self.staff_client.post(
+            f"/api/personaggi/api/staff/innesco-timer/{self.innesco.id}/cariche/",
+            {"delta": 1},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("illimitate", r.data["error"])
+
+    def test_rigenerazione_personale_non_scala_il_residuo_se_bloccata(self):
+        self.innesco.rigenera_cariche_ogni_secondi = 3600
+        self.innesco.save(update_fields=["rigenera_cariche_ogni_secondi", "updated_at"])
+        self.assertIsNone(self._scan(self.pg)[1])
+        self.assertIsNone(self._scan(self.pg)[1])
+        self.innesco.refresh_from_db()
+        self.assertEqual(self.innesco.cariche_residue, 0)
+        r = self.staff_client.post(
+            f"/api/personaggi/api/staff/innesco-timer/{self.innesco.id}/cariche/",
+            {"delta": 1},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200, r.content)
+        payload, err = self._scan(self.pg)
+        self.assertIsNone(payload)
+        self.assertIn("rigenerazione", err)
+        self.innesco.refresh_from_db()
+        self.assertEqual(self.innesco.cariche_residue, 1)
+        payload, err = self._scan(self.pg2)
+        self.assertIsNone(err)
+        self.innesco.refresh_from_db()
+        self.assertEqual(self.innesco.cariche_residue, 0)

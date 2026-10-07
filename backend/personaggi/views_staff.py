@@ -1431,6 +1431,24 @@ class InnescoTimerStaffViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @action(detail=True, methods=["post"], url_path="cariche")
+    def cariche_giorno(self, request, pk=None):
+        """Aggiunge o toglie cariche residue di oggi su questa sola istanza."""
+        from personaggi.innesco_timer_ops import applica_delta_cariche_giorno
+
+        obj = self.get_object()
+        raw = request.data.get("delta")
+        if isinstance(raw, bool) or not isinstance(raw, int):
+            return Response(
+                {"error": "delta deve essere un intero, ad esempio 1 o -1."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        _residue, err = applica_delta_cariche_giorno(obj.pk, raw)
+        if err:
+            return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+        obj.refresh_from_db()
+        return Response(InnescoTimerStaffSerializer(obj, context={"request": request}).data)
+
 
 class RandomQrPoolStaffViewSet(viewsets.ModelViewSet):
     """CRUD pool QR randomici (effetti + membership gestiti con action dedicate)."""

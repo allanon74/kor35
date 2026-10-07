@@ -5150,14 +5150,31 @@ class InnescoTimer(A_vista):
     durata_secondi = models.PositiveIntegerField(default=60, verbose_name="Durata countdown (secondi)")
     max_cariche = models.PositiveIntegerField(
         default=1,
-        verbose_name="Cariche per ciclo",
-        help_text="Quante volte si può attivare prima della rigenerazione (0 = illimitato).",
+        verbose_name="Cariche al giorno",
+        help_text=(
+            "Attivazioni disponibili oggi per questa istanza (0 = illimitato). "
+            "Lo staff può aggiungere o togliere il residuo; a mezzanotte torna a questo valore."
+        ),
+    )
+    cariche_residue = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Cariche residue del giorno",
+        help_text="Residuo già materializzato per cariche_giorno. Vuoto = vale ancora il massimo del giorno.",
+    )
+    cariche_giorno = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Giorno delle cariche residue",
+        help_text="Giorno locale a cui si riferisce cariche_residue. Un altro giorno ricalcola dal massimo.",
     )
     rigenera_cariche_ogni_secondi = models.PositiveIntegerField(
         null=True,
         blank=True,
         verbose_name="Rigenera cariche ogni (secondi)",
-        help_text="Lasciare vuoto per nessuna rigenerazione automatica delle cariche.",
+        help_text=(
+            "Limite aggiuntivo per singolo giocatore. Vuoto = conta solo il residuo giornaliero dell'istanza."
+        ),
     )
     segnale_luminoso = models.BooleanField(
         default=True,

@@ -1994,6 +1994,11 @@ export const staffAggiungiIstanzeInnescoTimer = (id, quante, onLogout) =>
     method: 'POST',
     body: JSON.stringify({ quante }),
   }, onLogout);
+export const staffDeltaCaricheInnescoTimer = (id, delta, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/innesco-timer/${id}/cariche/`, {
+    method: 'POST',
+    body: JSON.stringify({ delta }),
+  }, onLogout);
 export const ackInnescoTimerScaduto = (data, onLogout) =>
   fetchAuthenticated('/api/personaggi/api/timers/active/ack/', {
     method: 'POST',
