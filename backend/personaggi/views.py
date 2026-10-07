@@ -672,7 +672,10 @@ class InfusioniAcquistabiliView(generics.GenericAPIView):
         tutte_infusioni = _campaign_feature_filter(request, Infusione.objects.exclude(id__in=possedute_ids), FEATURE_INFUSIONI).annotate(
             livello_calc=Sum('componenti__valore')
         ).select_related(
-            'aura_richiesta', 'aura_infusione'
+            'aura_richiesta',
+            'aura_richiesta__stat_costo_forgiatura',
+            'aura_richiesta__stat_tempo_forgiatura',
+            'aura_infusione',
         ).prefetch_related(
             'componenti__caratteristica',
             'infusionestatisticabase_set__statistica'

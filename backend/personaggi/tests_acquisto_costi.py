@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from personaggi.acquisto_costi import (
@@ -276,3 +276,33 @@ class ForgiaturaCostoCondizionaleAuraTest(TestCase):
 
         self.assertEqual(costo, 300)
         self.assertEqual(tempo, 180)
+
+
+class InfusioneSerializerRealizzazioneTest(SimpleTestCase):
+    def test_espone_costo_e_tempo_del_personaggio_una_sola_volta(self):
+        from personaggi.serializers import InfusioneSerializer
+
+        infusione = SimpleNamespace(pk=7)
+        personaggio = object()
+        serializer = InfusioneSerializer(context={"personaggio": personaggio})
+
+        with patch(
+            "personaggi.services.GestioneCraftingService.calcola_costi_tempi",
+            return_value=(240, 90),
+        ) as mock_calcolo:
+            self.assertEqual(serializer.get_costo_realizzazione(infusione), 240)
+            self.assertEqual(serializer.get_tempo_realizzazione_secondi(infusione), 90)
+            mock_calcolo.assert_called_once_with(personaggio, infusione)
+
+    def test_senza_personaggio_non_calcola(self):
+        from personaggi.serializers import InfusioneSerializer
+
+        infusione = SimpleNamespace(pk=8)
+        serializer = InfusioneSerializer(context={})
+
+        with patch(
+            "personaggi.services.GestioneCraftingService.calcola_costi_tempi",
+        ) as mock_calcolo:
+            self.assertIsNone(serializer.get_costo_realizzazione(infusione))
+            self.assertIsNone(serializer.get_tempo_realizzazione_secondi(infusione))
+            mock_calcolo.assert_not_called()
