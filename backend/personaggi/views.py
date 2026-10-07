@@ -3397,7 +3397,7 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
                         id__in=oggetti_ids,
                         tracciamento_inventario__inventario=personaggio_mittente,
                         tracciamento_inventario__data_fine__isnull=True,
-                    ).distinct()
+                    ).prefetch_related("potenziamenti_installati").distinct()
                 )
                 found_ids = {o.id for o in oggetti_da_trasferire}
                 missing_ids = [oid for oid in oggetti_ids if oid not in found_ids]
@@ -3405,10 +3405,14 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
                     raise serializers.ValidationError(
                         {"oggetti_ids": f"Oggetti non trasferibili o non posseduti: {missing_ids}."}
                     )
-                blocked = [o.nome for o in oggetti_da_trasferire if getattr(o, 'is_equipaggiato', False)]
-                if blocked:
+                non_cedibili = []
+                for o in oggetti_da_trasferire:
+                    motivo = o.motivo_non_cedibile()
+                    if motivo:
+                        non_cedibili.append(f"{o.nome} ({motivo})")
+                if non_cedibili:
                     raise serializers.ValidationError(
-                        {"oggetti_ids": f"Non puoi inviare oggetti equipaggiati: {', '.join(blocked)}."}
+                        {"oggetti_ids": f"Non puoi inviare: {', '.join(non_cedibili)}."}
                     )
 
             # Crea messaggio.
@@ -3427,13 +3431,7 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
                 )
             else:
                 oggetti_snapshot = [
-                    {
-                        "id": o.id,
-                        "sync_id": str(o.sync_id),
-                        "nome": o.nome,
-                        "tipo_oggetto": o.tipo_oggetto,
-                    }
-                    for o in oggetti_da_trasferire
+                    o.snapshot_allegato_messaggio() for o in oggetti_da_trasferire
                 ]
                 serializer.save(
                     mittente=self.request.user,
@@ -3465,7 +3463,7 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
                         )
 
                 for oggetto in oggetti_da_trasferire:
-                    oggetto.sposta_in_inventario(destinatario)
+                    oggetto.trasferisci_in_inventario(destinatario)
 
         
         

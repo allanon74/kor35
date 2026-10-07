@@ -7,11 +7,7 @@ import { useCharacter } from './CharacterContext';
 import { useChiamataVocale } from './ChiamataVocaleProvider';
 import { useDirtyModalClose } from '../hooks/useDirtyModalClose';
 import { richTextHasContent } from '../utils/htmlSanitizer';
-
-const filterTransferableItems = (oggetti = []) =>
-  (oggetti || []).filter(
-    (item) => item && item.id && item.tipo_oggetto === 'FIS' && !item.is_equipaggiato
-  );
+import { etichettaOggettoCedibile, filtraOggettiCedibili } from '../lib/oggettiMessaggio';
 
 const hasMeaningfulText = (html) => richTextHasContent(html);
 
@@ -176,7 +172,7 @@ const ComposeMessageModal = ({
           setSenderCorrente(Number(currentCredits || 0));
           setSenderDeposito(0);
           setSenderDuale(false);
-          setSenderTransferItems(filterTransferableItems(availableTransferItems));
+          setSenderTransferItems(filtraOggettiCedibili(availableTransferItems));
           try {
             const detail = await getPersonaggioDetail(selectedSenderId, onLogout);
             if (!cancelled && detail) applyBalances(detail, currentCredits);
@@ -192,7 +188,7 @@ const ComposeMessageModal = ({
         const detail = await getPersonaggioDetail(selectedSenderId, onLogout);
         if (cancelled) return;
         applyBalances(detail, fromList?.crediti);
-        setSenderTransferItems(filterTransferableItems(detail?.oggetti || []));
+        setSenderTransferItems(filtraOggettiCedibili(detail?.oggetti || []));
       } catch {
         if (!cancelled) {
           setSenderCredits(Number(fromList?.crediti || 0));
@@ -669,7 +665,7 @@ const ComposeMessageModal = ({
                                   className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
                                 />
                                 <span className="text-sm text-gray-200">
-                                  {item.nome || `Oggetto ${item.id}`}
+                                  {etichettaOggettoCedibile(item)}
                                 </span>
                               </label>
                             ))

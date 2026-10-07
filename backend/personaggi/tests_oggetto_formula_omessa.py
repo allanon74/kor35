@@ -11,6 +11,7 @@ from personaggi.models import (
     Campagna,
     Infusione,
     Oggetto,
+    OggettoBase,
     Personaggio,
     Punteggio,
 )
@@ -39,7 +40,7 @@ class OggettoFormulaOmessaTests(TestCase):
 
     def _infusione(self, *, formula):
         return Infusione.objects.create(
-            nome=f"Infusione {formula or 'senza formula'}",
+            nome=(f"Infusione {formula or 'senza formula'}")[:100],
             aura_richiesta=self.aura,
             formula_attacco=formula,
             campagna=self.campagna,
@@ -98,3 +99,67 @@ class OggettoFormulaOmessaTests(TestCase):
         data = OggettoSerializer(oggetto, context={"personaggio": self.pg}).data
         self.assertEqual(data["attacco_base_effettivo"], "Mischia 1d10")
         self.assertTrue(data["attacco_formattato"])
+
+    def test_capacita_su_materia_non_diventa_chop(self):
+        """
+        Istanza ancora sul template di default, infusione con sola capacità:
+        niente attacco «Chop», la descrizione mostra la capacità.
+        """
+        formula_cap = (
+            "Capacità Aureola Benedetta: {formula_prefix}{formula_status} "
+            "Effetto: Disperdo questa tessitura!"
+        )
+        infusione = self._infusione(formula=formula_cap)
+        infusione.formula_builder_selezioni = {
+            "formula_type": "capacity",
+            "effect_description": "Disperdo questa tessitura!",
+        }
+        infusione.save(update_fields=["formula_builder_selezioni", "updated_at"])
+        oggetto = self._oggetto(
+            attacco_base=DEFAULT_ATTACK_FORMULA_TEMPLATE, infusione=infusione
+        )
+        self.assertEqual(oggetto.formula_attacco_effettiva, "")
+        self.assertIn("Capacità Aureola Benedetta", oggetto.formula_testo_effettiva)
+        html = self.pg.get_testo_formattato_per_item(oggetto)
+        self.assertIn("Capacità Aureola Benedetta", html)
+        self.assertNotIn("Chop", html)
+        data = OggettoSerializer(oggetto, context={"personaggio": self.pg}).data
+        self.assertIsNone(data["attacco_base_effettivo"])
+        self.assertIsNone(data["attacco_formattato"])
+
+    def test_template_default_su_anello_senza_formula_non_rende_chop(self):
+        base = OggettoBase.objects.create(nome="Anello d'argento", attacco_base="")
+        oggetto = Oggetto.objects.create(
+            nome="Anello d'argento",
+            testo="<p>Un anello.</p>",
+            attacco_base=DEFAULT_ATTACK_FORMULA_TEMPLATE,
+            oggetto_base_generatore=base,
+            aura=self.aura,
+        )
+        self.assertEqual(oggetto.formula_attacco_effettiva, "")
+        self.assertEqual(oggetto.formula_testo_effettiva, "")
+        html = self.pg.get_testo_formattato_per_item(oggetto)
+        self.assertNotIn("Chop", html)
+        self.assertNotIn("Formula:", html)
+
+    def test_pugnale_con_template_di_attacco_mantiene_il_chop(self):
+        base = OggettoBase.objects.create(
+            nome="Pugnale", attacco_base=DEFAULT_ATTACK_FORMULA_TEMPLATE
+        )
+        oggetto = Oggetto.objects.create(
+            nome="Pugnale",
+            testo="<p>Una lama.</p>",
+            attacco_base=DEFAULT_ATTACK_FORMULA_TEMPLATE,
+            oggetto_base_generatore=base,
+            aura=self.aura,
+        )
+        self.assertEqual(oggetto.formula_attacco_effettiva, DEFAULT_ATTACK_FORMULA_TEMPLATE)
+        html = self.pg.get_testo_formattato_per_item(oggetto)
+        self.assertIn("Chop", html)
+
+    def test_override_istanza_resta_attacco_anche_con_infusione_capacita(self):
+        infusione = self._infusione(formula="Capacità Aura: {formula_status}")
+        infusione.formula_builder_selezioni = {"formula_type": "capacity"}
+        infusione.save(update_fields=["formula_builder_selezioni", "updated_at"])
+        oggetto = self._oggetto(attacco_base="Lama pura", infusione=infusione)
+        self.assertEqual(oggetto.formula_attacco_effettiva, "Lama pura")
