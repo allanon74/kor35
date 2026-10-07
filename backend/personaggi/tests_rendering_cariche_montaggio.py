@@ -32,7 +32,7 @@ class GeneraHtmlCaricheLabelTests(TestCase):
         self.stat = Statistica.objects.create(
             nome="Cariche tecnologiche",
             sigla="CTK",
-            parametro="cariche_tech",
+            parametro="cariche",
             valore_base_predefinito=5,
         )
         self.infusione = Infusione.objects.create(
