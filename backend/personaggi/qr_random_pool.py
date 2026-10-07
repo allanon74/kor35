@@ -668,6 +668,50 @@ def apply_pool_effect(
             "dati": listino,
         }
 
+    if tipo == RandomQrPoolEffect.TIPO_CREDITI:
+        if not personaggio:
+            return {
+                "blocked": True,
+                "error": "Parametro personaggio_id richiesto per i crediti.",
+            }
+        from decimal import Decimal
+
+        from personaggi.economia_crediti import CONTO_DEPOSITO
+
+        lo = Decimal(effect.crediti_importo_min or 0)
+        hi = Decimal(effect.crediti_importo_max if effect.crediti_importo_max is not None else lo)
+        if hi < lo:
+            lo, hi = hi, lo
+        if lo == hi:
+            importo = lo
+        else:
+            importo = (
+                Decimal(random.randint(int(lo * 100), int(hi * 100))) / Decimal("100")
+            ).quantize(Decimal("0.01"))
+        if importo <= 0:
+            return {
+                **base,
+                "tipo_modello": "pool_errore",
+                "messaggio": "Importo crediti non valido.",
+                "dati": {},
+            }
+        with transaction.atomic():
+            personaggio.modifica_crediti(
+                importo,
+                f"Pool QR crediti: {effect.titolo or effect.pool.nome}",
+                conto=CONTO_DEPOSITO,
+            )
+        return {
+            **base,
+            "tipo_modello": "credito_deposito",
+            "messaggio": f"Accreditati {importo} crediti sul deposito.",
+            "dati": {
+                "nome": effect.titolo or "Crediti",
+                "importo": str(importo),
+                "conto": "DEPOSITO",
+            },
+        }
+
     if tipo == RandomQrPoolEffect.TIPO_OGGETTO_BASE:
         if not personaggio:
             return {
@@ -978,7 +1022,7 @@ def _conflict_payload(qr, *, tipo: str, nome: str, elemento_id) -> Dict[str, Any
 
 def associa_qr_a_trappola(trappola, qr, *, force: bool = False) -> Tuple[bool, Optional[Dict[str, Any]]]:
     """Collega un QrCode a Trappola (OneToOne). Non usa QrCode.vista."""
-    from .models import SerieQr, Trappola
+    from .models import QrCreditoDeposito, SerieQr, Trappola
     from .qr_logic import descrivi_avista_per_associazione_qr
 
     altro = Trappola.objects.filter(qr_code=qr).exclude(pk=trappola.pk).first()
@@ -989,6 +1033,12 @@ def associa_qr_a_trappola(trappola, qr, *, force: bool = False) -> Tuple[bool, O
     if serie_altro and not force:
         return False, _conflict_payload(
             qr, tipo="serie_qr", nome=serie_altro.nome, elemento_id=serie_altro.pk
+        )
+
+    credito_altro = QrCreditoDeposito.objects.filter(qr_code=qr).first()
+    if credito_altro and not force:
+        return False, _conflict_payload(
+            qr, tipo="credito_deposito", nome=credito_altro.nome, elemento_id=credito_altro.pk
         )
 
     if qr.vista_id and not force:
@@ -1011,6 +1061,7 @@ def associa_qr_a_trappola(trappola, qr, *, force: bool = False) -> Tuple[bool, O
     with transaction.atomic():
         Trappola.objects.filter(qr_code=qr).exclude(pk=trappola.pk).update(qr_code=None)
         SerieQr.objects.filter(qr_code=qr).update(qr_code=None)
+        QrCreditoDeposito.objects.filter(qr_code=qr).update(qr_code=None)
         if qr.vista_id:
             qr.vista = None
             qr.save(update_fields=["vista", "updated_at"])
@@ -1027,7 +1078,7 @@ def scollega_qr_da_trappola(trappola) -> None:
 
 def associa_qr_a_serie_qr(serie_qr, qr, *, force: bool = False) -> Tuple[bool, Optional[Dict[str, Any]]]:
     """Collega un QrCode a SerieQr (OneToOne). Non usa QrCode.vista."""
-    from .models import SerieQr, Trappola
+    from .models import QrCreditoDeposito, SerieQr, Trappola
     from .qr_logic import descrivi_avista_per_associazione_qr
 
     altro = SerieQr.objects.filter(qr_code=qr).exclude(pk=serie_qr.pk).first()
@@ -1038,6 +1089,12 @@ def associa_qr_a_serie_qr(serie_qr, qr, *, force: bool = False) -> Tuple[bool, O
     if trap_altro and not force:
         return False, _conflict_payload(
             qr, tipo="trappola", nome=trap_altro.nome, elemento_id=trap_altro.pk
+        )
+
+    credito_altro = QrCreditoDeposito.objects.filter(qr_code=qr).first()
+    if credito_altro and not force:
+        return False, _conflict_payload(
+            qr, tipo="credito_deposito", nome=credito_altro.nome, elemento_id=credito_altro.pk
         )
 
     if qr.vista_id and not force:
@@ -1060,12 +1117,81 @@ def associa_qr_a_serie_qr(serie_qr, qr, *, force: bool = False) -> Tuple[bool, O
     with transaction.atomic():
         SerieQr.objects.filter(qr_code=qr).exclude(pk=serie_qr.pk).update(qr_code=None)
         Trappola.objects.filter(qr_code=qr).update(qr_code=None)
+        QrCreditoDeposito.objects.filter(qr_code=qr).update(qr_code=None)
         if qr.vista_id:
             qr.vista = None
             qr.save(update_fields=["vista", "updated_at"])
         serie_qr.qr_code = qr
         serie_qr.save(update_fields=["qr_code", "updated_at"])
     return True, None
+
+
+def associa_qr_a_credito(
+    credito, qr, *, force: bool = False, usi_max=...
+) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    """Collega un QrCode a QrCreditoDeposito (OneToOne). Non usa QrCode.vista."""
+    from .models import QrCreditoDeposito, SerieQr, Trappola
+    from .qr_logic import descrivi_avista_per_associazione_qr
+
+    altro = QrCreditoDeposito.objects.filter(qr_code=qr).exclude(pk=credito.pk).first()
+    if altro and not force:
+        return False, _conflict_payload(
+            qr, tipo="credito_deposito", nome=altro.nome, elemento_id=altro.pk
+        )
+
+    trap_altro = Trappola.objects.filter(qr_code=qr).first()
+    if trap_altro and not force:
+        return False, _conflict_payload(
+            qr, tipo="trappola", nome=trap_altro.nome, elemento_id=trap_altro.pk
+        )
+
+    serie_altro = SerieQr.objects.filter(qr_code=qr).first()
+    if serie_altro and not force:
+        return False, _conflict_payload(
+            qr, tipo="serie_qr", nome=serie_altro.nome, elemento_id=serie_altro.pk
+        )
+
+    if qr.vista_id and not force:
+        info = descrivi_avista_per_associazione_qr(qr.vista) or {
+            "tipo": "sconosciuto",
+            "nome": getattr(qr.vista, "nome", "?"),
+            "elemento_id": str(qr.vista_id),
+        }
+        return False, {
+            "error": "QR già associato",
+            "already_associated": True,
+            "qr_id": str(qr.id),
+            "associazione_attuale": info,
+            "message": (
+                f'Questo QR punta ancora a «{info["nome"]}» ({info["tipo"]}). '
+                "Confermi di collegarlo a questo QR credito?"
+            ),
+        }
+
+    with transaction.atomic():
+        QrCreditoDeposito.objects.filter(qr_code=qr).exclude(pk=credito.pk).update(qr_code=None)
+        Trappola.objects.filter(qr_code=qr).update(qr_code=None)
+        SerieQr.objects.filter(qr_code=qr).update(qr_code=None)
+        update_qr = []
+        if qr.vista_id:
+            qr.vista = None
+            update_qr.append("vista")
+        if usi_max is not ...:
+            qr.usi_max = usi_max
+            qr.usi_consumati = 0
+            update_qr.extend(["usi_max", "usi_consumati"])
+        if update_qr:
+            update_qr.append("updated_at")
+            qr.save(update_fields=update_qr)
+        credito.qr_code = qr
+        credito.save(update_fields=["qr_code", "updated_at"])
+    return True, None
+
+
+def scollega_qr_da_credito(credito) -> None:
+    if credito.qr_code_id:
+        credito.qr_code = None
+        credito.save(update_fields=["qr_code", "updated_at"])
 
 
 def scollega_qr_da_serie_qr(serie_qr) -> None:

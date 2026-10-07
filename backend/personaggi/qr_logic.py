@@ -154,27 +154,31 @@ def risolvi_payload_manifesto(manifesto, personaggio=None) -> Dict[str, Any]:
     return payload
 
 
-def permessi_oggetto_inventario_qr(personaggio, oggetto) -> Dict[str, Any]:
+def aura_rilevante_visibilita_oggetto(oggetto):
     """
-    Visibilità e azioni per oggetti in inventario scansionato via QR (non PG).
+    Aura usata per vedere/prendere oggetti in inventario QR.
+    Per oggetti da infusione trasmutatore (aura secondaria valorizzata) fa fede
+    ``infusione.aura_infusione``; altrimenti ``oggetto.aura``.
     """
+    inf = getattr(oggetto, "infusione_generatrice", None)
+    if inf is not None and getattr(inf, "aura_infusione_id", None):
+        return inf.aura_infusione
+    return getattr(oggetto, "aura", None)
+
+
+def _is_istanza_oggetto_base(oggetto) -> bool:
+    """Istanza da listino (OggettoBase) senza origine infusione."""
+    return bool(getattr(oggetto, "oggetto_base_generatore_id", None)) and not getattr(
+        oggetto, "infusione_generatrice_id", None
+    )
+
+
+def _classifica_mat_mod(oggetto) -> Tuple[bool, bool]:
     from .models import (
-        TIPO_OGGETTO_FISICO,
         TIPO_OGGETTO_MATERIA,
         TIPO_OGGETTO_MOD,
         TIPO_OGGETTO_POTENZIAMENTO,
-        TIPO_OGGETTO_INNESTO,
-        TIPO_OGGETTO_MUTAZIONE,
-        TIPO_OGGETTO_AUMENTO,
     )
-
-    livello = oggetto.livello or 0
-    if oggetto.aura_id:
-        visibile = personaggio.get_valore_aura_effettivo(oggetto.aura) >= 1
-    else:
-        visibile = True
-
-    libero = not oggetto.ospitato_su_id
 
     is_mat = oggetto.tipo_oggetto == TIPO_OGGETTO_MATERIA or (
         oggetto.tipo_oggetto == TIPO_OGGETTO_POTENZIAMENTO and not oggetto.is_tecnologico
@@ -182,31 +186,367 @@ def permessi_oggetto_inventario_qr(personaggio, oggetto) -> Dict[str, Any]:
     is_mod = oggetto.tipo_oggetto == TIPO_OGGETTO_MOD or (
         oggetto.tipo_oggetto == TIPO_OGGETTO_POTENZIAMENTO and oggetto.is_tecnologico
     )
+    return is_mat, is_mod
 
-    ams = personaggio.get_valore_aura_per_sigla("AMS")
-    ate = personaggio.get_valore_aura_per_sigla("ATE")
 
-    # Prendi: materia/mod "liberi" (non montati) se visibili; altri tipi se visibili
-    puo_prendere = False
-    if visibile:
-        if is_mat or is_mod:
-            puo_prendere = libero
-        elif oggetto.tipo_oggetto in (
+def _ha_punteggio_aura_minimo(personaggio, aura, minimo: int = 1) -> bool:
+    if not aura:
+        return True
+    return int(personaggio.get_valore_aura_effettivo(aura) or 0) >= minimo
+
+
+def _puo_vedere_materia_o_mod(personaggio, oggetto) -> bool:
+    """
+    Materia: serve AMS ≥ 1 e ≥ 1 nell'aura rilevante.
+    Mod: serve ATE ≥ 1 e ≥ 1 nell'aura rilevante.
+    """
+    is_mat, is_mod = _classifica_mat_mod(oggetto)
+    ams = int(personaggio.get_valore_aura_per_sigla("AMS") or 0)
+    ate = int(personaggio.get_valore_aura_per_sigla("ATE") or 0)
+    if is_mod:
+        if ate < 1:
+            return False
+    elif is_mat:
+        if ams < 1:
+            return False
+    else:
+        return False
+    return _ha_punteggio_aura_minimo(personaggio, aura_rilevante_visibilita_oggetto(oggetto), 1)
+
+
+def _puo_vedere_oggetto_craftato(personaggio, oggetto) -> bool:
+    """
+    Oggetti (non base): AMS (Assemblatore) ≥ 1 e ≥ 1 nell'aura dell'oggetto
+    (secondaria se da trasmutatore).
+    """
+    ams = int(personaggio.get_valore_aura_per_sigla("AMS") or 0)
+    if ams < 1:
+        return False
+    return _ha_punteggio_aura_minimo(personaggio, aura_rilevante_visibilita_oggetto(oggetto), 1)
+
+
+def permessi_oggetto_inventario_qr(personaggio, oggetto) -> Dict[str, Any]:
+    """
+    Visibilità e azioni per oggetti in inventario scansionato via QR (non PG).
+
+    Regole:
+    - oggetti base (listino): sempre visibili e prendibili;
+    - materia/mod libere: visibili (e prendibili) se AMS/ATE ≥ 1 e aura ≥ 1;
+    - materia/mod montate: se visibili possono essere smontate/prese via host;
+    - oggetti craftati: AMS ≥ 1 + aura ≥ 1; se modificati, visibili/prendibili
+      solo se lo sono anche materie/mod montate.
+    """
+    from .models import (
+        TIPO_OGGETTO_FISICO,
+        TIPO_OGGETTO_INNESTO,
+        TIPO_OGGETTO_MUTAZIONE,
+        TIPO_OGGETTO_AUMENTO,
+    )
+
+    livello = oggetto.livello or 0
+    libero = not oggetto.ospitato_su_id
+    is_mat, is_mod = _classifica_mat_mod(oggetto)
+    ams = int(personaggio.get_valore_aura_per_sigla("AMS") or 0)
+    ate = int(personaggio.get_valore_aura_per_sigla("ATE") or 0)
+
+    # --- Oggetto base da listino: sempre ---
+    if _is_istanza_oggetto_base(oggetto) and libero:
+        return {
+            "visibile_inventario_qr": True,
+            "puo_prendere": True,
+            "puo_smonta_materia": False,
+            "puo_smonta_mod": False,
+            "categoria_visibilita": "oggetto_base",
+        }
+
+    # --- Materia / Mod ---
+    if is_mat or is_mod:
+        visibile = _puo_vedere_materia_o_mod(personaggio, oggetto)
+        # Libere: prendibili se visibili. Montate: "prendi" = smonta nel PG se visibili.
+        puo_prendere = bool(visibile)
+        return {
+            "visibile_inventario_qr": visibile,
+            "puo_prendere": puo_prendere,
+            "puo_smonta_materia": bool(visibile and is_mat and (libero or ams >= livello)),
+            "puo_smonta_mod": bool(visibile and is_mod and (libero or ate >= livello)),
+            "categoria_visibilita": "materia" if is_mat else "mod",
+        }
+
+    # --- Oggetti craftati / innesti / mutazioni / aumenti ---
+    montati = list(oggetto.potenziamenti_installati.all()) if libero else []
+    if montati:
+        ok_montati = all(_puo_vedere_materia_o_mod(personaggio, m) for m in montati)
+        visibile = ok_montati
+        puo_prendere = ok_montati
+        categoria = "oggetto_modificato"
+    else:
+        if oggetto.tipo_oggetto in (
             TIPO_OGGETTO_FISICO,
             TIPO_OGGETTO_INNESTO,
             TIPO_OGGETTO_MUTAZIONE,
             TIPO_OGGETTO_AUMENTO,
-        ):
-            puo_prendere = True
-
-    puo_smonta_materia = visibile and is_mat and ams >= livello
-    puo_smonta_mod = visibile and is_mod and ate >= livello
+        ) or not (is_mat or is_mod):
+            visibile = _puo_vedere_oggetto_craftato(personaggio, oggetto)
+        else:
+            visibile = False
+        puo_prendere = bool(visibile and libero)
+        categoria = "oggetto_craftato"
 
     return {
         "visibile_inventario_qr": visibile,
         "puo_prendere": puo_prendere,
-        "puo_smonta_materia": puo_smonta_materia,
-        "puo_smonta_mod": puo_smonta_mod,
+        "puo_smonta_materia": False,
+        "puo_smonta_mod": False,
+        "categoria_visibilita": categoria,
+    }
+
+
+def qr_usi_info(qr) -> Dict[str, Any]:
+    """Metadati usi residui per payload scan / acquisizione."""
+    usi_max = getattr(qr, "usi_max", None)
+    usi_consumati = int(getattr(qr, "usi_consumati", 0) or 0)
+    illimitato = usi_max is None
+    residui = None if illimitato else max(int(usi_max) - usi_consumati, 0)
+    esaurito = (not illimitato) and residui == 0
+    return {
+        "usi_max": usi_max,
+        "usi_consumati": usi_consumati,
+        "usi_illimitati": illimitato,
+        "usi_residui": residui,
+        "usi_esauriti": esaurito,
+    }
+
+
+def qr_usi_esauriti(qr) -> bool:
+    return bool(qr_usi_info(qr)["usi_esauriti"])
+
+
+def qr_deve_svuotarsi_dopo_uso(qr) -> bool:
+    """True se, consumando un altro uso, il QR deve svuotarsi (ultimo uso)."""
+    info = qr_usi_info(qr)
+    if info["usi_illimitati"]:
+        return False
+    return int(info["usi_residui"] or 0) <= 1
+
+
+def consuma_uso_qr(qr, *, svuota_vista: bool = True) -> Dict[str, Any]:
+    """
+    Incrementa usi_consumati; se esaurito e svuota_vista, stacca vista
+    (e lascia il QR fisico riusabile dallo staff).
+    """
+    from .models import QrCode
+
+    with transaction.atomic():
+        locked = QrCode.objects.select_for_update().get(pk=qr.pk)
+        if qr_usi_esauriti(locked):
+            return {**qr_usi_info(locked), "consumato": False, "svuotato": False}
+        locked.usi_consumati = int(locked.usi_consumati or 0) + 1
+        update_fields = ["usi_consumati", "updated_at"]
+        svuotato = False
+        if svuota_vista and not qr_usi_info(locked)["usi_illimitati"]:
+            if int(locked.usi_max) <= int(locked.usi_consumati):
+                locked.vista = None
+                update_fields.append("vista")
+                svuotato = True
+        locked.save(update_fields=update_fields)
+        # Allinea istanza caller
+        qr.usi_consumati = locked.usi_consumati
+        qr.vista_id = locked.vista_id
+        return {**qr_usi_info(locked), "consumato": True, "svuotato": svuotato}
+
+
+def clona_oggetto_per_multi_uso_qr(sorgente) -> Any:
+    """
+    Clona un'istanza Oggetto (campi + stats + potenziamenti montati) per
+    acquisizioni multi-uso che non devono spostare il template sul QR.
+    """
+    from .models import (
+        Oggetto,
+        OggettoStatistica,
+        OggettoStatisticaBase,
+        OggettoCaratteristica,
+    )
+
+    fields = [
+        "nome",
+        "testo",
+        "tipo_oggetto",
+        "classe_oggetto_id",
+        "is_tecnologico",
+        "costo_acquisto",
+        "attacco_base",
+        "formula_builder_selezioni",
+        "infusione_generatrice_id",
+        "slot_corpo",
+        "slot_fisici_possibili",
+        "cariche_attuali",
+        "oggetto_base_generatore_id",
+        "is_pesante",
+        "aura_id",
+        "is_danneggiato",
+    ]
+    kwargs = {}
+    for f in fields:
+        kwargs[f] = getattr(sorgente, f)
+    kwargs["is_equipaggiato"] = False
+    kwargs["ospitato_su"] = None
+    kwargs["in_vendita"] = False
+    kwargs["data_fine_attivazione"] = sorgente.data_fine_attivazione
+    nuovo = Oggetto.objects.create(**kwargs)
+
+    for row in sorgente.oggettostatisticabase_set.all():
+        OggettoStatisticaBase.objects.create(
+            oggetto=nuovo,
+            statistica_id=row.statistica_id,
+            valore_base=row.valore_base,
+        )
+    for row in sorgente.oggettostatistica_set.all():
+        OggettoStatistica.objects.create(
+            oggetto=nuovo,
+            statistica_id=row.statistica_id,
+            valore=row.valore,
+            tipo_modificatore=row.tipo_modificatore,
+            solo_oggetto_ospitante=getattr(row, "solo_oggetto_ospitante", False),
+        )
+    for row in sorgente.componenti.all():
+        OggettoCaratteristica.objects.create(
+            oggetto=nuovo,
+            caratteristica_id=row.caratteristica_id,
+            valore=row.valore,
+        )
+
+    for pot in sorgente.potenziamenti_installati.all():
+        clone_pot = clona_oggetto_per_multi_uso_qr(pot)
+        clone_pot.ospitato_su = nuovo
+        clone_pot.save(update_fields=["ospitato_su", "updated_at"])
+
+    return nuovo
+
+
+def prendi_oggetto_da_inventario_qr(*, personaggio, inventario, oggetto) -> Tuple[bool, str]:
+    """
+    Preleva un oggetto da inventario QR non-PG rispettando i permessi di visibilità.
+    Materia/mod montate: smonta e sposta nel PG.
+    """
+    from .models import Oggetto, Personaggio
+
+    if Personaggio.objects.filter(inventario_ptr_id=inventario.pk).exists():
+        return False, "Usa le transazioni per inventari personaggio."
+
+    in_inv = oggetto.inventario_corrente == inventario
+    host = oggetto.ospitato_su
+    host_in_inv = bool(host and host.inventario_corrente == inventario)
+    if not in_inv and not host_in_inv:
+        return False, "L'oggetto non è in questo inventario."
+
+    perm = permessi_oggetto_inventario_qr(personaggio, oggetto)
+    if not perm.get("visibile_inventario_qr") or not perm.get("puo_prendere"):
+        return False, "Non puoi prendere questo oggetto."
+
+    with transaction.atomic():
+        locked = Oggetto.objects.select_for_update().get(pk=oggetto.pk)
+        if locked.ospitato_su_id:
+            locked.ospitato_su = None
+            locked.save(update_fields=["ospitato_su", "updated_at"])
+        locked.sposta_in_inventario(personaggio)
+        personaggio.aggiungi_log(f"Preso da inventario QR «{inventario.nome}»: {locked.nome}")
+
+    return True, f"Hai preso «{locked.nome}»."
+
+
+def prendi_consumabile_da_inventario_qr(*, personaggio, inventario, consumabile) -> Tuple[bool, str]:
+    """Sposta un ConsumabileInInventario nel PG come ConsumabilePersonaggio."""
+    from datetime import date, timedelta
+
+    from .models import ConsumabileInInventario, ConsumabilePersonaggio, Personaggio
+
+    if Personaggio.objects.filter(inventario_ptr_id=inventario.pk).exists():
+        return False, "Usa le transazioni per inventari personaggio."
+    if consumabile.inventario_id != inventario.pk:
+        return False, "Consumabile non presente in questo inventario."
+
+    with transaction.atomic():
+        row = ConsumabileInInventario.objects.select_for_update().get(pk=consumabile.pk)
+        scadenza = row.data_scadenza or (date.today() + timedelta(days=30))
+        ConsumabilePersonaggio.objects.create(
+            personaggio=personaggio,
+            tessitura=row.tessitura,
+            nome=row.nome,
+            descrizione=row.descrizione or "",
+            formula=row.formula,
+            utilizzi_rimanenti=row.utilizzi_rimanenti,
+            data_scadenza=scadenza,
+        )
+        row.delete()
+        personaggio.aggiungi_log(f"Preso consumabile da inventario QR «{inventario.nome}»: {row.nome}")
+
+    return True, f"Hai preso il consumabile «{consumabile.nome}»."
+
+
+def prendi_crediti_da_inventario_qr(*, personaggio, inventario) -> Tuple[bool, str, Any]:
+    """Preleva tutti i crediti_deposito_contenuti dell'inventario QR sul deposito del PG."""
+    from decimal import Decimal
+
+    from personaggi.economia_crediti import CONTO_DEPOSITO
+
+    from .models import Inventario, Personaggio
+
+    if Personaggio.objects.filter(inventario_ptr_id=inventario.pk).exists():
+        return False, "Non applicabile a inventari personaggio.", None
+
+    with transaction.atomic():
+        inv = Inventario.objects.select_for_update().get(pk=inventario.pk)
+        importo = Decimal(inv.crediti_deposito_contenuti or 0)
+        if importo <= 0:
+            return False, "Nessun credito disponibile in questo inventario.", None
+        inv.crediti_deposito_contenuti = Decimal("0")
+        inv.save(update_fields=["crediti_deposito_contenuti", "updated_at"])
+        personaggio.modifica_crediti(
+            importo,
+            f"Prelievo crediti da inventario QR «{inv.nome}»",
+            conto=CONTO_DEPOSITO,
+        )
+        personaggio.aggiungi_log(f"Prelievo {importo} crediti deposito da inventario QR «{inv.nome}»")
+
+    return True, f"Accreditati {importo} crediti sul deposito.", importo
+
+
+def applica_credito_deposito_qr(*, qr, config, personaggio) -> Dict[str, Any]:
+    """Accredita importo (fisso/random) su DEPOSITO e consuma un uso del QR."""
+    from personaggi.economia_crediti import CONTO_DEPOSITO
+
+    if qr_usi_esauriti(qr):
+        return {"ok": False, "error": "qr_usi_esauriti", "message": "Questo QR ha esaurito gli usi."}
+
+    importo = config.importo_estratto()
+    if importo <= 0:
+        return {"ok": False, "error": "importo_zero", "message": "Importo credito non valido."}
+
+    with transaction.atomic():
+        personaggio.modifica_crediti(
+            importo,
+            f"QR credito deposito: {config.nome}",
+            conto=CONTO_DEPOSITO,
+        )
+        usi = consuma_uso_qr(qr, svuota_vista=False)
+        if usi.get("usi_esauriti"):
+            # Stacca la config credito dal QR esaurito
+            from .models import QrCreditoDeposito
+
+            QrCreditoDeposito.objects.filter(pk=config.pk).update(qr_code=None)
+
+    return {
+        "ok": True,
+        "tipo_modello": "credito_deposito",
+        "messaggio": f"Accreditati {importo} crediti sul deposito.",
+        "dati": {
+            "nome": config.nome,
+            "testo": config.testo,
+            "importo": str(importo),
+            "conto": "DEPOSITO",
+            **{k: usi.get(k) for k in ("usi_max", "usi_consumati", "usi_illimitati", "usi_residui", "usi_esauriti")},
+        },
+        "qrcode_id": qr.id,
     }
 
 
@@ -846,11 +1186,33 @@ class AssociaQrConflict(Exception):
         super().__init__(payload.get("message", "QR già associato"))
 
 
-def associa_qrcode_a_vista(qr, a_vista, *, force: bool = False) -> Dict[str, Any]:
+def parse_usi_max_payload(raw) -> Optional[int]:
+    """
+    Converte il payload staff in usi_max:
+    - None / '' / mancante → None (illimitato)
+    - intero ≥ 1 → valore
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, str) and not raw.strip():
+        return None
+    try:
+        val = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("usi_max non valido") from exc
+    if val < 1:
+        raise ValueError("usi_max deve essere ≥ 1 oppure vuoto (illimitato)")
+    return val
+
+
+def associa_qrcode_a_vista(
+    qr, a_vista, *, force: bool = False, usi_max=..., reset_usi: bool = True
+) -> Dict[str, Any]:
     """
     Collega un QrCode a un A_vista (o sottoclasse MTI: Manifesto, Tessitura, …).
     - Confronto sempre su vista_id (non su istanze ORM: Manifesto != A_vista stesso pk).
     - Stacca eventuale altro QR già sul target (vincolo OneToOne su vista_id).
+    - ``usi_max``: se passato (anche None), aggiorna il limite usi; Ellipsis = non toccare.
     """
     from .models import QrCode
 
@@ -858,11 +1220,23 @@ def associa_qrcode_a_vista(qr, a_vista, *, force: bool = False) -> Dict[str, Any
     current_pk = qr.vista_id
 
     if current_pk == target_pk:
+        update_fields = []
+        if usi_max is not ...:
+            qr.usi_max = usi_max
+            update_fields.append("usi_max")
+            if reset_usi:
+                qr.usi_consumati = 0
+                update_fields.append("usi_consumati")
+        if update_fields:
+            update_fields.append("updated_at")
+            qr.save(update_fields=update_fields)
         return {
             "status": "success",
             "message": "QR già associato a questo elemento",
             "qr_id": qr.id,
             "a_vista_id": target_pk,
+            "usi_max": qr.usi_max,
+            "usi_consumati": qr.usi_consumati,
         }
 
     if current_pk and current_pk != target_pk and not force:
@@ -890,11 +1264,20 @@ def associa_qrcode_a_vista(qr, a_vista, *, force: bool = False) -> Dict[str, Any
             other.save(update_fields=["vista", "updated_at"])
 
         qr.vista_id = target_pk
-        qr.save(update_fields=["vista", "updated_at"])
+        update_fields = ["vista", "updated_at"]
+        if usi_max is not ...:
+            qr.usi_max = usi_max
+            update_fields.append("usi_max")
+        if reset_usi:
+            qr.usi_consumati = 0
+            update_fields.append("usi_consumati")
+        qr.save(update_fields=update_fields)
 
     return {
         "status": "success",
         "message": "QR associato con successo",
         "qr_id": qr.id,
         "a_vista_id": target_pk,
+        "usi_max": qr.usi_max,
+        "usi_consumati": qr.usi_consumati,
     }

@@ -1541,9 +1541,31 @@ class QrCodeDetailView(APIView):
                 return gate_resp
             return self.gestisci_scansione_timer(configurazione_timer)
 
-        # Trappola / SerieQr standalone (OneToOne su QrCode, non A_vista)
+        # Credito deposito / Trappola / SerieQr standalone (OneToOne su QrCode, non A_vista)
         from personaggi import qr_random_pool
-        from personaggi.models import SerieQr, Trappola
+        from personaggi.models import QrCreditoDeposito, SerieQr, Trappola
+
+        credito_cfg = QrCreditoDeposito.objects.filter(qr_code=qr_code).first()
+        if credito_cfg:
+            if not scanner_pg:
+                return Response(
+                    {"error": "Parametro personaggio_id richiesto per il QR credito."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            gate_resp = self._response_minigioco_gate(
+                request, qr_code, scanner_pg, bypass_sid=bypass_sid
+            )
+            if gate_resp is not None:
+                return gate_resp
+            result = qr_logic.applica_credito_deposito_qr(
+                qr=qr_code, config=credito_cfg, personaggio=scanner_pg
+            )
+            if not result.get("ok"):
+                return Response(
+                    {"error": result.get("error"), "message": result.get("message")},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response(result, status=status.HTTP_200_OK)
 
         trappola = Trappola.objects.filter(qr_code=qr_code).first()
         if trappola:
@@ -1753,11 +1775,14 @@ class QrCodeDetailView(APIView):
                 data = dict(data)
                 data["puo_acquisire_da_qr"] = ok_take
                 data["messaggio_acquisizione_qr"] = msg_take or None
+            data = dict(data)
+            data.update(qr_logic.qr_usi_info(qr_code))
 
         elif hasattr(vista_obj, "attivata"):
             model_type = "attivata"
             serializer = AttivataSerializer(vista_obj.attivata)
-            data = serializer.data
+            data = dict(serializer.data)
+            data.update(qr_logic.qr_usi_info(qr_code))
 
         elif hasattr(vista_obj, "infusione"):
             model_type = "infusione"
@@ -1769,6 +1794,7 @@ class QrCodeDetailView(APIView):
                 data["tecnica_usabile"] = ok_u
                 data["tecnica_usabilita_messaggio"] = msg_u
                 data["gia_posseduta"] = scanner_pg.infusioni_possedute.filter(pk=t.pk).exists()
+            data.update(qr_logic.qr_usi_info(qr_code))
 
         elif hasattr(vista_obj, "tessitura"):
             model_type = "tessitura"
@@ -1780,6 +1806,7 @@ class QrCodeDetailView(APIView):
                 data["tecnica_usabile"] = ok_u
                 data["tecnica_usabilita_messaggio"] = msg_u
                 data["gia_posseduta"] = scanner_pg.tessiture_possedute.filter(pk=t.pk).exists()
+            data.update(qr_logic.qr_usi_info(qr_code))
 
         elif hasattr(vista_obj, "cerimoniale"):
             model_type = "cerimoniale"
@@ -1791,6 +1818,7 @@ class QrCodeDetailView(APIView):
                 data["tecnica_usabile"] = ok_u
                 data["tecnica_usabilita_messaggio"] = msg_u
                 data["gia_posseduta"] = scanner_pg.cerimoniali_posseduti.filter(pk=t.pk).exists()
+            data.update(qr_logic.qr_usi_info(qr_code))
 
         elif hasattr(vista_obj, "manifesto"):
             model_type = "manifesto"
@@ -1837,14 +1865,64 @@ class QrCodeDetailView(APIView):
             model_type = "inventario"
             base = InventarioSerializer(inv).data
             oggetti_out = []
+            visti_ids = set()
             for o in inv.get_oggetti():
                 perm = qr_logic.permessi_oggetto_inventario_qr(scanner_pg, o)
                 if not perm["visibile_inventario_qr"]:
+                    # Anche se l'host non è visibile, mostra materie/mod montate prendibili
+                    for pot in o.potenziamenti_installati.all():
+                        if pot.pk in visti_ids:
+                            continue
+                        perm_p = qr_logic.permessi_oggetto_inventario_qr(scanner_pg, pot)
+                        if not perm_p["visibile_inventario_qr"]:
+                            continue
+                        pd = OggettoSerializer(pot, context={"request": request, "personaggio": scanner_pg}).data
+                        pd.update(perm_p)
+                        oggetti_out.append(pd)
+                        visti_ids.add(pot.pk)
                     continue
                 od = OggettoSerializer(o, context={"request": request, "personaggio": scanner_pg}).data
                 od.update(perm)
                 oggetti_out.append(od)
-            data = {**base, "oggetti": oggetti_out, "inventario_qr_confermato": True}
+                visti_ids.add(o.pk)
+                for pot in o.potenziamenti_installati.all():
+                    if pot.pk in visti_ids:
+                        continue
+                    perm_p = qr_logic.permessi_oggetto_inventario_qr(scanner_pg, pot)
+                    if not perm_p["visibile_inventario_qr"]:
+                        continue
+                    pd = OggettoSerializer(pot, context={"request": request, "personaggio": scanner_pg}).data
+                    pd.update(perm_p)
+                    oggetti_out.append(pd)
+                    visti_ids.add(pot.pk)
+
+            consumabili_out = []
+            for c in inv.get_consumabili():
+                consumabili_out.append(
+                    {
+                        "id": str(c.id),
+                        "nome": c.nome,
+                        "descrizione": c.descrizione,
+                        "formula": c.formula,
+                        "utilizzi_rimanenti": c.utilizzi_rimanenti,
+                        "data_scadenza": c.data_scadenza.isoformat() if c.data_scadenza else None,
+                        "tessitura_id": c.tessitura_id,
+                        "visibile_inventario_qr": True,
+                        "puo_prendere": True,
+                        "categoria_visibilita": "consumabile",
+                    }
+                )
+
+            crediti_dep = inv.crediti_deposito_contenuti or 0
+            data = {
+                **base,
+                "oggetti": oggetti_out,
+                "consumabili": consumabili_out,
+                "crediti_deposito": str(crediti_dep),
+                "crediti_deposito_contenuti": str(crediti_dep),
+                "puo_prendere_crediti": bool(crediti_dep and crediti_dep > 0),
+                "inventario_qr_confermato": True,
+            }
 
         else:
             model_type = "a_vista"
@@ -5707,11 +5785,19 @@ class AssociaQrAVistaView(APIView):
     """
     Associa un QR code a un elemento derivato da A_vista 
     (Tessitura, Infusione, Cerimoniale, Oggetto, OggettoBase, Inventario, Manifesto, Nodo, …)
+
+    Body opzionale:
+    - usi_max: intero ≥ 1, oppure null/"" per usi illimitati
     """
     permission_classes = [IsStaffOrMaster]
     
     def post(self, request, a_vista_id):
-        from .qr_logic import AssociaQrConflict, associa_qrcode_a_vista, validate_qr_id
+        from .qr_logic import (
+            AssociaQrConflict,
+            associa_qrcode_a_vista,
+            parse_usi_max_payload,
+            validate_qr_id,
+        )
 
         qr_id_raw = request.data.get('qr_id')
         force = bool(request.data.get('force', False))
@@ -5723,11 +5809,18 @@ class AssociaQrAVistaView(APIView):
             qr_pk = validate_qr_id(qr_id_raw)
         except (ValueError, TypeError):
             return Response({'error': 'qr_id non valido'}, status=status.HTTP_400_BAD_REQUEST)
+
+        usi_max_arg = ...
+        if "usi_max" in request.data:
+            try:
+                usi_max_arg = parse_usi_max_payload(request.data.get("usi_max"))
+            except ValueError as exc:
+                return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             a_vista = A_vista.objects.get(pk=a_vista_id)
             qr = QrCode.objects.get(id=qr_pk)
-            result = associa_qrcode_a_vista(qr, a_vista, force=force)
+            result = associa_qrcode_a_vista(qr, a_vista, force=force, usi_max=usi_max_arg)
             return Response(result)
         except A_vista.DoesNotExist:
             return Response({'error': 'Elemento non trovato'}, status=status.HTTP_404_NOT_FOUND)
@@ -5735,3 +5828,70 @@ class AssociaQrAVistaView(APIView):
             return Response({'error': 'QR Code non trovato'}, status=status.HTTP_404_NOT_FOUND)
         except AssociaQrConflict as exc:
             return Response(exc.payload, status=status.HTTP_409_CONFLICT)
+
+
+class InventarioQrPrendiView(APIView):
+    """
+    Prelievo diretto da inventario QR non-PG (oggetto / consumabile / crediti deposito).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, format=None):
+        from .models import ConsumabileInInventario, Inventario, Oggetto
+
+        personaggio_id = request.data.get("personaggio_id")
+        inventario_id = request.data.get("inventario_id")
+        tipo = (request.data.get("tipo") or "oggetto").strip().lower()
+
+        if not personaggio_id or not inventario_id:
+            return Response(
+                {"error": "personaggio_id e inventario_id sono richiesti."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            pg = Personaggio.objects.get(pk=personaggio_id, proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        blocked = _gioco_live_bloccato_response(request, campagna=pg.campagna)
+        if blocked:
+            return blocked
+        try:
+            inv = Inventario.objects.get(pk=inventario_id)
+        except Inventario.DoesNotExist:
+            return Response({"error": "Inventario non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+        if tipo == "crediti":
+            ok, msg, importo = qr_logic.prendi_crediti_da_inventario_qr(personaggio=pg, inventario=inv)
+            if not ok:
+                return Response({"error": msg}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"success": msg, "importo": str(importo)}, status=status.HTTP_200_OK)
+
+        if tipo == "consumabile":
+            cid = request.data.get("consumabile_id")
+            if not cid:
+                return Response({"error": "consumabile_id richiesto."}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                cons = ConsumabileInInventario.objects.get(pk=cid, inventario=inv)
+            except (ConsumabileInInventario.DoesNotExist, ValueError, TypeError):
+                return Response({"error": "Consumabile non trovato."}, status=status.HTTP_404_NOT_FOUND)
+            ok, msg = qr_logic.prendi_consumabile_da_inventario_qr(
+                personaggio=pg, inventario=inv, consumabile=cons
+            )
+            if not ok:
+                return Response({"error": msg}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"success": msg}, status=status.HTTP_200_OK)
+
+        oggetto_id = request.data.get("oggetto_id")
+        if not oggetto_id:
+            return Response({"error": "oggetto_id richiesto."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            oggetto = Oggetto.objects.select_related("ospitato_su", "infusione_generatrice").get(pk=oggetto_id)
+        except Oggetto.DoesNotExist:
+            return Response({"error": "Oggetto non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        ok, msg = qr_logic.prendi_oggetto_da_inventario_qr(
+            personaggio=pg, inventario=inv, oggetto=oggetto
+        )
+        if not ok:
+            return Response({"error": msg}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"success": msg}, status=status.HTTP_200_OK)

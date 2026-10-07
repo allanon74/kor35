@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft, Wrench, CheckCircle2, AlertTriangle, Zap, BatteryCharging, Package, Volume2 } from 'lucide-react';
-import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvanzata, resolveMediaUrl, salvaDocumentoArchivio } from '../api'; 
+import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvanzata, resolveMediaUrl, salvaDocumentoArchivio, prendiDaInventarioQr } from '../api'; 
 import { useCharacter } from './CharacterContext';
 import { useTimers } from '../hooks/useTimers';
 import PropostaEditorModal from './PropostaEditorModal';
@@ -365,8 +365,13 @@ const InventarioView = ({ data, onLogout }) => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [viewingOggetto, setViewingOggetto] = useState(null);
+  const [creditiLeft, setCreditiLeft] = useState(
+    data.crediti_deposito_contenuti ?? data.crediti_deposito
+  );
+  const [consumabili, setConsumabili] = useState(data.consumabili || []);
+  const [oggetti, setOggetti] = useState(data.oggetti || []);
   
-  const { selectedCharacterData } = useCharacter();
+  const { selectedCharacterId } = useCharacter();
   const isInCooldown = Date.now() < cooldownEnd;
 
   useEffect(() => {
@@ -383,31 +388,20 @@ const InventarioView = ({ data, onLogout }) => {
     }
   }, [cooldownEnd, isInCooldown]);
 
+  const startCooldown = () => setCooldownEnd(Date.now() + 3000);
+
   const handlePrendi = async (oggettoId, oggettoNome) => {
-    if (isInCooldown) return;
-    
+    if (isInCooldown || !selectedCharacterId) return;
     setMessage('Elaborazione...');
     setError('');
-    setCooldownEnd(Date.now() + 10000); // Avvia cooldown 10s
-
+    startCooldown();
     try {
-      const response = await richiediTransazione(oggettoId, data.id, onLogout);
-      setMessage(`Richiesta per '${oggettoNome}' inviata! Attendi conferma.`);
-    } catch (err) {
-      setError(err.message || 'Errore imprevisto.');
-      setMessage('');
-      setCooldownEnd(0); // Resetta cooldown in caso di errore
-    }
-  };
-
-  const handleSottrai = async (obj) => {
-    if (isInCooldown) return;
-    setMessage('Elaborazione sottrazione...');
-    setError('');
-    setCooldownEnd(Date.now() + 10000);
-    try {
-      const response = await richiediTransazione(obj.id, data.id, onLogout);
-      setMessage(response?.success || `Sottrazione richiesta per '${obj.nome}'.`);
+      const response = await prendiDaInventarioQr(
+        { personaggio_id: selectedCharacterId, inventario_id: data.id, tipo: 'oggetto', oggetto_id: oggettoId },
+        onLogout,
+      );
+      setMessage(response?.success || `Hai preso «${oggettoNome}».`);
+      setOggetti((prev) => prev.filter((o) => o.id !== oggettoId));
     } catch (err) {
       setError(err.message || 'Errore imprevisto.');
       setMessage('');
@@ -415,7 +409,46 @@ const InventarioView = ({ data, onLogout }) => {
     }
   };
 
-  const oggettiLista = (data.oggetti || []).filter((o) => o.visibile_inventario_qr !== false);
+  const handlePrendiConsumabile = async (cons) => {
+    if (isInCooldown || !selectedCharacterId) return;
+    setMessage('Elaborazione...');
+    setError('');
+    startCooldown();
+    try {
+      const response = await prendiDaInventarioQr(
+        { personaggio_id: selectedCharacterId, inventario_id: data.id, tipo: 'consumabile', consumabile_id: cons.id },
+        onLogout,
+      );
+      setMessage(response?.success || `Hai preso «${cons.nome}».`);
+      setConsumabili((prev) => prev.filter((c) => c.id !== cons.id));
+    } catch (err) {
+      setError(err.message || 'Errore imprevisto.');
+      setMessage('');
+      setCooldownEnd(0);
+    }
+  };
+
+  const handlePrendiCrediti = async () => {
+    if (isInCooldown || !selectedCharacterId) return;
+    setMessage('Elaborazione...');
+    setError('');
+    startCooldown();
+    try {
+      const response = await prendiDaInventarioQr(
+        { personaggio_id: selectedCharacterId, inventario_id: data.id, tipo: 'crediti' },
+        onLogout,
+      );
+      setMessage(response?.success || 'Crediti accreditati sul deposito.');
+      setCreditiLeft('0');
+    } catch (err) {
+      setError(err.message || 'Errore imprevisto.');
+      setMessage('');
+      setCooldownEnd(0);
+    }
+  };
+
+  const oggettiLista = (oggetti || []).filter((o) => o.visibile_inventario_qr !== false);
+  const creditiNum = Number(creditiLeft || 0);
 
   return (
     <div>
@@ -435,20 +468,53 @@ const InventarioView = ({ data, onLogout }) => {
       {isInCooldown && (
          <p className="text-yellow-400 mb-4 flex items-center">
            <Timer size={16} className="mr-2" />
-           Cooldown "Prendi" attivo: {cooldownTimer}s
+           Cooldown &quot;Prendi&quot; attivo: {cooldownTimer}s
          </p>
       )}
+
+      {creditiNum > 0 && (
+        <div className="mb-4 p-3 bg-emerald-900/30 border border-emerald-700/50 rounded-md flex items-center justify-between gap-2">
+          <span className="text-sm text-emerald-200">Crediti deposito: <strong>{creditiLeft}</strong></span>
+          <button
+            type="button"
+            onClick={handlePrendiCrediti}
+            disabled={isInCooldown}
+            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-sm font-bold disabled:opacity-50"
+          >
+            Prendi
+          </button>
+        </div>
+      )}
+
+      {(consumabili || []).length > 0 && (
+        <ul className="space-y-2 mb-4">
+          {consumabili.map((c) => (
+            <li key={c.id} className="flex justify-between items-center p-3 bg-amber-950/40 border border-amber-800/40 rounded-md">
+              <span className="text-sm">{c.nome} <span className="text-xs text-gray-400">×{c.utilizzi_rimanenti}</span></span>
+              <button
+                type="button"
+                onClick={() => handlePrendiConsumabile(c)}
+                disabled={isInCooldown}
+                className="p-2 bg-green-600 rounded hover:bg-green-700 disabled:opacity-50"
+                title="Prendi consumabile"
+              >
+                <Grab size={18} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       
-      {oggettiLista.length === 0 && (
-        <p className="text-gray-500 italic">Nessun oggetto visibile in questo inventario.</p>
+      {oggettiLista.length === 0 && creditiNum <= 0 && (consumabili || []).length === 0 && (
+        <p className="text-gray-500 italic">Nessun contenuto visibile in questo inventario.</p>
       )}
 
       <ul className="space-y-3">
         {oggettiLista.map(obj => (
           <li key={obj.id} className="flex flex-col gap-2 p-3 bg-gray-700 rounded-md">
-            <div className="flex justify-between items-center w-full">
-              <span className="font-semibold">{obj.nome}</span>
-              <div className="space-x-2">
+            <div className="flex justify-between items-center w-full gap-2">
+              <span className="font-semibold min-w-0 break-words">{obj.nome}</span>
+              <div className="flex shrink-0 gap-2">
                 <button 
                   onClick={() => setViewingOggetto(obj)}
                   className="p-2 bg-blue-600 rounded hover:bg-blue-700" 
@@ -464,30 +530,41 @@ const InventarioView = ({ data, onLogout }) => {
                 >
                   <Grab size={18} />
                 </button>
-                {(obj.puo_smonta_materia || obj.puo_smonta_mod) && (
-                  <button
-                    onClick={() => handleSottrai(obj)}
-                    disabled={isInCooldown}
-                    className={`p-2 bg-amber-700 rounded hover:bg-amber-800 ${isInCooldown ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    title="Smonta/sottrai"
-                  >
-                    <Timer size={18} />
-                  </button>
-                )}
               </div>
             </div>
-            {(obj.puo_smonta_materia || obj.puo_smonta_mod) && (
-              <p className="text-[10px] text-gray-400">
-                {obj.puo_smonta_materia && <span className="mr-2 text-amber-300">Smontabile come Materia (AMS)</span>}
-                {obj.puo_smonta_mod && <span className="text-cyan-300">Smontabile come Mod (ATE)</span>}
-                <span className="block text-gray-500 mt-1">Puoi usare il pulsante ambra per richiedere la sottrazione via inventario QR.</span>
-              </p>
+            {obj.categoria_visibilita && (
+              <p className="text-[10px] text-gray-400">Tipo: {obj.categoria_visibilita}</p>
             )}
           </li>
         ))}
       </ul>
     </div>
   );
+};
+
+const CreditoDepositoView = ({ data }) => (
+  <div className="text-center space-y-3">
+    <h3 className="text-2xl font-bold text-emerald-300">{data?.nome || 'Crediti deposito'}</h3>
+    {data?.testo ? <RichHtml content={data.testo} className="prose prose-invert prose-sm max-w-none" /> : null}
+    <p className="text-3xl font-black text-white">+{data?.importo}</p>
+    <p className="text-sm text-emerald-200/90">Accreditati sul conto deposito.</p>
+    {data?.usi_illimitati ? (
+      <p className="text-xs text-gray-400">Usi illimitati</p>
+    ) : data?.usi_residui != null ? (
+      <p className="text-xs text-gray-400">Usi residui: {data.usi_residui}</p>
+    ) : null}
+  </div>
+);
+
+const UsiQrHint = ({ data }) => {
+  if (!data) return null;
+  if (data.usi_illimitati) {
+    return <p className="text-xs text-gray-400 mb-2">Usi illimitati su questo QR.</p>;
+  }
+  if (data.usi_residui != null) {
+    return <p className="text-xs text-amber-200/80 mb-2">Usi residui su questo QR: {data.usi_residui}</p>;
+  }
+  return null;
 };
 
 //##################################################################
@@ -689,10 +766,11 @@ const TecnicaAcquisizioneView = ({ qrId, tipo, data, onLogout, onClose, minigioc
         {data.nome || 'Tecnica'}
         <span className="ml-2 text-xs uppercase text-gray-500">({tipo})</span>
       </h3>
+      <UsiQrHint data={data} />
       {greyed && (
         <p className="text-sm text-amber-200/90 mb-3 border border-amber-800/50 rounded p-2 bg-amber-950/30">
           {data.gia_posseduta
-            ? 'Già nelle tue tecniche possedute. Puoi comunque consumare il QR se non l&apos;hai ancora fatto.'
+            ? 'Già nelle tue tecniche possedute.'
             : (data.tecnica_usabilita_messaggio || 'Requisiti non soddisfatti: la tecnica resterà inattiva in scheda.')}
         </p>
       )}
@@ -707,12 +785,12 @@ const TecnicaAcquisizioneView = ({ qrId, tipo, data, onLogout, onClose, minigioc
       {!message && (
         <button
           onClick={handleAcquisisci}
-          disabled={isLoading}
+          disabled={isLoading || data.gia_posseduta}
           className={`w-full mt-4 px-4 py-3 text-white text-lg font-bold rounded-md shadow-lg disabled:opacity-50 ${
             greyed ? 'bg-gray-600 hover:bg-gray-600' : 'bg-purple-600 hover:bg-purple-700'
           }`}
         >
-          {isLoading ? <Loader className="animate-spin mx-auto" /> : data.gia_posseduta ? 'Consuma QR (già posseduta)' : 'Aggiungi alle tecniche possedute'}
+          {isLoading ? <Loader className="animate-spin mx-auto" /> : data.gia_posseduta ? 'Già posseduta' : 'Aggiungi alle tecniche possedute'}
         </button>
       )}
     </div>
@@ -753,9 +831,10 @@ const AcquisizioneView = ({ qrId, data, tipo, onLogout, onClose, minigiocoSessio
   return (
     <div>
       <h3 className="text-2xl font-bold mb-4 flex items-center">
-        {tipo === 'oggetto' ? <Shield className="mr-2" /> : <Sparkles className="mr-2" />}
+        {tipo === 'oggetto' ? <Package className="mr-2" /> : <Sparkles className="mr-2" />}
         {data.nome || 'Oggetto Raro'}
       </h3>
+      <UsiQrHint data={data} />
       {error && <p className="text-red-400 mb-4 bg-red-900 bg-opacity-30 p-2 rounded">{error}</p>}
       {message && <p className="text-green-400 mb-4 bg-green-900 bg-opacity-30 p-2 rounded">{message}</p>}
       
@@ -1241,6 +1320,9 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
       
       case 'inventario':
         return <InventarioView data={data.dati} onLogout={onLogout} />;
+
+      case 'credito_deposito':
+        return <CreditoDepositoView data={data.dati || data} />;
 
       case 'infusione':
       case 'tessitura':

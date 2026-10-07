@@ -1459,16 +1459,29 @@ export const associaQrAVista = (vistaId, qrId, onLogout, force = false) => {
 };
 
 // Associa QR direttamente a un elemento derivato da A_vista (Tessitura, Infusione, Cerimoniale, Oggetto, OggettoBase, Inventario)
-export const associaQrDiretto = (aVistaId, qrId, onLogout, force = false) => {
+export const associaQrDiretto = (aVistaId, qrId, onLogout, force = false, usiMax = undefined) => {
+  const body = { qr_id: qrId, force: force };
+  // undefined = non inviare (lascia invariato); null = illimitato; numero = limite
+  if (usiMax !== undefined) {
+    body.usi_max = usiMax;
+  }
   return fetchAuthenticated(
     `/api/personaggi/api/a-vista/${aVistaId}/associa-qr/`,
     {
       method: 'POST',
-      body: JSON.stringify({ qr_id: qrId, force: force })
+      body: JSON.stringify(body)
     },
     onLogout
   );
 };
+
+/** Prelievo diretto da inventario QR non-PG (oggetto / consumabile / crediti). */
+export const prendiDaInventarioQr = (payload, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/inventario-qr/prendi/',
+    { method: 'POST', body: JSON.stringify(payload) },
+    onLogout,
+  );
 
 // --- EVENTI ---
 export const getEventi = (onLogout) => fetchAuthenticated('/api/plot/api/eventi/', { method: 'GET' }, onLogout);
@@ -2161,6 +2174,24 @@ export const staffAssociaQrTrappola = (trappolaId, qrId, onLogout, force = false
     onLogout,
   );
 
+export const staffGetQrCredito = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/qr-credito/', { method: 'GET' }, onLogout);
+export const staffCreateQrCredito = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/qr-credito/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdateQrCredito = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/qr-credito/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeleteQrCredito = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/qr-credito/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffAssociaQrCredito = (creditoId, qrId, onLogout, force = false, usiMax = undefined) => {
+  const body = { qr_id: qrId, force };
+  if (usiMax !== undefined) body.usi_max = usiMax;
+  return fetchAuthenticated(
+    `/api/personaggi/api/staff/qr-credito/${creditoId}/associa-qr/`,
+    { method: 'POST', body: JSON.stringify(body) },
+    onLogout,
+  );
+};
+
 export const staffGetSerieQr = (onLogout) =>
   fetchAuthenticated('/api/personaggi/api/staff/serie-qr/', { method: 'GET' }, onLogout);
 export const staffCreateSerieQr = (data, onLogout) =>
@@ -2187,6 +2218,41 @@ export const staffRimuoviOggettoInventario = (inventarioId, oggettoId, onLogout)
         method: 'POST', 
         body: JSON.stringify({ oggetto_id: oggettoId }) 
     }, onLogout);
+
+export const staffGetInventarioConsumabili = (inventarioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/inventari/${inventarioId}/consumabili/`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const staffAggiungiConsumabileInventario = (inventarioId, data, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/inventari/${inventarioId}/aggiungi-consumabile/`,
+    { method: 'POST', body: JSON.stringify(data) },
+    onLogout,
+  );
+
+export const staffRimuoviConsumabileInventario = (inventarioId, consumabileId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/inventari/${inventarioId}/rimuovi-consumabile/`,
+    { method: 'POST', body: JSON.stringify({ consumabile_id: consumabileId }) },
+    onLogout,
+  );
+
+export const staffCreaOggettoDaInfusioneInventario = (inventarioId, infusioneId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/inventari/${inventarioId}/crea-da-infusione/`,
+    { method: 'POST', body: JSON.stringify({ infusione_id: infusioneId }) },
+    onLogout,
+  );
+
+export const staffCreaOggettoDaBaseInventario = (inventarioId, oggettoBaseId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/inventari/${inventarioId}/crea-da-oggetto-base/`,
+    { method: 'POST', body: JSON.stringify({ oggetto_base_id: oggettoBaseId }) },
+    onLogout,
+  );
 
 export const staffGetOggettiSenzaPosizione = (onLogout) => 
     fetchAuthenticated('/api/personaggi/api/staff/oggetti-senza-posizione/', { method: 'GET' }, onLogout);

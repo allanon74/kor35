@@ -56,6 +56,7 @@ from .models import (
     InnescoTimer, InnescoTimerAck, QrInventarioScanSession, StatoInnescoTimerPersonaggio,
     RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect,
     Trappola, StatoTrappolaPersonaggio, SerieCollezione, SerieImmagine, SerieAssegnazione, SerieQr,
+    QrCreditoDeposito,
     TipologiaEffetto, EffettoCasuale, ConsumabilePersonaggio, CreazioneConsumabileInCorso,
     TIPO_EFFETTO_OGGETTO, TIPO_EFFETTO_TESSITURA,
     Korp, Carriera, SegnoZodiacale, TipoCarriera, Carica,
@@ -978,6 +979,13 @@ class TrappolaAdmin(admin.ModelAdmin):
     raw_id_fields = ("qr_code",)
 
 
+@admin.register(QrCreditoDeposito)
+class QrCreditoDepositoAdmin(admin.ModelAdmin):
+    list_display = ("id", "nome", "importo_min", "importo_max", "qr_code")
+    search_fields = ("nome",)
+    raw_id_fields = ("qr_code",)
+
+
 class SerieImmagineInline(admin.TabularInline):
     model = SerieImmagine
     extra = 0
@@ -1096,6 +1104,8 @@ class QrCodeAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'data_creazione',
+        'usi_max',
+        'usi_consumati',
         'stl_creato',
         'qr_stampato',
         'inventario_presente',

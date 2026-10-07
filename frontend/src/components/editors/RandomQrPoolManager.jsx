@@ -166,6 +166,8 @@ const emptyEffect = () => ({
   cerimoniale: '',
   attivata: '',
   negozio_mercante: '',
+  crediti_importo_min: '',
+  crediti_importo_max: '',
 });
 
 const effectDetailLabel = (eff) =>
@@ -179,6 +181,9 @@ const effectDetailLabel = (eff) =>
   || eff.infusione_nome
   || eff.cerimoniale_nome
   || eff.attivata_nome
+  || (eff.tipo === 'crediti' && (eff.crediti_importo_min != null)
+    ? `${eff.crediti_importo_min}–${eff.crediti_importo_max} CR`
+    : null)
   || '—';
 
 const POOL_COLUMNS = [
@@ -440,6 +445,16 @@ const RandomQrPoolManager = ({ onLogout }) => {
           tipo === 'negozio_mercante' && effectForm.negozio_mercante
             ? effectForm.negozio_mercante
             : null,
+        crediti_importo_min:
+          tipo === 'crediti' && effectForm.crediti_importo_min !== ''
+            ? effectForm.crediti_importo_min
+            : null,
+        crediti_importo_max:
+          tipo === 'crediti' && effectForm.crediti_importo_max !== ''
+            ? effectForm.crediti_importo_max
+            : (tipo === 'crediti' && effectForm.crediti_importo_min !== ''
+              ? effectForm.crediti_importo_min
+              : null),
       };
       await staffCreateRandomQrPoolEffect(selectedId, payload, onLogout);
       setEffectForm(emptyEffect());
@@ -767,6 +782,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
                         <option value="testo">Testo</option>
                         <option value="nodo">Nodo</option>
                         <option value="trappola">Trappola</option>
+                        <option value="crediti">Crediti deposito</option>
                         <option value="serie">Serie</option>
                         <option value="manifesto">Manifesto (anche condizionale)</option>
                         <option value="negozio_mercante">Negozio mercante</option>
@@ -860,6 +876,28 @@ const RandomQrPoolManager = ({ onLogout }) => {
                             <option key={n.id} value={n.id}>{n.nome}</option>
                           ))}
                         </select>
+                      )}
+                      {effectForm.tipo === 'crediti' && (
+                        <>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className="bg-gray-900 border border-gray-600 rounded p-2"
+                            placeholder="Importo min (o fisso)"
+                            value={effectForm.crediti_importo_min}
+                            onChange={(e) => setEffectForm((f) => ({ ...f, crediti_importo_min: e.target.value }))}
+                          />
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className="bg-gray-900 border border-gray-600 rounded p-2"
+                            placeholder="Importo max (vuoto = fisso)"
+                            value={effectForm.crediti_importo_max}
+                            onChange={(e) => setEffectForm((f) => ({ ...f, crediti_importo_max: e.target.value }))}
+                          />
+                        </>
                       )}
                       {effectForm.tipo === 'oggetto_base' && (
                         <select
