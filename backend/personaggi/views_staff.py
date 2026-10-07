@@ -29,6 +29,13 @@ from .models import (
     PersonaggioCarrieraMembership, CarrieraTierSblocco,
     Dichiarazione,
     Statistica,
+    Aura,
+    AURA,
+    Caratteristica,
+    ModelloAura,
+    STATISTICA,
+    CARATTERISTICA,
+    MATTONE,
     DEFAULT_WEAVE_FORMULA_TEMPLATE,
     Campagna, CampagnaFeaturePolicy,
     RegolaTransazioneCategoria,
@@ -76,6 +83,11 @@ from .serializers import (
     PersonaggioCarrieraMembershipStaffSerializer,
     DichiarazioneStaffSerializer,
     StatisticaStaffSerializer,
+    AuraStaffSerializer,
+    CaratteristicaStaffSerializer,
+    MattoneStaffSerializer,
+    ModelloAuraStaffSerializer,
+    PunteggioResiduoStaffSerializer,
     ManifestoStaffSerializer,
     NodoStaffSerializer,
     NodoRewardConfigStaffSerializer,
@@ -1042,6 +1054,104 @@ class StatisticaStaffViewSet(viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
 
+class AuraStaffViewSet(viewsets.ModelViewSet):
+    """CRUD catalogo Aure (Staff). Proxy Punteggio con tipo AU."""
+    queryset = Aura.objects.filter(tipo=AURA).prefetch_related(
+        'aure_infusione_consentite',
+    ).order_by('ordine', 'nome')
+    serializer_class = AuraStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    pagination_class = None
+    search_fields = ['nome', 'sigla']
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        sigla = (obj.sigla or "").upper()
+        if sigla.startswith("0") and len(sigla) >= 2:
+            return Response(
+                {"error": "Aura di sistema (sigla 0…): non eliminabile da questa maschera."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+class CaratteristicaStaffViewSet(viewsets.ModelViewSet):
+    queryset = Caratteristica.objects.filter(tipo=CARATTERISTICA).prefetch_related(
+        'modificatori_dati__statistica_modificata',
+    ).order_by('ordine', 'nome')
+    serializer_class = CaratteristicaStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    pagination_class = None
+    search_fields = ['nome', 'sigla']
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        sigla = (obj.sigla or "").upper()
+        if sigla.startswith("0") and len(sigla) >= 2:
+            return Response(
+                {"error": "Caratteristica di sistema (sigla 0…): non eliminabile da questa maschera."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+class MattoneStaffViewSet(viewsets.ModelViewSet):
+    queryset = Mattone.objects.select_related(
+        'aura', 'caratteristica_associata',
+    ).prefetch_related('mattonestatistica_set__statistica').order_by(
+        'aura__ordine', 'ordine', 'nome',
+    )
+    serializer_class = MattoneStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    pagination_class = None
+    search_fields = ['nome', 'sigla']
+    filterset_fields = ['aura']
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        sigla = (obj.sigla or "").upper()
+        if sigla.startswith("0") and len(sigla) >= 2:
+            return Response(
+                {"error": "Mattone di sistema (sigla 0…): non eliminabile da questa maschera."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+class ModelloAuraStaffViewSet(viewsets.ModelViewSet):
+    queryset = ModelloAura.objects.select_related('aura', 'elemento_secondario').prefetch_related(
+        'mattoni_proibiti', 'mattoni_obbligatori',
+        'req_doppia_rel__requisito', 'req_mattone_rel__requisito', 'req_caratt_rel__requisito',
+    ).order_by('aura__ordine', 'nome')
+    serializer_class = ModelloAuraStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    pagination_class = None
+    search_fields = ['nome', 'aura__nome']
+    filterset_fields = ['aura']
+
+
+class PunteggioResiduoStaffViewSet(viewsets.ModelViewSet):
+    """Elementi, condizioni, culti, vie, arti, archetipi, castoni, nodi, kata."""
+    queryset = Punteggio.objects.exclude(
+        tipo__in=(STATISTICA, AURA, CARATTERISTICA, MATTONE),
+    ).exclude(is_mattone=True).order_by('tipo', 'ordine', 'nome')
+    serializer_class = PunteggioResiduoStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    pagination_class = None
+    search_fields = ['nome', 'sigla']
+    filterset_fields = ['tipo']
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        sigla = (obj.sigla or "").upper()
+        if sigla.startswith("0") and len(sigla) >= 2:
+            return Response(
+                {"error": "Punteggio di sistema (sigla 0…): non eliminabile da questa maschera."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
 class EraStaffViewSet(viewsets.ModelViewSet):
     queryset = Era.objects.all().order_by("ordine", "nome")
     serializer_class = EraStaffSerializer
@@ -1319,14 +1429,21 @@ class NodoRewardConfigStaffViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class InnescoTimerStaffViewSet(viewsets.ModelViewSet):
-    """CRUD inneschi timer QR (target globale o per era/regione/KORP)."""
+    """CRUD inneschi timer QR: un gruppo di istanze identiche, ciascuna con il proprio QR."""
 
     serializer_class = InnescoTimerStaffSerializer
     permission_classes = [IsStaffOrMaster]
 
     def get_queryset(self):
-        qs = InnescoTimer.objects.prefetch_related("target_ere", "target_regioni", "target_korps").order_by(
-            "-id"
+        qs = (
+            InnescoTimer.objects.prefetch_related(
+                "target_ere",
+                "target_regioni",
+                "target_korps",
+                "target_personaggi",
+                "target_personaggi__proprietario",
+            )
+            .order_by("-id")
         )
         active = _get_active_campaign(self.request)
         base = _get_default_campaign()
@@ -1347,17 +1464,87 @@ class InnescoTimerStaffViewSet(viewsets.ModelViewSet):
         if "target_korps_ids" in data:
             ids = data.get("target_korps_ids") or []
             obj.target_korps.set(Korp.objects.filter(pk__in=ids))
+        if "target_personaggi_ids" in data:
+            ids = data.get("target_personaggi_ids") or []
+            obj.target_personaggi.set(Personaggio.objects.filter(pk__in=ids, tipologia__giocante=True))
+        if "target_evento_id" in data:
+            from gestione_plot.models import Evento
+
+            raw = data.get("target_evento_id")
+            if raw in (None, "", "null"):
+                obj.target_evento = None
+            else:
+                obj.target_evento = Evento.objects.filter(pk=raw).first()
+            obj.save(update_fields=["target_evento", "updated_at"])
+
+    @staticmethod
+    def _validate_target(obj):
+        if obj.modalita_target == InnescoTimer.INNESCO_TARGET_EVENTO and not obj.target_evento_id:
+            raise ValidationError({"target_evento_id": "Seleziona l'evento dei giocatori presenti."})
+        if obj.modalita_target == InnescoTimer.INNESCO_TARGET_KORP and not obj.target_korps.exists():
+            raise ValidationError({"target_korps_ids": "Seleziona almeno una KORP."})
+        if (
+            obj.modalita_target == InnescoTimer.INNESCO_TARGET_PERSONAGGI
+            and not obj.target_personaggi.exists()
+        ):
+            raise ValidationError({"target_personaggi_ids": "Aggiungi almeno un personaggio."})
 
     def perform_create(self, serializer):
+        from personaggi.innesco_timer_ops import MAX_ISTANZE_PER_RICHIESTA, aggiungi_istanze
+
         camp = _get_active_campaign(self.request) or _get_default_campaign()
         with transaction.atomic():
             obj = serializer.save(campagna=camp)
             self._apply_target_lists(obj, self.request.data)
+            self._validate_target(obj)
+            try:
+                n = int(self.request.data.get("numero_istanze") or 1)
+            except (TypeError, ValueError):
+                n = 1
+            n = max(1, min(n, MAX_ISTANZE_PER_RICHIESTA))
+            if n > 1:
+                if not (obj.etichetta_istanza or "").strip():
+                    obj.etichetta_istanza = "Istanza 1"
+                    obj.ordine_istanza = 1
+                    obj.save(update_fields=["etichetta_istanza", "ordine_istanza", "updated_at"])
+                aggiungi_istanze(obj, n - 1)
 
     def perform_update(self, serializer):
+        from personaggi.innesco_timer_ops import propaga_campi_gruppo
+
         with transaction.atomic():
             obj = serializer.save()
             self._apply_target_lists(obj, self.request.data)
+            self._validate_target(obj)
+            applica = self.request.data.get("applica_al_gruppo", True)
+            if applica in (False, "false", "0", 0):
+                return
+            propaga_campi_gruppo(obj)
+
+    @action(detail=False, methods=["get"], url_path="eventi-opzioni")
+    def eventi_opzioni(self, request):
+        """Eventi selezionabili come destinatari (presenti = partecipanti)."""
+        from gestione_plot.models import Evento
+
+        rows = list(Evento.objects.order_by("-data_inizio").values("id", "titolo")[:300])
+        return Response(rows)
+
+    @action(detail=True, methods=["post"], url_path="aggiungi-istanze")
+    def aggiungi_istanze_action(self, request, pk=None):
+        """Crea altre istanze identiche: ciascuna potrà avere il proprio QR."""
+        from personaggi.innesco_timer_ops import aggiungi_istanze
+
+        obj = self.get_object()
+        try:
+            quante = int(request.data.get("quante") or 1)
+        except (TypeError, ValueError):
+            quante = 1
+        with transaction.atomic():
+            creati = aggiungi_istanze(obj, quante)
+        return Response(
+            {"created": InnescoTimerStaffSerializer(creati, many=True, context={"request": request}).data},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class RandomQrPoolStaffViewSet(viewsets.ModelViewSet):

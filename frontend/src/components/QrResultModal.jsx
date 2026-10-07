@@ -1112,14 +1112,22 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
         messaggio_in_app: true
       };
     } else if (data.tipo_modello === 'timer_innesco' && data.dati) {
-      timerToActivate = {
-        nome: data.dati.nome,
-        endsAt: data.dati.scadenza,
-        alert_suono: true,
-        // Push scadenza gestita server-side (dispatch_timer_expiry)
-        notifica_push: false,
-        messaggio_in_app: true,
-      };
+      const ids = (data.dati.recipient_personaggio_ids || []).map((id) => Number(id));
+      const myId = parseInt(selectedCharacterId, 10);
+      const perMe = !ids.length || ids.includes(myId);
+      if (perMe) {
+        timerToActivate = {
+          id: data.dati.id,
+          nome: data.dati.nome,
+          endsAt: data.dati.scadenza,
+          alert_suono: true,
+          // Push scadenza gestita server-side (dispatch_timer_expiry)
+          notifica_push: false,
+          messaggio_in_app: true,
+          segnale_luminoso: data.dati.segnale_luminoso !== false,
+          source: 'innesco_timer',
+        };
+      }
     } else if (data.tipo_modello === 'trappola' && data.dati?.timer_attivo && data.dati?.scadenza) {
       timerToActivate = {
         nome: data.dati.nome || 'Trappola',
@@ -1152,7 +1160,7 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
         console.error("Errore nell'innesco del timer:", e);
       }
     }
-  }, [data, addTimer]);
+  }, [data, addTimer, selectedCharacterId]);
 
   const renderContent = () => {
     if (!data) {

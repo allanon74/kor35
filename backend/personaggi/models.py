@@ -1387,6 +1387,32 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
     return "".join(parts)
 
 
+def personaggio_da_inventario(inventario):
+    """Personaggio collegato a un Inventario (riga MTI), oppure None."""
+    if inventario is None:
+        return None
+    if isinstance(inventario, Personaggio):
+        return inventario
+    try:
+        return inventario.personaggio
+    except Personaggio.DoesNotExist:
+        return None
+
+
+def proprietario_effettivo_oggetto(oggetto):
+    """
+    Chi paga e subisce i modificatori dell'oggetto.
+    Le mod montate non hanno inventario proprio: si risale all'host.
+    """
+    pg = personaggio_da_inventario(getattr(oggetto, "inventario_corrente", None))
+    if pg is not None:
+        return pg
+    host = getattr(oggetto, "ospitato_su", None)
+    if host is None:
+        return None
+    return personaggio_da_inventario(getattr(host, "inventario_corrente", None))
+
+
 def calcola_cariche_massime_da_infusione(infusione, personaggio=None):
     """
     Tetto cariche da statistica_cariche dell'infusione:
@@ -1435,14 +1461,16 @@ def genera_html_cariche(item, personaggio=None):
         durata_str = " ".join(parts)
 
     # 3. Costruzione HTML
-    # Stile inline per garantire la visualizzazione ovunque (Admin & Frontend)
+    # Stile inline per garantire la visualizzazione ovunque (Admin & Frontend).
+    # Header in una sola riga ("Totale <stat>: N") per restare leggibile anche dopo
+    # sanitize CSS del frontend (justify-content non è nella allowlist).
     box_style = "margin-top: 12px; padding: 8px 12px; border: 1px solid rgba(255,255,255,0.2); background-color: rgba(0,0,0,0.2); border-radius: 6px; font-size: 0.9em; line-height: 1.4;"
-    header_style = "color: #ffd700; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 6px; padding-bottom: 4px; display: flex; justify-content: space-between; align-items: center;"
+    header_style = "color: #ffd700; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 6px; padding-bottom: 4px;"
     row_style = "margin-bottom: 2px;"
     label_style = "color: #aaa; margin-right: 5px;"
 
     html = f"<div style='{box_style}'>"
-    html += f"<div style='{header_style}'><span>⚡ {stat.nome}</span> <span>Tot: {valore_totale}</span></div>"
+    html += f"<div style='{header_style}'>Totale {stat.nome}: {valore_totale}</div>"
     
     if source.metodo_ricarica:
         html += f"<div style='{row_style}'><span style='{label_style}'>Ricarica:</span> {source.metodo_ricarica}</div>"
@@ -1466,6 +1494,96 @@ def genera_html_cariche(item, personaggio=None):
 
     html += "</div>"
     return html
+
+
+def _ids_caratteristiche_per_montaggio(item):
+    """ID caratteristiche (mattoni) usati per le regole ClasseOggetto su Mod/Materia."""
+    if isinstance(item, Infusione):
+        return list(item.componenti.values_list('caratteristica_id', flat=True))
+    if isinstance(item, Oggetto):
+        ids = list(item.componenti.values_list('caratteristica_id', flat=True))
+        if not ids and item.infusione_generatrice_id:
+            ids = list(
+                item.infusione_generatrice.componenti.values_list('caratteristica_id', flat=True)
+            )
+        return ids
+    return []
+
+
+def _tipo_logico_montaggio(item):
+    """
+    Restituisce 'mod', 'materia' o None.
+    Allineato a GestioneOggettiService.verifica_compatibilita_hardware /
+    crea_oggetto_da_infusione (ATE → tecnologico).
+    """
+    if isinstance(item, Oggetto):
+        if item.tipo_oggetto == TIPO_OGGETTO_MATERIA:
+            return 'materia'
+        if item.tipo_oggetto == TIPO_OGGETTO_MOD:
+            return 'mod'
+        if item.tipo_oggetto == TIPO_OGGETTO_POTENZIAMENTO:
+            return 'mod' if item.is_tecnologico else 'materia'
+        return None
+
+    if isinstance(item, Infusione):
+        if getattr(item, 'tipo_risultato', None) != SCELTA_RISULTATO_POTENZIAMENTO:
+            return None
+        aura = item.aura_infusione if item.aura_infusione_id else item.aura_richiesta
+        if aura and getattr(aura, 'sigla', None) == 'ATE':
+            return 'mod'
+        return 'materia'
+
+    return None
+
+
+def classi_oggetto_compatibili_montaggio(item):
+    """
+    Classi Oggetto su cui Mod/Materia può essere montata, secondo le whitelist
+    di ClasseOggetto (mattoni_materia_permessi / limitazioni_mod).
+    Tutte le caratteristiche del componente devono essere ammesse (intersezione).
+    """
+    tipo = _tipo_logico_montaggio(item)
+    if not tipo:
+        return []
+    caratt_ids = [cid for cid in _ids_caratteristiche_per_montaggio(item) if cid]
+    if not caratt_ids:
+        return []
+
+    # Import lazy: ClasseOggetto è definito più sotto nello stesso modulo.
+    qs = ClasseOggetto.objects.all()
+    if tipo == 'materia':
+        for cid in caratt_ids:
+            qs = qs.filter(mattoni_materia_permessi=cid)
+    else:
+        for cid in caratt_ids:
+            qs = qs.filter(limitazioni_mod=cid)
+    return list(qs.order_by('nome').values_list('nome', flat=True))
+
+
+def genera_html_montaggio_classi_oggetto(item):
+    """
+    Blocco HTML: tipi di oggetto (Classi Oggetto) su cui Mod/Materia è montabile.
+    Vuoto se non applicabile o nessuna classe compatibile.
+    """
+    nomi = classi_oggetto_compatibili_montaggio(item)
+    if not nomi:
+        return ""
+
+    box_style = (
+        "margin-top: 12px; padding: 8px 12px; border: 1px solid rgba(255,255,255,0.2); "
+        "background-color: rgba(0,0,0,0.2); border-radius: 6px; font-size: 0.9em; line-height: 1.4;"
+    )
+    header_style = (
+        "color: #ffd700; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); "
+        "margin-bottom: 6px; padding-bottom: 4px;"
+    )
+    nomi_esc = ", ".join(nomi)
+    return (
+        f"<div style='{box_style}'>"
+        f"<div style='{header_style}'>Montabile su:</div>"
+        f"<div>{nomi_esc}</div>"
+        f"</div>"
+    )
 
 
 def formatta_html_costi_attivazione_tessitura(tessitura):
@@ -3346,7 +3464,12 @@ class Infusione(Tecnica):
             formula=self.formula_attacco,
         )
         extra = html_sezioni_append(self, None, context=ctx, statistiche_base=stats)
-        return base_text + extra + genera_html_cariche(self, None)
+        return (
+            base_text
+            + extra
+            + genera_html_cariche(self, None)
+            + genera_html_montaggio_classi_oggetto(self)
+        )
     
 class Tessitura(Tecnica):
     formula = models.TextField("Formula", blank=True, null=True, default=DEFAULT_WEAVE_FORMULA_TEMPLATE)
@@ -5080,14 +5203,24 @@ class MinigiocoQrSession(SyncableModel, models.Model):
 
 class InnescoTimer(A_vista):
     """
-    Innesco timer personale (e broadcast mirato) collegabile a un QrCode come altre A_vista.
+    Innesco timer collegabile a un QrCode come altre A_vista.
+
+    Più righe con lo stesso ``gruppo_id`` sono istanze identiche (stessi destinatari,
+    stessa durata, stesso nome). Ogni istanza ha il proprio QR e il proprio countdown:
+    la scansione di un QR non resetta le altre istanze del gruppo.
     """
 
     INNESCO_TARGET_GLOBAL = "globale"
+    INNESCO_TARGET_EVENTO = "evento"
+    INNESCO_TARGET_KORP = "korp"
+    INNESCO_TARGET_PERSONAGGI = "personaggi"
     INNESCO_TARGET_FILTRI = "filtri"
     INNESCO_TARGET_CHOICES = [
-        (INNESCO_TARGET_GLOBAL, "Tutti i giocatori"),
-        (INNESCO_TARGET_FILTRI, "Solo era / regione / KORP selezionate"),
+        (INNESCO_TARGET_GLOBAL, "A tutti"),
+        (INNESCO_TARGET_EVENTO, "Solo giocatori presenti all'evento"),
+        (INNESCO_TARGET_KORP, "Solo KORP"),
+        (INNESCO_TARGET_PERSONAGGI, "Lista di personaggi"),
+        (INNESCO_TARGET_FILTRI, "Filtri era / regione / KORP"),
     ]
 
     modalita_target = models.CharField(
@@ -5096,6 +5229,21 @@ class InnescoTimer(A_vista):
         default=INNESCO_TARGET_GLOBAL,
         db_index=True,
     )
+    gruppo_id = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        db_index=True,
+        verbose_name="Gruppo istanze",
+        help_text="Istanze con lo stesso gruppo condividono nome, durata e destinatari.",
+    )
+    etichetta_istanza = models.CharField(
+        max_length=80,
+        blank=True,
+        default="",
+        verbose_name="Etichetta istanza",
+        help_text="Nome staff della singola istanza (es. QR nord). I giocatori vedono il nome del timer.",
+    )
+    ordine_istanza = models.PositiveIntegerField(default=1, verbose_name="Ordine istanza")
     durata_secondi = models.PositiveIntegerField(default=60, verbose_name="Durata countdown (secondi)")
     max_cariche = models.PositiveIntegerField(
         default=1,
@@ -5134,9 +5282,24 @@ class InnescoTimer(A_vista):
         default=get_default_campagna_id,
         db_index=True,
     )
+    target_evento = models.ForeignKey(
+        "gestione_plot.Evento",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="innesco_timers",
+        verbose_name="Evento (presenti)",
+        help_text="Con modalità evento: solo i PG in «partecipanti» di questo evento.",
+    )
     target_ere = models.ManyToManyField("Era", blank=True, related_name="innesco_timers")
     target_regioni = models.ManyToManyField("Regione", blank=True, related_name="innesco_timers")
     target_korps = models.ManyToManyField("Korp", blank=True, related_name="innesco_timers")
+    target_personaggi = models.ManyToManyField(
+        "Personaggio",
+        blank=True,
+        related_name="innesco_timers_mirati",
+        verbose_name="Personaggi destinatari",
+    )
 
     class Meta:
         verbose_name = "Innesco timer (QR)"
@@ -5175,6 +5338,46 @@ class StatoInnescoTimerPersonaggio(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.personaggio_id} / {self.innesco_timer_id} fino {self.data_fine}"
+
+
+class InnescoTimerAck(SyncableModel, models.Model):
+    """
+    Il giocatore ha chiuso la schermata «timer scaduto» per una specifica scadenza.
+    Finché non esiste l'ack, il client continua a mostrare la schermata anche dopo un reload.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="ack_innesco_timer",
+    )
+    innesco_timer = models.ForeignKey(
+        InnescoTimer,
+        on_delete=models.CASCADE,
+        related_name="ack_personaggi",
+    )
+    data_fine = models.DateTimeField(
+        verbose_name="Scadenza confermata",
+        help_text="broadcast_data_fine dell'istanza al momento della conferma.",
+    )
+
+    class Meta:
+        verbose_name = "Ack scadenza innesco timer"
+        verbose_name_plural = "Ack scadenze innesco timer"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("personaggio", "innesco_timer", "data_fine"),
+                name="uq_innesco_timer_ack_pg_fine",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["personaggio", "innesco_timer"], name="innesco_ack_pg_it"),
+        ]
+
+    def __str__(self):
+        return f"ack {self.personaggio_id} / {self.innesco_timer_id} @ {self.data_fine}"
 
 
 def _default_tipi_minigioco_pool():
@@ -6100,7 +6303,12 @@ class Oggetto(A_vista):
             context=ctx,
         )
         extra = html_sezioni_append(self, None, context=ctx, statistiche_base=stats)
-        return base_text + extra + genera_html_cariche(self, None)
+        return (
+            base_text
+            + extra
+            + genera_html_cariche(self, None)
+            + genera_html_montaggio_classi_oggetto(self)
+        )
     
     @property
     def inventario_corrente(self):
@@ -8692,6 +8900,7 @@ class Personaggio(Inventario):
 
         if isinstance(item, (Oggetto, Infusione)):
             testo_finale += genera_html_cariche(item, self)
+            testo_finale += genera_html_montaggio_classi_oggetto(item)
 
         return testo_finale
 

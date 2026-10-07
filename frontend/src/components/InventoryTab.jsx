@@ -13,6 +13,7 @@ import PunteggioDisplay from './PunteggioDisplay';
 import RichHtml from './RichHtml';
 import { useOptimisticEquip, useOptimisticRecharge, useOptimisticDamage, useOptimisticRepair, useOptimisticDiscard } from '../hooks/useGameData';
 import { emitToast } from '../utils/toastBus';
+import { dettaglioRicarica } from '../lib/ricaricaOggetto';
 import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 import { useSharedNowTs } from '../hooks/useSharedNowTs';
 import { LazyList } from './ui/LazyList';
@@ -471,7 +472,7 @@ const InventoryItemCard = memo(({ item, isExpanded, onToggleExpand, onEquip, onR
                             onClick={(e) => { e.stopPropagation(); onRecharge(item); }}
                             className="flex items-center gap-1 px-2 py-0.5 bg-yellow-900/50 hover:bg-yellow-800 text-yellow-200 border border-yellow-700 rounded text-[10px] uppercase font-bold tracking-wide transition-colors"
                         >
-                            <RefreshCw size={10} /> {item.costo_ricarica} CR
+                            <RefreshCw size={10} /> {dettaglioRicarica(item).totale} CR
                         </button>
                     )}
                 </div>
@@ -796,10 +797,22 @@ const InventoryTab = ({ onLogout }) => {
   };
 
   const handleRecharge = (item) => {
-      const costo = item.costo_ricarica || 0;
+      const { totale } = dettaglioRicarica(item);
+      const costoLabel = `${totale} CR`;
       const metodo = item.testo_ricarica || "Standard";
-      if (window.confirm(`Ricaricare ${item.nome}?\nCosto: ${costo} CR\nMetodo: ${metodo}`)) {
-          rechargeMutation.mutate({ oggetto_id: item.id, charId: characterData.id });
+      if (window.confirm(`Ricaricare ${item.nome}?\nCosto: ${costoLabel}\nMetodo: ${metodo}`)) {
+          rechargeMutation.mutate(
+              { oggetto_id: item.id, charId: characterData.id },
+              {
+                  onError: (err) => {
+                      emitToast({
+                          type: 'error',
+                          title: 'Ricarica fallita',
+                          message: err?.message || 'Impossibile ricaricare l\'oggetto.',
+                      });
+                  },
+              }
+          );
       }
   };
 

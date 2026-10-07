@@ -77,10 +77,11 @@ from .models import (
     statistica_chiave_modificatore, 
     QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, Punteggio, Tabella, 
     TipologiaPersonaggio, abilita_tier, abilita_requisito, abilita_sbloccata, 
-    abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, NodoRewardConfig, A_vista, Mattone, InnescoTimer,
+    abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, NodoRewardConfig, A_vista, Mattone, Caratteristica, CaratteristicaModificatore, InnescoTimer,
     RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect, Trappola, SerieCollezione, SerieAssegnazione, SerieImmagine, SerieQr,
     MinigiocoPattern, MinigiocoPatternEntry, MinigiocoSezioneDefault, MinigiocoQrConfig,
-    AURA, 
+    AURA, Aura, CARATTERISTICA, ELEMENTO, STATISTICA,
+    CONDIZIONE, CULTO, VIA, ARTE, ARCHETIPO, CASTONE, NODO, KATA, MATTONE,
     Infusione, Tessitura, 
     # NUOVI MODELLI INTERMEDI
     InfusioneCaratteristica, TessituraCaratteristica, PropostaTecnicaCaratteristica,
@@ -717,16 +718,304 @@ class StatisticaSerializer(serializers.ModelSerializer):
 
 
 class StatisticaStaffSerializer(serializers.ModelSerializer):
+    """Campi propri di Statistica + anagrafica Punteggio (nome/sigla/colore).
+
+    Non include i campi da catalogo Aura (produce_*, stat_costo_*, aure_infusione_*):
+    stanno sul tipo AU e si editano nella maschera staff Aure.
+    """
+
     class Meta:
         model = Statistica
         fields = (
             'id', 'nome', 'sigla', 'parametro', 'descrizione', 'ordine', 'colore',
-            'formula', 'is_primaria', 'is_costo', 'is_tempo', 'is_numero',
+            'formula', 'tipo_modificatore', 'is_primaria', 'is_costo', 'is_tempo', 'is_numero',
             'is_risorsa_pool', 'valore_predefinito', 'valore_base_predefinito',
             'pool_corrente_default_pieno_se_assente',
             'auto_recupero_attivo', 'auto_recupero_intervallo_secondi', 'auto_recupero_step',
             'massimo_pool_sigla',
         )
+
+
+_AURA_STAFF_STAT_FK = (
+    'stat_costo_creazione_infusione',
+    'stat_costo_creazione_tessitura',
+    'stat_costo_acquisto_infusione',
+    'stat_costo_acquisto_tessitura',
+    'stat_costo_invio_proposta_infusione',
+    'stat_costo_invio_proposta_tessitura',
+    'stat_costo_forgiatura',
+    'stat_tempo_forgiatura',
+    'stat_costo_creazione_oggetto',
+    'stat_costo_creazione_mod',
+    'stat_costo_creazione_innesto',
+    'stat_costo_creazione_mutazione',
+    'stat_costo_acquisto_cerimoniale',
+    'stat_costo_creazione_cerimoniale',
+    'stat_costo_invio_proposta_cerimoniale',
+    'stat_costo_consumabili',
+    'stat_numero_consumabili',
+    'stat_tempo_creazione_consumabili',
+    'stat_durata_consumabili',
+)
+
+
+class AuraStaffSerializer(serializers.ModelSerializer):
+    """Catalogo Aura (Punteggio tipo AU): flag produzione, costi, infusioni consentite."""
+
+    aure_infusione_consentite = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Punteggio.objects.filter(tipo=AURA),
+        required=False,
+    )
+
+    class Meta:
+        model = Aura
+        fields = (
+            'id',
+            'nome',
+            'sigla',
+            'descrizione',
+            'ordine',
+            'colore',
+            'tipo',
+            'is_soprannaturale',
+            'is_generica',
+            'permette_infusioni',
+            'permette_tessiture',
+            'permette_cerimoniali',
+            'produce_aumenti',
+            'produce_potenziamenti',
+            'nome_tipo_aumento',
+            'nome_tipo_potenziamento',
+            'nome_tipo_tessitura',
+            'spegne_a_zero_cariche',
+            'potenziamenti_multi_slot',
+            'aure_infusione_consentite',
+            *_AURA_STAFF_STAT_FK,
+        )
+        read_only_fields = ('tipo',)
+        extra_kwargs = {name: {'allow_null': True, 'required': False} for name in _AURA_STAFF_STAT_FK}
+
+
+PUNTEGGI_TIPI_CON_MASCHERA_DEDICATA = (STATISTICA, AURA, CARATTERISTICA)
+PUNTEGGI_TIPI_RESIDUI = (ELEMENTO, CONDIZIONE, CULTO, VIA, ARTE, ARCHETIPO, CASTONE, NODO, KATA)
+
+
+def _sync_simple_children(manager, rows, build_kwargs):
+    manager.all().delete()
+    for row in rows or []:
+        kwargs = build_kwargs(row)
+        if kwargs is None:
+            continue
+        manager.create(**kwargs)
+
+
+class CaratteristicaModificatoreStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CaratteristicaModificatore
+        fields = ('id', 'statistica_modificata', 'modificatore', 'ogni_x_punti')
+        extra_kwargs = {'id': {'required': False}}
+        validators = []
+
+
+class CaratteristicaStaffSerializer(serializers.ModelSerializer):
+    """Proxy Punteggio tipo CA + modificatori verso statistiche."""
+
+    modificatori = CaratteristicaModificatoreStaffSerializer(
+        source='modificatori_dati', many=True, required=False,
+    )
+
+    class Meta:
+        model = Caratteristica
+        fields = (
+            'id', 'nome', 'sigla', 'descrizione', 'ordine', 'colore', 'tipo',
+            'modificatori',
+        )
+        read_only_fields = ('tipo',)
+
+    def create(self, validated_data):
+        mods = validated_data.pop('modificatori_dati', [])
+        validated_data['tipo'] = CARATTERISTICA
+        obj = Caratteristica.objects.create(**validated_data)
+        self._sync_modificatori(obj, mods)
+        return obj
+
+    def update(self, instance, validated_data):
+        mods = validated_data.pop('modificatori_dati', None)
+        validated_data['tipo'] = CARATTERISTICA
+        instance = super().update(instance, validated_data)
+        if mods is not None:
+            self._sync_modificatori(instance, mods)
+        return instance
+
+    def _sync_modificatori(self, instance, rows):
+        _sync_simple_children(
+            instance.modificatori_dati,
+            rows,
+            lambda row: {
+                'statistica_modificata': row['statistica_modificata'],
+                'modificatore': row.get('modificatore') or 1,
+                'ogni_x_punti': row.get('ogni_x_punti') or 1,
+            } if row.get('statistica_modificata') else None,
+        )
+
+
+class MattoneStatisticaStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MattoneStatistica
+        fields = ('id', 'statistica', 'valore', 'tipo_modificatore')
+        extra_kwargs = {'id': {'required': False}}
+        validators = []
+
+
+class MattoneStaffSerializer(serializers.ModelSerializer):
+    statistiche_mod = MattoneStatisticaStaffSerializer(
+        source='mattonestatistica_set', many=True, required=False,
+    )
+    aura_nome = serializers.CharField(source='aura.nome', read_only=True)
+    caratteristica_nome = serializers.CharField(source='caratteristica_associata.nome', read_only=True)
+
+    class Meta:
+        model = Mattone
+        fields = (
+            'id', 'nome', 'sigla', 'tipo', 'ordine', 'colore',
+            'aura', 'aura_nome', 'caratteristica_associata', 'caratteristica_nome', 'indice_componente',
+            'descrizione_mattone', 'dichiarazione',
+            'funzionamento_metatalento', 'descrizione_metatalento', 'testo_addizionale',
+            'mostra_classi_arma', 'statistiche_mod',
+        )
+        extra_kwargs = {
+            'indice_componente': {'allow_null': True, 'required': False},
+            'tipo': {'required': False},
+        }
+
+    def create(self, validated_data):
+        stats = validated_data.pop('mattonestatistica_set', [])
+        validated_data.setdefault('tipo', MATTONE)
+        obj = Mattone.objects.create(**validated_data)
+        self._sync_stats(obj, stats)
+        return obj
+
+    def update(self, instance, validated_data):
+        stats = validated_data.pop('mattonestatistica_set', None)
+        instance = super().update(instance, validated_data)
+        if stats is not None:
+            self._sync_stats(instance, stats)
+        return instance
+
+    def _sync_stats(self, instance, rows):
+        _sync_simple_children(
+            instance.mattonestatistica_set,
+            rows,
+            lambda row: {
+                'statistica': row['statistica'],
+                'valore': row.get('valore') or 0,
+                'tipo_modificatore': row.get('tipo_modificatore') or 'ADD',
+            } if row.get('statistica') else None,
+        )
+
+
+class ModelloAuraRequisitoStaffSerializer(serializers.Serializer):
+    requisito = serializers.PrimaryKeyRelatedField(queryset=Punteggio.objects.all())
+    valore = serializers.IntegerField(default=1)
+
+
+class ModelloAuraStaffSerializer(serializers.ModelSerializer):
+    aura_nome = serializers.CharField(source='aura.nome', read_only=True)
+    mattoni_proibiti = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Mattone.objects.all(), required=False,
+    )
+    mattoni_obbligatori = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Mattone.objects.all(), required=False,
+    )
+    requisiti_doppia = ModelloAuraRequisitoStaffSerializer(
+        source='req_doppia_rel', many=True, required=False,
+    )
+    requisiti_mattone = ModelloAuraRequisitoStaffSerializer(
+        source='req_mattone_rel', many=True, required=False,
+    )
+    requisiti_caratt = ModelloAuraRequisitoStaffSerializer(
+        source='req_caratt_rel', many=True, required=False,
+    )
+
+    class Meta:
+        model = ModelloAura
+        fields = (
+            'id', 'nome', 'aura', 'aura_nome', 'descrizione',
+            'mattoni_proibiti', 'mattoni_obbligatori',
+            'usa_doppia_formula', 'elemento_secondario', 'usa_condizione_doppia',
+            'requisiti_doppia',
+            'usa_formula_per_mattone', 'usa_condizione_mattone',
+            'requisiti_mattone',
+            'usa_formula_per_caratteristica', 'usa_condizione_caratt',
+            'requisiti_caratt',
+        )
+        extra_kwargs = {
+            'elemento_secondario': {'allow_null': True, 'required': False},
+        }
+
+    def create(self, validated_data):
+        nested = self._pop_nested(validated_data)
+        m2m_proib = validated_data.pop('mattoni_proibiti', [])
+        m2m_obb = validated_data.pop('mattoni_obbligatori', [])
+        obj = ModelloAura.objects.create(**validated_data)
+        obj.mattoni_proibiti.set(m2m_proib)
+        obj.mattoni_obbligatori.set(m2m_obb)
+        self._sync_requisiti(obj, nested)
+        return obj
+
+    def update(self, instance, validated_data):
+        nested = self._pop_nested(validated_data)
+        m2m_proib = validated_data.pop('mattoni_proibiti', None)
+        m2m_obb = validated_data.pop('mattoni_obbligatori', None)
+        instance = super().update(instance, validated_data)
+        if m2m_proib is not None:
+            instance.mattoni_proibiti.set(m2m_proib)
+        if m2m_obb is not None:
+            instance.mattoni_obbligatori.set(m2m_obb)
+        self._sync_requisiti(instance, nested)
+        return instance
+
+    def _pop_nested(self, validated_data):
+        return {
+            'doppia': validated_data.pop('req_doppia_rel', None),
+            'mattone': validated_data.pop('req_mattone_rel', None),
+            'caratt': validated_data.pop('req_caratt_rel', None),
+        }
+
+    def _sync_requisiti(self, instance, nested):
+        mapping = {
+            'doppia': instance.req_doppia_rel,
+            'mattone': instance.req_mattone_rel,
+            'caratt': instance.req_caratt_rel,
+        }
+        for key, manager in mapping.items():
+            rows = nested.get(key)
+            if rows is None:
+                continue
+            _sync_simple_children(
+                manager,
+                rows,
+                lambda row: {
+                    'requisito': row['requisito'],
+                    'valore': row.get('valore') or 1,
+                } if row.get('requisito') else None,
+            )
+
+
+class PunteggioResiduoStaffSerializer(serializers.ModelSerializer):
+    """Punteggi senza maschera dedicata (non ST/AU/CA, non mattoni MTI)."""
+
+    class Meta:
+        model = Punteggio
+        fields = ('id', 'nome', 'sigla', 'tipo', 'ordine', 'colore', 'descrizione')
+
+    def validate_tipo(self, value):
+        if value not in PUNTEGGI_TIPI_RESIDUI:
+            raise serializers.ValidationError(
+                "Tipo non ammesso qui: usa le maschere Statistiche, Aure, Caratteristiche o Mattoni."
+            )
+        return value
 
 
 class PunteggioSerializer(serializers.ModelSerializer):
@@ -1555,33 +1844,14 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
         ).data
 
     def get_cariche_massime(self, obj):
-        if not obj.infusione_generatrice or not obj.infusione_generatrice.statistica_cariche:
+        from .models import calcola_cariche_massime_da_infusione, proprietario_effettivo_oggetto
+
+        infusione = obj.infusione_generatrice
+        if not infusione or not infusione.statistica_cariche:
             return 0
-        
-        # Logica di calcolo identica a 'crea_oggetto_da_infusione'
-        # Serve il proprietario per i modificatori
-        proprietario = obj.inventario_corrente.personaggio_ptr if hasattr(obj.inventario_corrente, 'personaggio_ptr') else None
-        
-        if not proprietario and obj.inventario_corrente and hasattr(obj.inventario_corrente, 'personaggio_ptr'):
-            proprietario = obj.inventario_corrente.personaggio_ptr
+        personaggio = self.context.get("personaggio") or proprietario_effettivo_oggetto(obj)
+        return calcola_cariche_massime_da_infusione(infusione, personaggio)
 
-        stat_def = obj.infusione_generatrice.statistica_cariche
-        
-        # 1. Valore Base (dall'infusione o dal default della stat)
-        # Cerchiamo se l'infusione ha un override specifico per questa statistica
-        stat_base_link = obj.infusione_generatrice.infusionestatisticabase_set.filter(statistica=stat_def).first()
-        valore_base = stat_base_link.valore_base if stat_base_link else stat_def.valore_base_predefinito
-
-        # 2. Modificatori Personaggio (se presente)
-        if proprietario:
-            # Nota: modificatori_calcolati è una property cached del model Personaggio
-            chiave = statistica_chiave_modificatore(stat_def)
-            mods = proprietario.modificatori_calcolati.get(chiave, {'add': 0.0, 'mol': 1.0}) if chiave else {'add': 0.0, 'mol': 1.0}
-            valore_finale = int(round((valore_base + mods['add']) * mods['mol']))
-            return max(0, valore_finale)
-        
-        return valore_base
-    
     def get_attacco_base_effettivo(self, obj):
         # Formula «effettiva»: vuota se oggetto o infusione generatrice non ne hanno una.
         return obj.formula_attacco_effettiva or None
@@ -1863,32 +2133,13 @@ class OggettoSerializer(serializers.ModelSerializer):
         return 0
 
     def get_cariche_massime(self, obj):
-        if not obj.infusione_generatrice or not obj.infusione_generatrice.statistica_cariche:
+        from .models import calcola_cariche_massime_da_infusione, proprietario_effettivo_oggetto
+
+        infusione = obj.infusione_generatrice
+        if not infusione or not infusione.statistica_cariche:
             return 0
-        
-        # Logica di calcolo identica a 'crea_oggetto_da_infusione'
-        # Serve il proprietario per i modificatori
-        proprietario = obj.inventario_corrente.personaggio_ptr if hasattr(obj.inventario_corrente, 'personaggio_ptr') else None
-        
-        if not proprietario and obj.inventario_corrente and hasattr(obj.inventario_corrente, 'personaggio_ptr'):
-            proprietario = obj.inventario_corrente.personaggio_ptr
-
-        stat_def = obj.infusione_generatrice.statistica_cariche
-        
-        # 1. Valore Base (dall'infusione o dal default della stat)
-        # Cerchiamo se l'infusione ha un override specifico per questa statistica
-        stat_base_link = obj.infusione_generatrice.infusionestatisticabase_set.filter(statistica=stat_def).first()
-        valore_base = stat_base_link.valore_base if stat_base_link else stat_def.valore_base_predefinito
-
-        # 2. Modificatori Personaggio (se presente)
-        if proprietario:
-            # Nota: modificatori_calcolati è una property cached del model Personaggio
-            chiave = statistica_chiave_modificatore(stat_def)
-            mods = proprietario.modificatori_calcolati.get(chiave, {'add': 0.0, 'mol': 1.0}) if chiave else {'add': 0.0, 'mol': 1.0}
-            valore_finale = int(round((valore_base + mods['add']) * mods['mol']))
-            return max(0, valore_finale)
-        
-        return valore_base
+        personaggio = self.context.get("personaggio") or proprietario_effettivo_oggetto(obj)
+        return calcola_cariche_massime_da_infusione(infusione, personaggio)
 
     def get_durata_totale(self, obj):
         return obj.infusione_generatrice.durata_attivazione if obj.infusione_generatrice else 0
@@ -2738,10 +2989,14 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
     target_ere_ids = serializers.SerializerMethodField()
     target_regioni_ids = serializers.SerializerMethodField()
     target_korps_ids = serializers.SerializerMethodField()
+    target_evento_id = serializers.SerializerMethodField()
+    target_personaggi = serializers.SerializerMethodField()
     campagna = serializers.PrimaryKeyRelatedField(read_only=True)
-    has_qrcode = serializers.BooleanField(read_only=True)
-    qrcode_id = serializers.CharField(read_only=True, allow_null=True)
-    minigioco_usa_default = serializers.BooleanField(read_only=True, default=False)
+    gruppo_id = serializers.UUIDField(read_only=True)
+    ordine_istanza = serializers.IntegerField(read_only=True)
+    has_qrcode = serializers.SerializerMethodField()
+    qrcode_id = serializers.SerializerMethodField()
+    minigioco_usa_default = serializers.SerializerMethodField()
 
     class Meta:
         model = InnescoTimer
@@ -2755,14 +3010,44 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
             "rigenera_cariche_ogni_secondi",
             "segnale_luminoso",
             "campagna",
+            "gruppo_id",
+            "etichetta_istanza",
+            "ordine_istanza",
+            "target_evento_id",
             "target_ere_ids",
             "target_regioni_ids",
             "target_korps_ids",
+            "target_personaggi",
             "has_qrcode",
             "qrcode_id",
             "minigioco_usa_default",
         )
-        read_only_fields = ("campagna", "target_ere_ids", "target_regioni_ids", "target_korps_ids")
+        read_only_fields = (
+            "campagna",
+            "gruppo_id",
+            "ordine_istanza",
+            "target_evento_id",
+            "target_ere_ids",
+            "target_regioni_ids",
+            "target_korps_ids",
+            "target_personaggi",
+        )
+
+    def get_target_evento_id(self, obj):
+        return obj.target_evento_id
+
+    def get_has_qrcode(self, obj):
+        annotated = getattr(obj, "has_qrcode", None)
+        if annotated is not None:
+            return bool(annotated)
+        return bool(getattr(obj, "qrcode_id", None))
+
+    def get_qrcode_id(self, obj):
+        valore = getattr(obj, "qrcode_id", None)
+        return str(valore) if valore else None
+
+    def get_minigioco_usa_default(self, obj):
+        return bool(getattr(obj, "minigioco_usa_default", False))
 
     def get_target_ere_ids(self, obj):
         return list(obj.target_ere.values_list("id", flat=True))
@@ -2772,6 +3057,16 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
 
     def get_target_korps_ids(self, obj):
         return list(obj.target_korps.values_list("id", flat=True))
+
+    def get_target_personaggi(self, obj):
+        righe = []
+        for pg in obj.target_personaggi.select_related("proprietario").all():
+            user = pg.proprietario
+            giocatore = ""
+            if user is not None:
+                giocatore = (user.get_full_name() or "").strip() or user.username
+            righe.append({"id": pg.id, "nome": pg.nome, "giocatore": giocatore})
+        return righe
 
 
 class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):

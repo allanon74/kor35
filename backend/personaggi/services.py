@@ -26,6 +26,7 @@ from .models import (
     FALLBACK_STAT_TEMPO_CREAZIONE_CONSUMABILI, FALLBACK_STAT_DURATA_CONSUMABILI,
     TessituraEffettoRuntime, TessituraOggettoRuntime, AbilitaStatistica,
     Statistica, statistica_chiave_modificatore,
+    calcola_cariche_massime_da_infusione,
 )
 
 
@@ -979,7 +980,58 @@ class GestioneOggettiService:
             "attivo_fino_a": oggetto.data_fine_attivazione,
             "has_timer": attiva_timer,
         }
-    
+
+    @staticmethod
+    def ricarica_cariche_oggetto(oggetto, personaggio):
+        """
+        Ripristina le cariche al tetto reale dell'infusione e scala i crediti.
+
+        Il tetto è lo stesso di creazione e scheda (InfusioneStatisticaBase, altrimenti
+        valore_base_predefinito del catalogo, più i modificatori del personaggio).
+        costo_ricarica_crediti è un forfait: si paga una volta per riportare l'oggetto
+        al massimo, qualunque sia il numero di cariche mancanti.
+
+        Ritorna un dict. Se non manca nulla, gia_carico=True e non scrive nulla.
+        """
+        infusione = oggetto.infusione_generatrice
+        if not infusione or not infusione.statistica_cariche:
+            raise ValidationError("Oggetto non ricaricabile.")
+        if personaggio is None:
+            raise ValidationError("Impossibile determinare il proprietario per il pagamento.")
+
+        max_cariche = calcola_cariche_massime_da_infusione(infusione, personaggio)
+        mancanti = max_cariche - int(oggetto.cariche_attuali or 0)
+        if mancanti <= 0:
+            return {
+                "gia_carico": True,
+                "costo": 0,
+                "mancanti": 0,
+                "cariche": oggetto.cariche_attuali,
+                "max_cariche": max_cariche,
+            }
+
+        costo = int(infusione.costo_ricarica_crediti or 0)
+        if personaggio.crediti < costo:
+            raise ValidationError(
+                f"Crediti insufficienti. Servono {costo} crediti, ne hai {personaggio.crediti}."
+            )
+
+        with transaction.atomic():
+            if costo:
+                personaggio.modifica_crediti(-costo, f"Ricarica {oggetto.nome}")
+            oggetto.cariche_attuali = max_cariche
+            # Ricarica = reset del timer di attivazione in corso.
+            oggetto.data_fine_attivazione = None
+            oggetto.save()
+
+        return {
+            "gia_carico": False,
+            "costo": costo,
+            "mancanti": mancanti,
+            "cariche": oggetto.cariche_attuali,
+            "max_cariche": max_cariche,
+        }
+
     @staticmethod
     def manipola_statistica_temporanea(personaggio, stat_sigla, operazione):
         """

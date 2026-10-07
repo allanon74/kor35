@@ -22,6 +22,11 @@ from .views_staff import (
     MattoniMagiciListView,
     DichiarazioneStaffViewSet,
     StatisticaStaffViewSet,
+    AuraStaffViewSet,
+    CaratteristicaStaffViewSet,
+    MattoneStaffViewSet,
+    ModelloAuraStaffViewSet,
+    PunteggioResiduoStaffViewSet,
     StaffQrInventoryScanView,
     StaffMinigiocoQrConfigView,
     StaffMinigiocoBibliotecaView,
@@ -112,6 +117,11 @@ router.register(r'staff/tipologie-effetto', views_staff.TipologiaEffettoViewSet,
 router.register(r'staff/effetti-casuali', views_staff.EffettoCasualeViewSet, basename='staff-effetti-casuali')
 router.register(r'staff/dichiarazioni', views_staff.DichiarazioneStaffViewSet, basename='staff-dichiarazioni')
 router.register(r'staff/statistiche', views_staff.StatisticaStaffViewSet, basename='staff-statistiche')
+router.register(r'staff/aure', views_staff.AuraStaffViewSet, basename='staff-aure')
+router.register(r'staff/caratteristiche', views_staff.CaratteristicaStaffViewSet, basename='staff-caratteristiche')
+router.register(r'staff/mattoni', views_staff.MattoneStaffViewSet, basename='staff-mattoni')
+router.register(r'staff/modelli-aura', views_staff.ModelloAuraStaffViewSet, basename='staff-modelli-aura')
+router.register(r'staff/punteggi', views_staff.PunteggioResiduoStaffViewSet, basename='staff-punteggi')
 router.register(r'staff/ere', views_staff.EraStaffViewSet, basename='staff-ere')
 router.register(r'staff/regioni', views_staff.RegioneStaffViewSet, basename='staff-regioni')
 router.register(r'staff/prefetture', views_staff.PrefetturaStaffViewSet, basename='staff-prefetture')

@@ -1664,6 +1664,7 @@ class QrCodeDetailView(APIView):
                     "tipo_modello": "timer_innesco",
                     "messaggio": f"Innesco timer «{inn_timer.nome}» avviato.",
                     "dati": {
+                        "id": payload.get("id"),
                         "nome": payload["nome"],
                         "scadenza": payload["scadenza"].isoformat() if payload.get("scadenza") else None,
                         "segnale_luminoso": payload.get("segnale_luminoso", True),
@@ -3541,25 +3542,26 @@ class OggettoViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def ricarica(self, request, pk=None):
+        from personaggi.models import proprietario_effettivo_oggetto
+
         oggetto = self.get_object()
-        infusione = oggetto.infusione_generatrice
-        if not infusione or not infusione.statistica_cariche: return Response({'error': 'Questo oggetto non supporta la ricarica.'}, status=status.HTTP_400_BAD_REQUEST)
-        max_cariche = infusione.statistica_cariche.valore_predefinito 
-        cariche_mancanti = max_cariche - oggetto.cariche_attuali
-        if cariche_mancanti <= 0: return Response({'message': 'Oggetto già completamente carico.'}, status=status.HTTP_200_OK)
-        costo_totale = cariche_mancanti * infusione.costo_ricarica_crediti
-        inventario = oggetto.inventario_corrente
-        personaggio = None
-        if inventario:
-            if hasattr(inventario, 'personaggio'): personaggio = inventario.personaggio
-            elif hasattr(inventario, 'personaggio_ptr'): personaggio = inventario.personaggio_ptr
-        if not personaggio: return Response({'error': 'Impossibile determinare il proprietario per il pagamento.'}, status=status.HTTP_400_BAD_REQUEST)
-        if personaggio.crediti < costo_totale: return Response({'error': f'Crediti insufficienti. Servono {costo_totale} crediti, ne hai {personaggio.crediti}.'}, status=status.HTTP_400_BAD_REQUEST)
-        with transaction.atomic():
-            personaggio.modifica_crediti(-costo_totale, f"Ricarica oggetto: {oggetto.nome}")
-            oggetto.cariche_attuali = max_cariche
-            oggetto.save()
-        return Response({'status': 'success', 'cariche_attuali': oggetto.cariche_attuali, 'costo_pagato': costo_totale, 'crediti_residui': personaggio.crediti})
+        personaggio = proprietario_effettivo_oggetto(oggetto)
+        if not personaggio:
+            return Response({'error': 'Impossibile determinare il proprietario per il pagamento.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            result = GestioneOggettiService.ricarica_cariche_oggetto(oggetto, personaggio)
+        except ValidationError as e:
+            msg = "; ".join(str(m) for m in e.messages) if getattr(e, "messages", None) else str(e)
+            return Response({'error': msg}, status=status.HTTP_400_BAD_REQUEST)
+        if result["gia_carico"]:
+            return Response({'message': 'Oggetto già completamente carico.'}, status=status.HTTP_200_OK)
+        personaggio.refresh_from_db()
+        return Response({
+            'status': 'success',
+            'cariche_attuali': result["cariche"],
+            'costo_pagato': result["costo"],
+            'crediti_residui': personaggio.crediti,
+        })
         
 @api_view(['POST'])
 @authentication_classes([TokenAuthentication])
@@ -5026,39 +5028,34 @@ class GameActionsViewSet(viewsets.ViewSet):
     def ricarica_oggetto(self, request):
         """
         Ricarica le cariche di un oggetto pagando i crediti.
+
+        Il tetto non è il default di catalogo della statistica (valore_base_predefinito):
+        è il valore base dell'infusione (InfusioneStatisticaBase) più i modificatori del PG,
+        lo stesso numero mostrato in scheda come cariche_massime.
+        Il costo è il forfait dell'infusione, non un prezzo per carica mancante.
         """
         obj_id = request.data.get('oggetto_id')
         char_id = request.data.get('char_id')
-        
+
         obj = get_object_or_404(Oggetto, pk=obj_id)
         pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
-        
-        infusione = obj.infusione_generatrice
-        if not infusione or not infusione.statistica_cariche:
-            return Response({'error': 'Oggetto non ricaricabile'}, status=400)
-            
-        # Calcolo costo
-        max_cariche = infusione.statistica_cariche.valore_base_predefinito
-        mancanti = max_cariche - obj.cariche_attuali
-        
-        if mancanti <= 0:
+
+        try:
+            result = GestioneOggettiService.ricarica_cariche_oggetto(obj, pg)
+        except ValidationError as e:
+            msg = "; ".join(str(m) for m in e.messages) if getattr(e, "messages", None) else str(e)
+            return Response({'error': msg}, status=400)
+
+        if result["gia_carico"]:
             return Response({'message': 'Già carico'}, status=200)
-            
-        costo = mancanti * infusione.costo_ricarica_crediti
-        
-        if pg.crediti < costo:
-             return Response({'error': f'Crediti insufficienti. Servono {costo} CR.'}, status=400)
-             
-        with transaction.atomic():
-            pg.modifica_crediti(-costo, f"Ricarica {obj.nome}")
-            obj.cariche_attuali = max_cariche
-            # Se ricarichi, il timer si resetta? Di solito no, o si spegne.
-            # Per ora lasciamo il timer inalterato o lo spegniamo. Spegniamolo per coerenza (ricarica = reset).
-            obj.data_fine_attivazione = None 
-            obj.save()
-            
-        serializer = OggettoSerializer(obj)
-        return Response(serializer.data)
+
+        pg.refresh_from_db()
+        serializer = OggettoSerializer(obj, context={'personaggio': pg})
+        payload = serializer.data
+        detail = PersonaggioDetailSerializer(pg, context={'request': request})
+        payload['personaggio'] = detail.data
+        payload['costo_pagato'] = result["costo"]
+        return Response(payload)
     
 class ActiveTimersViewSet(viewsets.ReadOnlyModelViewSet):
     """API per recuperare i timer attualmente attivi al caricamento dell'app"""
@@ -5107,7 +5104,37 @@ class ActiveTimersViewSet(viewsets.ReadOnlyModelViewSet):
                         }
                     )
                 rows.extend(qr_logic.active_innesco_timer_rows_for_personaggio(pg))
-        return Response(rows) 
+        return Response(rows)
+
+    @action(detail=False, methods=["post"], url_path="ack")
+    def ack(self, request):
+        """Il giocatore ha premuto Ok sulla schermata «timer scaduto»."""
+        from personaggi.innesco_timer_ops import ack_innesco_timer_scaduto
+
+        raw_pid = request.data.get("personaggio_id")
+        raw_inn = request.data.get("innesco_id")
+        if raw_inn is None and request.data.get("id"):
+            token = str(request.data.get("id"))
+            raw_inn = token.split(":", 1)[1] if token.startswith("innesco:") else token
+        try:
+            pid = int(raw_pid)
+            inn_id = int(raw_inn)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "personaggio_id e innesco_id richiesti."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        pg = Personaggio.objects.filter(pk=pid, proprietario=request.user).first()
+        if pg is None:
+            return Response({"error": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        inn = InnescoTimer.objects.filter(pk=inn_id).first()
+        if inn is None:
+            return Response({"error": "Innesco timer non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        if not qr_logic.personaggio_match_innesco_timer(pg, inn):
+            return Response({"error": "Timer non destinato a questo personaggio."}, status=status.HTTP_403_FORBIDDEN)
+        ack_innesco_timer_scaduto(pg, inn, request.data.get("data_fine"))
+        return Response({"ok": True})
+
 class StatisticaViewSet(viewsets.ReadOnlyModelViewSet):
     """Visualizza l'elenco delle statistiche tecniche disponibili"""
     queryset = Statistica.objects.all()

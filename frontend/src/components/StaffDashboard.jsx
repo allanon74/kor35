@@ -43,6 +43,11 @@ const EraManager = lazy(() => import('./editors/EraManager'));
 const CarriereKorpsManager = lazy(() => import('./editors/CarriereKorpsManager'));
 const DichiarazioniGlossarioManager = lazy(() => import('./editors/DichiarazioniGlossarioManager'));
 const StatisticaManager = lazy(() => import('./editors/StatisticaManager'));
+const AuraManager = lazy(() => import('./editors/AuraManager'));
+const CaratteristicaManager = lazy(() => import('./editors/CaratteristicaManager'));
+const MattoneManager = lazy(() => import('./editors/MattoneManager'));
+const ModelloAuraManager = lazy(() => import('./editors/ModelloAuraManager'));
+const PunteggioResiduoManager = lazy(() => import('./editors/PunteggioResiduoManager'));
 const ArcanaProfilesTab = lazy(() => import('./editors/ArcanaProfilesTab'));
 const CampaignManager = lazy(() => import('./editors/CampaignManager'));
 const ManifestoManager = lazy(() => import('./editors/ManifestoManager'));
@@ -99,6 +104,11 @@ const STAFF_COMPONENT_MAP = {
     'creazione-guidata': CreazioneGuidataStaffManager,
     'dichiarazioni-glossario': DichiarazioniGlossarioManager,
     statistiche: StatisticaManager,
+    aure: AuraManager,
+    caratteristiche: CaratteristicaManager,
+    mattoni: MattoneManager,
+    'modelli-aura': ModelloAuraManager,
+    punteggi: PunteggioResiduoManager,
     'arcana-profiles': ArcanaProfilesTab,
     campagne: CampaignManager,
     maintenance: MaintenanceModePanel,
@@ -219,6 +229,13 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
             .filter((tool) => staffToolModuloEnabled(moduliAccesso, tool.id)),
         [roleFlags, moduliAccesso],
     );
+
+    useEffect(() => {
+        if (!initialTool || initialTool === 'home') return;
+        if (visibleTools.some((t) => t.id === initialTool)) {
+            setActiveTool((current) => (current === initialTool ? current : initialTool));
+        }
+    }, [visibleTools, initialTool]);
 
     const menuStructure = useMemo(
         () => applyStaffDashboardLayout(visibleTools, dashboardLayout),

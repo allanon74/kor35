@@ -1987,6 +1987,18 @@ export const staffUpdateInnescoTimer = (id, data, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/innesco-timer/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 export const staffDeleteInnescoTimer = (id, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/innesco-timer/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffInnescoTimerEventi = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/innesco-timer/eventi-opzioni/', { method: 'GET' }, onLogout);
+export const staffAggiungiIstanzeInnescoTimer = (id, quante, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/innesco-timer/${id}/aggiungi-istanze/`, {
+    method: 'POST',
+    body: JSON.stringify({ quante }),
+  }, onLogout);
+export const ackInnescoTimerScaduto = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/timers/active/ack/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }, onLogout);
 
 // --- Pool QR randomico / Trappola / Serie ---
 export const staffGetRandomQrPools = (onLogout) =>
@@ -2573,6 +2585,69 @@ export const staffDeleteStatistica = (id, onLogout) => {
         method: 'DELETE',
     }, onLogout);
 };
+
+export const staffGetAure = (onLogout) => {
+    return fetchAuthenticated('/api/personaggi/api/staff/aure/', { method: 'GET' }, onLogout);
+};
+
+export const staffCreateAura = (data, onLogout) => {
+    return fetchAuthenticated('/api/personaggi/api/staff/aure/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+};
+
+export const staffUpdateAura = (id, data, onLogout) => {
+    return fetchAuthenticated(`/api/personaggi/api/staff/aure/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+};
+
+export const staffDeleteAura = (id, onLogout) => {
+    return fetchAuthenticated(`/api/personaggi/api/staff/aure/${id}/`, {
+        method: 'DELETE',
+    }, onLogout);
+};
+
+const staffCatalogCrud = (path) => ({
+    list: (onLogout) => fetchAuthenticated(`/api/personaggi/api/staff/${path}/`, { method: 'GET' }, onLogout),
+    create: (data, onLogout) => fetchAuthenticated(`/api/personaggi/api/staff/${path}/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout),
+    update: (id, data, onLogout) => fetchAuthenticated(`/api/personaggi/api/staff/${path}/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout),
+    remove: (id, onLogout) => fetchAuthenticated(`/api/personaggi/api/staff/${path}/${id}/`, {
+        method: 'DELETE',
+    }, onLogout),
+});
+
+const caratteristicheCrud = staffCatalogCrud('caratteristiche');
+export const staffGetCaratteristiche = caratteristicheCrud.list;
+export const staffCreateCaratteristica = caratteristicheCrud.create;
+export const staffUpdateCaratteristica = caratteristicheCrud.update;
+export const staffDeleteCaratteristica = caratteristicheCrud.remove;
+
+const mattoniCrud = staffCatalogCrud('mattoni');
+export const staffGetMattoni = mattoniCrud.list;
+export const staffCreateMattone = mattoniCrud.create;
+export const staffUpdateMattone = mattoniCrud.update;
+export const staffDeleteMattone = mattoniCrud.remove;
+
+const modelliAuraCrud = staffCatalogCrud('modelli-aura');
+export const staffGetModelliAura = modelliAuraCrud.list;
+export const staffCreateModelloAura = modelliAuraCrud.create;
+export const staffUpdateModelloAura = modelliAuraCrud.update;
+export const staffDeleteModelloAura = modelliAuraCrud.remove;
+
+const punteggiResiduiCrud = staffCatalogCrud('punteggi');
+export const staffGetPunteggiResidui = punteggiResiduiCrud.list;
+export const staffCreatePunteggioResiduo = punteggiResiduiCrud.create;
+export const staffUpdatePunteggioResiduo = punteggiResiduiCrud.update;
+export const staffDeletePunteggioResiduo = punteggiResiduiCrud.remove;
 
 export const createPersonaggio = (data, onLogout) => {
     return fetchAuthenticated('/api/personaggi/api/gestione-personaggi/', {

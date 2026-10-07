@@ -17,6 +17,23 @@ function resolveGroupIcon(iconName) {
   return STAFF_GROUP_ICON_MAP[iconName] || Layers;
 }
 
+function mergeMissingDefaultTools(layout) {
+  const assigned = new Set();
+  for (const group of layout.groups || []) {
+    for (const id of group.tool_ids || []) assigned.add(id);
+  }
+  for (const id of layout.pinned_tool_ids || []) assigned.add(id);
+  const groups = (layout.groups || []).map((group) => {
+    const defaultGroup = DEFAULT_STAFF_DASHBOARD_LAYOUT.groups.find((g) => g.id === group.id);
+    if (!defaultGroup) return group;
+    const extra = (defaultGroup.tool_ids || []).filter((id) => !assigned.has(id));
+    extra.forEach((id) => assigned.add(id));
+    if (extra.length === 0) return group;
+    return { ...group, tool_ids: [...(group.tool_ids || []), ...extra] };
+  });
+  return { ...layout, groups };
+}
+
 function normalizeLayoutInput(layout) {
   if (!layout || typeof layout !== 'object') {
     return DEFAULT_STAFF_DASHBOARD_LAYOUT;
@@ -64,7 +81,7 @@ function enrichToolList(tools, layout, paletteId) {
  * Applica layout globale ai tool visibili per ruolo.
  */
 export function applyStaffDashboardLayout(visibleTools, layoutRaw) {
-  const layout = normalizeLayoutInput(layoutRaw);
+  const layout = mergeMissingDefaultTools(normalizeLayoutInput(layoutRaw));
   const toolById = new Map(visibleTools.map((t) => [t.id, t]));
   const assigned = new Set();
 
