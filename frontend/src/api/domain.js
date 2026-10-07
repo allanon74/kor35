@@ -1486,6 +1486,8 @@ export const riallineaIscrizioniEvento = (id, onLogout) =>
   fetchAuthenticated(`/api/plot/api/eventi/${id}/riallinea_iscrizioni/`, { method: 'POST', body: '{}' }, onLogout);
 export const reportRicompenseEvento = (id, onLogout) =>
   fetchAuthenticated(`/api/plot/api/eventi/${id}/report_ricompense/`, { method: 'GET' }, onLogout);
+export const riassegnaPremiMancantiEvento = (id, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/eventi/${id}/riassegna_premi_mancanti/`, { method: 'POST', body: '{}' }, onLogout);
 
 // --- TASK / MISSIONI ---
 export const getMissioni = (params = {}, onLogout) => {

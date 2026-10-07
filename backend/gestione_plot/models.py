@@ -250,14 +250,27 @@ class EventoVocePortare(SyncableModel, models.Model):
 
 class EventoPremioPersonaggio(SyncableModel, models.Model):
     """
-    Segna che PC e crediti d'evento sono stati accreditati una volta al PG iscritto
-    (al primo accesso in sessione durante un giorno d'evento).
+    Segna che PC, crediti e prestigio d'evento sono stati accreditati al PG
+    per un avvio ufficiale (Evento.started_at).
+
+    Un nuovo «Inizia evento» sullo stesso record non è coperto dalla riga
+    precedente: altrimenti un evento riusato (prova, poi evento vero) risulta
+    «assegnato» senza l'accredito di quell'avvio.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name="premi_presenza")
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="premi_evento_presenza")
+    avvio_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Avvio coperto",
+        help_text=(
+            "started_at dell'evento a cui si riferisce questo accredito. "
+            "Se è diverso dall'avvio corrente, PC/crediti/prestigio vanno riassegnati."
+        ),
+    )
 
     class Meta:
         verbose_name = "Premio presenza evento (PG)"

@@ -1,6 +1,9 @@
 """
-Accredito una tantum di PC e crediti d'evento ai PG iscritti, al login in sessione
-durante un giorno d'evento (finestra GiornoEvento; se non ci sono giorni, usa data_inizio/data_fine evento).
+Accredito di PC, crediti e prestigio d'evento ai PG iscritti.
+
+L'accredito è una tantum per avvio ufficiale (``Evento.started_at``), non per
+sempre sullo stesso record evento. Un evento riusato (prova estiva, poi evento
+vero) non deve risultare «consegnato» solo perché esiste una riga premio vecchia.
 """
 
 from __future__ import annotations
@@ -8,15 +11,73 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from personaggi.models import Personaggio, PersonaggioCarrieraMembership
+from personaggi.models import (
+    CreditoMovimento,
+    Personaggio,
+    PersonaggioCarrieraMembership,
+    PersonaggioLog,
+    PuntiCaratteristicaMovimento,
+)
 
 from .models import Evento, EventoPremioPersonaggio
 
 logger = logging.getLogger(__name__)
+
+
+def descrizione_premio_evento(evento: Evento) -> str:
+    return f"Inizio evento «{evento.titolo}»"[:198]
+
+
+def _accredito_avvio_gia_scritto(evento: Evento, personaggio: Personaggio) -> bool:
+    """
+    True se il ledger di questo avvio ha già la riga premio.
+
+    Copre il caso in cui l'accredito è stato riparato a mano prima che la riga
+    ``EventoPremioPersonaggio.avvio_at`` indicasse l'avvio corrente: senza questo
+    controllo un deploy successivo pagherebbe due volte.
+    """
+    started = getattr(evento, "started_at", None)
+    if started is None:
+        return False
+    desc = descrizione_premio_evento(evento)
+    if PuntiCaratteristicaMovimento.objects.filter(
+        personaggio=personaggio,
+        descrizione=desc,
+        data__gte=started,
+    ).exists():
+        return True
+    if CreditoMovimento.objects.filter(
+        personaggio=personaggio,
+        descrizione=desc,
+        data__gte=started,
+    ).exists():
+        return True
+    return PersonaggioLog.objects.filter(
+        personaggio=personaggio,
+        data__gte=started,
+        testo_log__contains=desc,
+    ).exists()
+
+
+def premio_copre_avvio_corrente(row, evento: Evento, personaggio: Personaggio | None = None) -> bool:
+    """True se questo PG ha già ricevuto PC/crediti/prestigio dell'avvio corrente."""
+    started = getattr(evento, "started_at", None)
+    if row is not None:
+        if started is None:
+            return True
+        avvio = getattr(row, "avvio_at", None)
+        if avvio is not None and avvio == started:
+            return True
+        if avvio is None and row.created_at >= started:
+            return True
+    pg = personaggio if personaggio is not None else getattr(row, "personaggio", None)
+    if pg is not None and _accredito_avvio_gia_scritto(evento, pg):
+        return True
+    return False
 
 
 def _evento_in_finestra_presenza(evento: Evento, now) -> bool:
@@ -93,44 +154,83 @@ def dettaglio_crediti_premio_evento(evento: Evento, personaggio: Personaggio, ts
     }
 
 
-def applica_premio_presenza_personaggio(evento: Evento, pg: Personaggio, when=None) -> bool:
-    ts = when or timezone.now()
-    with transaction.atomic():
-        _row, created = EventoPremioPersonaggio.objects.get_or_create(
-            evento=evento,
-            personaggio=pg,
-        )
-        if not created:
-            return False
-        desc = f"Inizio evento «{evento.titolo}»"[:198]
-        n_pc = int(evento.pc_guadagnati or 0)
-        if n_pc > 0:
-            pg.modifica_pc(n_pc, desc)
-        cred = calcola_crediti_premio_evento(evento, pg, ts=ts)
-        if cred > 0:
-            from personaggi.economia_crediti import CONTO_CORRENTE
+def _accredita_importo_premio(evento: Evento, pg: Personaggio, ts) -> None:
+    desc = descrizione_premio_evento(evento)
+    n_pc = int(evento.pc_guadagnati or 0)
+    if n_pc > 0:
+        pg.modifica_pc(n_pc, desc)
+    cred = calcola_crediti_premio_evento(evento, pg, ts=ts)
+    if cred > 0:
+        from personaggi.economia_crediti import CONTO_CORRENTE
 
-            pg.modifica_crediti(cred, desc, conto=CONTO_CORRENTE, evento=evento)
-        n_pr = int(getattr(evento, "prestigio_base_inizio_evento", 0) or 0)
-        if n_pr != 0:
-            pg.modifica_prestigio(n_pr, desc)
+        pg.modifica_crediti(cred, desc, conto=CONTO_CORRENTE, evento=evento)
+    n_pr = int(getattr(evento, "prestigio_base_inizio_evento", 0) or 0)
+    if n_pr != 0:
+        pg.modifica_prestigio(n_pr, desc)
+
+
+def _segna_avvio_premio(row: EventoPremioPersonaggio, started) -> None:
+    row.avvio_at = started
+    row.save(update_fields=["avvio_at", "updated_at"])
+
+
+def applica_premio_presenza_personaggio(evento: Evento, pg: Personaggio, when=None) -> bool:
+    """
+    Accredita il premio dell'avvio corrente.
+
+    Ritorna True solo se questo giro ha scritto PC/crediti/prestigio.
+    Una riga premio di un avvio precedente non blocca il nuovo avvio.
+    """
+    ts = when or timezone.now()
+    started = getattr(evento, "started_at", None)
+    with transaction.atomic():
+        row = (
+            EventoPremioPersonaggio.objects.select_for_update()
+            .filter(evento=evento, personaggio=pg)
+            .first()
+        )
+        if premio_copre_avvio_corrente(row, evento, pg):
+            return False
+        if row is None:
+            try:
+                with transaction.atomic():
+                    row = EventoPremioPersonaggio.objects.create(
+                        evento=evento,
+                        personaggio=pg,
+                        avvio_at=started,
+                    )
+            except IntegrityError:
+                row = (
+                    EventoPremioPersonaggio.objects.select_for_update()
+                    .get(evento=evento, personaggio=pg)
+                )
+                if premio_copre_avvio_corrente(row, evento, pg):
+                    return False
+                _segna_avvio_premio(row, started)
+        else:
+            _segna_avvio_premio(row, started)
+        _accredita_importo_premio(evento, pg, ts)
         return True
 
 
 def report_ricompense_evento(evento: Evento, ts=None) -> dict:
-    when = ts or timezone.now()
+    when = ts or evento.started_at or timezone.now()
     rows = []
     partecipanti = evento.partecipanti.all().select_related("tipologia")
-    premi_ids = set(
-        EventoPremioPersonaggio.objects.filter(evento=evento).values_list("personaggio_id", flat=True)
-    )
+    premi = {
+        row.personaggio_id: row
+        for row in EventoPremioPersonaggio.objects.filter(evento=evento)
+    }
     for pg in partecipanti:
+        row = premi.get(pg.id)
+        coperto = premio_copre_avvio_corrente(row, evento, pg)
         dettagli_crediti = dettaglio_crediti_premio_evento(evento, pg, ts=when)
         rows.append(
             {
                 "personaggio_id": pg.id,
                 "personaggio_nome": pg.nome,
-                "premio_gia_assegnato": pg.id in premi_ids,
+                "premio_gia_assegnato": coperto,
+                "premio_avvio_precedente": bool(row) and not coperto,
                 "pc_evento": int(evento.pc_guadagnati or 0),
                 "prestigio_evento": int(getattr(evento, "prestigio_base_inizio_evento", 0) or 0),
                 **dettagli_crediti,
@@ -149,7 +249,7 @@ def report_ricompense_evento(evento: Evento, ts=None) -> dict:
 def applica_premi_presenza_eventi(user):
     """
     Per ogni personaggio del proprietario iscritto a un evento la cui finestra di presenza include ``now``,
-    crea (se assente) il record premio e accredita PC/crediti dell'evento.
+    accredita PC/crediti/prestigio dell'avvio corrente se non risultano già scritti.
 
     Ritorna un dict con conteggi diagnostici (idempotente).
     """

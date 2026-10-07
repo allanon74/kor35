@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { 
     getEventi, associaQrAVista, getRisorseEditor, getAVistaDisponibili,
-    createEvento, updateEvento, deleteEvento, iniziaEvento, terminaEvento, reportRicompenseEvento, riallineaIscrizioniEvento,
+    createEvento, updateEvento, deleteEvento, iniziaEvento, terminaEvento, reportRicompenseEvento, riallineaIscrizioniEvento, riassegnaPremiMancantiEvento,
     createGiorno, updateGiorno, deleteGiorno,
     createQuest, updateQuest, deleteQuest,
     addPngToQuest, addMostroToQuest, addVistaToQuest,
@@ -381,6 +381,10 @@ const PlotTab = ({ onLogout }) => {
     const handleReportRicompenseEvento = useCallback(async () => {
         if (!selectedEvento?.id) return null;
         return reportRicompenseEvento(selectedEvento.id, onLogout);
+    }, [selectedEvento, onLogout]);
+    const handleRiassegnaPremiMancanti = useCallback(async () => {
+        if (!selectedEvento?.id) return null;
+        return riassegnaPremiMancantiEvento(selectedEvento.id, onLogout);
     }, [selectedEvento, onLogout]);
     const handleRiallineaIscrizioni = useCallback(async () => {
         if (!selectedEvento?.id) return;
@@ -1199,6 +1203,7 @@ const PlotTab = ({ onLogout }) => {
                                 onIniziaEvento={handleIniziaEvento}
                                 onTerminaEvento={handleTerminaEvento}
                                 onReportRicompense={handleReportRicompenseEvento}
+                                onRiassegnaPremiMancanti={handleRiassegnaPremiMancanti}
                                 onRiallineaIscrizioni={handleRiallineaIscrizioni}
                                 onRefresh={handleRefreshEvento}
                                 onRefreshRisorse={() => loadRisorseEditor(activeCampaign)}
