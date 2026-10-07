@@ -7,7 +7,7 @@ set -euo pipefail
 #   ./scripts/install_mirror_sync_services.sh
 #   ./scripts/install_mirror_sync_services.sh --repo-path /home/pi/kor35-replica --user pi --group pi
 #   ./scripts/install_mirror_sync_services.sh --db-interval 1m --media-calendar "*-*-* *:15:00"
-#   ./scripts/install_mirror_sync_services.sh --backup-calendar "*-*-* 05:00:00" --backup-retention-days 15
+#   ./scripts/install_mirror_sync_services.sh --backup-calendar "*-*-* 05:00:00" --backup-keep 15
 #   ./scripts/install_mirror_sync_services.sh --no-enable
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,7 +19,7 @@ RUN_GROUP="pi"
 DB_INTERVAL="2m"
 MEDIA_CALENDAR="*-*-* *:15:00"
 BACKUP_CALENDAR="*-*-* 05:00:00"
-BACKUP_RETENTION_DAYS="15"
+BACKUP_KEEP="15"
 BACKUP_DIR="/home/pi/backups/kor35/db"
 ENABLE_NOW="1"
 
@@ -49,8 +49,9 @@ while [ $# -gt 0 ]; do
       BACKUP_CALENDAR="${2:-}"
       shift 2
       ;;
-    --backup-retention-days)
-      BACKUP_RETENTION_DAYS="${2:-}"
+    --backup-keep|--backup-retention-days)
+      # --backup-retention-days resta come alias legacy (= keep count)
+      BACKUP_KEEP="${2:-}"
       shift 2
       ;;
     --backup-dir)
@@ -107,7 +108,8 @@ sed -i "s|^OnUnitActiveSec=.*$|OnUnitActiveSec=$DB_INTERVAL|g" "$SYSTEMD_DIR/kor
 sed -i "s|^OnCalendar=.*$|OnCalendar=$MEDIA_CALENDAR|g" "$SYSTEMD_DIR/kor35-mirror-media-sync.timer"
 sed -i "s|^OnCalendar=.*$|OnCalendar=$BACKUP_CALENDAR|g" "$SYSTEMD_DIR/kor35-mirror-db-backup.timer"
 sed -i "s|^Environment=KOR35_DB_BACKUP_DIR=.*$|Environment=KOR35_DB_BACKUP_DIR=$BACKUP_DIR|g" "$SYSTEMD_DIR/kor35-mirror-db-backup.service"
-sed -i "s|^Environment=KOR35_DB_BACKUP_RETENTION_DAYS=.*$|Environment=KOR35_DB_BACKUP_RETENTION_DAYS=$BACKUP_RETENTION_DAYS|g" "$SYSTEMD_DIR/kor35-mirror-db-backup.service"
+sed -i "s|^Environment=KOR35_DB_BACKUP_KEEP=.*$|Environment=KOR35_DB_BACKUP_KEEP=$BACKUP_KEEP|g" "$SYSTEMD_DIR/kor35-mirror-db-backup.service"
+sed -i "s|^Environment=KOR35_DB_BACKUP_RETENTION_DAYS=.*$|Environment=KOR35_DB_BACKUP_RETENTION_DAYS=0|g" "$SYSTEMD_DIR/kor35-mirror-db-backup.service"
 sed -i "s|^Environment=KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR=.*$|Environment=KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR=$BACKUP_DIR/monthly|g" "$SYSTEMD_DIR/kor35-mirror-db-backup.service"
 
 systemctl daemon-reload
@@ -126,7 +128,7 @@ echo "DB interval: $DB_INTERVAL"
 echo "Media calendar: $MEDIA_CALENDAR"
 echo "Backup calendar: $BACKUP_CALENDAR"
 echo "Backup dir: $BACKUP_DIR"
-echo "Backup retention days: $BACKUP_RETENTION_DAYS"
+echo "Backup keep last: $BACKUP_KEEP"
 echo ""
 echo "Verifica:"
 echo "  systemctl status kor35-mirror-stack.service --no-pager"

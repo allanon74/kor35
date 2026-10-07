@@ -101,7 +101,8 @@ Script: `scripts/backup_db_daily.sh`
 Caratteristiche:
 - esegue `pg_dump` dal container `db` (quindi usa `POSTGRES_DB/POSTGRES_USER` del servizio)
 - salva dump su file in formato **custom** (`.dump`) + checksum `.sha256`
-- rotazione basata su `mtime`: elimina dump più vecchi di **14 giorni** (default)
+- rotazione tipo logrotate: conserva solo gli **ultimi 10 dump** (`KOR35_DB_BACKUP_KEEP`, default)
+- archivio mensile opzionale in `$BACKUP_DIR/monthly/` (non soggetto al keep giornaliero)
 
 Esecuzione manuale (esempio produzione):
 
@@ -112,32 +113,30 @@ make backup-db ENV=prod
 
 Variabili opzionali:
 - `KOR35_DB_BACKUP_DIR` (default: `/var/backups/kor35/db`)
-- `KOR35_DB_BACKUP_RETENTION_DAYS` (default: `14`)
+- `KOR35_DB_BACKUP_KEEP` (default: `10`)
+- `KOR35_DB_BACKUP_RETENTION_DAYS` (default: `0`; usato solo se `KEEP=0`)
 
 Esempio custom:
 
 ```bash
 cd /srv/kor35
 KOR35_DB_BACKUP_DIR=/var/backups/kor35/db \
-KOR35_DB_BACKUP_RETENTION_DAYS=14 \
+KOR35_DB_BACKUP_KEEP=10 \
 make backup-db ENV=prod
 ```
 
-Schedulazione consigliata in produzione: **systemd timer**
+Schedulazione in produzione: **systemd timer alle 06:00** (ora locale Europe/Rome)
 
 File nel repo:
 - `config/systemd/kor35-db-backup.service`
 - `config/systemd/kor35-db-backup.timer`
+- `scripts/install_prod_db_backup.sh`
 
-Installazione (sul server):
+Installazione (sul server prod):
 
 ```bash
-sudo mkdir -p /var/backups/kor35/db
-sudo chmod 700 /var/backups/kor35/db
-
-sudo cp /srv/kor35/config/systemd/kor35-db-backup.* /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now kor35-db-backup.timer
+cd /srv/kor35
+sudo make install-prod-db-backup ENV=prod RUN_NOW=1
 ```
 
 Test e log:
@@ -145,12 +144,14 @@ Test e log:
 ```bash
 sudo systemctl start kor35-db-backup.service
 sudo journalctl -u kor35-db-backup.service -n 200 --no-pager
+sudo systemctl list-timers | grep kor35-db-backup
+ls -lah /var/backups/kor35/db
 ```
 
 Alternativa (se preferisci): cron
 
 ```cron
-30 3 * * * cd /srv/kor35 && KOR35_DB_BACKUP_DIR=/var/backups/kor35/db KOR35_DB_BACKUP_RETENTION_DAYS=14 make backup-db ENV=prod >> /var/log/kor35-db-backup.log 2>&1
+0 6 * * * cd /srv/kor35 && KOR35_DB_BACKUP_DIR=/var/backups/kor35/db KOR35_DB_BACKUP_KEEP=10 make backup-db ENV=prod >> /var/log/kor35-db-backup.log 2>&1
 ```
 
 ### Avvio stack

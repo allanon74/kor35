@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Dump giornaliero PostgreSQL su file, con rotazione (default: 14 giorni).
+# Dump giornaliero PostgreSQL su file, con rotazione tipo logrotate.
 # Pensato per girare sul server di produzione (ENV=prod), ma funziona anche per altri profili.
 #
 # Requisiti:
@@ -14,7 +14,8 @@ set -euo pipefail
 #
 # Variabili opzionali:
 #   KOR35_DB_BACKUP_DIR=/var/backups/kor35/db
-#   KOR35_DB_BACKUP_RETENTION_DAYS=14
+#   KOR35_DB_BACKUP_KEEP=10                    # conserva solo gli ultimi N dump (prioritario se > 0)
+#   KOR35_DB_BACKUP_RETENTION_DAYS=0           # fallback per età (usato solo se KEEP=0)
 #   KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR=/var/backups/kor35/db/monthly
 #   KOR35_DB_BACKUP_ENABLE_MONTHLY_ARCHIVE=1
 
@@ -24,7 +25,8 @@ source "$SCRIPT_DIR/lib_wsl_pi_like.sh"
 
 ENV_PROFILE="prod"
 BACKUP_DIR="${KOR35_DB_BACKUP_DIR:-/var/backups/kor35/db}"
-RETENTION_DAYS="${KOR35_DB_BACKUP_RETENTION_DAYS:-14}"
+KEEP="${KOR35_DB_BACKUP_KEEP:-10}"
+RETENTION_DAYS="${KOR35_DB_BACKUP_RETENTION_DAYS:-0}"
 MONTHLY_ARCHIVE_DIR="${KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR:-$BACKUP_DIR/monthly}"
 ENABLE_MONTHLY_ARCHIVE="${KOR35_DB_BACKUP_ENABLE_MONTHLY_ARCHIVE:-1}"
 
@@ -72,9 +74,34 @@ sha256sum "$dump_file" >"$sha_file"
 
 echo "OK: $(basename "$dump_file")"
 
-echo "Rotazione: mantengo ultimi $RETENTION_DAYS giorni in $BACKUP_DIR"
-find "$BACKUP_DIR" -type f -name "kor35_${WSL_PI_ENV_PROFILE}_*.dump" -mtime "+$RETENTION_DAYS" -print -delete || true
-find "$BACKUP_DIR" -type f -name "kor35_${WSL_PI_ENV_PROFILE}_*.dump.sha256" -mtime "+$RETENTION_DAYS" -print -delete || true
+rotate_by_count() {
+  local keep_n="$1"
+  local pattern="$2"
+  local idx=0
+  local f
+
+  # Ordine: più recenti prima (mtime). Solo file in BACKUP_DIR (non monthly/).
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    idx=$((idx + 1))
+    if [ "$idx" -gt "$keep_n" ]; then
+      echo "Rotazione (keep=$keep_n): elimino $(basename "$f")"
+      rm -f -- "$f"
+    fi
+  done < <(find "$BACKUP_DIR" -maxdepth 1 -type f -name "$pattern" -printf '%T@\t%p\n' | sort -nr | cut -f2-)
+}
+
+if [ "${KEEP}" -gt 0 ] 2>/dev/null; then
+  echo "Rotazione: mantengo ultimi $KEEP dump in $BACKUP_DIR"
+  rotate_by_count "$KEEP" "kor35_${WSL_PI_ENV_PROFILE}_*.dump"
+  rotate_by_count "$KEEP" "kor35_${WSL_PI_ENV_PROFILE}_*.dump.sha256"
+elif [ "${RETENTION_DAYS}" -gt 0 ] 2>/dev/null; then
+  echo "Rotazione: mantengo ultimi $RETENTION_DAYS giorni in $BACKUP_DIR"
+  find "$BACKUP_DIR" -maxdepth 1 -type f -name "kor35_${WSL_PI_ENV_PROFILE}_*.dump" -mtime "+$RETENTION_DAYS" -print -delete || true
+  find "$BACKUP_DIR" -maxdepth 1 -type f -name "kor35_${WSL_PI_ENV_PROFILE}_*.dump.sha256" -mtime "+$RETENTION_DAYS" -print -delete || true
+else
+  echo "Rotazione: disabilitata (KOR35_DB_BACKUP_KEEP=0 e KOR35_DB_BACKUP_RETENTION_DAYS=0)"
+fi
 
 if [ "$ENABLE_MONTHLY_ARCHIVE" = "1" ]; then
   mkdir -p "$MONTHLY_ARCHIVE_DIR"
@@ -89,4 +116,3 @@ if [ "$ENABLE_MONTHLY_ARCHIVE" = "1" ]; then
     echo "Archivio mensile: già presente per $month_tag, skip."
   fi
 fi
-
