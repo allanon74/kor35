@@ -3,6 +3,7 @@ import {
   Archive, Filter, Heart, Loader2, Plus, RotateCcw, Search, Skull, Users,
 } from 'lucide-react';
 import StaffRazzaAuraTab from './StaffRazzaAuraTab';
+import StaffTecnicheTab from './StaffTecnicheTab';
 import StaffEconomiaTab from './StaffEconomiaTab';
 import RichTextEditor from '../RichTextEditor';
 import StaffCostumePhotosSection from '../StaffCostumePhotosSection';
@@ -1076,6 +1077,18 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                         </ul>
                       </div>
                     </div>
+                  )}
+
+                  {modalTab === 'tecniche' && detail && (
+                    <StaffTecnicheTab
+                      detail={detail}
+                      onLogout={onLogout}
+                      onUpdated={(updated, msg) => {
+                        setDetail(updated);
+                        if (msg) setMessage(msg);
+                      }}
+                      onError={(msg) => setMessage(msg || 'Operazione tecniche fallita')}
+                    />
                   )}
 
                   {modalTab === 'razza-aura' && detail && (

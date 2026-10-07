@@ -32,6 +32,13 @@ describe('PersonaggiStaffChrome', () => {
     document.body.querySelectorAll('[data-testid="personaggi-staff-tabs"]').forEach((el) => el.remove());
   });
 
+  it('include il tab tecniche possedute', () => {
+    const tab = PERSONAGGI_STAFF_TABS.find((t) => t.id === 'tecniche');
+    expect(tab).toBeTruthy();
+    expect(tab.label).toBe('Tecniche');
+    expect(tab.short.length).toBeLessThanOrEqual(8);
+  });
+
   it('ogni tab ha etichetta corta per il telefono', () => {
     expect(PERSONAGGI_STAFF_TABS.length).toBeGreaterThanOrEqual(12);
     PERSONAGGI_STAFF_TABS.forEach((tab) => {
