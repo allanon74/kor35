@@ -30,7 +30,7 @@ class StaffTecnichePosseduteTests(APITestCase):
         self.client.force_authenticate(user=self.staff)
         self.tipo = TipologiaPersonaggio.objects.create(nome="PG Tecniche", giocante=True)
         self.pg = Personaggio.objects.create(nome="PG Tecniche", tipologia=self.tipo)
-        self.aura = Punteggio.objects.create(nome="Aura Staff Tec", sigla="ASTX", tipo=AURA)
+        self.aura = Punteggio.objects.create(nome="Aura Staff Tec", sigla="ATX", tipo=AURA)
         self.base = f"/api/personaggi/api/staff/personaggi/{self.pg.id}"
 
     def _infusione(self, nome="Infusione staff"):
@@ -59,8 +59,7 @@ class StaffTecnichePosseduteTests(APITestCase):
         self.assertEqual(possedute[0]["id"], inf.id)
         self.assertEqual(possedute[0]["nome"], inf.nome)
         self.assertEqual(possedute[0]["costo_crediti_pagato"], "0.00")
-        self.pg.refresh_from_db()
-        self.assertEqual(self.pg.crediti, Decimal("40"))
+        self.assertEqual(Decimal(str(res_add.json()["crediti"])), Decimal("40.00"))
 
         res_rm = self.client.post(
             f"{self.base}/rimuovi-tecnica/",
@@ -69,8 +68,7 @@ class StaffTecnichePosseduteTests(APITestCase):
         )
         self.assertEqual(res_rm.status_code, status.HTTP_200_OK, res_rm.content)
         self.assertEqual(res_rm.json().get("infusioni_possedute"), [])
-        self.pg.refresh_from_db()
-        self.assertEqual(self.pg.crediti, Decimal("40"))
+        self.assertEqual(Decimal(str(res_rm.json()["crediti"])), Decimal("40.00"))
 
     def test_acquisto_addebita_e_revoca_rimborsa(self):
         inf = self._infusione("Infusione a pagamento")
@@ -100,8 +98,7 @@ class StaffTecnichePosseduteTests(APITestCase):
         self.assertEqual(res_ok.status_code, status.HTTP_200_OK, res_ok.content)
         row = (res_ok.json().get("infusioni_possedute") or [])[0]
         self.assertEqual(row["costo_crediti_pagato"], "25.00")
-        self.pg.refresh_from_db()
-        self.assertEqual(self.pg.crediti, Decimal("15"))
+        self.assertEqual(Decimal(str(res_ok.json()["crediti"])), Decimal("15.00"))
 
         res_rm = self.client.post(
             f"{self.base}/rimuovi-tecnica/",
@@ -109,8 +106,8 @@ class StaffTecnichePosseduteTests(APITestCase):
             format="json",
         )
         self.assertEqual(res_rm.status_code, status.HTTP_200_OK, res_rm.content)
-        self.pg.refresh_from_db()
-        self.assertEqual(self.pg.crediti, Decimal("40"))
+        self.assertEqual(res_rm.json().get("infusioni_possedute"), [])
+        self.assertEqual(Decimal(str(res_rm.json()["crediti"])), Decimal("40.00"))
 
     def test_acquisto_rispetta_requisiti_omaggio_li_ignora(self):
         car = Punteggio.objects.create(nome="Forza Staff", sigla="FSS", tipo=CARATTERISTICA)
