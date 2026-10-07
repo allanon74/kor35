@@ -1,6 +1,6 @@
 import React, { useMemo, useCallback, memo, useState, useEffect } from 'react';
 import { useCharacter } from './CharacterContext';
-import { Coins, Star, Bell, Backpack, Zap, Pencil, Save, X } from 'lucide-react';
+import { Coins, Star, Bell, Backpack, Zap, Pencil, Save, X, Award } from 'lucide-react';
 import PunteggioDisplay from './PunteggioDisplay';
 import GenericGroupedList from './GenericGroupedList';
 import IconaPunteggio from './IconaPunteggio';
@@ -131,6 +131,7 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
     crediti_deposito,
     economia,
     punti_caratteristica,
+    prestigio,
     punteggi_base,
     statistiche_base_dict,
     modificatori_calcolati, 
@@ -549,7 +550,7 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
 
       {/* Valute */}
       {duale ? (
-        <div className="grid grid-cols-2 gap-3 mb-6 max-w-2xl mx-auto items-stretch">
+        <div className="grid grid-cols-2 gap-3 mb-3 max-w-2xl mx-auto items-stretch">
           <div className="flex flex-col p-2 bg-gray-800 rounded-md hover:bg-gray-750 transition-colors">
             <div className="flex items-center mb-1">
               <Coins className="text-yellow-400 shrink-0" />
@@ -579,11 +580,20 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4 mb-6 max-w-lg mx-auto">
+        <div className="grid grid-cols-2 gap-4 mb-3 max-w-lg mx-auto">
           <StatRow label="CR" value={crediti || 0} icon={<Coins className="text-yellow-400 animate-pulse" />} />
           <StatRow label="PC" value={punti_caratteristica || 0} icon={<Star className="text-blue-400" />} />
         </div>
       )}
+      <div className={`flex items-center justify-between gap-3 p-3 bg-gray-800 rounded-md min-h-11 ${duale ? 'mb-6 max-w-2xl mx-auto' : 'mb-6 max-w-lg mx-auto'}`}>
+        <div className="flex items-center min-w-0">
+          <Award className="text-fuchsia-400 shrink-0" aria-hidden="true" />
+          <span className="ml-2 font-semibold text-gray-300">Prestigio attuale</span>
+        </div>
+        <span className="text-3xl font-bold text-white tabular-nums shrink-0">
+          {Math.max(0, Number(prestigio) || 0)}
+        </span>
+      </div>
 
       <ContrattiSchedaPresenza personaggioId={personaggioId} onLogout={onLogout} modo="scheda" />
 

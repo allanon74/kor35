@@ -18,7 +18,7 @@ const staffLabel = (user) => {
     return full || user.username || `Utente #${user.id}`;
 };
 
-const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRiallineaIscrizioni, onRefresh, onRefreshRisorse, risorseLoading = false, onLogout }) => {
+const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRiassegnaPremiMancanti, onRiallineaIscrizioni, onRefresh, onRefreshRisorse, risorseLoading = false, onLogout }) => {
     const [showPartecipanti, setShowPartecipanti] = useState(false);
     const [showRicompense, setShowRicompense] = useState(false);
     const [reportLoading, setReportLoading] = useState(false);
@@ -27,6 +27,7 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
     const [localStaffIds, setLocalStaffIds] = useState([]);
     const [savingStaff, setSavingStaff] = useState(false);
     const [riallineaLoading, setRiallineaLoading] = useState(false);
+    const [riassegnaLoading, setRiassegnaLoading] = useState(false);
 
     const allStaff = useMemo(() => risorse.staff || [], [risorse.staff]);
     const allStaffIds = useMemo(() => normalizeStaffIds(allStaff), [allStaff]);
@@ -123,6 +124,20 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
             setReportLoading(false);
         }
     }, [onReportRicompense]);
+
+    const handleRiassegnaMancanti = useCallback(async () => {
+        if (!onRiassegnaPremiMancanti) return;
+        setReportError('');
+        setRiassegnaLoading(true);
+        try {
+            await onRiassegnaPremiMancanti();
+            await handleLoadReport();
+        } catch (e) {
+            setReportError(e?.message || 'Errore accredito ricompense mancanti');
+        } finally {
+            setRiassegnaLoading(false);
+        }
+    }, [onRiassegnaPremiMancanti, handleLoadReport]);
 
     if (!evento) return null;
 
@@ -292,18 +307,37 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                     </button>
                     {reportLoading ? <p className="text-xs text-gray-400">Caricamento report…</p> : null}
                     {reportError ? <p className="text-xs text-red-300">{reportError}</p> : null}
+                    {showRicompense && reportData?.ricompense?.some((r) => !r.premio_gia_assegnato) ? (
+                        <button
+                            type="button"
+                            disabled={riassegnaLoading}
+                            onClick={handleRiassegnaMancanti}
+                            className="min-h-11 w-full sm:w-auto px-3 py-2 bg-amber-700 text-white rounded-lg text-xs font-black uppercase shadow hover:bg-amber-600 disabled:opacity-50"
+                        >
+                            {riassegnaLoading ? 'Accredito…' : 'Accredita mancanti'}
+                        </button>
+                    ) : null}
                     {showRicompense && reportData?.ricompense?.length ? (
                         <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                             {reportData.ricompense.map((r) => (
                                 <div key={r.personaggio_id} className="rounded border border-gray-800 bg-gray-900/80 p-2">
-                                    <div className="flex items-center justify-between text-xs">
-                                        <span className="font-bold text-white">{r.personaggio_nome}</span>
-                                        <span className={r.premio_gia_assegnato ? 'text-emerald-300' : 'text-amber-300'}>
-                                            {r.premio_gia_assegnato ? 'Assegnato' : 'Non assegnato'}
+                                    <div className="flex items-center justify-between gap-2 text-xs">
+                                        <span className="font-bold text-white min-w-0 break-words">{r.personaggio_nome}</span>
+                                        <span className={`shrink-0 ${r.premio_gia_assegnato ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                            {r.premio_gia_assegnato
+                                                ? 'Assegnato'
+                                                : r.premio_avvio_precedente
+                                                    ? 'Avvio precedente'
+                                                    : 'Non assegnato'}
                                         </span>
                                     </div>
-                                    <div className="mt-1 text-[11px] text-gray-300">
-                                        PC: {r.pc_evento} · Base evento: {Number(r.base_evento || 0).toLocaleString('it-IT')} CR ·
+                                    {r.premio_avvio_precedente ? (
+                                        <p className="mt-1 text-[11px] text-amber-200/90">
+                                            C&apos;è una riga di un avvio precedente: PC, crediti e prestigio di questo avvio non sono stati accreditati.
+                                        </p>
+                                    ) : null}
+                                    <div className="mt-1 text-[11px] text-gray-300 break-words">
+                                        PC: {r.pc_evento} · Prestigio: {r.prestigio_evento || 0} · Base evento: {Number(r.base_evento || 0).toLocaleString('it-IT')} CR ·
                                         Bonus: {Number(r.bonus_totale || 0).toLocaleString('it-IT')} CR ·
                                         Totale: {Number(r.totale_crediti || 0).toLocaleString('it-IT')} CR
                                     </div>
