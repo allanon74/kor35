@@ -732,7 +732,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
                 e.stopPropagation();
                 setAnteprimaNegozio(negozio);
               }}
-              className="inline-flex items-center gap-1.5 min-h-11 px-2.5 py-1.5 bg-emerald-600/25 text-emerald-300 hover:bg-emerald-600 hover:text-white rounded-lg transition-all text-[10px] font-black uppercase tracking-wide whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-1.5 min-h-11 min-w-11 px-2.5 py-1.5 bg-emerald-600/25 text-emerald-300 hover:bg-emerald-600 hover:text-white rounded-lg transition-all text-[10px] font-black uppercase tracking-wide whitespace-nowrap shrink-0"
               title="Anteprima vetrina (come la vede un giocatore)"
               aria-label={`Anteprima vetrina ${negozio?.nome || ''}`.trim()}
             >
@@ -762,7 +762,7 @@ const NegozioMercanteManager = ({ onLogout }) => {
               <button
                 type="button"
                 onClick={() => setAnteprimaNegozio(selected)}
-                className="min-h-11 w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-sm font-bold text-white"
+                className="min-h-11 w-full sm:w-auto sm:mr-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-sm font-bold text-white order-last sm:order-first"
                 title="Anteprima vetrina (come la vede un giocatore)"
               >
                 <Eye size={16} />
@@ -771,29 +771,31 @@ const NegozioMercanteManager = ({ onLogout }) => {
             ) : null
           }
         >
-          <div className="flex flex-wrap gap-1 border-b border-gray-800 pb-2 -mt-1">
-            {MODAL_TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setModalTab(t.id)}
-                className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wide ${
-                  modalTab === t.id ? 'bg-amber-700 text-white' : 'bg-gray-800 text-gray-400'
-                }`}
-              >
-                {t.label}
-                {t.id === 'catalogo' ? ` (${voci.length})` : ''}
-              </button>
-            ))}
+          <div className="flex flex-col gap-2 border-b border-gray-800 pb-2 -mt-1 min-w-0">
+            <div className="flex flex-wrap gap-1 min-w-0">
+              {MODAL_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setModalTab(t.id)}
+                  className={`min-h-11 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wide ${
+                    modalTab === t.id ? 'bg-amber-700 text-white' : 'bg-gray-800 text-gray-400'
+                  }`}
+                >
+                  {t.label}
+                  {t.id === 'catalogo' ? ` (${voci.length})` : ''}
+                </button>
+              ))}
+            </div>
             {selected.id ? (
               <button
                 type="button"
                 onClick={() => setAnteprimaNegozio(selected)}
-                className="ml-auto inline-flex items-center gap-1.5 min-h-11 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wide bg-emerald-700/80 text-white hover:bg-emerald-600"
+                className="w-full sm:w-auto sm:self-end inline-flex items-center justify-center gap-1.5 min-h-11 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wide bg-emerald-700/80 text-white hover:bg-emerald-600"
                 title="Anteprima vetrina (come la vede un giocatore)"
               >
                 <Eye size={14} />
-                Anteprima
+                Anteprima vetrina
               </button>
             ) : null}
           </div>
