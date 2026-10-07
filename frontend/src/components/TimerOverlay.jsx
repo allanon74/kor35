@@ -49,14 +49,19 @@ const SingleTimer = ({ timer, onMove }) => {
           : 'border-amber-400 bg-gray-950/95 shadow-[0_0_22px_rgba(251,191,36,0.35)]'
       } ${glow ? 'animate-pulse' : ''}`}
       title="Tocca per spostare il timer in un altro angolo"
-      aria-label={`Timer ${timer.nome}, ${formatLeft(timeLeft)} rimanenti. Tocca per spostarlo.`}
+      aria-label={`Timer ${timer.nome}${timer.istanza ? `, ${timer.istanza}` : ''}, ${formatLeft(timeLeft)} rimanenti. Tocca per spostarlo.`}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className={`text-[10px] font-black uppercase tracking-[0.18em] ${isDanger ? 'text-red-300' : 'text-amber-300'}`}>
             {isDanger ? 'Trappola' : 'Timer'}
           </div>
-          <div className="truncate text-base font-black uppercase">{timer.nome}</div>
+          <div className="break-words text-base font-black uppercase leading-tight line-clamp-2">{timer.nome}</div>
+          {timer.istanza ? (
+            <div className="mt-0.5 break-words text-xs font-semibold leading-snug text-white/90 line-clamp-2">
+              {timer.istanza}
+            </div>
+          ) : null}
         </div>
         <div className={`font-mono text-3xl font-black tabular-nums ${isDanger ? 'text-red-200' : 'text-amber-300'}`}>
           {formatLeft(timeLeft)}
@@ -162,7 +167,10 @@ export const TimerOverlay = ({ activeTimers, onRemove, personaggioId, onLogout }
           id="timer-scaduto-titolo"
           className="max-w-[18ch] break-words text-4xl font-black uppercase leading-tight text-red-600 sm:text-6xl"
         >
-          Timer {modal.nome} scaduto!
+          <span className="block">Timer {modal.nome} scaduto!</span>
+          {modal.istanza ? (
+            <span className="mt-3 block text-3xl normal-case text-red-400 sm:text-5xl">{modal.istanza}</span>
+          ) : null}
         </h1>
         <button
           type="button"

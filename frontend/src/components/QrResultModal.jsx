@@ -1119,6 +1119,7 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
         timerToActivate = {
           id: data.dati.id,
           nome: data.dati.nome,
+          istanza: data.dati.istanza,
           endsAt: data.dati.scadenza,
           alert_suono: true,
           // Push scadenza gestita server-side (dispatch_timer_expiry)

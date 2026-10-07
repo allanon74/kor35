@@ -806,6 +806,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
               updateTimerState({
                 id: payload.id,
                 nome: payload.nome,
+                istanza: payload.istanza,
                 data_fine: payload.data_fine,
                 alert_suono: true,
                 // Push scadenza: worker server (dispatch_timer_expiry), evita doppia Notification locale

@@ -23,6 +23,7 @@ def dispatch_expired_innesco_pushes(*, now=None) -> Dict[str, Any]:
     Per ogni InnescoTimer con broadcast scaduto e push non ancora inviata:
     invia web push ai proprietari dei PG destinatari, poi marca inviata.
     """
+    from personaggi.innesco_timer_ops import etichetta_istanza_pubblica
     from personaggi.models import InnescoTimer, Personaggio
     from personaggi.qr_logic import recipient_personaggio_ids_for_innesco
 
@@ -56,8 +57,9 @@ def dispatch_expired_innesco_pushes(*, now=None) -> Dict[str, Any]:
                 .values_list("proprietario_id", flat=True)
                 .distinct()
             )
-            head = f"Timer scaduto: {locked.nome}"
-            body = f'Il countdown «{locked.nome}» è terminato.'
+            istanza = etichetta_istanza_pubblica(locked)
+            head = f"Timer scaduto: {locked.nome} — {istanza}"
+            body = f'Il countdown «{locked.nome}» ({istanza}) è terminato.'
             push_attempts += _send_webpush_to_users(
                 user_ids,
                 head=head,

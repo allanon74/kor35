@@ -212,6 +212,7 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
   const [eventiOptions, setEventiOptions] = useState([]);
   const [quanteByGruppo, setQuanteByGruppo] = useState({});
   const [caricheBusyId, setCaricheBusyId] = useState(null);
+  const [apertoId, setApertoId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -306,8 +307,10 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
       const body = toPayload(editing, { includeCount: !editing.id });
       if (editing.id) {
         await staffUpdateInnescoTimer(editing.id, body, onLogout);
+        if (editing.gruppo_id) setApertoId(String(editing.gruppo_id));
       } else {
-        await staffCreateInnescoTimer(body, onLogout);
+        const created = await staffCreateInnescoTimer(body, onLogout);
+        if (created?.gruppo_id) setApertoId(String(created.gruppo_id));
       }
       setEditing(null);
       setMsg('Salvato. Le modifiche valgono per tutte le istanze del timer.');
@@ -382,8 +385,8 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
         </button>
       </div>
       <p className="text-xs text-gray-400">
-        Alla scansione parte il countdown sui telefoni dei destinatari. Puoi creare più istanze identiche:
-        ognuna ha il suo QR, il suo countdown e le sue cariche del giorno. Le modifiche al timer valgono per tutto il gruppo.
+        Apri un timer per vedere le istanze, associarne un QR e aggiungerne altre.
+        Sul telefono compaiono il nome del timer e quello dell&apos;istanza avviata.
       </p>
       <StaffMinigiocoPageToolbar
         pageKey={MINIGIOCO_PAGE_KEYS.innescoTimer}
@@ -392,128 +395,151 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
       />
       {loading ? (
         <p className="text-gray-400">Caricamento…</p>
+      ) : gruppi.length === 0 ? (
+        <p className="text-sm text-gray-400">Nessun timer. Creane uno con Nuovo.</p>
       ) : (
-        <ul className="space-y-3">
-          {gruppi.map((gruppo) => (
-            <li key={gruppo.gruppoId} className="border border-gray-700 rounded-lg p-3 space-y-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="font-semibold break-words">{gruppo.head.nome}</div>
-                  <div className="text-[11px] text-gray-400">
-                    {gruppo.head.durata_secondi}s · {TARGET_LABEL[gruppo.head.modalita_target] || gruppo.head.modalita_target}
-                    {' '}· {gruppo.istanze.length} {gruppo.istanze.length === 1 ? 'istanza' : 'istanze'}
-                    {Number(gruppo.head.max_cariche) > 0
-                      ? ` · ${gruppo.head.max_cariche} cariche/giorno`
-                      : ' · cariche illimitate'}
+        <ul className="space-y-2">
+          {gruppi.map((gruppo) => {
+            const aperto = String(apertoId) === String(gruppo.gruppoId);
+            const meta = [
+              `${gruppo.head.durata_secondi}s`,
+              TARGET_LABEL[gruppo.head.modalita_target] || gruppo.head.modalita_target,
+              `${gruppo.istanze.length} ${gruppo.istanze.length === 1 ? 'istanza' : 'istanze'}`,
+              Number(gruppo.head.max_cariche) > 0
+                ? `${gruppo.head.max_cariche} cariche/giorno`
+                : 'cariche illimitate',
+            ].join(' · ');
+            return (
+            <li key={gruppo.gruppoId} className="border border-gray-700 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                className="flex w-full min-h-11 items-center gap-3 px-3 py-3 text-left hover:bg-gray-800/60"
+                aria-expanded={aperto}
+                onClick={() => setApertoId(aperto ? null : String(gruppo.gruppoId))}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold break-words">{gruppo.head.nome}</span>
+                  <span className="mt-0.5 block text-[11px] text-gray-400 break-words">{meta}</span>
+                </span>
+                <span className="shrink-0 text-xs font-semibold text-indigo-200">
+                  {aperto ? 'Chiudi' : 'Apri'}
+                </span>
+              </button>
+              {aperto && (
+                <div className="space-y-3 border-t border-gray-800 px-3 py-3">
+                  <button
+                    type="button"
+                    className="min-h-11 w-full text-xs px-3 py-2 bg-gray-700 rounded sm:w-auto"
+                    onClick={() => {
+                      setModalTab('dati');
+                      setEditing({ ...emptyForm(), ...gruppo.head, numero_istanze: 1 });
+                    }}
+                  >
+                    Modifica timer
+                  </button>
+                  <p className="text-[11px] text-gray-400">
+                    Ogni istanza ha il suo QR, il suo countdown e le sue cariche. Il nome che scrivi qui compare sul telefono.
+                  </p>
+                  <ul className="space-y-2">
+                    {gruppo.istanze.map((ist, index) => (
+                      <li key={`${ist.id}:${ist.etichetta_istanza || ''}`} className="rounded border border-gray-800 bg-gray-900/40 p-2 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="shrink-0 text-[11px] font-semibold text-gray-500 w-5 text-center">{index + 1}</span>
+                          <StaffQrBadge hasQr={ist.has_qrcode} />
+                          <input
+                            className="min-h-11 min-w-0 flex-1 px-2 py-1 rounded bg-gray-800 border border-gray-600 text-sm"
+                            defaultValue={ist.etichetta_istanza || `Istanza ${ist.ordine_istanza || index + 1}`}
+                            aria-label={`Nome istanza ${index + 1}`}
+                            onBlur={(e) => salvaEtichetta(ist, e.target.value.trim())}
+                          />
+                        </div>
+                        {Number(ist.max_cariche) > 0 && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-gray-300">Cariche oggi</span>
+                            <button
+                              type="button"
+                              className="min-h-11 min-w-11 px-3 text-lg leading-none bg-gray-700 rounded"
+                              aria-label={`Togli una carica di oggi a ${ist.etichetta_istanza || `istanza ${index + 1}`}`}
+                              disabled={caricheBusyId === ist.id}
+                              onClick={() => cambiaCariche(ist, -1)}
+                            >
+                              −
+                            </button>
+                            <span className="min-w-[2rem] text-center text-sm font-semibold tabular-nums">
+                              {ist.cariche_residue_oggi ?? ist.max_cariche}
+                            </span>
+                            <button
+                              type="button"
+                              className="min-h-11 min-w-11 px-3 text-lg leading-none bg-gray-700 rounded"
+                              aria-label={`Aggiungi una carica di oggi a ${ist.etichetta_istanza || `istanza ${index + 1}`}`}
+                              disabled={caricheBusyId === ist.id}
+                              onClick={() => cambiaCariche(ist, 1)}
+                            >
+                              +
+                            </button>
+                          </div>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          <StaffMinigiocoUsaDefaultToggle
+                            qrcodeId={ist.qrcode_id}
+                            usaDefault={ist.minigioco_usa_default}
+                            pageKey={MINIGIOCO_PAGE_KEYS.innescoTimer}
+                            onLogout={onLogout}
+                            compact
+                            onChange={(val) => patchStaffListMinigiocoDefault(setItems, ist.id, val)}
+                          />
+                          <button
+                            type="button"
+                            className="min-h-11 text-xs px-3 py-1 bg-indigo-800 rounded"
+                            onClick={() => openMinigioco(ist.qrcode_id, ist.nome)}
+                            disabled={!ist.qrcode_id}
+                            title={ist.qrcode_id ? 'Configura minigioco QR' : 'Associa prima un QR'}
+                          >
+                            Minigioco
+                          </button>
+                          <button
+                            type="button"
+                            className="min-h-11 text-xs px-3 py-1 bg-violet-800 rounded"
+                            onClick={() => setScanningId(ist.id)}
+                          >
+                            Associa QR
+                          </button>
+                          <button
+                            type="button"
+                            className="min-h-11 text-xs px-3 py-1 bg-red-900 rounded"
+                            onClick={() => remove(ist.id)}
+                          >
+                            Elimina
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <label className="text-xs text-gray-300 sm:w-28">
+                      Quante
+                      <input
+                        type="number"
+                        min="1"
+                        max="20"
+                        className="mt-1 block w-full min-h-11 px-2 rounded bg-gray-800 border border-gray-600"
+                        value={quanteByGruppo[gruppo.gruppoId] ?? '1'}
+                        onChange={(e) => setQuanteByGruppo((prev) => ({ ...prev, [gruppo.gruppoId]: e.target.value }))}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="min-h-11 text-sm px-3 py-2 bg-amber-800 rounded sm:flex-1"
+                      onClick={() => aggiungiIstanze(gruppo.head)}
+                    >
+                      Aggiungi istanze
+                    </button>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="min-h-11 text-xs px-3 py-2 bg-gray-700 rounded shrink-0"
-                  onClick={() => {
-                    setModalTab('dati');
-                    setEditing({ ...emptyForm(), ...gruppo.head, numero_istanze: 1 });
-                  }}
-                >
-                  Modifica gruppo
-                </button>
-              </div>
-              <ul className="space-y-2">
-                {gruppo.istanze.map((ist) => (
-                  <li key={ist.id} className="rounded border border-gray-800 bg-gray-900/40 p-2 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <StaffQrBadge hasQr={ist.has_qrcode} />
-                      <input
-                        className="min-h-11 flex-1 min-w-[8rem] px-2 py-1 rounded bg-gray-800 border border-gray-600 text-sm"
-                        defaultValue={ist.etichetta_istanza || `Istanza ${ist.ordine_istanza || 1}`}
-                        aria-label="Etichetta istanza"
-                        onBlur={(e) => salvaEtichetta(ist, e.target.value.trim())}
-                      />
-                    </div>
-                    {Number(ist.max_cariche) > 0 && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-gray-300">Cariche oggi</span>
-                        <button
-                          type="button"
-                          className="min-h-11 min-w-11 px-3 text-lg leading-none bg-gray-700 rounded"
-                          aria-label="Togli una carica di oggi"
-                          disabled={caricheBusyId === ist.id}
-                          onClick={() => cambiaCariche(ist, -1)}
-                        >
-                          −
-                        </button>
-                        <span className="min-w-[2rem] text-center text-sm font-semibold tabular-nums">
-                          {ist.cariche_residue_oggi ?? ist.max_cariche}
-                        </span>
-                        <button
-                          type="button"
-                          className="min-h-11 min-w-11 px-3 text-lg leading-none bg-gray-700 rounded"
-                          aria-label="Aggiungi una carica di oggi"
-                          disabled={caricheBusyId === ist.id}
-                          onClick={() => cambiaCariche(ist, 1)}
-                        >
-                          +
-                        </button>
-                      </div>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      <StaffMinigiocoUsaDefaultToggle
-                        qrcodeId={ist.qrcode_id}
-                        usaDefault={ist.minigioco_usa_default}
-                        pageKey={MINIGIOCO_PAGE_KEYS.innescoTimer}
-                        onLogout={onLogout}
-                        compact
-                        onChange={(val) => patchStaffListMinigiocoDefault(setItems, ist.id, val)}
-                      />
-                      <button
-                        type="button"
-                        className="min-h-11 text-xs px-3 py-1 bg-indigo-800 rounded"
-                        onClick={() => openMinigioco(ist.qrcode_id, ist.nome)}
-                        disabled={!ist.qrcode_id}
-                        title={ist.qrcode_id ? 'Configura minigioco QR' : 'Associa prima un QR'}
-                      >
-                        Minigioco
-                      </button>
-                      <button
-                        type="button"
-                        className="min-h-11 text-xs px-3 py-1 bg-violet-800 rounded"
-                        onClick={() => setScanningId(ist.id)}
-                      >
-                        Associa QR
-                      </button>
-                      <button
-                        type="button"
-                        className="min-h-11 text-xs px-3 py-1 bg-red-900 rounded"
-                        onClick={() => remove(ist.id)}
-                      >
-                        Elimina
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <div className="flex flex-wrap items-end gap-2">
-                <label className="text-xs text-gray-300">
-                  Istanze da aggiungere
-                  <input
-                    type="number"
-                    min="1"
-                    max="20"
-                    className="mt-1 block w-24 min-h-11 px-2 rounded bg-gray-800 border border-gray-600"
-                    value={quanteByGruppo[gruppo.gruppoId] ?? '1'}
-                    onChange={(e) => setQuanteByGruppo((prev) => ({ ...prev, [gruppo.gruppoId]: e.target.value }))}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="min-h-11 text-xs px-3 py-2 bg-amber-800 rounded"
-                  onClick={() => aggiungiIstanze(gruppo.head)}
-                >
-                  Crea istanze
-                </button>
-              </div>
+              )}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
 
@@ -536,7 +562,7 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
           {modalTab === 'dati' && (
           <div className="space-y-3">
           <label className="block text-sm">
-            Nome (mostrato sul timer)
+            Nome del timer (sul telefono, insieme al nome dell&apos;istanza)
             <input
               className="w-full mt-1 min-h-11 px-2 py-2 rounded bg-gray-800 border border-gray-600"
               value={editing.nome}
@@ -574,7 +600,7 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
           </div>
           {!editing.id && (
             <label className="block text-sm">
-              Quante istanze creare (ognuna avrà il proprio QR)
+              Istanze iniziali (le altre si aggiungono aprendo il timer)
               <input
                 type="number"
                 min="1"
