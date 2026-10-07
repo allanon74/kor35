@@ -230,6 +230,13 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         [roleFlags, moduliAccesso],
     );
 
+    useEffect(() => {
+        if (!initialTool || initialTool === 'home') return;
+        if (visibleTools.some((t) => t.id === initialTool)) {
+            setActiveTool((current) => (current === initialTool ? current : initialTool));
+        }
+    }, [visibleTools, initialTool]);
+
     const menuStructure = useMemo(
         () => applyStaffDashboardLayout(visibleTools, dashboardLayout),
         [visibleTools, dashboardLayout],
