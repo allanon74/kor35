@@ -20,6 +20,7 @@ export function normalizeTimerRow(row) {
   return {
     id,
     nome: row.nome || row.label || 'Operazione',
+    istanza: String(row.istanza || '').trim(),
     endTime,
     alert_suono: row.alert_suono !== false,
     notifica_push: !!row.notifica_push,

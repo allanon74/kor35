@@ -254,6 +254,7 @@ def _broadcast_timer_innesco(
     *,
     innesco_id,
     nome: str,
+    istanza: str,
     data_fine,
     segnale_luminoso: bool,
     recipient_personaggio_ids: List[int],
@@ -271,6 +272,7 @@ def _broadcast_timer_innesco(
                 "payload": {
                     "id": f"innesco:{innesco_id}",
                     "nome": nome,
+                    "istanza": istanza,
                     "data_fine": data_fine.isoformat(),
                     "segnale_luminoso": segnale_luminoso,
                     "source": "innesco_timer",
@@ -294,7 +296,7 @@ def attiva_innesco_timer_per_personaggio(
     """
     from .models import InnescoTimer, StatoInnescoTimerPersonaggio
 
-    from .innesco_timer_ops import prepara_consumo_carica_giorno
+    from .innesco_timer_ops import etichetta_istanza_pubblica, prepara_consumo_carica_giorno
 
     class _AttivazioneRifiutata(Exception):
         def __init__(self, message: str):
@@ -351,10 +353,12 @@ def attiva_innesco_timer_per_personaggio(
         return None, rifiuto.message
 
     ids = recipient_personaggio_ids_for_innesco(locked)
+    istanza = etichetta_istanza_pubblica(locked)
 
     _broadcast_timer_innesco(
         innesco_id=locked.pk,
         nome=locked.nome,
+        istanza=istanza,
         data_fine=stato.data_fine,
         segnale_luminoso=locked.segnale_luminoso,
         recipient_personaggio_ids=ids,
@@ -363,6 +367,7 @@ def attiva_innesco_timer_per_personaggio(
     return {
         "id": f"innesco:{locked.pk}",
         "nome": locked.nome,
+        "istanza": istanza,
         "scadenza": stato.data_fine,
         "segnale_luminoso": locked.segnale_luminoso,
         "recipient_personaggio_ids": ids,
@@ -415,9 +420,12 @@ INNESCO_ACK_WINDOW = timedelta(hours=24)
 
 
 def _innesco_timer_row(inn, data_fine, *, scaduto: bool) -> Dict[str, Any]:
+    from .innesco_timer_ops import etichetta_istanza_pubblica
+
     return {
         "id": f"innesco:{inn.pk}",
         "nome": inn.nome,
+        "istanza": etichetta_istanza_pubblica(inn),
         "data_fine": data_fine.isoformat(),
         "alert_suono": True,
         "notifica_push": False,  # push scadenza gestita server-side
