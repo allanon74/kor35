@@ -176,8 +176,8 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       tool_ids: [
         'mostri', 'abilita', 'cerimoniali', 'tessiture', 'infusioni',
         'oggetti', 'oggetti-base', 'tabelle', 'effetti-casuali',
-        'ere-prefetture', 'carriere-korps', 'dichiarazioni-glossario', 'statistiche', 'aure',
-        'caratteristiche', 'mattoni', 'modelli-aura', 'punteggi',
+        'ere-prefetture', 'carriere-korps', 'dichiarazioni-glossario',
+        'statistiche', 'caratteristiche', 'aure', 'punteggi', 'mattoni', 'modelli-aura',
       ],
     },
     {

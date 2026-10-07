@@ -349,7 +349,7 @@ const StatisticaManager = ({ onLogout }) => {
     <StaffToolShell className="space-y-4" fill>
       <p className="text-sm text-gray-400 px-1">
         Catalogo statistiche (P01, COG, pool, …). Le sigle 0K* sono componenti nave: si possono
-        modificare, non cancellare.
+        modificare, non cancellare. Caratteristiche, aure e altri punteggi hanno maschere dedicate.
       </p>
       <MasterGenericList
         title="Statistiche"

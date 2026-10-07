@@ -435,7 +435,8 @@ const AuraManager = ({ onLogout }) => {
     <StaffToolShell className="space-y-4" fill>
       <p className="text-sm text-gray-400 px-1">
         Catalogo aure (ATE, AMS, …): produzione oggetti, costi tessitura/infusione/cerimoniali
-        e aure infusione consentite. I mattoni restano in admin Django.
+        e aure infusione consentite. Statistiche, caratteristiche, mattoni e modelli di aura
+        hanno maschere dedicate.
       </p>
       <MasterGenericList
         title="Aure"
