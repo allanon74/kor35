@@ -4,6 +4,7 @@ import PunteggioDisplay from './PunteggioDisplay.jsx';
 import RichHtml from './RichHtml';
 import ActivationCostPreview from './ActivationCostPreview';
 import { evaluateActivationCosts } from '../lib/activationCostUtils';
+import { formatDurataRealizzazione } from '../lib/durataRealizzazione';
 
 const ACTIVATION_COST_LABELS = {
   Infusione: "Costi all'uso dell'oggetto (per attivazione)",
@@ -42,6 +43,11 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica', char = null })
       prev.includes(sid) ? prev.filter((x) => x !== sid) : [...prev, sid]
     ));
   };
+  const costoRealizzazione = tecnica.costo_realizzazione;
+  const tempoRealizzazione = tecnica.tempo_realizzazione_secondi;
+  const mostraRealizzazione = type === 'Infusione'
+    && costoRealizzazione != null
+    && tempoRealizzazione != null;
 
   return (
     <div 
@@ -168,6 +174,29 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica', char = null })
             <p className="text-gray-500 italic text-base">Nessuna descrizione disponibile.</p>
             )}
         </div>
+
+        {mostraRealizzazione && (
+          <div className="mb-6 rounded-lg border border-orange-800/40 bg-orange-950/20 p-4">
+            <h3 className="text-sm font-bold text-orange-300 uppercase mb-2 tracking-wider">
+              Realizzazione oggetto
+            </h3>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6 text-sm">
+              <div className="flex items-baseline gap-2 min-w-0">
+                <span className="text-gray-400">Costo</span>
+                <span className="font-bold text-yellow-400 text-base">{Number(costoRealizzazione)} CR</span>
+              </div>
+              <div className="flex items-baseline gap-2 min-w-0">
+                <span className="text-gray-400">Tempo</span>
+                <span className="font-bold text-orange-100 text-base">
+                  {formatDurataRealizzazione(tempoRealizzazione)}
+                </span>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-gray-400">
+              Materiali e tempo per forgiare l&apos;oggetto, in base alle tue statistiche.
+            </p>
+          </div>
+        )}
 
         {activationCosts.length > 0 && (
           <div className="mb-6 rounded-lg border border-amber-800/40 bg-amber-950/20 p-4">

@@ -2207,6 +2207,9 @@ class InfusioneSerializer(serializers.ModelSerializer):
     # Gestione Costi
     costo_pieno = serializers.SerializerMethodField()
     costo_effettivo = serializers.SerializerMethodField()
+    # Forgiatura fai-da-te: stessi numeri di GestioneCraftingService.calcola_costi_tempi.
+    costo_realizzazione = serializers.SerializerMethodField()
+    tempo_realizzazione_secondi = serializers.SerializerMethodField()
 
     class Meta:
         model = Infusione
@@ -2218,6 +2221,7 @@ class InfusioneSerializer(serializers.ModelSerializer):
             'statistiche_base',
             'costi_attivazione',
             'costo_crediti', 'costo_pieno', 'costo_effettivo',
+            'costo_realizzazione', 'tempo_realizzazione_secondi',
             'tipo_risultato', 'non_acquistabile',
         )
 
@@ -2239,6 +2243,30 @@ class InfusioneSerializer(serializers.ModelSerializer):
         if personaggio:
             return calcola_costo_tecnica_acquisto(personaggio, obj)
         return obj.costo_crediti
+
+    def _costi_realizzazione(self, obj):
+        """Crediti e secondi per realizzare l'oggetto da questa infusione."""
+        cache = getattr(self, '_cache_realizzazione', None)
+        if cache is None:
+            cache = {}
+            self._cache_realizzazione = cache
+        key = getattr(obj, 'pk', None) or id(obj)
+        if key not in cache:
+            personaggio = self.context.get('personaggio')
+            if not personaggio:
+                cache[key] = (None, None)
+            else:
+                from personaggi.services import GestioneCraftingService
+
+                costo, tempo = GestioneCraftingService.calcola_costi_tempi(personaggio, obj)
+                cache[key] = (int(costo), int(tempo))
+        return cache[key]
+
+    def get_costo_realizzazione(self, obj):
+        return self._costi_realizzazione(obj)[0]
+
+    def get_tempo_realizzazione_secondi(self, obj):
+        return self._costi_realizzazione(obj)[1]
 
     def get_componenti(self, obj):
         return _serialize_componenti_con_nome_mattone(obj)
@@ -3990,7 +4018,10 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         from .models import PersonaggioInfusione
 
         infusioni = personaggio.infusioni_possedute.select_related(
-            "aura_richiesta", "aura_infusione"
+            "aura_richiesta",
+            "aura_richiesta__stat_costo_forgiatura",
+            "aura_richiesta__stat_tempo_forgiatura",
+            "aura_infusione",
         ).prefetch_related(
             "infusionestatisticabase_set__statistica",
             "costi_attivazione__statistica",
