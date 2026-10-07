@@ -146,6 +146,39 @@ class StaffDashboardLayoutTests(SimpleTestCase):
         self.assertIn("statistiche", database_tools)
         validate_staff_dashboard_layout(layout)
 
+    def test_aure_tool_nel_default(self):
+        from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
+
+        self.assertIn("aure", KNOWN_STAFF_TOOL_IDS)
+        layout = default_staff_dashboard_layout()
+        database_tools = layout["groups"][1]["tool_ids"]
+        self.assertIn("aure", database_tools)
+        validate_staff_dashboard_layout(layout)
+
+    def test_catalogo_punteggi_tools_nel_default(self):
+        from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
+
+        layout = default_staff_dashboard_layout()
+        database_tools = layout["groups"][1]["tool_ids"]
+        for tool_id in ("statistiche", "caratteristiche", "aure", "punteggi", "mattoni", "modelli-aura"):
+            self.assertIn(tool_id, KNOWN_STAFF_TOOL_IDS)
+            self.assertIn(tool_id, database_tools)
+        self.assertLess(database_tools.index("statistiche"), database_tools.index("caratteristiche"))
+        self.assertLess(database_tools.index("caratteristiche"), database_tools.index("aure"))
+        self.assertLess(database_tools.index("aure"), database_tools.index("punteggi"))
+        validate_staff_dashboard_layout(layout)
+
+    def test_layout_salvato_riceve_maschere_catalogo_mancanti(self):
+        saved = default_staff_dashboard_layout()
+        db = saved["groups"][1]
+        db["tool_ids"] = [t for t in db["tool_ids"] if t not in (
+            "aure", "caratteristiche", "punteggi", "mattoni", "modelli-aura",
+        )]
+        merged = effective_staff_dashboard_layout(saved)
+        database_tools = merged["groups"][1]["tool_ids"]
+        for tool_id in ("statistiche", "caratteristiche", "aure", "punteggi"):
+            self.assertIn(tool_id, database_tools)
+
     def test_pool_pg_tool_nel_default(self):
         from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
 
