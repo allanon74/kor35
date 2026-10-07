@@ -186,7 +186,9 @@ function parseColumnWidthPx(width) {
 
 /**
  * Ruolo della colonna nel layout a card (smartphone).
- * `mobileRole` esplicito: 'badge' | 'title' | 'detail' | 'hidden'.
+ * `mobileRole` esplicito: 'badge' | 'title' | 'subtitle' | 'meta' | 'detail' | 'hidden'.
+ * `subtitle`: riga secondaria sotto il titolo (più valori uniti da « · »).
+ * `meta`: chip compatto (etichetta + valore) sulla stessa riga degli altri meta.
  */
 export function columnMobileRole(col, { titleAssigned = false } = {}) {
   if (col?.mobileRole) return col.mobileRole;

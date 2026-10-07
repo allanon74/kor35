@@ -9,6 +9,7 @@ import {
   PersonaggiStaffTabStrip,
   personaggiExtraFiltersActive,
 } from './PersonaggiStaffChrome';
+import { buildPersonaggioListColumns } from './personaggioListColumns';
 import { columnMobileRole } from '../../staff/staffTableModel';
 
 function mount(element) {
@@ -65,12 +66,20 @@ describe('PersonaggiStaffChrome', () => {
 });
 
 describe('colonne elenco Personaggi su mobile', () => {
-  it('nasconde QR/deposito/allineamento e tiene nome come titolo', () => {
-    expect(columnMobileRole({ header: 'Nome', mobileRole: 'title' })).toBe('title');
-    expect(columnMobileRole({ header: 'Tipo', mobileRole: 'badge' })).toBe('badge');
-    expect(columnMobileRole({ header: 'QR', mobileRole: 'hidden' })).toBe('hidden');
-    expect(columnMobileRole({ header: 'Deposito', mobileRole: 'hidden' })).toBe('hidden');
-    expect(columnMobileRole({ header: 'L/O/G', mobileRole: 'hidden' })).toBe('hidden');
-    expect(columnMobileRole({ header: 'Corrente', mobileRole: 'detail' })).toBe('detail');
+  it('compatta la card: titolo, sottotitolo e chip, nasconde i campi secondari', () => {
+    const byKey = Object.fromEntries(buildPersonaggioListColumns().map((col) => [col.key, col]));
+    expect(byKey.nome.mobileRole).toBe('title');
+    expect(byKey.tipo.mobileRole).toBe('badge');
+    expect(byKey.proprietario.mobileRole).toBe('subtitle');
+    expect(byKey.era.mobileRole).toBe('subtitle');
+    expect(byKey.korp.mobileRole).toBe('meta');
+    expect(byKey.korp.mobileHeader).toBe('KORP');
+    expect(byKey.corrente.mobileRole).toBe('meta');
+    expect(byKey.prestigio.mobileRole).toBe('meta');
+    expect(byKey.qr.mobileRole).toBe('hidden');
+    expect(byKey.deposito.mobileRole).toBe('hidden');
+    expect(byKey.allineamento.mobileRole).toBe('hidden');
+    expect(columnMobileRole(byKey.nome)).toBe('title');
+    expect(columnMobileRole(byKey.corrente)).toBe('meta');
   });
 });
