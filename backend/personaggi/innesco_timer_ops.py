@@ -2,12 +2,13 @@
 Istanze multiple di un innesco timer e conferma («Ok») della schermata di scadenza.
 
 Le istanze dello stesso ``gruppo_id`` condividono nome, durata e destinatari.
-QR, countdown e ack restano per singola istanza.
+QR, countdown, ack e cariche residue del giorno restano per singola istanza.
 """
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional, Tuple
 
+from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -16,7 +17,8 @@ from kor35.syncing import touch_sync_updated_at
 
 from .models import InnescoTimer, InnescoTimerAck
 
-# Campi copiati su tutte le istanze del gruppo. QR e countdown restano locali.
+# Campi copiati su tutte le istanze del gruppo.
+# QR, countdown e cariche residue del giorno restano sulla singola istanza.
 CAMPI_CONDIVISI = (
     "nome",
     "testo",
@@ -29,6 +31,8 @@ CAMPI_CONDIVISI = (
 )
 
 MAX_ISTANZE_PER_RICHIESTA = 20
+# Lo staff aggiunge o toglie a passi piccoli; il pavimento del residuo resta 0.
+MAX_DELTA_CARICHE = 20
 
 
 def _copia_destinatari(src: InnescoTimer, dst: InnescoTimer) -> None:
@@ -87,6 +91,67 @@ def propaga_campi_gruppo(source: InnescoTimer) -> List[int]:
 def aggiungi_istanze(source: InnescoTimer, quante: int) -> List[InnescoTimer]:
     n = max(1, min(int(quante or 1), MAX_ISTANZE_PER_RICHIESTA))
     return [clone_innesco_istanza(source) for _ in range(n)]
+
+
+def cariche_residue_oggi(innesco: InnescoTimer, oggi=None) -> Optional[int]:
+    """
+    Residuo visibile oggi, senza scrivere.
+
+    ``None`` se le cariche sono illimitate. Se il giorno è cambiato o il residuo
+    non è ancora stato materializzato, vale ``max_cariche``.
+    """
+    max_c = int(innesco.max_cariche or 0)
+    if max_c <= 0:
+        return None
+    oggi = oggi or timezone.localdate()
+    if innesco.cariche_giorno == oggi and innesco.cariche_residue is not None:
+        return int(innesco.cariche_residue)
+    return max_c
+
+
+def materializza_cariche_oggi(innesco: InnescoTimer, oggi=None) -> int:
+    """Allinea in memoria il residuo al giorno corrente. Il chiamante salva."""
+    oggi = oggi or timezone.localdate()
+    max_c = int(innesco.max_cariche or 0)
+    if innesco.cariche_giorno != oggi or innesco.cariche_residue is None:
+        innesco.cariche_residue = max_c
+        innesco.cariche_giorno = oggi
+    return int(innesco.cariche_residue)
+
+
+def prepara_consumo_carica_giorno(innesco: InnescoTimer) -> Optional[str]:
+    """
+    Scala una carica del giorno in memoria.
+
+    Ritorna un messaggio se il residuo è a zero. Non salva: il chiamante,
+    dentro la stessa transazione, persiste solo se l'attivazione prosegue.
+    """
+    if int(innesco.max_cariche or 0) <= 0:
+        return None
+    if materializza_cariche_oggi(innesco) <= 0:
+        return "Cariche esaurite per oggi."
+    innesco.cariche_residue = int(innesco.cariche_residue) - 1
+    return None
+
+
+def applica_delta_cariche_giorno(innesco_id: int, delta: int) -> Tuple[Optional[int], Optional[str]]:
+    """
+    Aggiunge o toglie cariche al residuo di oggi di una sola istanza.
+
+    Il risultato può superare ``max_cariche`` (lo staff ricarica la giornata)
+    e non scende sotto zero. A mezzanotte il prossimo accesso riparte dal massimo.
+    """
+    passo = int(delta)
+    if passo == 0 or abs(passo) > MAX_DELTA_CARICHE:
+        return None, "Indica quante cariche aggiungere o togliere (da -20 a 20, escluso 0)."
+    with transaction.atomic():
+        locked = InnescoTimer.objects.select_for_update().get(pk=innesco_id)
+        if int(locked.max_cariche or 0) <= 0:
+            return None, "Questo timer ha cariche illimitate: non c'è un residuo da modificare."
+        materializza_cariche_oggi(locked)
+        locked.cariche_residue = max(0, int(locked.cariche_residue) + passo)
+        locked.save(update_fields=["cariche_residue", "cariche_giorno", "updated_at"])
+        return int(locked.cariche_residue), None
 
 
 def ack_innesco_timer_scaduto(personaggio, innesco: InnescoTimer, data_fine_raw) -> InnescoTimerAck:

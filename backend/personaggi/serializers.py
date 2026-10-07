@@ -2997,6 +2997,7 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
     has_qrcode = serializers.SerializerMethodField()
     qrcode_id = serializers.SerializerMethodField()
     minigioco_usa_default = serializers.SerializerMethodField()
+    cariche_residue_oggi = serializers.SerializerMethodField()
 
     class Meta:
         model = InnescoTimer
@@ -3007,6 +3008,7 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
             "modalita_target",
             "durata_secondi",
             "max_cariche",
+            "cariche_residue_oggi",
             "rigenera_cariche_ogni_secondi",
             "segnale_luminoso",
             "campagna",
@@ -3031,7 +3033,13 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
             "target_regioni_ids",
             "target_korps_ids",
             "target_personaggi",
+            "cariche_residue_oggi",
         )
+
+    def get_cariche_residue_oggi(self, obj):
+        from personaggi.innesco_timer_ops import cariche_residue_oggi
+
+        return cariche_residue_oggi(obj)
 
     def get_target_evento_id(self, obj):
         return obj.target_evento_id

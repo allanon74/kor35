@@ -294,60 +294,77 @@ def attiva_innesco_timer_per_personaggio(
     """
     from .models import InnescoTimer, StatoInnescoTimerPersonaggio
 
+    from .innesco_timer_ops import prepara_consumo_carica_giorno
+
+    class _AttivazioneRifiutata(Exception):
+        def __init__(self, message: str):
+            self.message = message
+
     now = timezone.now()
-    max_c = int(innesco.max_cariche or 0)
-    regen = innesco.rigenera_cariche_ogni_secondi
 
-    with transaction.atomic():
-        stato, _created = StatoInnescoTimerPersonaggio.objects.select_for_update().get_or_create(
-            personaggio=personaggio,
-            innesco_timer=innesco,
-            defaults={
-                "data_fine": now,
-                "cariche_usate_ciclo": 0,
-                "ciclo_iniziato_at": now,
-            },
-        )
+    try:
+        with transaction.atomic():
+            # Prima l'istanza, poi lo stato del giocatore: le due scansioni non si incrociano.
+            locked = InnescoTimer.objects.select_for_update().get(pk=innesco.pk)
+            max_c = int(locked.max_cariche or 0)
+            regen = locked.rigenera_cariche_ogni_secondi
+            stato, _created = StatoInnescoTimerPersonaggio.objects.select_for_update().get_or_create(
+                personaggio=personaggio,
+                innesco_timer=locked,
+                defaults={
+                    "data_fine": now,
+                    "cariche_usate_ciclo": 0,
+                    "ciclo_iniziato_at": now,
+                },
+            )
 
-        if max_c > 0:
-            # Rigenera cariche dopo intervallo (da fine ultimo ciclo esaurito)
-            if stato.cariche_usate_ciclo >= max_c and regen and stato.ciclo_iniziato_at:
-                prossima = stato.ciclo_iniziato_at + timedelta(seconds=int(regen))
-                if now >= prossima:
-                    stato.cariche_usate_ciclo = 0
-                else:
-                    sec = max(0, int((prossima - now).total_seconds()))
-                    return None, f"Cariche esaurite. Prossima rigenerazione tra ~{sec}s."
-            elif stato.cariche_usate_ciclo >= max_c and not regen:
-                return None, "Cariche esaurite per questo innesco."
+            if max_c > 0 and regen:
+                # Limite extra del singolo giocatore, oltre al residuo condiviso del giorno.
+                if stato.cariche_usate_ciclo >= max_c and stato.ciclo_iniziato_at:
+                    prossima = stato.ciclo_iniziato_at + timedelta(seconds=int(regen))
+                    if now >= prossima:
+                        stato.cariche_usate_ciclo = 0
+                    else:
+                        sec = max(0, int((prossima - now).total_seconds()))
+                        raise _AttivazioneRifiutata(
+                            f"Cariche esaurite. Prossima rigenerazione tra ~{sec}s."
+                        )
 
-        stato.data_fine = now + timedelta(seconds=int(innesco.durata_secondi or 60))
-        if max_c > 0:
-            stato.cariche_usate_ciclo += 1
-            if stato.cariche_usate_ciclo >= max_c:
-                stato.ciclo_iniziato_at = now
-        stato.save()
+            campi_save = ["broadcast_data_fine", "broadcast_push_inviata", "updated_at"]
+            if max_c > 0:
+                err_cariche = prepara_consumo_carica_giorno(locked)
+                if err_cariche:
+                    raise _AttivazioneRifiutata(err_cariche)
+                campi_save = ["cariche_residue", "cariche_giorno", *campi_save]
 
-    ids = recipient_personaggio_ids_for_innesco(innesco)
+            stato.data_fine = now + timedelta(seconds=int(locked.durata_secondi or 60))
+            if max_c > 0 and regen:
+                stato.cariche_usate_ciclo += 1
+                if stato.cariche_usate_ciclo >= max_c:
+                    stato.ciclo_iniziato_at = now
+            stato.save()
 
-    InnescoTimer.objects.filter(pk=innesco.pk).update(
-        broadcast_data_fine=stato.data_fine,
-        broadcast_push_inviata=False,
-    )
+            locked.broadcast_data_fine = stato.data_fine
+            locked.broadcast_push_inviata = False
+            locked.save(update_fields=campi_save)
+    except _AttivazioneRifiutata as rifiuto:
+        return None, rifiuto.message
+
+    ids = recipient_personaggio_ids_for_innesco(locked)
 
     _broadcast_timer_innesco(
-        innesco_id=innesco.pk,
-        nome=innesco.nome,
+        innesco_id=locked.pk,
+        nome=locked.nome,
         data_fine=stato.data_fine,
-        segnale_luminoso=innesco.segnale_luminoso,
+        segnale_luminoso=locked.segnale_luminoso,
         recipient_personaggio_ids=ids,
     )
 
     return {
-        "id": f"innesco:{innesco.pk}",
-        "nome": innesco.nome,
+        "id": f"innesco:{locked.pk}",
+        "nome": locked.nome,
         "scadenza": stato.data_fine,
-        "segnale_luminoso": innesco.segnale_luminoso,
+        "segnale_luminoso": locked.segnale_luminoso,
         "recipient_personaggio_ids": ids,
     }, None
 

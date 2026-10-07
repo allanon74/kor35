@@ -931,6 +931,8 @@ class InnescoTimerAdmin(SModelAdmin):
         "modalita_target",
         "durata_secondi",
         "max_cariche",
+        "cariche_residue",
+        "cariche_giorno",
         "campagna",
     )
     list_filter = ("modalita_target", "campagna")
