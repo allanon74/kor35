@@ -50,6 +50,7 @@ class InnescoTimerBehaviorTests(TestCase):
         mock_broadcast.assert_called_once()
         kwargs = mock_broadcast.call_args.kwargs
         self.assertEqual(kwargs["nome"], "Allarme Globale")
+        self.assertEqual(kwargs["istanza"], "Istanza 1")
         ids = set(kwargs["recipient_personaggio_ids"])
         self.assertIn(self.pg.id, ids)
         self.assertIn(self.pg2.id, ids)
@@ -235,6 +236,16 @@ class InnescoTimerBehaviorTests(TestCase):
         self.innesco.save()
         propaga_campi_gruppo(self.innesco)
         extra.refresh_from_db()
+        self.innesco.etichetta_istanza = "QR nord"
+        self.innesco.save(update_fields=["etichetta_istanza", "updated_at"])
+        payload, err = qr_logic.attiva_innesco_timer_per_personaggio(self.pg, self.innesco)
+        self.assertIsNone(err)
+        self.assertEqual(payload["nome"], "Allarme rinominato")
+        self.assertEqual(payload["istanza"], "QR nord")
+        rows = qr_logic.active_innesco_timer_rows_for_personaggio(self.pg2)
+        self.assertEqual(rows[0]["istanza"], "QR nord")
+        self.assertEqual(rows[0]["nome"], "Allarme rinominato")
+
         self.assertEqual(extra.nome, "Allarme rinominato")
         self.assertEqual(extra.durata_secondi, 30)
         self.assertIsNone(extra.broadcast_data_fine)

@@ -39,13 +39,22 @@ describe('TimerOverlay', () => {
     const endTime = Date.now() + 90_000;
     const { unmount } = mount(createElement(TimerOverlay, {
       activeTimers: {
-        'innesco:4': { id: 'innesco:4', nome: 'Allarme', endTime, alert_suono: true, messaggio_in_app: true },
+        'innesco:4': {
+          id: 'innesco:4',
+          nome: 'Allarme',
+          istanza: 'QR nord',
+          endTime,
+          alert_suono: true,
+          messaggio_in_app: true,
+        },
       },
       onRemove: () => {},
     }));
 
     const button = document.body.querySelector('button[aria-label*="Allarme"]');
     expect(button).toBeTruthy();
+    expect(button.textContent).toMatch(/Allarme/);
+    expect(button.textContent).toMatch(/QR nord/);
     expect(button.textContent).toMatch(/1:3/);
     const shell = button.parentElement;
     expect(shell.className).toContain('right-3');
@@ -66,6 +75,7 @@ describe('TimerOverlay', () => {
         'innesco:7': {
           id: 'innesco:7',
           nome: 'Raid',
+          istanza: 'Cancello est',
           endTime,
           scaduto: true,
           alert_suono: true,
@@ -80,7 +90,8 @@ describe('TimerOverlay', () => {
 
     const titolo = document.getElementById('timer-scaduto-titolo');
     expect(titolo).toBeTruthy();
-    expect(titolo.textContent).toBe('Timer Raid scaduto!');
+    expect(titolo.textContent).toContain('Timer Raid scaduto!');
+    expect(titolo.textContent).toContain('Cancello est');
     expect(titolo.className).toContain('text-red-600');
     expect(onRemove).not.toHaveBeenCalled();
 

@@ -328,6 +328,36 @@ class EventoViewSet(viewsets.ModelViewSet):
 
         data = report_ricompense_evento(evento)
         return Response(data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="riassegna_premi_mancanti")
+    def riassegna_premi_mancanti(self, request, pk=None):
+        """Accredita PC/crediti/prestigio dell'avvio corrente a chi non li ha ancora."""
+        evento = self.get_object()
+        if not evento.started_at:
+            return Response(
+                {"detail": "L'evento non è mai stato avviato."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from .evento_premi import applica_premio_presenza_personaggio
+
+        when = evento.started_at
+        premi_applicati = 0
+        gia_assegnati = 0
+        with transaction.atomic():
+            for pg in evento.partecipanti.all():
+                if applica_premio_presenza_personaggio(evento, pg, when=when):
+                    premi_applicati += 1
+                else:
+                    gia_assegnati += 1
+        return Response(
+            {
+                "ok": True,
+                "evento_id": evento.id,
+                "premi_applicati": premi_applicati,
+                "gia_assegnati": gia_assegnati,
+            },
+            status=status.HTTP_200_OK,
+        )
     
     @action(detail=False, methods=['get'])
     def a_vista_disponibili(self, request):

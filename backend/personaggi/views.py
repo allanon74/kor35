@@ -1662,10 +1662,13 @@ class QrCodeDetailView(APIView):
             return Response(
                 {
                     "tipo_modello": "timer_innesco",
-                    "messaggio": f"Innesco timer «{inn_timer.nome}» avviato.",
+                    "messaggio": (
+                        f"Innesco timer «{payload['nome']}» — {payload.get('istanza') or ''} avviato."
+                    ),
                     "dati": {
                         "id": payload.get("id"),
                         "nome": payload["nome"],
+                        "istanza": payload.get("istanza") or "",
                         "scadenza": payload["scadenza"].isoformat() if payload.get("scadenza") else None,
                         "segnale_luminoso": payload.get("segnale_luminoso", True),
                         "recipient_personaggio_ids": payload.get("recipient_personaggio_ids") or [],

@@ -93,6 +93,15 @@ def aggiungi_istanze(source: InnescoTimer, quante: int) -> List[InnescoTimer]:
     return [clone_innesco_istanza(source) for _ in range(n)]
 
 
+def etichetta_istanza_pubblica(innesco: InnescoTimer) -> str:
+    """Nome dell'istanza mostrato sul telefono insieme al nome del timer."""
+    etichetta = (getattr(innesco, "etichetta_istanza", None) or "").strip()
+    if etichetta:
+        return etichetta
+    ordine = int(getattr(innesco, "ordine_istanza", None) or 1)
+    return f"Istanza {ordine}"
+
+
 def cariche_residue_oggi(innesco: InnescoTimer, oggi=None) -> Optional[int]:
     """
     Residuo visibile oggi, senza scrivere.
