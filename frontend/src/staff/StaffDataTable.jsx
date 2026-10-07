@@ -254,7 +254,7 @@ export default function StaffDataTable({
                 );
               })}
               {hasActions && (
-                <th className="px-4 py-3 text-right w-24 bg-gray-900 sticky right-0 z-30 shadow-[-5px_0px_5px_-2px_rgba(0,0,0,0.5)]">
+                <th className="px-4 py-3 text-right min-w-[10.5rem] bg-gray-900 sticky right-0 z-30 shadow-[-5px_0px_5px_-2px_rgba(0,0,0,0.5)]">
                   Azioni
                 </th>
               )}
@@ -305,7 +305,7 @@ export default function StaffDataTable({
                   {hasActions && (
                     <td className="px-4 py-3 text-right whitespace-nowrap sticky right-0 bg-gray-800 group-hover:bg-gray-700/30 transition-colors z-10 shadow-[-5px_0px_5px_-2px_rgba(0,0,0,0.3)]">
                       <div
-                        className="flex justify-end gap-1 opacity-100 md:opacity-60 md:group-hover:opacity-100 transition-opacity"
+                        className="flex justify-end items-center gap-1.5 opacity-100"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {renderActions(item)}
