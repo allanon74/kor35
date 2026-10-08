@@ -23,14 +23,34 @@ class WikiPdfStylesTests(SimpleTestCase):
 
 
 class WikiPdfTocTests(SimpleTestCase):
-    def test_toc_depth(self):
+    """La profondità dell'indice segue `inizio_capitolo`, non l'albero delle pagine."""
+
+    def _pagine(self):
         root = PaginaRegolamento(titolo="Root", slug="root", pk=1, parent_id=None)
         child = PaginaRegolamento(titolo="Child", slug="child", pk=2, parent_id=1)
-        pages = [root, child]
-        rendered = [
-            {"slug": "root", "titolo": "Root", "chapter_num": 1, "solo_indice": False},
-            {"slug": "child", "titolo": "Child", "chapter_num": 2, "solo_indice": False},
+        return [root, child]
+
+    def _rendered(self):
+        return [
+            {
+                "slug": "root", "titolo": "Root", "chapter_num": 1,
+                "solo_indice": False, "inizio_capitolo": True,
+            },
+            {
+                "slug": "child", "titolo": "Child", "chapter_num": None,
+                "solo_indice": False, "inizio_capitolo": False,
+            },
         ]
-        toc = build_toc_entries(pages, rendered, max_depth=3)
+
+    def test_toc_depth(self):
+        toc = build_toc_entries(self._pagine(), self._rendered(), max_depth=3)
+        self.assertEqual([entry["depth"] for entry in toc], [0, 1])
+
+    def test_pagina_senza_flag_vale_come_inizio_capitolo(self):
+        rendered = [{"slug": "root", "titolo": "Root", "chapter_num": 1, "solo_indice": False}]
+        toc = build_toc_entries(self._pagine()[:1], rendered, max_depth=3)
         self.assertEqual(toc[0]["depth"], 0)
-        self.assertEqual(toc[1]["depth"], 1)
+
+    def test_max_depth_uno_appiattisce_indice(self):
+        toc = build_toc_entries(self._pagine(), self._rendered(), max_depth=1)
+        self.assertEqual([entry["depth"] for entry in toc], [0, 0])

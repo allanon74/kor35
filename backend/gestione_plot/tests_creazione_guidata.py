@@ -25,7 +25,8 @@ class CreazioneGuidataIsolationTests(TestCase):
 
     def test_acquire_abilita_route_unchanged(self):
         """L'acquisto tradizionale resta sul endpoint storico, non sul wizard."""
-        resolved = reverse('acquisisci_abilita')
+        # `personaggi/urls.py` dichiara `app_name`: il nome va risolto col namespace.
+        resolved = reverse('personaggi:acquisisci_abilita')
         self.assertEqual(resolved, '/api/personaggi/api/personaggio/me/acquisisci_abilita/')
 
     def test_wizard_stato_accessible_without_applying_pg(self):
