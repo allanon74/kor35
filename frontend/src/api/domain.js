@@ -1491,8 +1491,19 @@ export const getEventiOpzioni = (onLogout) =>
 export const createEvento = (data, onLogout) => fetchAuthenticated('/api/plot/api/eventi/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
 export const updateEvento = (id, data, onLogout) => fetchAuthenticated(`/api/plot/api/eventi/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 export const deleteEvento = (id, onLogout) => fetchAuthenticated(`/api/plot/api/eventi/${id}/`, { method: 'DELETE' }, onLogout);
-export const iniziaEvento = (id, onLogout) =>
-  fetchAuthenticated(`/api/plot/api/eventi/${id}/inizia/`, { method: 'POST', body: '{}' }, onLogout);
+/**
+ * Avvio evento. `riassegnaPremi` omesso = prima chiamata: se qualcuno ha già incassato
+ * il premio il backend risponde 409 `premi_gia_assegnati` e lo staff deve scegliere.
+ */
+export const iniziaEvento = (id, onLogout, { riassegnaPremi = null } = {}) =>
+  fetchAuthenticated(
+    `/api/plot/api/eventi/${id}/inizia/`,
+    {
+      method: 'POST',
+      body: JSON.stringify(riassegnaPremi === null ? {} : { riassegna_premi: !!riassegnaPremi }),
+    },
+    onLogout,
+  );
 /** Chiusura evento: `force` serve per confermare la chiusura di un evento appena avviato. */
 export const terminaEvento = (id, onLogout, { force = false } = {}) =>
   fetchAuthenticated(

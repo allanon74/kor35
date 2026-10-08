@@ -6,6 +6,7 @@ import {
 import { RichTextViewer } from './RichTextDisplay';
 import EventoPortateSection from './EventoPortateSection';
 import EventoTasksLivePanel from './EventoTasksLivePanel';
+import ConfirmDialog from './editors/ConfirmDialog';
 
 const normalizeStaffIds = (list) => (
     (list || [])
@@ -30,6 +31,8 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
     const [riassegnaLoading, setRiassegnaLoading] = useState(false);
     const [statoEventoBusy, setStatoEventoBusy] = useState(false);
     const [statoEventoError, setStatoEventoError] = useState('');
+    // null | {tipo:'inizia'} | {tipo:'premi', dati} | {tipo:'termina'} | {tipo:'termina-force', secondi}
+    const [statoDialog, setStatoDialog] = useState(null);
 
     const allStaff = useMemo(() => risorse.staff || [], [risorse.staff]);
     const allStaffIds = useMemo(() => normalizeStaffIds(allStaff), [allStaff]);
@@ -143,61 +146,45 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
 
     const eventoInCorso = !!(evento?.started_at && !evento?.ended_at);
 
-    const handleIniziaEvento = useCallback(async () => {
-        if (!onIniziaEvento || statoEventoBusy) return;
-        const ok = window.confirm(
-            `Avviare «${evento?.titolo}»?\n\n`
-            + 'I partecipanti ricevono i premi di presenza e vedono la tab Tasks '
-            + 'per tutta la durata dell\'evento.',
-        );
-        if (!ok) return;
+    /** Avvio evento: `riassegnaPremi` null alla prima chiamata, poi la scelta dello staff. */
+    const avviaEvento = useCallback(async (riassegnaPremi = null) => {
+        if (!onIniziaEvento) return;
         setStatoEventoError('');
         setStatoEventoBusy(true);
         try {
-            await onIniziaEvento();
+            await onIniziaEvento({ riassegnaPremi });
+            setStatoDialog(null);
         } catch (e) {
+            if (e?.status === 409 && e?.data?.code === 'premi_gia_assegnati') {
+                setStatoDialog({ tipo: 'premi', dati: e.data });
+                return;
+            }
+            setStatoDialog(null);
             setStatoEventoError(e?.data?.detail || e?.message || 'Avvio evento fallito');
         } finally {
             setStatoEventoBusy(false);
         }
-    }, [onIniziaEvento, statoEventoBusy, evento?.titolo]);
+    }, [onIniziaEvento]);
 
-    /** Chiusura evento: doppia conferma se l'evento è stato avviato pochi secondi fa. */
-    const handleTerminaEvento = useCallback(async () => {
-        if (!onTerminaEvento || statoEventoBusy) return;
-        const ok = window.confirm(
-            `Terminare «${evento?.titolo}»?\n\n`
-            + 'La tab Tasks sparisce ai giocatori, i contratti si chiudono e i prestiti '
-            + 'del mercante vengono restituiti.',
-        );
-        if (!ok) return;
+    /** Chiusura evento: `force` conferma la chiusura di un evento appena avviato. */
+    const chiudiEvento = useCallback(async (force = false) => {
+        if (!onTerminaEvento) return;
         setStatoEventoError('');
         setStatoEventoBusy(true);
         try {
-            await onTerminaEvento({ force: false });
+            await onTerminaEvento({ force });
+            setStatoDialog(null);
         } catch (e) {
             if (e?.status === 409 && e?.data?.code === 'evento_appena_avviato') {
-                const secondi = e?.data?.secondi_da_avvio ?? 0;
-                const forza = window.confirm(
-                    `Evento avviato ${secondi} secondi fa: se hai premuto due volte lo stesso `
-                    + 'pulsante, annulla e l\'evento resta in corso.\n\nTerminarlo davvero?',
-                );
-                if (!forza) {
-                    setStatoEventoBusy(false);
-                    return;
-                }
-                try {
-                    await onTerminaEvento({ force: true });
-                } catch (e2) {
-                    setStatoEventoError(e2?.data?.detail || e2?.message || 'Chiusura evento fallita');
-                }
-            } else {
-                setStatoEventoError(e?.data?.detail || e?.message || 'Chiusura evento fallita');
+                setStatoDialog({ tipo: 'termina-force', secondi: e?.data?.secondi_da_avvio ?? 0 });
+                return;
             }
+            setStatoDialog(null);
+            setStatoEventoError(e?.data?.detail || e?.message || 'Chiusura evento fallita');
         } finally {
             setStatoEventoBusy(false);
         }
-    }, [onTerminaEvento, statoEventoBusy, evento?.titolo]);
+    }, [onTerminaEvento]);
 
     if (!evento) return null;
 
@@ -308,7 +295,7 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                         {!eventoInCorso ? (
                             <button
                                 type="button"
-                                onClick={handleIniziaEvento}
+                                onClick={() => setStatoDialog({ tipo: 'inizia' })}
                                 disabled={statoEventoBusy}
                                 className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-amber-500 transition-all disabled:opacity-50"
                             >
@@ -317,7 +304,7 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                         ) : (
                             <button
                                 type="button"
-                                onClick={handleTerminaEvento}
+                                onClick={() => setStatoDialog({ tipo: 'termina' })}
                                 disabled={statoEventoBusy}
                                 className="px-4 py-2 bg-rose-700 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-rose-600 transition-all disabled:opacity-50"
                             >
@@ -546,6 +533,78 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                     </div>
                 )}
             </div>
+
+            <ConfirmDialog
+                open={statoDialog?.tipo === 'inizia'}
+                title={`Avviare «${evento.titolo}»?`}
+                message={
+                    'I partecipanti ricevono i premi di presenza e vedono la tab Tasks '
+                    + "per tutta la durata dell'evento."
+                }
+                confirmLabel="Avvia evento"
+                confirmTone="warning"
+                loading={statoEventoBusy}
+                onConfirm={() => avviaEvento(null)}
+                onCancel={() => setStatoDialog(null)}
+            />
+
+            <ConfirmDialog
+                open={statoDialog?.tipo === 'premi'}
+                title="Premi già assegnati"
+                confirmLabel="Riattribuisci bonus"
+                confirmTone="warning"
+                altLabel="Avvia senza riattribuire"
+                onAlt={() => avviaEvento(false)}
+                loading={statoEventoBusy}
+                onConfirm={() => avviaEvento(true)}
+                onCancel={() => setStatoDialog(null)}
+            >
+                <div className="space-y-2 text-sm text-gray-300">
+                    <p>
+                        {statoDialog?.dati?.gia_premiati_count} di{' '}
+                        {statoDialog?.dati?.partecipanti_count} partecipanti hanno già ricevuto
+                        PC, crediti e prestigio di questo evento.
+                    </p>
+                    <p className="text-xs text-gray-400">
+                        «Riattribuisci bonus» accredita di nuovo il premio a tutti gli iscritti.
+                        «Avvia senza riattribuire» lo accredita solo a chi non l&apos;ha ancora
+                        ricevuto.
+                    </p>
+                    {statoDialog?.dati?.gia_premiati?.length ? (
+                        <ul className="max-h-32 overflow-y-auto rounded border border-gray-800 bg-gray-950/60 p-2 text-xs text-gray-400">
+                            {statoDialog.dati.gia_premiati.map((pg) => (
+                                <li key={pg.id} className="truncate">{pg.nome}</li>
+                            ))}
+                        </ul>
+                    ) : null}
+                </div>
+            </ConfirmDialog>
+
+            <ConfirmDialog
+                open={statoDialog?.tipo === 'termina'}
+                title={`Terminare «${evento.titolo}»?`}
+                message={
+                    'La tab Tasks sparisce ai giocatori, i contratti si chiudono e i prestiti '
+                    + 'del mercante vengono restituiti.'
+                }
+                confirmLabel="Termina evento"
+                loading={statoEventoBusy}
+                onConfirm={() => chiudiEvento(false)}
+                onCancel={() => setStatoDialog(null)}
+            />
+
+            <ConfirmDialog
+                open={statoDialog?.tipo === 'termina-force'}
+                title="Evento appena avviato"
+                message={
+                    `L'evento è partito ${statoDialog?.secondi ?? 0} secondi fa: se hai premuto `
+                    + "due volte lo stesso pulsante, annulla e l'evento resta in corso."
+                }
+                confirmLabel="Termina comunque"
+                loading={statoEventoBusy}
+                onConfirm={() => chiudiEvento(true)}
+                onCancel={() => setStatoDialog(null)}
+            />
         </div>
     );
 };

@@ -368,10 +368,11 @@ const PlotTab = ({ onLogout }) => {
     }, [onLogout, refreshData]);
 
     const handleAddGiorno = useCallback(() => startEdit('giorno'), [startEdit]);
-    const handleIniziaEvento = useCallback(async () => {
-        if (!selectedEvento?.id) return;
-        await iniziaEvento(selectedEvento.id, onLogout);
+    const handleIniziaEvento = useCallback(async ({ riassegnaPremi = null } = {}) => {
+        if (!selectedEvento?.id) return null;
+        const res = await iniziaEvento(selectedEvento.id, onLogout, { riassegnaPremi });
         await refreshData();
+        return res;
     }, [selectedEvento, onLogout, refreshData]);
     const handleTerminaEvento = useCallback(async ({ force = false } = {}) => {
         if (!selectedEvento?.id) return;

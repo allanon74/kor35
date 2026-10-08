@@ -10,8 +10,14 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from gestione_plot.models import Evento
+from gestione_plot.models import Evento, EventoPremioPersonaggio
 from gestione_plot.views import EVENTO_TERMINA_GUARD_SECONDS
+from personaggi.models import (
+    Campagna,
+    Personaggio,
+    PuntiCaratteristicaMovimento,
+    TipologiaPersonaggio,
+)
 
 User = get_user_model()
 
@@ -74,3 +80,101 @@ class EventoIniziaTerminaTests(APITestCase):
     def test_termina_evento_non_in_corso(self):
         resp = self._termina(force=True)
         self.assertEqual(resp.status_code, 400, resp.data)
+
+
+class EventoIniziaPremiGiaAssegnatiTests(APITestCase):
+    """Riavvio evento: lo staff scegle se riattribuire il premio di presenza."""
+
+    def setUp(self):
+        self.master = User.objects.create_superuser("master_premi", "p@test.local", "x")
+        self.campagna = Campagna.objects.create(slug="premi-evento", nome="Premi evento", attiva=True)
+        self.tipologia = TipologiaPersonaggio.objects.create(nome="Giocante premi", giocante=True)
+        now = timezone.now()
+        self.evento = Evento.objects.create(
+            titolo="Evento premi",
+            data_inizio=now - timedelta(hours=1),
+            data_fine=now + timedelta(days=1),
+            pc_guadagnati=2,
+        )
+        self.pg = Personaggio.objects.create(
+            nome="PG premi",
+            proprietario=self.master,
+            campagna=self.campagna,
+            tipologia=self.tipologia,
+        )
+        self.evento.partecipanti.add(self.pg)
+        self.client.force_authenticate(user=self.master)
+
+    def _inizia(self, **payload):
+        return self.client.post(
+            f"/api/plot/api/eventi/{self.evento.id}/inizia/",
+            payload,
+            format="json",
+        )
+
+    def _chiudi(self):
+        self.evento.refresh_from_db()
+        self.evento.ended_at = timezone.now()
+        self.evento.save(update_fields=["ended_at", "updated_at"])
+
+    def _movimenti_pc(self):
+        return PuntiCaratteristicaMovimento.objects.filter(personaggio=self.pg).count()
+
+    def test_primo_avvio_assegna_senza_chiedere(self):
+        resp = self._inizia()
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["premi_applicati"], 1)
+        self.assertEqual(resp.data["premi_saltati"], 0)
+        self.assertEqual(self._movimenti_pc(), 1)
+
+    def test_riavvio_chiede_conferma(self):
+        self._inizia()
+        self._chiudi()
+        resp = self._inizia()
+        self.assertEqual(resp.status_code, 409, resp.data)
+        self.assertEqual(resp.data["code"], "premi_gia_assegnati")
+        self.assertEqual(resp.data["gia_premiati_count"], 1)
+        self.assertEqual(resp.data["partecipanti_count"], 1)
+        self.assertEqual(resp.data["gia_premiati"][0]["nome"], "PG premi")
+        self.evento.refresh_from_db()
+        self.assertIsNotNone(self.evento.ended_at)
+
+    def test_riavvio_con_riassegna_paga_di_nuovo(self):
+        self._inizia()
+        self._chiudi()
+        resp = self._inizia(riassegna_premi=True)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["premi_applicati"], 1)
+        self.assertEqual(resp.data["premi_saltati"], 0)
+        self.assertEqual(self._movimenti_pc(), 2)
+
+    def test_riavvio_senza_riassegna_salta_chi_ha_gia_avuto(self):
+        self._inizia()
+        self._chiudi()
+        resp = self._inizia(riassegna_premi=False)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["premi_applicati"], 0)
+        self.assertEqual(resp.data["premi_saltati"], 1)
+        self.assertEqual(self._movimenti_pc(), 1)
+        # Il premio risulta coperto dall'avvio corrente: «Accredita mancanti» non lo ripaga.
+        self.evento.refresh_from_db()
+        row = EventoPremioPersonaggio.objects.get(evento=self.evento, personaggio=self.pg)
+        self.assertEqual(row.avvio_at, self.evento.started_at)
+
+    def test_riavvio_senza_riassegna_paga_i_nuovi_iscritti(self):
+        self._inizia()
+        self._chiudi()
+        nuovo = Personaggio.objects.create(
+            nome="PG nuovo",
+            proprietario=self.master,
+            campagna=self.campagna,
+            tipologia=self.tipologia,
+        )
+        self.evento.partecipanti.add(nuovo)
+        resp = self._inizia(riassegna_premi=False)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["premi_applicati"], 1)
+        self.assertEqual(resp.data["premi_saltati"], 1)
+        self.assertEqual(
+            PuntiCaratteristicaMovimento.objects.filter(personaggio=nuovo).count(), 1
+        )
