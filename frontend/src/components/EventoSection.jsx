@@ -19,6 +19,60 @@ const staffLabel = (user) => {
     return full || user.username || `Utente #${user.id}`;
 };
 
+const fmtCr = (valore) => Number(valore || 0).toLocaleString('it-IT', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+});
+
+const fmtPr = (valore) => Number(valore || 0).toLocaleString('it-IT');
+
+/**
+ * Totali dello specchietto task. `missioni_riepilogo_totali` arriva dal backend;
+ * il fallback copre il caso di un backend non ancora aggiornato, ricavando i
+ * totali dalle sole righe KORP (i contatori delle task spente restano a zero).
+ */
+const totaliTaskEvento = (evento, righe) => {
+    const dal_backend = evento?.missioni_riepilogo_totali;
+    if (dal_backend && typeof dal_backend === 'object') return dal_backend;
+    const max = (campo) => righe.reduce((acc, row) => Math.max(acc, Number(row[campo] || 0)), 0);
+    const nTask = max('n_task_totale');
+    return {
+        n_task_collegate: nTask,
+        n_task_attive: nTask,
+        n_task_spente_evento: 0,
+        n_task_spente_catalogo: 0,
+        crediti_base: null,
+        prestigio_base: null,
+        crediti_max: max('crediti_totale'),
+        prestigio_max: max('prestigio_totale'),
+    };
+};
+
+/** Avvisi che spiegano perché i totali sono a zero o incompleti. */
+const noteTaskEvento = (totali) => {
+    const note = [];
+    if (Number(totali.n_task_spente_catalogo || 0) > 0) {
+        note.push(
+            `${totali.n_task_spente_catalogo} task collegate sono spente nel catalogo `
+            + '(Gestione Tasks → Attiva) e non entrano nei totali.',
+        );
+    }
+    if (Number(totali.n_task_spente_evento || 0) > 0) {
+        note.push(
+            `${totali.n_task_spente_evento} task sono disattivate per questo evento `
+            + 'dal pannello Tasks evento.',
+        );
+    }
+    if (
+        Number(totali.n_task_attive || 0) > 0
+        && Number(totali.crediti_max || 0) === 0
+        && Number(totali.prestigio_max || 0) === 0
+    ) {
+        note.push('Le task conteggiate non hanno premi configurati: i totali restano a zero.');
+    }
+    return note;
+};
+
 const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRiassegnaPremiMancanti, onRiallineaIscrizioni, onRefresh, onRefreshRisorse, risorseLoading = false, onLogout }) => {
     const [showPartecipanti, setShowPartecipanti] = useState(false);
     const [showRicompense, setShowRicompense] = useState(false);
@@ -146,6 +200,28 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
 
     const eventoInCorso = !!(evento?.started_at && !evento?.ended_at);
 
+    const riepilogoTask = useMemo(() => {
+        const righe = Array.isArray(evento?.missioni_riepilogo) ? evento.missioni_riepilogo : [];
+        return righe.map((row) => ({
+            ...row,
+            crediti_totale: row.crediti_totale
+                ?? Number(row.crediti_korp || 0) + Number(row.crediti_non_korp || 0),
+            prestigio_totale: row.prestigio_totale
+                ?? Number(row.prestigio_korp || 0) + Number(row.prestigio_non_korp || 0),
+            n_task_totale: row.n_task_totale
+                ?? Number(row.n_task_korp || 0) + Number(row.n_task_non_korp || 0),
+        }));
+    }, [evento?.missioni_riepilogo]);
+
+    const totaliTask = useMemo(
+        () => totaliTaskEvento(evento, riepilogoTask),
+        [evento, riepilogoTask],
+    );
+    const noteRiepilogoTask = useMemo(() => noteTaskEvento(totaliTask), [totaliTask]);
+    // Senza task collegate lo specchietto mostrerebbe solo righe KORP vuote.
+    const mostraRiepilogoTask = riepilogoTask.length > 0
+        && Number(totaliTask.n_task_collegate || 0) > 0;
+
     /** Avvio evento: `riassegnaPremi` null alla prima chiamata, poi la scelta dello staff. */
     const avviaEvento = useCallback(async (riassegnaPremi = null) => {
         if (!onIniziaEvento) return;
@@ -221,13 +297,37 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                             {eventoInCorso ? " · tab Tasks visibile ai giocatori" : null}
                         </span>
                     </div>
-                    {Array.isArray(evento.missioni_riepilogo) && evento.missioni_riepilogo.length > 0 ? (
-                        <div className="mt-3 rounded-lg border border-lime-900/40 bg-lime-950/20 px-3 py-2">
-                            <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-lime-300">
-                                Premi task per KORP
+                    {mostraRiepilogoTask ? (
+                        <div className="mt-3 rounded-lg border border-lime-900/40 bg-lime-950/20 px-3 py-2 normal-case not-italic">
+                            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                                <span className="text-[10px] font-black uppercase tracking-wide text-lime-300">
+                                    Premi task per KORP
+                                </span>
+                                <span className="font-mono text-[10px] text-gray-300">
+                                    Task conteggiate: {totaliTask.n_task_attive} / {totaliTask.n_task_collegate}
+                                </span>
+                                {totaliTask.crediti_base !== null ? (
+                                    <span
+                                        className="font-mono text-[10px] font-bold text-lime-200"
+                                        title="Somma dei premi di catalogo delle task conteggiate, senza moltiplicatori KORP"
+                                    >
+                                        Totale base: {fmtCr(totaliTask.crediti_base)} Cr · {fmtPr(totaliTask.prestigio_base)} Pr
+                                    </span>
+                                ) : null}
+                                <span
+                                    className="font-mono text-[10px] font-bold text-amber-200"
+                                    title="Totale più alto ottenibile da un PG, moltiplicatori KORP inclusi"
+                                >
+                                    Massimo per PG: {fmtCr(totaliTask.crediti_max)} Cr · {fmtPr(totaliTask.prestigio_max)} Pr
+                                </span>
                             </div>
-                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                {evento.missioni_riepilogo.map((row) => (
+                            {noteRiepilogoTask.length > 0 ? (
+                                <ul className="mt-1 space-y-0.5 text-[10px] font-medium text-amber-300/90">
+                                    {noteRiepilogoTask.map((nota) => <li key={nota}>{nota}</li>)}
+                                </ul>
+                            ) : null}
+                            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                {riepilogoTask.map((row) => (
                                     <div
                                         key={row.korp_id}
                                         className="rounded border border-violet-800/40 bg-violet-950/30 px-2 py-1.5 text-[10px] text-violet-100"
@@ -242,10 +342,14 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                                             </span>
                                         </div>
                                         <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-gray-300">
-                                            <span>Cr KORP: {Number(row.crediti_korp || 0).toLocaleString('it-IT')}</span>
-                                            <span>Pr KORP: {row.prestigio_korp || 0}</span>
-                                            <span>Cr altre: {Number(row.crediti_non_korp || 0).toLocaleString('it-IT')}</span>
-                                            <span>Pr altre: {row.prestigio_non_korp || 0}</span>
+                                            <span>Cr KORP: {fmtCr(row.crediti_korp)}</span>
+                                            <span>Pr KORP: {fmtPr(row.prestigio_korp)}</span>
+                                            <span>Cr altre: {fmtCr(row.crediti_non_korp)}</span>
+                                            <span>Pr altre: {fmtPr(row.prestigio_non_korp)}</span>
+                                        </div>
+                                        <div className="mt-1 flex items-baseline justify-between gap-2 border-t border-violet-800/50 pt-1 font-mono text-[10px] font-black text-lime-200">
+                                            <span>Totale ({row.n_task_totale} task)</span>
+                                            <span>{fmtCr(row.crediti_totale)} Cr · {fmtPr(row.prestigio_totale)} Pr</span>
                                         </div>
                                     </div>
                                 ))}

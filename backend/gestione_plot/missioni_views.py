@@ -26,7 +26,7 @@ from .missioni_service import (
     assegna_risoluzione,
     eventi_attivi_ids,
     lista_missioni_per_personaggio,
-    riepilogo_premi_evento,
+    riepilogo_task_evento,
     set_missione_attiva_evento,
 )
 from .views import IsMasterOrReadOnly, _is_campaign_staff_plus
@@ -379,10 +379,12 @@ class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path=r"riepilogo-evento/(?P<evento_id>[^/.]+)")
     def riepilogo_evento(self, request, evento_id=None):
         evento = get_object_or_404(Evento, pk=evento_id)
+        riepilogo = riepilogo_task_evento(evento)
         return Response({
             "evento_id": evento.id,
             "evento_titolo": evento.titolo,
-            "korps": riepilogo_premi_evento(evento),
+            "korps": riepilogo["korps"],
+            "totali": riepilogo["totali"],
         })
 
     @action(detail=False, methods=["post"], url_path="assegna-risoluzione")

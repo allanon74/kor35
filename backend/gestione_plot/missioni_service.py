@@ -216,13 +216,9 @@ def assegna_risoluzione(
     return ris
 
 
-def riepilogo_premi_evento(evento: Evento) -> list[dict]:
-    """
-    Per KORP X:
-    - di Korp = task di X × fattore_crediti_X (Cr) e × fattore_prestigio_X (Pr)
-    - non di Korp = generiche + altre KORP non esclusive (senza fattori)
-    """
-    missioni = list(
+def missioni_attive_evento(evento: Evento) -> list[Missione]:
+    """Task che entrano nel conteggio: attive in catalogo e attive per l'evento."""
+    return list(
         Missione.objects.filter(
             attiva=True,
             evento_links__evento=evento,
@@ -231,6 +227,16 @@ def riepilogo_premi_evento(evento: Evento) -> list[dict]:
         .select_related("korp")
         .distinct()
     )
+
+
+def riepilogo_premi_evento(evento: Evento) -> list[dict]:
+    """
+    Per KORP X:
+    - di Korp = task di X × fattore_crediti_X (Cr) e × fattore_prestigio_X (Pr)
+    - non di Korp = generiche + altre KORP non esclusive (senza fattori)
+    - totale = quanto incassa un PG di X svolgendo tutte le task che gli sono aperte
+    """
+    missioni = missioni_attive_evento(evento)
     korps = list(Carriera.objects.filter(tipo_carriera__codice="korp").order_by("nome"))
     out = []
     for korp in korps:
@@ -246,19 +252,57 @@ def riepilogo_premi_evento(evento: Evento) -> list[dict]:
         pr_k = sum((int(m.reward_prestigio or 0) for m in di_korp), 0)
         cr_n = sum((_q2(m.reward_crediti) for m in non_di_korp), ZERO)
         pr_n = sum((int(m.reward_prestigio or 0) for m in non_di_korp), 0)
+        cr_korp = _q2(cr_k * fattore_cr)
+        pr_korp = int((Decimal(pr_k) * fattore_pr).to_integral_value(rounding=ROUND_HALF_UP))
         out.append({
             "korp_id": korp.id,
             "korp_nome": korp.nome,
             "fattore_task_crediti": fattore_cr,
             "fattore_task_prestigio": fattore_pr,
-            "crediti_korp": _q2(cr_k * fattore_cr),
-            "prestigio_korp": int((Decimal(pr_k) * fattore_pr).to_integral_value(rounding=ROUND_HALF_UP)),
+            "crediti_korp": cr_korp,
+            "prestigio_korp": pr_korp,
             "crediti_non_korp": _q2(cr_n),
             "prestigio_non_korp": pr_n,
             "n_task_korp": len(di_korp),
             "n_task_non_korp": len(non_di_korp),
+            "crediti_totale": _q2(cr_korp + cr_n),
+            "prestigio_totale": pr_korp + pr_n,
+            "n_task_totale": len(di_korp) + len(non_di_korp),
         })
     return out
+
+
+def totali_task_evento(evento: Evento, righe_korp: list[dict] | None = None) -> dict:
+    """Totali complessivi dello specchietto task di un evento (riga «Totale» staff).
+
+    - ``crediti_base`` / ``prestigio_base``: somma dei premi di catalogo delle task
+      conteggiate, senza moltiplicatori KORP.
+    - ``crediti_max`` / ``prestigio_max``: miglior totale ottenibile da un PG, cioè
+      il massimo tra i totali delle singole KORP.
+    - i contatori ``n_task_spente_*`` spiegano perché alcune task collegate
+      all'evento non entrano nei totali.
+    """
+    missioni = missioni_attive_evento(evento)
+    righe = riepilogo_premi_evento(evento) if righe_korp is None else righe_korp
+    links = list(MissioneEvento.objects.filter(evento=evento).select_related("missione"))
+    spente_evento = [lk for lk in links if not lk.attiva]
+    spente_catalogo = [lk for lk in links if lk.attiva and not lk.missione.attiva]
+    return {
+        "n_task_collegate": len(links),
+        "n_task_attive": len(missioni),
+        "n_task_spente_evento": len(spente_evento),
+        "n_task_spente_catalogo": len(spente_catalogo),
+        "crediti_base": sum((_q2(m.reward_crediti) for m in missioni), ZERO),
+        "prestigio_base": sum((int(m.reward_prestigio or 0) for m in missioni), 0),
+        "crediti_max": max((_q2(r["crediti_totale"]) for r in righe), default=ZERO),
+        "prestigio_max": max((int(r["prestigio_totale"]) for r in righe), default=0),
+    }
+
+
+def riepilogo_task_evento(evento: Evento) -> dict:
+    """Specchietto staff completo: righe per KORP + totali dell'evento."""
+    righe = riepilogo_premi_evento(evento)
+    return {"korps": righe, "totali": totali_task_evento(evento, righe)}
 
 
 def eventi_attivi_ids():
