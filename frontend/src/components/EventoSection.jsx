@@ -7,6 +7,11 @@ import { RichTextViewer } from './RichTextDisplay';
 import EventoPortateSection from './EventoPortateSection';
 import EventoTasksLivePanel from './EventoTasksLivePanel';
 import ConfirmDialog from './editors/ConfirmDialog';
+import {
+    noteRiepilogoTask,
+    righeRiepilogoTask,
+    totaliRiepilogoTask,
+} from '../lib/riepilogoTaskEvento';
 
 const normalizeStaffIds = (list) => (
     (list || [])
@@ -25,53 +30,6 @@ const fmtCr = (valore) => Number(valore || 0).toLocaleString('it-IT', {
 });
 
 const fmtPr = (valore) => Number(valore || 0).toLocaleString('it-IT');
-
-/**
- * Totali dello specchietto task. `missioni_riepilogo_totali` arriva dal backend;
- * il fallback copre il caso di un backend non ancora aggiornato, ricavando i
- * totali dalle sole righe KORP (i contatori delle task spente restano a zero).
- */
-const totaliTaskEvento = (evento, righe) => {
-    const dal_backend = evento?.missioni_riepilogo_totali;
-    if (dal_backend && typeof dal_backend === 'object') return dal_backend;
-    const max = (campo) => righe.reduce((acc, row) => Math.max(acc, Number(row[campo] || 0)), 0);
-    const nTask = max('n_task_totale');
-    return {
-        n_task_collegate: nTask,
-        n_task_attive: nTask,
-        n_task_spente_evento: 0,
-        n_task_spente_catalogo: 0,
-        crediti_base: null,
-        prestigio_base: null,
-        crediti_max: max('crediti_totale'),
-        prestigio_max: max('prestigio_totale'),
-    };
-};
-
-/** Avvisi che spiegano perché i totali sono a zero o incompleti. */
-const noteTaskEvento = (totali) => {
-    const note = [];
-    if (Number(totali.n_task_spente_catalogo || 0) > 0) {
-        note.push(
-            `${totali.n_task_spente_catalogo} task collegate sono spente nel catalogo `
-            + '(Gestione Tasks → Attiva) e non entrano nei totali.',
-        );
-    }
-    if (Number(totali.n_task_spente_evento || 0) > 0) {
-        note.push(
-            `${totali.n_task_spente_evento} task sono disattivate per questo evento `
-            + 'dal pannello Tasks evento.',
-        );
-    }
-    if (
-        Number(totali.n_task_attive || 0) > 0
-        && Number(totali.crediti_max || 0) === 0
-        && Number(totali.prestigio_max || 0) === 0
-    ) {
-        note.push('Le task conteggiate non hanno premi configurati: i totali restano a zero.');
-    }
-    return note;
-};
 
 const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRiassegnaPremiMancanti, onRiallineaIscrizioni, onRefresh, onRefreshRisorse, risorseLoading = false, onLogout }) => {
     const [showPartecipanti, setShowPartecipanti] = useState(false);
@@ -200,24 +158,12 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
 
     const eventoInCorso = !!(evento?.started_at && !evento?.ended_at);
 
-    const riepilogoTask = useMemo(() => {
-        const righe = Array.isArray(evento?.missioni_riepilogo) ? evento.missioni_riepilogo : [];
-        return righe.map((row) => ({
-            ...row,
-            crediti_totale: row.crediti_totale
-                ?? Number(row.crediti_korp || 0) + Number(row.crediti_non_korp || 0),
-            prestigio_totale: row.prestigio_totale
-                ?? Number(row.prestigio_korp || 0) + Number(row.prestigio_non_korp || 0),
-            n_task_totale: row.n_task_totale
-                ?? Number(row.n_task_korp || 0) + Number(row.n_task_non_korp || 0),
-        }));
-    }, [evento?.missioni_riepilogo]);
-
+    const riepilogoTask = useMemo(() => righeRiepilogoTask(evento), [evento]);
     const totaliTask = useMemo(
-        () => totaliTaskEvento(evento, riepilogoTask),
+        () => totaliRiepilogoTask(evento, riepilogoTask),
         [evento, riepilogoTask],
     );
-    const noteRiepilogoTask = useMemo(() => noteTaskEvento(totaliTask), [totaliTask]);
+    const noteTask = useMemo(() => noteRiepilogoTask(totaliTask), [totaliTask]);
     // Senza task collegate lo specchietto mostrerebbe solo righe KORP vuote.
     const mostraRiepilogoTask = riepilogoTask.length > 0
         && Number(totaliTask.n_task_collegate || 0) > 0;
@@ -321,9 +267,9 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                                     Massimo per PG: {fmtCr(totaliTask.crediti_max)} Cr · {fmtPr(totaliTask.prestigio_max)} Pr
                                 </span>
                             </div>
-                            {noteRiepilogoTask.length > 0 ? (
+                            {noteTask.length > 0 ? (
                                 <ul className="mt-1 space-y-0.5 text-[10px] font-medium text-amber-300/90">
-                                    {noteRiepilogoTask.map((nota) => <li key={nota}>{nota}</li>)}
+                                    {noteTask.map((nota) => <li key={nota}>{nota}</li>)}
                                 </ul>
                             ) : null}
                             <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
