@@ -1273,6 +1273,7 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
               listinoIniziale={data.dati}
               onClose={onClose}
               onLogout={onLogout}
+              embedded
             />
           </React.Suspense>
         );
@@ -1649,8 +1650,10 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
           </button>
         </div>
 
-        {/* Contenuto Dinamico */}
-        <div className="grow p-6 overflow-y-auto text-white">
+        {/* Contenuto Dinamico. Il negozio riempie il riquadro: niente secondo dialogo sopra. */}
+        <div className={data?.tipo_modello === 'negozio_mercante'
+          ? 'grow min-h-0 overflow-hidden text-white'
+          : 'grow p-6 overflow-y-auto text-white'}>
           {renderContent()}
         </div>
 
@@ -1668,4 +1671,4 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
   );
 };
 
-export default QrResultModal;
+export default React.memo(QrResultModal);

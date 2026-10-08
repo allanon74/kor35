@@ -23,7 +23,7 @@ const fmtCr = (n) => {
   return v.toFixed(2);
 };
 
-const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout }) => {
+const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout, embedded = false }) => {
   const { selectedCharacterId, selectedCharacterData: char, refreshCharacterData } = useCharacter();
   const [listino, setListino] = useState(listinoIniziale || null);
   const [loading, setLoading] = useState(!listinoIniziale);
@@ -304,22 +304,23 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
     return (listino?.voci || []).find((v) => `${v.tipo}-${v.id}` === key) || voceAperta;
   }, [voceAperta, listino?.voci]);
 
-  return (
-    <Dialog
-      open
-      // Il fondale, Escape e il pointer di apertura non chiudono: solo la X.
-      onClose={() => {}}
-      className="relative z-50"
-    >
-      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" aria-hidden="true" />
-      <div className="fixed inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4">
-        <Dialog.Panel className="w-full sm:max-w-2xl h-[96dvh] sm:h-auto sm:max-h-[90vh] flex flex-col bg-gray-900 border border-amber-700/40 rounded-t-xl sm:rounded-xl shadow-2xl min-w-0">
+  // Dal QR il negozio sta dentro «Risultato Scansione»: un Dialog sopra coprirebbe
+  // e scoprirebbe quel titolo a ogni ridisegno (il cronometro della pagina batte ogni secondo).
+  const Cornice = embedded ? 'div' : Dialog.Panel;
+  const Titolo = embedded ? 'h2' : Dialog.Title;
+  const corpo = (
+    <>
+      {!embedded && <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" aria-hidden="true" />}
+      <div className={embedded ? 'flex flex-col h-full min-h-0' : 'fixed inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4'}>
+        <Cornice className={embedded
+          ? 'flex flex-col h-full min-h-0 bg-gray-900 min-w-0'
+          : 'w-full sm:max-w-2xl h-[96dvh] sm:h-auto sm:max-h-[90vh] flex flex-col bg-gray-900 border border-amber-700/40 rounded-t-xl sm:rounded-xl shadow-2xl min-w-0'}>
           <div className="flex items-start justify-between gap-2 p-3 sm:p-4 border-b border-gray-700 shrink-0">
             <div className="min-w-0">
-              <Dialog.Title className="text-base sm:text-lg font-bold text-amber-400 flex items-center gap-2 min-w-0">
+              <Titolo className="text-base sm:text-lg font-bold text-amber-400 flex items-center gap-2 min-w-0">
                 <Store size={20} className="shrink-0" />
                 <span className="break-words">{listino?.nome || 'Negozio'}</span>
-              </Dialog.Title>
+              </Titolo>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-xs">
                 {duale ? (
                   <span className="font-mono">
@@ -543,7 +544,7 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
               </button>
             </div>
           )}
-        </Dialog.Panel>
+        </Cornice>
       </div>
 
       {voceApertaAggiornata && (
@@ -728,6 +729,18 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
           </div>
         </Dialog>
       )}
+    </>
+  );
+
+  if (embedded) return corpo;
+  return (
+    <Dialog
+      open
+      // Il fondale, Escape e il pointer di apertura non chiudono: solo la X.
+      onClose={() => {}}
+      className="relative z-50"
+    >
+      {corpo}
     </Dialog>
   );
 };

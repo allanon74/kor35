@@ -22,6 +22,7 @@ const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, o
   const [queuedCount, setQueuedCount] = useState(0);
   
   const html5QrCodeRef = useRef(null);
+  const scanBusyRef = useRef(false);
   const qrReaderId = "qr-reader-element";
   const isOnline = useOnlineStatus();
   
@@ -81,26 +82,26 @@ const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, o
   }, [isOnline, flushQueuedScans]);
 
   const handleScanData = async (decodedText) => {
-    // Controlla se un personaggio è selezionato
-    if (!selectedCharacterId) {
-      setError("Per favore, seleziona un personaggio prima di scansionare.");
-      stopWebcamScan(); // Ferma lo scanner
-      return;
-    }
-
-    // Controllo cooldown globale
-    if (isStealingOnCooldown) {
-        setError(`Devi attendere la fine del cooldown (furto) prima di scansionare.`);
+    if (scanBusyRef.current) return;
+    scanBusyRef.current = true;
+    try {
+      if (!selectedCharacterId) {
+        setError("Per favore, seleziona un personaggio prima di scansionare.");
         stopWebcamScan();
         return;
-    }
+      }
 
-    setIsScanning(false);
-    setIsLoading(true);
-    setError('');
-    setInfo('');
+      if (isStealingOnCooldown) {
+        setError('Devi attendere la fine del cooldown (furto) prima di scansionare.');
+        stopWebcamScan();
+        return;
+      }
 
-    try {
+      setIsScanning(false);
+      setIsLoading(true);
+      setError('');
+      setInfo('');
+
       await stopWebcamScan();
 
       const qrId = normalizeScannedQrId(decodedText);
@@ -140,6 +141,7 @@ const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, o
       }
       setError(err.message || 'Impossibile caricare i dati QR.');
     } finally {
+      scanBusyRef.current = false;
       setIsLoading(false);
     }
   };
@@ -175,7 +177,7 @@ const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, o
           { facingMode: "environment" }, // Prova prima la fotocamera posteriore
           config,
           (decodedText, decodedResult) => {
-            // Successo
+            // Il fotogramma successivo non deve rilanciare la scansione mentre la prima è in corso.
             handleScanData(decodedText);
           },
           (errorMessage) => {

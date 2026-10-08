@@ -83,9 +83,11 @@ describe('QrResultModal resta aperta', () => {
     });
 
     expect(document.body.textContent).toContain('Inventurium');
+    expect(document.body.textContent).toContain('Risultato Scansione');
+    expect(document.querySelector('[data-headlessui-portal]')).toBeNull();
     expect(onClose).not.toHaveBeenCalled();
 
-    const fondale = document.querySelector('[aria-hidden="true"]');
+    const fondale = document.querySelector('.fixed.inset-0');
     await act(async () => {
       fondale?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
       fondale?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
