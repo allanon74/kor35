@@ -60,10 +60,12 @@ const TABS = [
 
 const emptyCondizioni = () => ({ operator: 'AND', requisiti: [] });
 
-const ManifestoManager = ({ onBack, onLogout }) => {
+const ManifestoManager = ({ onBack, onLogout, initialTab = 'manifesti' }) => {
   const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
   const { lookup, loading: lookupLoading } = useRequisitiAccessoLookup(onLogout);
-  const [tab, setTab] = useState('manifesti');
+  const [tab, setTab] = useState(
+    TABS.some((t) => t.id === initialTab) ? initialTab : 'manifesti',
+  );
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
@@ -886,7 +888,13 @@ const ManifestoManager = ({ onBack, onLogout }) => {
   return (
     <StaffToolShell maxWidth="4xl" className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold text-white tracking-tight">QR — Manifesti / Serie / Trappole / Crediti</h1>
+        <h1 className="text-xl font-bold text-white tracking-tight">
+          QR — Manifesti / Serie / Trappole / Crediti
+        </h1>
+        <p className="text-xs text-gray-400 mt-1">
+          Tab <span className="text-emerald-300 font-semibold">Crediti QR</span>: crea QR che
+          accreditano sul deposito (importo fisso o intervallo random; usi limitati o illimitati).
+        </p>
         <StaffToolSubnav
           tabs={TABS}
           active={tab}

@@ -75,6 +75,15 @@ class StaffDashboardLayoutTests(SimpleTestCase):
         self.assertIn("manuali-pdf", giocatori_tools)
         validate_staff_dashboard_layout(layout)
 
+    def test_qr_crediti_tool_nel_default(self):
+        from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
+
+        self.assertIn("qr-crediti", KNOWN_STAFF_TOOL_IDS)
+        layout = default_staff_dashboard_layout()
+        evento_tools = layout["groups"][0]["tool_ids"]
+        self.assertIn("qr-crediti", evento_tools)
+        validate_staff_dashboard_layout(layout)
+
     def test_economia_crediti_tool_nel_default(self):
         from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
 

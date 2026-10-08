@@ -51,6 +51,7 @@ const PunteggioResiduoManager = lazy(() => import('./editors/PunteggioResiduoMan
 const ArcanaProfilesTab = lazy(() => import('./editors/ArcanaProfilesTab'));
 const CampaignManager = lazy(() => import('./editors/CampaignManager'));
 const ManifestoManager = lazy(() => import('./editors/ManifestoManager'));
+const QrCreditoDepositoManager = lazy(() => import('./editors/QrCreditoDepositoManager'));
 const NodoManager = lazy(() => import('./editors/NodoManager'));
 const InnescoTimerManager = lazy(() => import('./editors/InnescoTimerManager'));
 const RandomQrPoolManager = lazy(() => import('./editors/RandomQrPoolManager'));
@@ -88,6 +89,7 @@ const STAFF_COMPONENT_MAP = {
     immagini: ImmagineManager,
     inventari: InventarioManager,
     manifesti: ManifestoManager,
+    'qr-crediti': QrCreditoDepositoManager,
     nodi: NodoManager,
     'innesco-timer': InnescoTimerManager,
     'qr-random-pool': RandomQrPoolManager,

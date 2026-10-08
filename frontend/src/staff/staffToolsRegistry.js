@@ -113,7 +113,8 @@ export const STAFF_TOOLS_REGISTRY = {
   tabelle: { id: 'tabelle', label: 'Tabelle', icon: Layers, color: 'bg-pink-700', componentKey: 'tabelle' },
   immagini: { id: 'immagini', label: 'Immagini wiki', icon: Image, color: 'bg-teal-700', componentKey: 'immagini' },
   inventari: { id: 'inventari', label: 'Inventari', icon: Package, color: 'bg-slate-700', componentKey: 'inventari' },
-  manifesti: { id: 'manifesti', label: 'QR — Manifesti / Serie / Trappole', icon: BookText, color: 'bg-amber-900', componentKey: 'manifesti' },
+  manifesti: { id: 'manifesti', label: 'QR — Manifesti / Serie / Trappole / Crediti', icon: BookText, color: 'bg-amber-900', componentKey: 'manifesti' },
+  'qr-crediti': { id: 'qr-crediti', label: 'QR — Crediti deposito', icon: Wallet, color: 'bg-emerald-800', componentKey: 'qr-crediti' },
   nodi: { id: 'nodi', label: 'QR — Nodi', icon: Sparkles, color: 'bg-cyan-900', componentKey: 'nodi' },
   'innesco-timer': { id: 'innesco-timer', label: 'QR — Innesco timer', icon: Sparkles, color: 'bg-orange-900', componentKey: 'innesco-timer' },
   'qr-random-pool': { id: 'qr-random-pool', label: 'QR — Pool randomico', icon: QrCode, color: 'bg-rose-800', componentKey: 'qr-random-pool' },
@@ -164,7 +165,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       palette: 'indigo',
       order: 0,
       collapsed_default: false,
-      tool_ids: ['plot', 'pilotaggio', 'app-links', 'calendario-compiti', 'manifesti', 'nodi', 'innesco-timer', 'qr-random-pool', 'minigioco-pattern', 'qr-debug', 'scommesse', 'negozi-mercante', 'carte-collezionabili', 'tasks', 'contratti'],
+      tool_ids: ['plot', 'pilotaggio', 'app-links', 'calendario-compiti', 'manifesti', 'qr-crediti', 'nodi', 'innesco-timer', 'qr-random-pool', 'minigioco-pattern', 'qr-debug', 'scommesse', 'negozi-mercante', 'carte-collezionabili', 'tasks', 'contratti'],
     },
     {
       id: 'database',
