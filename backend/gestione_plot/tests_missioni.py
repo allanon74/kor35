@@ -235,16 +235,46 @@ class MissioniVisibilitaApiTests(APITestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), [])
 
-    def test_tab_evento_attivo_false_se_non_iscritto(self):
+    def _evento_attivo(self, user, pg):
+        return self._get(
+            user,
+            f"/api/plot/api/missioni/evento-attivo/?personaggio={pg.id}",
+        )
+
+    def test_tab_evento_attivo_anche_se_non_iscritto(self):
+        """La tab Tasks segue solo l'evento in corso; `iscritto` spiega l'elenco vuoto."""
         self.evento.started_at = timezone.now()
         self.evento.save(update_fields=["started_at", "updated_at"])
-        resp = self._get(
-            self.player,
-            f"/api/plot/api/missioni/evento-attivo/?personaggio={self.pg.id}",
-        )
+        resp = self._evento_attivo(self.player, self.pg)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["attivo"])
+        self.assertFalse(resp.json()["iscritto"])
+
+    def test_tab_evento_attivo_true_se_iscritto(self):
+        self.evento.started_at = timezone.now()
+        self.evento.save(update_fields=["started_at", "updated_at"])
+        self.evento.partecipanti.add(self.pg)
+        resp = self._evento_attivo(self.player, self.pg)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["attivo"])
+        self.assertTrue(resp.json()["iscritto"])
+        self.assertEqual(resp.json()["titolo"], "Evento tasks vis")
+
+    def test_tab_evento_attivo_false_se_mai_iniziato(self):
+        self.evento.partecipanti.add(self.pg)
+        resp = self._evento_attivo(self.player, self.pg)
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(resp.json()["attivo"])
-        self.assertFalse(resp.json()["iscritto"])
+
+    def test_tab_evento_attivo_false_dopo_termina(self):
+        now = timezone.now()
+        self.evento.partecipanti.add(self.pg)
+        self.evento.started_at = now - timedelta(hours=2)
+        self.evento.ended_at = now
+        self.evento.save(update_fields=["started_at", "ended_at", "updated_at"])
+        resp = self._evento_attivo(self.player, self.pg)
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["attivo"])
 
     def test_mie_visibile_se_partito_e_iscritto(self):
         self.evento.started_at = timezone.now()

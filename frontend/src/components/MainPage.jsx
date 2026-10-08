@@ -120,6 +120,9 @@ const AVAILABLE_TABS = [
 
 const DEFAULT_SHORTCUTS = ['inventario', 'abilita', 'messaggi', 'qr'];
 
+/** Polling stato evento per la tab Tasks: deve comparire/sparire in pochi secondi. */
+const TASKS_EVENTO_POLL_MS = 15000;
+
 const TabLoadingFallback = () => (
   <div className="h-full flex items-center justify-center bg-gray-900/40" role="status" aria-label="Caricamento scheda">
     <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500" />
@@ -189,7 +192,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const [stivaAccessSigla, setStivaAccessSigla] = useState(DEFAULT_STIVA_ACCESS_STAT_SIGLA);
   const [carteTabEnabled, setCarteTabEnabled] = useState(false);
   const [contrattiTabEnabled, setContrattiTabEnabled] = useState(false);
-  const [tasksEventoAttivo, setTasksEventoAttivo] = useState(false);
+  const [tasksEventoStato, setTasksEventoStato] = useState(null);
   const [poolVisibili, setPoolVisibili] = useState([]);
   const [poolTabsReady, setPoolTabsReady] = useState(false);
   const minigiocoIntentRef = useRef(null);
@@ -408,31 +411,50 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
 
   const tasksModuloOk = canAccessModulo('tasks');
 
+  /**
+   * Tab Tasks: visibile per tutta la durata di un evento in corso e nascosta appena
+   * viene terminato. Il polling è breve e si riallinea a ogni ritorno in primo piano;
+   * un errore di rete non nasconde la tab (si mantiene l'ultimo stato noto).
+   */
   useEffect(() => {
     let cancelled = false;
-    if (!tasksModuloOk) {
-      setTasksEventoAttivo(false);
-      return undefined;
-    }
-    if (!selectedCharacterId) {
-      setTasksEventoAttivo(false);
+    if (!tasksModuloOk || !selectedCharacterId) {
+      setTasksEventoStato(null);
       return undefined;
     }
     const load = async () => {
       try {
         const data = await getMissioniEventoAttivo(selectedCharacterId, onLogout);
-        if (!cancelled) setTasksEventoAttivo(!!data?.attivo);
+        if (cancelled) return;
+        setTasksEventoStato({
+          attivo: !!data?.attivo,
+          iscritto: data?.iscritto === null || data?.iscritto === undefined ? null : !!data.iscritto,
+          titolo: data?.titolo || null,
+          startedAt: data?.started_at || null,
+        });
       } catch {
-        if (!cancelled) setTasksEventoAttivo(false);
+        /* rete instabile: non nascondere la tab, si riprova al prossimo giro */
       }
     };
     load();
-    const timer = setInterval(load, 45000);
+    const timer = setInterval(load, TASKS_EVENTO_POLL_MS);
+    const onWake = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      load();
+    };
+    window.addEventListener('focus', onWake);
+    window.addEventListener('online', onWake);
+    document.addEventListener('visibilitychange', onWake);
     return () => {
       cancelled = true;
       clearInterval(timer);
+      window.removeEventListener('focus', onWake);
+      window.removeEventListener('online', onWake);
+      document.removeEventListener('visibilitychange', onWake);
     };
   }, [tasksModuloOk, onLogout, activeCampaign, selectedCharacterId]);
+
+  const tasksEventoAttivo = !!tasksEventoStato?.attivo;
 
   useEffect(() => {
     let cancelled = false;
@@ -1138,7 +1160,13 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                       initialViewMode={messaggiViewMode}
                   />
               );
-          } else if (tabDef.id === 'scommesse' || tabDef.id === 'tasks') {
+          } else if (tabDef.id === 'tasks') {
+              content = (
+                  <div className="flex min-h-full flex-col">
+                      <Component onLogout={onLogout} eventoStato={tasksEventoStato} />
+                  </div>
+              );
+          } else if (tabDef.id === 'scommesse') {
               content = (
                   <div className="flex min-h-full flex-col">
                       <Component onLogout={onLogout} />
@@ -1172,6 +1200,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     onLogout,
     messageComposeTarget,
     messaggiViewMode,
+    tasksEventoStato,
   ]);
 
   // --- CONTENUTO MENU (render function, evita remount continui della sidebar) ---

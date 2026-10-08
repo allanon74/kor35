@@ -264,18 +264,21 @@ class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="evento-attivo")
     def evento_attivo(self, request):
-        """True se esiste un evento ufficialmente in corso (Inizia senza Termina).
+        """``attivo`` = esiste un evento ufficialmente in corso (Inizia senza Termina).
 
-        Con ``?personaggio=`` è True solo se quel PG è iscritto all'evento in corso.
+        La tab Tasks del giocatore si basa solo su questo flag: deve comparire
+        sempre durante un evento in corso e sparire appena viene terminato.
+        Con ``?personaggio=`` la risposta aggiunge ``iscritto``, che serve al
+        pannello per spiegare un elenco vuoto (PG non fra i partecipanti).
         """
         ids = eventi_attivi_ids()
-        if not ids:
-            return Response({"attivo": False, "iscritto": False})
         ev = (
             Evento.objects.filter(id__in=ids)
             .order_by("started_at")
             .values("id", "titolo", "started_at")
             .first()
+            if ids
+            else None
         )
         if not ev:
             return Response({"attivo": False, "iscritto": False})
@@ -294,20 +297,12 @@ class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
         if not is_staff and pg.proprietario_id != user.id:
             return Response({"detail": "Non autorizzato."}, status=403)
         iscritto = Evento.objects.filter(id=ev["id"], partecipanti=pg).exists()
-        if not iscritto:
-            return Response({
-                "attivo": False,
-                "id": ev["id"],
-                "titolo": ev["titolo"],
-                "started_at": ev["started_at"],
-                "iscritto": False,
-            })
         return Response({
             "attivo": True,
             "id": ev["id"],
             "titolo": ev["titolo"],
             "started_at": ev["started_at"],
-            "iscritto": True,
+            "iscritto": iscritto,
         })
 
     @action(detail=False, methods=["get"], url_path="evento-tasks")
