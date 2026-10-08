@@ -712,6 +712,47 @@ def apply_pool_effect(
             },
         }
 
+    if tipo == RandomQrPoolEffect.TIPO_INVENTARIO:
+        if not effect.inventario_id:
+            return {
+                **base,
+                "tipo_modello": "pool_errore",
+                "messaggio": "Effetto inventario senza inventario collegato.",
+                "dati": {},
+            }
+        if not personaggio:
+            return {
+                "blocked": True,
+                "error": "Parametro personaggio_id richiesto per l'inventario.",
+            }
+        from .models import Inventario, Personaggio
+
+        inv = (
+            Inventario.objects.filter(pk=effect.inventario_id)
+            .exclude(id__in=Personaggio.all_objects.values_list("inventario_ptr_id", flat=True))
+            .first()
+        )
+        if inv is None:
+            return {
+                **base,
+                "tipo_modello": "pool_errore",
+                "messaggio": "Inventario non disponibile (manca o è lo zaino di un personaggio).",
+                "dati": {},
+            }
+        # Niente doppia scansione: il claim del pool è già consumato su questo QR.
+        # Visibilità e «prendi» restano quelli di payload_inventario_confermato.
+        dati = qr_logic.payload_inventario_confermato(
+            inventario=inv,
+            personaggio=personaggio,
+            request=request,
+        )
+        return {
+            **base,
+            "tipo_modello": "inventario",
+            "messaggio": inv.nome or "Inventario",
+            "dati": dati,
+        }
+
     if tipo == RandomQrPoolEffect.TIPO_OGGETTO_BASE:
         if not personaggio:
             return {

@@ -301,6 +301,78 @@ def permessi_oggetto_inventario_qr(personaggio, oggetto) -> Dict[str, Any]:
     }
 
 
+def payload_inventario_confermato(*, inventario, personaggio, request=None) -> Dict[str, Any]:
+    """
+    Contenuto di un inventario non-PG già confermato.
+
+    Stesse regole di una scansione inventario QR (materia/mod, oggetti craftati,
+    oggetti base, consumabili, crediti deposito). Usato sia dopo la doppia
+    scansione del QR inventario sia quando un pool random consegna l'inventario.
+    """
+    from .serializers import InventarioSerializer, OggettoSerializer
+
+    base = InventarioSerializer(inventario).data
+    ctx = {"request": request, "personaggio": personaggio}
+    oggetti_out = []
+    visti_ids = set()
+    for o in inventario.get_oggetti():
+        perm = permessi_oggetto_inventario_qr(personaggio, o)
+        if not perm["visibile_inventario_qr"]:
+            for pot in o.potenziamenti_installati.all():
+                if pot.pk in visti_ids:
+                    continue
+                perm_p = permessi_oggetto_inventario_qr(personaggio, pot)
+                if not perm_p["visibile_inventario_qr"]:
+                    continue
+                pd = OggettoSerializer(pot, context=ctx).data
+                pd.update(perm_p)
+                oggetti_out.append(pd)
+                visti_ids.add(pot.pk)
+            continue
+        od = OggettoSerializer(o, context=ctx).data
+        od.update(perm)
+        oggetti_out.append(od)
+        visti_ids.add(o.pk)
+        for pot in o.potenziamenti_installati.all():
+            if pot.pk in visti_ids:
+                continue
+            perm_p = permessi_oggetto_inventario_qr(personaggio, pot)
+            if not perm_p["visibile_inventario_qr"]:
+                continue
+            pd = OggettoSerializer(pot, context=ctx).data
+            pd.update(perm_p)
+            oggetti_out.append(pd)
+            visti_ids.add(pot.pk)
+
+    consumabili_out = []
+    for c in inventario.get_consumabili():
+        consumabili_out.append(
+            {
+                "id": str(c.id),
+                "nome": c.nome,
+                "descrizione": c.descrizione,
+                "formula": c.formula,
+                "utilizzi_rimanenti": c.utilizzi_rimanenti,
+                "data_scadenza": c.data_scadenza.isoformat() if c.data_scadenza else None,
+                "tessitura_id": c.tessitura_id,
+                "visibile_inventario_qr": True,
+                "puo_prendere": True,
+                "categoria_visibilita": "consumabile",
+            }
+        )
+
+    crediti_dep = inventario.crediti_deposito_contenuti or 0
+    return {
+        **base,
+        "oggetti": oggetti_out,
+        "consumabili": consumabili_out,
+        "crediti_deposito": str(crediti_dep),
+        "crediti_deposito_contenuti": str(crediti_dep),
+        "puo_prendere_crediti": bool(crediti_dep and crediti_dep > 0),
+        "inventario_qr_confermato": True,
+    }
+
+
 def qr_usi_info(qr) -> Dict[str, Any]:
     """Metadati usi residui per payload scan / acquisizione."""
     usi_max = getattr(qr, "usi_max", None)

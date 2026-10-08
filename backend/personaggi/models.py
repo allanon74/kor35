@@ -5668,6 +5668,7 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
     TIPO_ATTIVATA = "attivata"
     TIPO_NEGOZIO_MERCANTE = "negozio_mercante"
     TIPO_CREDITI = "crediti"
+    TIPO_INVENTARIO = "inventario"
     TIPO_CHOICES = (
         (TIPO_TESTO, "Testo"),
         (TIPO_NODO, "Nodo"),
@@ -5682,6 +5683,7 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
         (TIPO_ATTIVATA, "Attivata"),
         (TIPO_NEGOZIO_MERCANTE, "Negozio mercante"),
         (TIPO_CREDITI, "Crediti deposito"),
+        (TIPO_INVENTARIO, "Inventario"),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -5788,6 +5790,17 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
         blank=True,
         validators=[MinValueValidator(Decimal("0"))],
         help_text="Solo crediti: importo massimo.",
+    )
+    inventario = models.ForeignKey(
+        "Inventario",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pool_effetti",
+        help_text=(
+            "Effetto: alla scansione il giocatore apre questo inventario "
+            "(non un personaggio), con le stesse regole di visibilità degli inventari QR."
+        ),
     )
 
     class Meta:

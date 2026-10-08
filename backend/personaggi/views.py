@@ -1861,68 +1861,13 @@ class QrCodeDetailView(APIView):
                     },
                     status=status.HTTP_200_OK,
                 )
-            # fase confermato: payload completo con permessi per oggetto
+            # fase confermato: stesse regole di payload_inventario_confermato
             model_type = "inventario"
-            base = InventarioSerializer(inv).data
-            oggetti_out = []
-            visti_ids = set()
-            for o in inv.get_oggetti():
-                perm = qr_logic.permessi_oggetto_inventario_qr(scanner_pg, o)
-                if not perm["visibile_inventario_qr"]:
-                    # Anche se l'host non è visibile, mostra materie/mod montate prendibili
-                    for pot in o.potenziamenti_installati.all():
-                        if pot.pk in visti_ids:
-                            continue
-                        perm_p = qr_logic.permessi_oggetto_inventario_qr(scanner_pg, pot)
-                        if not perm_p["visibile_inventario_qr"]:
-                            continue
-                        pd = OggettoSerializer(pot, context={"request": request, "personaggio": scanner_pg}).data
-                        pd.update(perm_p)
-                        oggetti_out.append(pd)
-                        visti_ids.add(pot.pk)
-                    continue
-                od = OggettoSerializer(o, context={"request": request, "personaggio": scanner_pg}).data
-                od.update(perm)
-                oggetti_out.append(od)
-                visti_ids.add(o.pk)
-                for pot in o.potenziamenti_installati.all():
-                    if pot.pk in visti_ids:
-                        continue
-                    perm_p = qr_logic.permessi_oggetto_inventario_qr(scanner_pg, pot)
-                    if not perm_p["visibile_inventario_qr"]:
-                        continue
-                    pd = OggettoSerializer(pot, context={"request": request, "personaggio": scanner_pg}).data
-                    pd.update(perm_p)
-                    oggetti_out.append(pd)
-                    visti_ids.add(pot.pk)
-
-            consumabili_out = []
-            for c in inv.get_consumabili():
-                consumabili_out.append(
-                    {
-                        "id": str(c.id),
-                        "nome": c.nome,
-                        "descrizione": c.descrizione,
-                        "formula": c.formula,
-                        "utilizzi_rimanenti": c.utilizzi_rimanenti,
-                        "data_scadenza": c.data_scadenza.isoformat() if c.data_scadenza else None,
-                        "tessitura_id": c.tessitura_id,
-                        "visibile_inventario_qr": True,
-                        "puo_prendere": True,
-                        "categoria_visibilita": "consumabile",
-                    }
-                )
-
-            crediti_dep = inv.crediti_deposito_contenuti or 0
-            data = {
-                **base,
-                "oggetti": oggetti_out,
-                "consumabili": consumabili_out,
-                "crediti_deposito": str(crediti_dep),
-                "crediti_deposito_contenuti": str(crediti_dep),
-                "puo_prendere_crediti": bool(crediti_dep and crediti_dep > 0),
-                "inventario_qr_confermato": True,
-            }
+            data = qr_logic.payload_inventario_confermato(
+                inventario=inv,
+                personaggio=scanner_pg,
+                request=request,
+            )
 
         else:
             model_type = "a_vista"

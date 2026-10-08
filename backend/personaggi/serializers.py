@@ -3122,6 +3122,9 @@ class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
     negozio_mercante_nome = serializers.CharField(
         source="negozio_mercante.nome", read_only=True, allow_null=True
     )
+    inventario_nome = serializers.CharField(
+        source="inventario.nome", read_only=True, allow_null=True
+    )
 
     class Meta:
         model = RandomQrPoolEffect
@@ -3155,6 +3158,8 @@ class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
             "negozio_mercante_nome",
             "crediti_importo_min",
             "crediti_importo_max",
+            "inventario",
+            "inventario_nome",
         )
         read_only_fields = ("id",)
 
@@ -3175,6 +3180,7 @@ class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
             E.TIPO_CERIMONIALE: ("cerimoniale", "Cerimoniale"),
             E.TIPO_ATTIVATA: ("attivata", "Attivata"),
             E.TIPO_NEGOZIO_MERCANTE: ("negozio_mercante", "Negozio mercante"),
+            E.TIPO_INVENTARIO: ("inventario", "Inventario"),
         }
         if tipo in required:
             field, label = required[tipo]
@@ -3189,6 +3195,21 @@ class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
             if not val:
                 raise serializers.ValidationError(
                     {field: f"{label} obbligatorio per tipo «{tipo}»."}
+                )
+        if tipo == E.TIPO_INVENTARIO:
+            inv = attrs.get("inventario")
+            if inv is None and self.instance is not None:
+                inv = getattr(self.instance, "inventario", None)
+            inv_id = getattr(inv, "pk", inv)
+            from .models import Personaggio
+
+            if inv_id and Personaggio.all_objects.filter(inventario_ptr_id=inv_id).exists():
+                raise serializers.ValidationError(
+                    {
+                        "inventario": (
+                            "Usa un inventario contenitore, non lo zaino di un personaggio."
+                        )
+                    }
                 )
         if tipo == E.TIPO_CREDITI:
             lo = attrs.get("crediti_importo_min")

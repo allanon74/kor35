@@ -25,6 +25,7 @@ import {
   staffGetInfusioni,
   staffGetCerimoniali,
   staffGetNegoziMercante,
+  staffGetInventari,
 } from '../../api';
 
 const defaultPesiDiff = () => ({ 1: 0, 2: 0, 3: 0, 4: 1 });
@@ -166,6 +167,7 @@ const emptyEffect = () => ({
   cerimoniale: '',
   attivata: '',
   negozio_mercante: '',
+  inventario: '',
   crediti_importo_min: '',
   crediti_importo_max: '',
 });
@@ -176,6 +178,7 @@ const effectDetailLabel = (eff) =>
   || eff.serie_nome
   || eff.manifesto_nome
   || eff.negozio_mercante_nome
+  || eff.inventario_nome
   || eff.oggetto_base_nome
   || eff.tessitura_nome
   || eff.infusione_nome
@@ -239,6 +242,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
   const [infusioni, setInfusioni] = useState([]);
   const [cerimoniali, setCerimoniali] = useState([]);
   const [negozi, setNegozi] = useState([]);
+  const [inventari, setInventari] = useState([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -264,6 +268,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
       infData,
       cerData,
       negoziData,
+      inventariData,
     ] = await Promise.all([
       staffGetSerieCollezioni(onLogout),
       staffGetNodi(onLogout),
@@ -274,6 +279,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
       staffGetInfusioni(onLogout, { page_size: 500 }),
       staffGetCerimoniali(onLogout, { page_size: 500 }),
       staffGetNegoziMercante(onLogout),
+      staffGetInventari(onLogout),
     ]);
     setSerieList(Array.isArray(serie) ? serie : serie?.results || []);
     setNodi(Array.isArray(nodiData) ? nodiData : nodiData?.results || []);
@@ -294,6 +300,8 @@ const RandomQrPoolManager = ({ onLogout }) => {
     );
     const negList = Array.isArray(negoziData) ? negoziData : negoziData?.results || [];
     setNegozi(negList.filter((n) => n.attivo !== false));
+    const invList = Array.isArray(inventariData) ? inventariData : inventariData?.results || [];
+    setInventari(invList.filter((inv) => !inv.is_personaggio));
   }, [onLogout]);
 
   useEffect(() => {
@@ -444,6 +452,10 @@ const RandomQrPoolManager = ({ onLogout }) => {
         negozio_mercante:
           tipo === 'negozio_mercante' && effectForm.negozio_mercante
             ? effectForm.negozio_mercante
+            : null,
+        inventario:
+          tipo === 'inventario' && effectForm.inventario
+            ? Number(effectForm.inventario)
             : null,
         crediti_importo_min:
           tipo === 'crediti' && effectForm.crediti_importo_min !== ''
@@ -786,6 +798,7 @@ const RandomQrPoolManager = ({ onLogout }) => {
                         <option value="serie">Serie</option>
                         <option value="manifesto">Manifesto (anche condizionale)</option>
                         <option value="negozio_mercante">Negozio mercante</option>
+                        <option value="inventario">Inventario</option>
                         <option value="oggetto_base">Oggetto (listino Accademia)</option>
                         <option value="da_infusione">Materia/Mod (da Infusione)</option>
                         <option value="tessitura">Tessitura</option>
@@ -864,6 +877,26 @@ const RandomQrPoolManager = ({ onLogout }) => {
                             <option key={m.id} value={m.id}>{m.nome}</option>
                           ))}
                         </select>
+                      )}
+                      {effectForm.tipo === 'inventario' && (
+                        <div className="sm:col-span-2 space-y-1">
+                          <select
+                            className="w-full min-h-11 bg-gray-900 border border-gray-600 rounded p-2"
+                            value={effectForm.inventario}
+                            onChange={(e) => setEffectForm((f) => ({ ...f, inventario: e.target.value }))}
+                          >
+                            <option value="">Seleziona inventario…</option>
+                            {inventari.map((inv) => (
+                              <option key={inv.id} value={inv.id}>{inv.nome}</option>
+                            ))}
+                          </select>
+                          <p className="text-[11px] text-gray-500 leading-snug">
+                            Il giocatore apre questo inventario. Valgono le stesse regole degli altri
+                            inventari: materia solo con Aura Mondana - Assemblatore e l&apos;aura
+                            dell&apos;oggetto almeno a 1, mod con Aura Tecnologica e la stessa aura,
+                            oggetti da listino sempre visibili.
+                          </p>
+                        </div>
                       )}
                       {effectForm.tipo === 'negozio_mercante' && (
                         <select

@@ -24,6 +24,7 @@ const api = vi.hoisted(() => ({
   staffGetInfusioni: vi.fn(),
   staffGetCerimoniali: vi.fn(),
   staffGetNegoziMercante: vi.fn(),
+  staffGetInventari: vi.fn(),
 }));
 
 vi.mock('../../api', () => api);
@@ -97,6 +98,7 @@ describe('RandomQrPoolManager scan overlay e cooldown', () => {
     api.staffGetInfusioni.mockResolvedValue([]);
     api.staffGetCerimoniali.mockResolvedValue([]);
     api.staffGetNegoziMercante.mockResolvedValue([]);
+    api.staffGetInventari.mockResolvedValue([]);
   });
 
   it('sulla tab QR mostra il cooldown e apre lo scanner in portal sopra il modal', async () => {

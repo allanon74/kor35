@@ -855,3 +855,132 @@ class MinigiocoPesiDifficoltaTests(TestCase):
 
         d = qr_minigioco.scegli_difficolta_da_pesi(cfg, Rng())
         self.assertEqual(d, 3)
+
+
+class RandomQrPoolInventarioEffectTests(TestCase):
+    """Effetto pool inventario: stesse regole di visibilità di un inventario QR."""
+
+    def setUp(self):
+        from personaggi.models import (
+            AURA,
+            CARATTERISTICA,
+            Inventario,
+            Oggetto,
+            OggettoBase,
+            OggettoInInventario,
+            Punteggio,
+            TIPO_OGGETTO_FISICO,
+            TIPO_OGGETTO_MATERIA,
+            TIPO_OGGETTO_MOD,
+        )
+
+        self.AURA = AURA
+        self.CARATTERISTICA = CARATTERISTICA
+        self.user = User.objects.create_user(username="poolinv", password="pass")
+        self.pg = Personaggio.objects.create(nome="PG Pool Inv", proprietario=self.user)
+        self.ams = Punteggio.objects.create(nome="Aura Mondana - Assemblatore", sigla="AMS", tipo=AURA)
+        self.ate = Punteggio.objects.create(nome="Aura Tecnologica", sigla="ATE", tipo=AURA)
+        self.aura = Punteggio.objects.create(nome="Aura Oggetto", sigla="AOG", tipo=AURA)
+        self.altra = Punteggio.objects.create(nome="Aura Altra", sigla="AAL", tipo=AURA)
+        self.inv = Inventario.objects.create(nome="Cassa pool")
+        self.base = Oggetto.objects.create(
+            nome="Listino",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            oggetto_base_generatore=OggettoBase.objects.create(
+                nome="Tpl listino", tipo_oggetto=TIPO_OGGETTO_FISICO, costo=1
+            ),
+        )
+        self.materia = Oggetto.objects.create(
+            nome="Scheggia", tipo_oggetto=TIPO_OGGETTO_MATERIA, aura=self.aura
+        )
+        self.materia_altra = Oggetto.objects.create(
+            nome="Scheggia altra", tipo_oggetto=TIPO_OGGETTO_MATERIA, aura=self.altra
+        )
+        self.mod = Oggetto.objects.create(
+            nome="Chip", tipo_oggetto=TIPO_OGGETTO_MOD, aura=self.aura, is_tecnologico=True
+        )
+        self.craft = Oggetto.objects.create(
+            nome="Reliquia", tipo_oggetto=TIPO_OGGETTO_FISICO, aura=self.aura
+        )
+        for og in (self.base, self.materia, self.materia_altra, self.mod, self.craft):
+            OggettoInInventario.objects.create(oggetto=og, inventario=self.inv)
+        self.pool = RandomQrPool.objects.create(nome="Pool Inv", attivo=True)
+        self.qr = QrCode.objects.create()
+        RandomQrPoolMembership.objects.create(pool=self.pool, qr_code=self.qr)
+        self.eff = RandomQrPoolEffect.objects.create(
+            pool=self.pool,
+            tipo=RandomQrPoolEffect.TIPO_INVENTARIO,
+            frequenza=1,
+            inventario=self.inv,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def _grant(self, pg, punteggio, valore=1):
+        from personaggi.models import Abilita, PersonaggioAbilita, Punteggio, abilita_punteggio
+
+        n = getattr(self, "_grant_n", 0) + 1
+        self._grant_n = n
+        car = Punteggio.objects.create(
+            nome=f"Car pool inv {n}",
+            sigla=f"Z{n:02d}",
+            tipo=self.CARATTERISTICA,
+        )
+        ab = Abilita.objects.create(
+            nome=f"Ab {punteggio.sigla} {pg.id}",
+            caratteristica=car,
+            costo_pc=0,
+            costo_crediti=0,
+        )
+        abilita_punteggio.objects.create(abilita=ab, punteggio=punteggio, valore=valore)
+        PersonaggioAbilita.objects.create(personaggio=pg, abilita=ab)
+
+    def _scan(self):
+        with patch("personaggi.qr_random_pool.scegli_effetto", return_value=self.eff):
+            return self.client.get(
+                f"/api/personaggi/api/qrcode/{self.qr.id}/",
+                {"personaggio_id": self.pg.id},
+            )
+
+    def _nomi(self, response):
+        return {o["nome"] for o in response.data["dati"]["oggetti"]}
+
+    def test_senza_aure_solo_oggetto_base(self):
+        r = self._scan()
+        self.assertEqual(r.status_code, 200, getattr(r, "data", r.content))
+        self.assertEqual(r.data["tipo_modello"], "inventario")
+        self.assertEqual(r.data["dati"]["nome"], "Cassa pool")
+        self.assertEqual(self._nomi(r), {"Listino"})
+
+    def test_materia_e_craft_con_assemblatore_e_aura(self):
+        self._grant(self.pg, self.ams)
+        self._grant(self.pg, self.aura)
+        r = self._scan()
+        self.assertEqual(r.status_code, 200, r.data)
+        nomi = self._nomi(r)
+        self.assertIn("Listino", nomi)
+        self.assertIn("Scheggia", nomi)
+        self.assertIn("Reliquia", nomi)
+        self.assertNotIn("Scheggia altra", nomi)
+        self.assertNotIn("Chip", nomi)
+        row = next(o for o in r.data["dati"]["oggetti"] if o["nome"] == "Scheggia")
+        self.assertTrue(row["visibile_inventario_qr"])
+        self.assertTrue(row["puo_prendere"])
+
+    def test_mod_con_ate_e_aura(self):
+        user2 = User.objects.create_user(username="poolinv2", password="pass")
+        pg2 = Personaggio.objects.create(nome="PG Mod", proprietario=user2)
+        self._grant(pg2, self.ate)
+        self._grant(pg2, self.aura)
+        self.client.force_authenticate(user2)
+        with patch("personaggi.qr_random_pool.scegli_effetto", return_value=self.eff):
+            r = self.client.get(
+                f"/api/personaggi/api/qrcode/{self.qr.id}/",
+                {"personaggio_id": pg2.id},
+            )
+        self.assertEqual(r.status_code, 200, r.data)
+        nomi = self._nomi(r)
+        self.assertIn("Chip", nomi)
+        self.assertIn("Listino", nomi)
+        self.assertNotIn("Scheggia", nomi)
+        self.assertNotIn("Reliquia", nomi)
