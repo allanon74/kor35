@@ -43,6 +43,7 @@ export function personaggiExtraFiltersActive(filters) {
   if (!filters) return false;
   return (
     filters.tipo !== 'all' ||
+    Boolean(filters.evento) ||
     Boolean(filters.era) ||
     Boolean(filters.carriera) ||
     (filters.morto && filters.morto !== 'vivo')

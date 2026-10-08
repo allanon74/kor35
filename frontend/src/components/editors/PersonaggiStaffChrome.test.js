@@ -70,6 +70,13 @@ describe('PersonaggiStaffChrome', () => {
     expect(personaggiExtraFiltersActive({ tipo: 'all', era: '3', carriera: '', morto: 'vivo' })).toBe(true);
     expect(personaggiExtraFiltersActive({ tipo: 'all', era: '', carriera: '', morto: 'morto' })).toBe(true);
   });
+
+  it('personaggiExtraFiltersActive segnala il filtro iscritti all evento', () => {
+    const base = { q: '', evento: '', tipo: 'all', era: '', carriera: '', morto: 'vivo' };
+    expect(personaggiExtraFiltersActive(base)).toBe(false);
+    expect(personaggiExtraFiltersActive({ ...base, evento: '12' })).toBe(true);
+    expect(personaggiExtraFiltersActive({ ...base, q: 'aiace' })).toBe(false);
+  });
 });
 
 describe('colonne elenco Personaggi su mobile', () => {
