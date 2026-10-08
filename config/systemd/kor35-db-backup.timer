@@ -1,12 +1,11 @@
 [Unit]
-Description=KOR35 - Scheduler backup DB giornaliero
+Description=KOR35 - Scheduler backup DB giornaliero (06:00 Europe/Rome)
 
 [Timer]
-# Ogni giorno alle 03:30 UTC (modifica a piacere)
-OnCalendar=*-*-* 03:30:00 UTC
+# Ogni giorno alle 06:00 ora locale del server (Europe/Rome su prod)
+OnCalendar=*-*-* 06:00:00
 Persistent=true
-RandomizedDelaySec=10m
+RandomizedDelaySec=0
 
 [Install]
 WantedBy=timers.target
-

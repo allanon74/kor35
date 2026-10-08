@@ -12,7 +12,8 @@ WorkingDirectory=/home/pi/kor35-replica
 
 # Backup giornalieri + archivio mensile persistente
 Environment=KOR35_DB_BACKUP_DIR=/home/pi/backups/kor35/db
-Environment=KOR35_DB_BACKUP_RETENTION_DAYS=15
+Environment=KOR35_DB_BACKUP_KEEP=15
+Environment=KOR35_DB_BACKUP_RETENTION_DAYS=0
 Environment=KOR35_DB_BACKUP_ENABLE_MONTHLY_ARCHIVE=1
 Environment=KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR=/home/pi/backups/kor35/db/monthly
 

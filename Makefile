@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: android-apk android-sync android-open android-path android-doctor android-reset-studio help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push check-media repair-rubriche-media sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls install-mirror-noip mirror-noip-update mirror-pi-install-noip install-mirror-tunnel mirror-tunnel-up mirror-tunnel-status install-prod-mirror-tunnel prod-install-mirror-tunnel mirror-tunnel-pair mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db prod-turn-prepare pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart timer-dispatch timer-dispatch-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run bootstrap-kor35-mse-template bootstrap-kor35-mse-template-dry-run
+.PHONY: android-apk android-sync android-open android-path android-doctor android-reset-studio help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push check-media repair-rubriche-media sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls install-mirror-noip mirror-noip-update mirror-pi-install-noip install-mirror-tunnel mirror-tunnel-up mirror-tunnel-status install-prod-mirror-tunnel prod-install-mirror-tunnel mirror-tunnel-pair mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db install-prod-db-backup prod-turn-prepare pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart timer-dispatch timer-dispatch-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run bootstrap-kor35-mse-template bootstrap-kor35-mse-template-dry-run
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -117,7 +117,8 @@ help:
 	@echo "    make mirror-tunnel-pair                             # galleria mirror.kor35.it (prod+Pi)"
 	@echo ""
 	@echo "Backup:"
-	@echo "  make backup-db ENV=prod      # dump DB su file + rotazione (vedi scripts/backup_db_daily.sh)"
+	@echo "  make backup-db ENV=prod      # dump DB su file + rotazione (ultimi 10; vedi scripts/backup_db_daily.sh)"
+	@echo "  sudo make install-prod-db-backup ENV=prod  # su prod: timer systemd 06:00 + keep 10"
 	@echo "  make prod-turn-prepare        # sul droplet via SSH: TURN_AUTH_SECRET + ufw 3478/relay"
 	@echo ""
 	@echo "Wiki staff (sorgenti docs/wiki/staff/):"
@@ -492,8 +493,19 @@ diagnose-carte:
 cleanup-legacy:
 	./scripts/cleanup_legacy_wsl_stack.sh
 
+# Dump manuale. Su prod la dir è /var/backups/kor35/db (root:deploy 770 dopo install-prod-db-backup).
+# Se vedi Permission denied: sudo ./scripts/install_prod_db_backup.sh  (sistema i permessi)
+# oppure: sudo ./scripts/backup_db_daily.sh --env prod
 backup-db:
 	./scripts/backup_db_daily.sh --env "$(ENV)"
+
+# Su produzione: installa/abilita timer systemd backup DB (06:00, keep=10).
+# Opzioni: BACKUP_KEEP=10 BACKUP_CALENDAR='*-*-* 06:00:00' RUN_NOW=1
+install-prod-db-backup:
+	sudo ./scripts/install_prod_db_backup.sh \
+		$(if $(BACKUP_KEEP),--keep $(BACKUP_KEEP),) \
+		$(if $(BACKUP_CALENDAR),--calendar "$(BACKUP_CALENDAR)",) \
+		$(if $(filter 1,$(RUN_NOW)),--run-now,)
 
 prod-turn-prepare:
 	ssh -o BatchMode=yes kor35-prod 'bash -s' < scripts/prepare_prod_turn.sh
