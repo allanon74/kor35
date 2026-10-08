@@ -2898,6 +2898,86 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
             return Response({'detail': result.error}, status=status_code)
         return Response(self._serialize_detail(result.personaggio, request))
 
+    @action(detail=True, methods=['get'], url_path='tecniche-catalogo')
+    def tecniche_catalogo(self, request, pk=None):
+        """Elenco compatto di infusioni/tessiture/cerimoniali non ancora posseduti."""
+        from personaggi.tecniche_personaggio_ops import (
+            TipoTecnicaNonValido,
+            catalogo_tecniche_per_staff,
+        )
+
+        personaggio = self.get_object()
+        tipo = request.query_params.get('tipo') or ''
+        try:
+            rows = catalogo_tecniche_per_staff(
+                personaggio,
+                tipo,
+                request,
+                q=request.query_params.get('q') or '',
+            )
+        except TipoTecnicaNonValido as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(rows)
+
+    @action(detail=True, methods=['post'], url_path='assegna-tecnica')
+    def assegna_tecnica(self, request, pk=None):
+        """Assegna un'infusione, tessitura o cerimoniale (acquisto con regole, oppure omaggio)."""
+        from personaggi.tecniche_personaggio_ops import (
+            TipoTecnicaNonValido,
+            acquisisci_tecnica_personaggio,
+        )
+
+        personaggio = self.get_object()
+        tecnica_id = request.data.get('tecnica_id')
+        tipo = request.data.get('tipo')
+        motivo = (request.data.get('motivo') or 'Assegnazione tecnica staff').strip()
+        omaggio = request.data.get('omaggio') in (True, 'true', '1', 1, 'si', 'sì')
+        if not tecnica_id:
+            return Response({'detail': 'tecnica_id obbligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            result = acquisisci_tecnica_personaggio(
+                personaggio,
+                tipo,
+                tecnica_id,
+                request,
+                omaggio=omaggio,
+                motivo_staff=motivo,
+            )
+        except TipoTecnicaNonValido as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        if not result.ok:
+            return Response({'detail': result.error}, status=result.status)
+        fresco = self.get_object()
+        return Response(self._serialize_detail(fresco, request))
+
+    @action(detail=True, methods=['post'], url_path='rimuovi-tecnica')
+    def rimuovi_tecnica(self, request, pk=None):
+        """Revoca una tecnica posseduta. Rimborsa i crediti pagati; ignora il blocco evento."""
+        from personaggi.tecniche_personaggio_ops import (
+            TipoTecnicaNonValido,
+            revoca_tecnica_personaggio,
+        )
+
+        personaggio = self.get_object()
+        tecnica_id = request.data.get('tecnica_id')
+        tipo = request.data.get('tipo')
+        motivo = (request.data.get('motivo') or 'Revoca tecnica staff').strip()
+        if not tecnica_id:
+            return Response({'detail': 'tecnica_id obbligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            result = revoca_tecnica_personaggio(
+                personaggio,
+                tipo,
+                tecnica_id,
+                motivo_staff=motivo,
+            )
+        except TipoTecnicaNonValido as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        if not result.ok:
+            return Response({'detail': result.error}, status=result.status)
+        fresco = self.get_object()
+        return Response(self._serialize_detail(fresco, request))
+
     @action(detail=True, methods=['post'], url_path='assegna-modello-aura')
     def assegna_modello_aura(self, request, pk=None):
         """Assegna o sostituisce il modello di aura per un'aura (intervento staff)."""

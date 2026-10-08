@@ -3059,6 +3059,45 @@ export const staffPersonaggioRimuoviAbilita = (personaggioId, abilitaId, { motiv
     }),
   }, onLogout);
 
+/** Staff: catalogo tecniche non possedute (infusione | tessitura | cerimoniale). */
+export const staffPersonaggioCatalogoTecniche = (personaggioId, tipo, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/personaggi/${personaggioId}/tecniche-catalogo/?tipo=${encodeURIComponent(tipo)}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+/** Staff: assegna un'infusione, tessitura o cerimoniale (acquisto o omaggio). */
+export const staffPersonaggioAssegnaTecnica = (
+  personaggioId,
+  { tipo, tecnicaId, motivo, omaggio } = {},
+  onLogout,
+) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/assegna-tecnica/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      tipo,
+      tecnica_id: tecnicaId,
+      motivo: motivo || '',
+      omaggio: !!omaggio,
+    }),
+  }, onLogout);
+
+/** Staff: revoca una tecnica posseduta e rimborsa i crediti pagati. */
+export const staffPersonaggioRimuoviTecnica = (
+  personaggioId,
+  { tipo, tecnicaId, motivo } = {},
+  onLogout,
+) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/rimuovi-tecnica/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      tipo,
+      tecnica_id: tecnicaId,
+      motivo: motivo || '',
+    }),
+  }, onLogout);
+
 /** Staff: assegna o sostituisce modello aura per un personaggio. */
 export const staffPersonaggioAssegnaModelloAura = (personaggioId, modelloAuraId, { motivo } = {}, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/assegna-modello-aura/`, {

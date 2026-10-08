@@ -4923,6 +4923,9 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
     carriere_membership = serializers.SerializerMethodField()
     risorse_pool_ui = serializers.SerializerMethodField()
     abilita_possedute = serializers.SerializerMethodField()
+    infusioni_possedute = serializers.SerializerMethodField()
+    tessiture_possedute = serializers.SerializerMethodField()
+    cerimoniali_posseduti = serializers.SerializerMethodField()
     razza_abilita = serializers.SerializerMethodField()
     scheda_modifica_libera = serializers.SerializerMethodField()
     punteggi_base = serializers.JSONField(read_only=True)
@@ -4971,7 +4974,9 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'watch_enabled', 'prestigio', 'badge_instafame',
             'punti_luminosi', 'punti_oscuri', 'punti_grigi',
             'avatar_url', 'qrcode_id', 'qrcode_testo',
-            'carriere_membership', 'risorse_pool_ui', 'abilita_possedute', 'razza_abilita',
+            'carriere_membership', 'risorse_pool_ui', 'abilita_possedute',
+            'infusioni_possedute', 'tessiture_possedute', 'cerimoniali_posseduti',
+            'razza_abilita',
             'scheda_modifica_libera', 'punteggi_base', 'modelli_aura', 'can_edit_razza',
             'movimenti_credito', 'movimenti_pc',
             'oggetti_inventario', 'eventi_partecipati', 'watch_binding', 'impostazioni_ui',
@@ -4985,7 +4990,9 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'tipologia_nome', 'giocante', 'campagna_nome',
             'era_nome', 'prefettura_nome', 'avatar_url',
             'qrcode_id', 'qrcode_testo', 'carriere_membership',
-            'risorse_pool_ui', 'abilita_possedute', 'razza_abilita', 'scheda_modifica_libera',
+            'risorse_pool_ui', 'abilita_possedute',
+            'infusioni_possedute', 'tessiture_possedute', 'cerimoniali_posseduti',
+            'razza_abilita', 'scheda_modifica_libera',
             'punteggi_base', 'modelli_aura', 'can_edit_razza',
             'movimenti_credito', 'movimenti_pc',
         )
@@ -5058,6 +5065,21 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
         )
         ctx = {**self.context, 'personaggio': obj}
         return PersonaggioAbilitaStaffSerializer(pivots, many=True, context=ctx).data
+
+    def get_infusioni_possedute(self, obj):
+        from personaggi.tecniche_personaggio_ops import serializza_tecniche_possedute
+
+        return serializza_tecniche_possedute(obj, "infusione")
+
+    def get_tessiture_possedute(self, obj):
+        from personaggi.tecniche_personaggio_ops import serializza_tecniche_possedute
+
+        return serializza_tecniche_possedute(obj, "tessitura")
+
+    def get_cerimoniali_posseduti(self, obj):
+        from personaggi.tecniche_personaggio_ops import serializza_tecniche_possedute
+
+        return serializza_tecniche_possedute(obj, "cerimoniale")
 
     def get_scheda_modifica_libera(self, obj):
         from personaggi.modificabilita import personaggio_scheda_modifica_libera
