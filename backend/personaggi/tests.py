@@ -1442,7 +1442,10 @@ class PersonaggioStaffRetrieveTests(APITestCase):
         self.assertEqual(body.get("professioni"), "Scout")
 
     def test_staff_assegna_e_rimuovi_abilita(self):
-        ab = Abilita.objects.create(nome="Staff Test Skill", costo_pc=0, costo_crediti=0)
+        caratt = Punteggio.objects.create(nome="Car Staff Skill", sigla="CSS", tipo=CARATTERISTICA)
+        ab = Abilita.objects.create(
+            nome="Staff Test Skill", caratteristica=caratt, costo_pc=0, costo_crediti=0
+        )
         base = f"/api/personaggi/api/staff/personaggi/{self.pg.id}"
 
         res_add = self.client.post(
