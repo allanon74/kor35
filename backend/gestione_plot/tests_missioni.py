@@ -3,20 +3,29 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from gestione_plot.missioni_service import applica_fattore_korp, calcola_ricompensa_base
+from gestione_plot.missioni_service import (
+    applica_fattore_korp,
+    calcola_ricompensa_base,
+    riepilogo_premi_evento,
+    totali_task_evento,
+)
 from gestione_plot.models import Evento, Missione, MissioneEvento
+from gestione_plot.serializers import EventoSerializer
 from personaggi.campagna_moduli import MODULO_ACCESSO_OPEN, MODULO_TASKS, apply_moduli_accesso
 from personaggi.models import (
     CAMPAGNA_ROLE_MASTER,
     CAMPAGNA_ROLE_PLAYER,
     CAMPAGNA_ROLE_STAFFER,
+    TIER_3,
     Campagna,
     CampagnaUtente,
+    Carriera,
     Personaggio,
+    TipoCarriera,
     TipologiaPersonaggio,
 )
 
@@ -76,6 +85,118 @@ class MissioniRiepilogoLogicTests(SimpleTestCase):
         non = [m for m in missioni if m.korp_id != korp_id and not m.esclusiva]
         self.assertEqual(len(di), 1)
         self.assertEqual(sum(m.reward_crediti for m in non), Decimal("25"))  # 20 + 5, non 50 esclusiva
+
+
+class MissioniRiepilogoTotaliTests(TestCase):
+    """Specchietto staff: righe KORP con totale + totali complessivi dell'evento."""
+
+    def setUp(self):
+        tipo_korp, _ = TipoCarriera.objects.get_or_create(
+            codice="korp", defaults={"nome": "KORP"}
+        )
+        self.apex = Carriera.objects.create(
+            nome="APEX",
+            tipo=TIER_3,
+            tipo_carriera=tipo_korp,
+            fattore_task_crediti=Decimal("2.00"),
+            fattore_task_prestigio=Decimal("3.00"),
+        )
+        self.fame = Carriera.objects.create(
+            nome="FAME",
+            tipo=TIER_3,
+            tipo_carriera=tipo_korp,
+        )
+        now = timezone.now()
+        self.evento = Evento.objects.create(
+            titolo="Evento riepilogo",
+            data_inizio=now,
+            data_fine=now + timedelta(days=1),
+        )
+
+    def _task(self, titolo, *, korp=None, cr="0", pr=0, esclusiva=False, attiva=True,
+              link_attiva=True):
+        missione = Missione.objects.create(
+            titolo=titolo,
+            korp=korp,
+            esclusiva=esclusiva,
+            attiva=attiva,
+            reward_crediti=Decimal(cr),
+            reward_prestigio=pr,
+        )
+        MissioneEvento.objects.create(
+            missione=missione, evento=self.evento, attiva=link_attiva
+        )
+        return missione
+
+    def _riga(self, korp):
+        righe = riepilogo_premi_evento(self.evento)
+        return next(r for r in righe if r["korp_id"] == korp.id)
+
+    def test_totale_riga_somma_korp_e_altre_con_fattori(self):
+        self._task("Apex uno", korp=self.apex, cr="10", pr=2)
+        self._task("Generica", cr="5", pr=1)
+        riga = self._riga(self.apex)
+        self.assertEqual(riga["crediti_korp"], Decimal("20.00"))  # 10 × 2.00
+        self.assertEqual(riga["prestigio_korp"], 6)  # 2 × 3.00
+        self.assertEqual(riga["crediti_non_korp"], Decimal("5.00"))
+        self.assertEqual(riga["prestigio_non_korp"], 1)
+        self.assertEqual(riga["crediti_totale"], Decimal("25.00"))
+        self.assertEqual(riga["prestigio_totale"], 7)
+        self.assertEqual(riga["n_task_totale"], 2)
+
+    def test_totale_riga_esclude_esclusive_di_altre_korp(self):
+        self._task("Fame esclusiva", korp=self.fame, cr="50", pr=9, esclusiva=True)
+        self._task("Generica", cr="5", pr=1)
+        riga = self._riga(self.apex)
+        self.assertEqual(riga["crediti_totale"], Decimal("5.00"))
+        self.assertEqual(riga["prestigio_totale"], 1)
+        self.assertEqual(riga["n_task_totale"], 1)
+
+    def test_totali_evento_base_e_massimo(self):
+        self._task("Apex uno", korp=self.apex, cr="10", pr=2)
+        self._task("Generica", cr="5", pr=1)
+        totali = totali_task_evento(self.evento)
+        self.assertEqual(totali["n_task_collegate"], 2)
+        self.assertEqual(totali["n_task_attive"], 2)
+        # Base: premi di catalogo, senza moltiplicatori KORP.
+        self.assertEqual(totali["crediti_base"], Decimal("15.00"))
+        self.assertEqual(totali["prestigio_base"], 3)
+        # Massimo: la riga KORP più ricca (APEX con fattori 2.00 / 3.00).
+        self.assertEqual(totali["crediti_max"], Decimal("25.00"))
+        self.assertEqual(totali["prestigio_max"], 7)
+
+    def test_totali_contano_le_task_spente(self):
+        self._task("Attiva", cr="10", pr=1)
+        self._task("Catalogo spento", cr="99", pr=99, attiva=False)
+        self._task("Evento spento", cr="77", pr=77, link_attiva=False)
+        totali = totali_task_evento(self.evento)
+        self.assertEqual(totali["n_task_collegate"], 3)
+        self.assertEqual(totali["n_task_attive"], 1)
+        self.assertEqual(totali["n_task_spente_catalogo"], 1)
+        self.assertEqual(totali["n_task_spente_evento"], 1)
+        self.assertEqual(totali["crediti_base"], Decimal("10.00"))
+        self.assertEqual(totali["prestigio_base"], 1)
+
+    def test_totali_zero_senza_premi_configurati(self):
+        self._task("Senza premio", korp=self.apex)
+        totali = totali_task_evento(self.evento)
+        self.assertEqual(totali["n_task_attive"], 1)
+        self.assertEqual(totali["crediti_base"], Decimal("0.00"))
+        self.assertEqual(totali["crediti_max"], Decimal("0.00"))
+        self.assertEqual(totali["prestigio_max"], 0)
+
+    def test_totali_senza_task_collegate(self):
+        totali = totali_task_evento(self.evento)
+        self.assertEqual(totali["n_task_collegate"], 0)
+        self.assertEqual(totali["crediti_base"], Decimal("0.00"))
+        self.assertEqual(totali["crediti_max"], Decimal("0.00"))
+
+    def test_serializer_espone_i_totali(self):
+        self._task("Apex uno", korp=self.apex, cr="10", pr=2)
+        data = EventoSerializer(self.evento).data
+        self.assertEqual(len(data["missioni_riepilogo"]), 2)
+        self.assertEqual(Decimal(str(data["missioni_riepilogo_totali"]["crediti_max"])), Decimal("20.00"))
+        self.assertEqual(data["missioni_riepilogo_totali"]["n_task_attive"], 1)
 
 
 class MissioniFattoreKorpTests(SimpleTestCase):
@@ -235,16 +356,46 @@ class MissioniVisibilitaApiTests(APITestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), [])
 
-    def test_tab_evento_attivo_false_se_non_iscritto(self):
+    def _evento_attivo(self, user, pg):
+        return self._get(
+            user,
+            f"/api/plot/api/missioni/evento-attivo/?personaggio={pg.id}",
+        )
+
+    def test_tab_evento_attivo_anche_se_non_iscritto(self):
+        """La tab Tasks segue solo l'evento in corso; `iscritto` spiega l'elenco vuoto."""
         self.evento.started_at = timezone.now()
         self.evento.save(update_fields=["started_at", "updated_at"])
-        resp = self._get(
-            self.player,
-            f"/api/plot/api/missioni/evento-attivo/?personaggio={self.pg.id}",
-        )
+        resp = self._evento_attivo(self.player, self.pg)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["attivo"])
+        self.assertFalse(resp.json()["iscritto"])
+
+    def test_tab_evento_attivo_true_se_iscritto(self):
+        self.evento.started_at = timezone.now()
+        self.evento.save(update_fields=["started_at", "updated_at"])
+        self.evento.partecipanti.add(self.pg)
+        resp = self._evento_attivo(self.player, self.pg)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["attivo"])
+        self.assertTrue(resp.json()["iscritto"])
+        self.assertEqual(resp.json()["titolo"], "Evento tasks vis")
+
+    def test_tab_evento_attivo_false_se_mai_iniziato(self):
+        self.evento.partecipanti.add(self.pg)
+        resp = self._evento_attivo(self.player, self.pg)
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(resp.json()["attivo"])
-        self.assertFalse(resp.json()["iscritto"])
+
+    def test_tab_evento_attivo_false_dopo_termina(self):
+        now = timezone.now()
+        self.evento.partecipanti.add(self.pg)
+        self.evento.started_at = now - timedelta(hours=2)
+        self.evento.ended_at = now
+        self.evento.save(update_fields=["started_at", "ended_at", "updated_at"])
+        resp = self._evento_attivo(self.player, self.pg)
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["attivo"])
 
     def test_mie_visibile_se_partito_e_iscritto(self):
         self.evento.started_at = timezone.now()

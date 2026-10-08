@@ -6,6 +6,12 @@ import {
 import { RichTextViewer } from './RichTextDisplay';
 import EventoPortateSection from './EventoPortateSection';
 import EventoTasksLivePanel from './EventoTasksLivePanel';
+import ConfirmDialog from './editors/ConfirmDialog';
+import {
+    noteRiepilogoTask,
+    righeRiepilogoTask,
+    totaliRiepilogoTask,
+} from '../lib/riepilogoTaskEvento';
 
 const normalizeStaffIds = (list) => (
     (list || [])
@@ -18,6 +24,13 @@ const staffLabel = (user) => {
     return full || user.username || `Utente #${user.id}`;
 };
 
+const fmtCr = (valore) => Number(valore || 0).toLocaleString('it-IT', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+});
+
+const fmtPr = (valore) => Number(valore || 0).toLocaleString('it-IT');
+
 const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRiassegnaPremiMancanti, onRiallineaIscrizioni, onRefresh, onRefreshRisorse, risorseLoading = false, onLogout }) => {
     const [showPartecipanti, setShowPartecipanti] = useState(false);
     const [showRicompense, setShowRicompense] = useState(false);
@@ -28,6 +41,10 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
     const [savingStaff, setSavingStaff] = useState(false);
     const [riallineaLoading, setRiallineaLoading] = useState(false);
     const [riassegnaLoading, setRiassegnaLoading] = useState(false);
+    const [statoEventoBusy, setStatoEventoBusy] = useState(false);
+    const [statoEventoError, setStatoEventoError] = useState('');
+    // null | {tipo:'inizia'} | {tipo:'premi', dati} | {tipo:'termina'} | {tipo:'termina-force', secondi}
+    const [statoDialog, setStatoDialog] = useState(null);
 
     const allStaff = useMemo(() => risorse.staff || [], [risorse.staff]);
     const allStaffIds = useMemo(() => normalizeStaffIds(allStaff), [allStaff]);
@@ -139,6 +156,58 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
         }
     }, [onRiassegnaPremiMancanti, handleLoadReport]);
 
+    const eventoInCorso = !!(evento?.started_at && !evento?.ended_at);
+
+    const riepilogoTask = useMemo(() => righeRiepilogoTask(evento), [evento]);
+    const totaliTask = useMemo(
+        () => totaliRiepilogoTask(evento, riepilogoTask),
+        [evento, riepilogoTask],
+    );
+    const noteTask = useMemo(() => noteRiepilogoTask(totaliTask), [totaliTask]);
+    // Senza task collegate lo specchietto mostrerebbe solo righe KORP vuote.
+    const mostraRiepilogoTask = riepilogoTask.length > 0
+        && Number(totaliTask.n_task_collegate || 0) > 0;
+
+    /** Avvio evento: `riassegnaPremi` null alla prima chiamata, poi la scelta dello staff. */
+    const avviaEvento = useCallback(async (riassegnaPremi = null) => {
+        if (!onIniziaEvento) return;
+        setStatoEventoError('');
+        setStatoEventoBusy(true);
+        try {
+            await onIniziaEvento({ riassegnaPremi });
+            setStatoDialog(null);
+        } catch (e) {
+            if (e?.status === 409 && e?.data?.code === 'premi_gia_assegnati') {
+                setStatoDialog({ tipo: 'premi', dati: e.data });
+                return;
+            }
+            setStatoDialog(null);
+            setStatoEventoError(e?.data?.detail || e?.message || 'Avvio evento fallito');
+        } finally {
+            setStatoEventoBusy(false);
+        }
+    }, [onIniziaEvento]);
+
+    /** Chiusura evento: `force` conferma la chiusura di un evento appena avviato. */
+    const chiudiEvento = useCallback(async (force = false) => {
+        if (!onTerminaEvento) return;
+        setStatoEventoError('');
+        setStatoEventoBusy(true);
+        try {
+            await onTerminaEvento({ force });
+            setStatoDialog(null);
+        } catch (e) {
+            if (e?.status === 409 && e?.data?.code === 'evento_appena_avviato') {
+                setStatoDialog({ tipo: 'termina-force', secondi: e?.data?.secondi_da_avvio ?? 0 });
+                return;
+            }
+            setStatoDialog(null);
+            setStatoEventoError(e?.data?.detail || e?.message || 'Chiusura evento fallita');
+        } finally {
+            setStatoEventoBusy(false);
+        }
+    }, [onTerminaEvento]);
+
     if (!evento) return null;
 
     return (
@@ -169,17 +238,42 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                                 <> · {Number(evento.prestigio_base_inizio_evento)} Pr</>
                             ) : null}
                         </span>
-                        <span className={evento.started_at && !evento.ended_at ? "text-amber-300" : "text-gray-500"}>
-                            Stato: {evento.started_at && !evento.ended_at ? "IN CORSO" : "NON INIZIATO"}
+                        <span className={eventoInCorso ? "text-amber-300" : "text-gray-500"}>
+                            Stato: {eventoInCorso ? "IN CORSO" : "NON INIZIATO"}
+                            {eventoInCorso ? " · tab Tasks visibile ai giocatori" : null}
                         </span>
                     </div>
-                    {Array.isArray(evento.missioni_riepilogo) && evento.missioni_riepilogo.length > 0 ? (
-                        <div className="mt-3 rounded-lg border border-lime-900/40 bg-lime-950/20 px-3 py-2">
-                            <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-lime-300">
-                                Premi task per KORP
+                    {mostraRiepilogoTask ? (
+                        <div className="mt-3 rounded-lg border border-lime-900/40 bg-lime-950/20 px-3 py-2 normal-case not-italic">
+                            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                                <span className="text-[10px] font-black uppercase tracking-wide text-lime-300">
+                                    Premi task per KORP
+                                </span>
+                                <span className="font-mono text-[10px] text-gray-300">
+                                    Task conteggiate: {totaliTask.n_task_attive} / {totaliTask.n_task_collegate}
+                                </span>
+                                {totaliTask.crediti_base !== null ? (
+                                    <span
+                                        className="font-mono text-[10px] font-bold text-lime-200"
+                                        title="Somma dei premi di catalogo delle task conteggiate, senza moltiplicatori KORP"
+                                    >
+                                        Totale base: {fmtCr(totaliTask.crediti_base)} Cr · {fmtPr(totaliTask.prestigio_base)} Pr
+                                    </span>
+                                ) : null}
+                                <span
+                                    className="font-mono text-[10px] font-bold text-amber-200"
+                                    title="Totale più alto ottenibile da un PG, moltiplicatori KORP inclusi"
+                                >
+                                    Massimo per PG: {fmtCr(totaliTask.crediti_max)} Cr · {fmtPr(totaliTask.prestigio_max)} Pr
+                                </span>
                             </div>
-                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                {evento.missioni_riepilogo.map((row) => (
+                            {noteTask.length > 0 ? (
+                                <ul className="mt-1 space-y-0.5 text-[10px] font-medium text-amber-300/90">
+                                    {noteTask.map((nota) => <li key={nota}>{nota}</li>)}
+                                </ul>
+                            ) : null}
+                            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                {riepilogoTask.map((row) => (
                                     <div
                                         key={row.korp_id}
                                         className="rounded border border-violet-800/40 bg-violet-950/30 px-2 py-1.5 text-[10px] text-violet-100"
@@ -194,10 +288,14 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                                             </span>
                                         </div>
                                         <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-gray-300">
-                                            <span>Cr KORP: {Number(row.crediti_korp || 0).toLocaleString('it-IT')}</span>
-                                            <span>Pr KORP: {row.prestigio_korp || 0}</span>
-                                            <span>Cr altre: {Number(row.crediti_non_korp || 0).toLocaleString('it-IT')}</span>
-                                            <span>Pr altre: {row.prestigio_non_korp || 0}</span>
+                                            <span>Cr KORP: {fmtCr(row.crediti_korp)}</span>
+                                            <span>Pr KORP: {fmtPr(row.prestigio_korp)}</span>
+                                            <span>Cr altre: {fmtCr(row.crediti_non_korp)}</span>
+                                            <span>Pr altre: {fmtPr(row.prestigio_non_korp)}</span>
+                                        </div>
+                                        <div className="mt-1 flex items-baseline justify-between gap-2 border-t border-violet-800/50 pt-1 font-mono text-[10px] font-black text-lime-200">
+                                            <span>Totale ({row.n_task_totale} task)</span>
+                                            <span>{fmtCr(row.crediti_totale)} Cr · {fmtPr(row.prestigio_totale)} Pr</span>
                                         </div>
                                     </div>
                                 ))}
@@ -244,19 +342,23 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
 
                 {isMaster && (
                     <div className="flex flex-wrap gap-2">
-                        {!evento.started_at || evento.ended_at ? (
+                        {!eventoInCorso ? (
                             <button
-                                onClick={onIniziaEvento}
-                                className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-amber-500 transition-all"
+                                type="button"
+                                onClick={() => setStatoDialog({ tipo: 'inizia' })}
+                                disabled={statoEventoBusy}
+                                className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-amber-500 transition-all disabled:opacity-50"
                             >
-                                Inizia evento
+                                {statoEventoBusy ? 'Avvio…' : 'Inizia evento'}
                             </button>
                         ) : (
                             <button
-                                onClick={onTerminaEvento}
-                                className="px-4 py-2 bg-rose-700 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-rose-600 transition-all"
+                                type="button"
+                                onClick={() => setStatoDialog({ tipo: 'termina' })}
+                                disabled={statoEventoBusy}
+                                className="px-4 py-2 bg-rose-700 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-rose-600 transition-all disabled:opacity-50"
                             >
-                                Termina evento
+                                {statoEventoBusy ? 'Chiusura…' : 'Termina evento'}
                             </button>
                         )}
                         {onRiallineaIscrizioni ? (
@@ -289,6 +391,9 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                         <button onClick={() => onDelete(evento.id)} className="p-2 bg-red-900/20 text-red-500 border border-red-900/30 rounded-lg hover:bg-red-600 hover:text-white transition-all">
                             <Trash2 size={20}/>
                         </button>
+                        {statoEventoError ? (
+                            <p className="w-full text-xs text-red-300 normal-case">{statoEventoError}</p>
+                        ) : null}
                     </div>
                 )}
             </div>
@@ -478,6 +583,78 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                     </div>
                 )}
             </div>
+
+            <ConfirmDialog
+                open={statoDialog?.tipo === 'inizia'}
+                title={`Avviare «${evento.titolo}»?`}
+                message={
+                    'I partecipanti ricevono i premi di presenza e vedono la tab Tasks '
+                    + "per tutta la durata dell'evento."
+                }
+                confirmLabel="Avvia evento"
+                confirmTone="warning"
+                loading={statoEventoBusy}
+                onConfirm={() => avviaEvento(null)}
+                onCancel={() => setStatoDialog(null)}
+            />
+
+            <ConfirmDialog
+                open={statoDialog?.tipo === 'premi'}
+                title="Premi già assegnati"
+                confirmLabel="Riattribuisci bonus"
+                confirmTone="warning"
+                altLabel="Avvia senza riattribuire"
+                onAlt={() => avviaEvento(false)}
+                loading={statoEventoBusy}
+                onConfirm={() => avviaEvento(true)}
+                onCancel={() => setStatoDialog(null)}
+            >
+                <div className="space-y-2 text-sm text-gray-300">
+                    <p>
+                        {statoDialog?.dati?.gia_premiati_count} di{' '}
+                        {statoDialog?.dati?.partecipanti_count} partecipanti hanno già ricevuto
+                        PC, crediti e prestigio di questo evento.
+                    </p>
+                    <p className="text-xs text-gray-400">
+                        «Riattribuisci bonus» accredita di nuovo il premio a tutti gli iscritti.
+                        «Avvia senza riattribuire» lo accredita solo a chi non l&apos;ha ancora
+                        ricevuto.
+                    </p>
+                    {statoDialog?.dati?.gia_premiati?.length ? (
+                        <ul className="max-h-32 overflow-y-auto rounded border border-gray-800 bg-gray-950/60 p-2 text-xs text-gray-400">
+                            {statoDialog.dati.gia_premiati.map((pg) => (
+                                <li key={pg.id} className="truncate">{pg.nome}</li>
+                            ))}
+                        </ul>
+                    ) : null}
+                </div>
+            </ConfirmDialog>
+
+            <ConfirmDialog
+                open={statoDialog?.tipo === 'termina'}
+                title={`Terminare «${evento.titolo}»?`}
+                message={
+                    'La tab Tasks sparisce ai giocatori, i contratti si chiudono e i prestiti '
+                    + 'del mercante vengono restituiti.'
+                }
+                confirmLabel="Termina evento"
+                loading={statoEventoBusy}
+                onConfirm={() => chiudiEvento(false)}
+                onCancel={() => setStatoDialog(null)}
+            />
+
+            <ConfirmDialog
+                open={statoDialog?.tipo === 'termina-force'}
+                title="Evento appena avviato"
+                message={
+                    `L'evento è partito ${statoDialog?.secondi ?? 0} secondi fa: se hai premuto `
+                    + "due volte lo stesso pulsante, annulla e l'evento resta in corso."
+                }
+                confirmLabel="Termina comunque"
+                loading={statoEventoBusy}
+                onConfirm={() => chiudiEvento(true)}
+                onCancel={() => setStatoDialog(null)}
+            />
         </div>
     );
 };

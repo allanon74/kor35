@@ -213,6 +213,42 @@ def applica_premio_presenza_personaggio(evento: Evento, pg: Personaggio, when=No
         return True
 
 
+def partecipanti_premio_gia_assegnato(evento: Evento) -> list[Personaggio]:
+    """Iscritti che hanno già incassato il premio di questo evento (anche a un avvio precedente).
+
+    Serve all'avvio evento: lo staff decide se riattribuire il bonus o saltarli.
+    """
+    premiati = set(
+        EventoPremioPersonaggio.objects.filter(evento=evento).values_list(
+            "personaggio_id", flat=True
+        )
+    )
+    if not premiati:
+        return []
+    return [pg for pg in evento.partecipanti.all().order_by("nome") if pg.id in premiati]
+
+
+def salta_premio_presenza_personaggio(evento: Evento, pg: Personaggio) -> bool:
+    """Marca il premio come già coperto dall'avvio corrente senza accreditare nulla.
+
+    Usato quando lo staff avvia l'evento scegliendo di non riattribuire il bonus:
+    così nemmeno «Accredita mancanti» lo paga di nuovo.
+    """
+    started = getattr(evento, "started_at", None)
+    with transaction.atomic():
+        row = (
+            EventoPremioPersonaggio.objects.select_for_update()
+            .filter(evento=evento, personaggio=pg)
+            .first()
+        )
+        if row is None:
+            return False
+        if premio_copre_avvio_corrente(row, evento, pg):
+            return False
+        _segna_avvio_premio(row, started)
+        return True
+
+
 def report_ricompense_evento(evento: Evento, ts=None) -> dict:
     when = ts or evento.started_at or timezone.now()
     rows = []

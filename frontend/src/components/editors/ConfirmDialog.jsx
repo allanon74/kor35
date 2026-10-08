@@ -11,6 +11,9 @@ const ConfirmDialog = ({
   confirmTone = 'danger',
   onConfirm,
   onCancel,
+  // Azione alternativa opzionale (es. «avvia senza riattribuire il bonus»)
+  altLabel = '',
+  onAlt = null,
   loading = false,
   // Sopra overlay scanner (z-50) e plugin tipo Html5Qrcode
   zIndexClass = 'z-[10000]',
@@ -45,6 +48,16 @@ const ConfirmDialog = ({
             >
               {cancelLabel}
             </button>
+            {altLabel && onAlt ? (
+              <button
+                type="button"
+                onClick={onAlt}
+                disabled={loading}
+                className="min-h-11 w-full sm:w-auto px-4 py-2 bg-indigo-700 hover:bg-indigo-600 rounded-lg text-sm font-bold text-white disabled:opacity-60"
+              >
+                {altLabel}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={onConfirm}

@@ -319,6 +319,7 @@ class EventoSerializer(serializers.ModelSerializer):
     iscrizione_opzioni = EventoIscrizioneOpzioneSerializer(many=True, required=False)
     voci_portare = EventoVocePortareSerializer(many=True, read_only=True)
     missioni_riepilogo = serializers.SerializerMethodField()
+    missioni_riepilogo_totali = serializers.SerializerMethodField()
 
     # Questi campi permettono al frontend di vedere i nomi (UserCheck e Users icone)
     staff_details = UserShortSerializer(source='staff_assegnato', many=True, read_only=True)
@@ -335,7 +336,7 @@ class EventoSerializer(serializers.ModelSerializer):
             'giorni', 'staff_details', 'partecipanti_details',
             'iscrizione_apertura', 'iscrizione_chiusura', 'iscrizione_costo_euro',
             'iscrizione_test_attiva', 'iscrizione_opzioni', 'voci_portare',
-            'missioni_riepilogo',
+            'missioni_riepilogo', 'missioni_riepilogo_totali',
         ]
 
     def validate(self, attrs):
@@ -361,9 +362,20 @@ class EventoSerializer(serializers.ModelSerializer):
             return [giorno for giorno in giorni_data if (giorno.get("quests") or [])]
         return giorni_data
 
+    def _riepilogo_task(self, obj):
+        """Righe KORP + totali calcolati una sola volta per evento serializzato."""
+        cached = getattr(obj, '_riepilogo_task_cache', None)
+        if cached is None:
+            from .missioni_service import riepilogo_task_evento
+            cached = riepilogo_task_evento(obj)
+            obj._riepilogo_task_cache = cached
+        return cached
+
     def get_missioni_riepilogo(self, obj):
-        from .missioni_service import riepilogo_premi_evento
-        return riepilogo_premi_evento(obj)
+        return self._riepilogo_task(obj)['korps']
+
+    def get_missioni_riepilogo_totali(self, obj):
+        return self._riepilogo_task(obj)['totali']
 
     def create(self, validated_data):
         opzioni_data = validated_data.pop('iscrizione_opzioni', None)
