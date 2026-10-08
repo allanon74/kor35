@@ -69,21 +69,25 @@ install -d -o "$KIOSK_USER" -g "$KIOSK_USER" /etc/kor35 /var/lib/kor35
 install -m 0755 "${SCRIPT_DIR}/kiosk-station.sh" /usr/local/bin/kiosk-station.sh
 install -m 0755 "${SCRIPT_DIR}/kor35-kiosk-wifi.sh" /usr/local/sbin/kor35-kiosk-wifi.sh
 
-umask 077
-{
-  printf 'PILOT_BASE_URL=%q\n' "$PILOT_BASE_URL"
-  printf 'KIOSK_START_PATH=%q\n' '/pilot/?screen=station&viewport=800x480'
-  printf 'KIOSK_WIFI_MANAGE=%q\n' '1'
-  printf 'KIOSK_WIFI_PRIMARY_SSID=%q\n' "$PRIMARY_SSID"
-  printf 'KIOSK_WIFI_PRIMARY_PSK=%q\n' "$PRIMARY_PSK"
-  printf 'KIOSK_WIFI_FALLBACK_SSID=%q\n' "$FALLBACK_SSID"
-  printf 'KIOSK_WIFI_FALLBACK_PSK=%q\n' "$FALLBACK_PSK"
-  printf 'KIOSK_WIFI_PROMPT=%q\n' "$WIFI_PROMPT"
-  printf 'KIOSK_MODE=%q\n' '800x480'
-  printf 'KIOSK_ROTATE=%q\n' 'normal'
-} > /etc/kor35/kiosk-station.env
-chown "$KIOSK_USER:$KIOSK_USER" /etc/kor35/kiosk-station.env
-chmod 600 /etc/kor35/kiosk-station.env
+if [ -f /etc/kor35/kiosk-station.env ]; then
+  echo "Lascio /etc/kor35/kiosk-station.env com'è (password già presenti)."
+else
+  umask 077
+  {
+    printf 'PILOT_BASE_URL=%q\n' "$PILOT_BASE_URL"
+    printf 'KIOSK_START_PATH=%q\n' '/pilot/?screen=station&viewport=800x480'
+    printf 'KIOSK_WIFI_MANAGE=%q\n' '1'
+    printf 'KIOSK_WIFI_PRIMARY_SSID=%q\n' "$PRIMARY_SSID"
+    printf 'KIOSK_WIFI_PRIMARY_PSK=%q\n' "$PRIMARY_PSK"
+    printf 'KIOSK_WIFI_FALLBACK_SSID=%q\n' "$FALLBACK_SSID"
+    printf 'KIOSK_WIFI_FALLBACK_PSK=%q\n' "$FALLBACK_PSK"
+    printf 'KIOSK_WIFI_PROMPT=%q\n' "$WIFI_PROMPT"
+    printf 'KIOSK_MODE=%q\n' '800x480'
+    printf 'KIOSK_ROTATE=%q\n' 'normal'
+  } > /etc/kor35/kiosk-station.env
+  chown "$KIOSK_USER:$KIOSK_USER" /etc/kor35/kiosk-station.env
+  chmod 600 /etc/kor35/kiosk-station.env
+fi
 
 usermod -aG netdev "$KIOSK_USER" || true
 cat > /etc/sudoers.d/kor35-kiosk-wifi <<EOF
@@ -91,8 +95,9 @@ ${KIOSK_USER} ALL=(root) NOPASSWD: /usr/local/sbin/kor35-kiosk-wifi.sh
 EOF
 chmod 440 /etc/sudoers.d/kor35-kiosk-wifi
 
-sed "s/__KIOSK_USER__/${KIOSK_USER}/g" "${SCRIPT_DIR}/kiosk-station.service" \
-  > /etc/systemd/system/kiosk-station.service
+uid="$(id -u "$KIOSK_USER")"
+sed -e "s/__KIOSK_USER__/${KIOSK_USER}/g" -e "s|/run/user/1000|/run/user/${uid}|g" \
+  "${SCRIPT_DIR}/kiosk-station.service" > /etc/systemd/system/kiosk-station.service
 systemctl daemon-reload
 systemctl enable kiosk-station.service
 systemctl restart kiosk-station.service || true
@@ -102,7 +107,7 @@ echo "Kiosk stazione installato per ${KIOSK_USER}."
 echo "  Servizio: systemctl status kiosk-station.service"
 echo "  Config:   /etc/kor35/kiosk-station.env"
 echo "  Schermo:  /pilot/?screen=station&viewport=800x480"
-echo "  WiFi:     prima ${PRIMARY_SSID}, poi la rete di riserva o una scelta a schermo"
+echo "  WiFi:     se ${PRIMARY_SSID} è già su, non la stacco. Altrimenti alzo il profilo salvato una volta"
 echo ""
 echo "Serve Raspberry Pi OS con desktop e login automatico sulla sessione grafica."
 echo "Per il desktop di debug: sudo touch /etc/kor35/NO_KIOSK && sudo systemctl stop kiosk-station.service"

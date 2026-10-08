@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# KOR35 — kiosk singolo schermo 800×480 (Console Ingegneria o Scientifica).
-# Apre /pilot/?screen=station : ingegneria, scientifica e comunicazioni, poi il QR.
+# KOR35 — console stazione, un solo schermo 800×480.
+# Stesso modello della plancia dual-screen: non stacco il WiFi.
+# Chromium parte solo quando https://www.kor35.it risponde, e si riapre se cade.
 set -uo pipefail
 
 export DISPLAY="${DISPLAY:-:0}"
 export XAUTHORITY="${XAUTHORITY:-${HOME}/.Xauthority}"
-export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
 
 KIOSK_ENV="${KOR35_KIOSK_STATION_ENV:-/etc/kor35/kiosk-station.env}"
 NO_KIOSK_FLAG="${KOR35_NO_KIOSK_FLAG:-/etc/kor35/NO_KIOSK}"
@@ -14,11 +16,11 @@ WIFI_HELPER="${KOR35_WIFI_HELPER:-/usr/local/sbin/kor35-kiosk-wifi.sh}"
 DEFAULT_BASE="https://www.kor35.it"
 PILOT_BASE_URL="${PILOT_BASE_URL:-$DEFAULT_BASE}"
 KIOSK_WIFI_MANAGE="${KIOSK_WIFI_MANAGE:-1}"
-KIOSK_WIFI_PROMPT="${KIOSK_WIFI_PROMPT:-1}"
 KIOSK_ROTATE="${KIOSK_ROTATE:-normal}"
 KIOSK_MODE="${KIOSK_MODE:-800x480}"
 KIOSK_START_PATH="${KIOSK_START_PATH:-/pilot/?screen=station&viewport=800x480}"
 KIOSK_PROFILE="${KIOSK_PROFILE:-${HOME}/.config/kiosk-station}"
+KIOSK_DISABLE_GPU="${KIOSK_DISABLE_GPU:-0}"
 
 # shellcheck source=/dev/null
 [ -f "$KIOSK_ENV" ] && source "$KIOSK_ENV"
@@ -27,6 +29,8 @@ log() { echo "[kiosk-station] $*"; }
 warn() { echo "[kiosk-station] WARN: $*" >&2; }
 
 [ -f "$NO_KIOSK_FLAG" ] && { log "NO_KIOSK attivo ($NO_KIOSK_FLAG), esco."; exit 0; }
+
+log "modello plancia: non stacco il WiFi"
 
 find_chromium() {
   local c
@@ -48,190 +52,212 @@ normalize_base() {
 }
 
 http_code() {
-  curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 4 --max-time 12 "$1" 2>/dev/null || echo "000"
+  local code
+  code="$(curl -4 -k -s -o /dev/null -w "%{http_code}" --connect-timeout 4 --max-time 12 "$1" 2>/dev/null || true)"
+  printf '%s\n' "${code:-000}"
 }
 
-resolve_working_base() {
+server_up() {
+  local base="$1" code
+  code="$(http_code "${base%/}/api/healthz/")"
+  [[ "$code" == 2* || "$code" == 3* ]]
+}
+
+log_net() {
+  log "RAM: $(awk '/MemTotal|MemAvailable/ {printf "%s=%skB ", $1, $2}' /proc/meminfo)"
+  log "SSID: $(iw dev "$(nmcli -t -f DEVICE,TYPE device 2>/dev/null | awk -F: '$2=="wifi" && $1 !~ /^p2p/ {print $1; exit}')" link 2>/dev/null | sed -n 's/^[[:space:]]*SSID: //p' | head -n 1)"
+  log "Route: $(ip -4 route show default 2>/dev/null | head -n 1)"
+  log "DNS www.kor35.it: $(getent hosts www.kor35.it 2>/dev/null | head -n 1 || echo 'non risolve')"
+}
+
+maybe_low_ram() {
+  local avail
+  avail="$(awk '/MemAvailable/ {print $2}' /proc/meminfo)"
+  if [ "${avail:-0}" -lt 250000 ]; then
+    KIOSK_DISABLE_GPU=1
+    warn "Poca memoria libera (${avail} kB). Chromium parte senza GPU."
+  fi
+}
+
+prepare_wifi_once() {
+  [ "$KIOSK_WIFI_MANAGE" = "1" ] || { log "WiFi lasciato a NetworkManager"; return 0; }
+  [ -x "$WIFI_HELPER" ] || { warn "Helper WiFi assente"; return 0; }
+  sudo -n "$WIFI_HELPER" once || warn "helper WiFi once non eseguito"
+}
+
+repair_dns() {
+  [ -x "$WIFI_HELPER" ] || return 0
+  sudo -n "$WIFI_HELPER" dns || true
+}
+
+# Stampa la base URL quando healthz risponde. Vuoto se non c'è.
+probe_base() {
   local primary candidate normalized scheme
   primary="$(normalize_base "${PILOT_BASE_URL:-$DEFAULT_BASE}")" || primary="$DEFAULT_BASE"
-  for candidate in "$primary"; do
-    normalized="${candidate#https://}"
-    normalized="${normalized#http://}"
-    for scheme in https http; do
-      candidate="${scheme}://${normalized}"
-      code="$(http_code "${candidate}/api/healthz/")"
-      if [[ "$code" == 2* || "$code" == 3* ]]; then
-        echo "$candidate"
-        return 0
-      fi
-    done
+  normalized="${primary#https://}"
+  normalized="${normalized#http://}"
+  for scheme in https http; do
+    candidate="${scheme}://${normalized}"
+    if server_up "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
   done
-  warn "Server non raggiungibile, apro comunque ${primary}"
-  echo "$primary"
+  return 1
 }
 
-update_env_key() {
-  local key="$1" value="$2" escaped tmp
-  [ -f "$KIOSK_ENV" ] || return 0
-  escaped="$(printf '%q' "$value")"
-  tmp="$(mktemp)"
-  if grep -q "^${key}=" "$KIOSK_ENV"; then
-    awk -v k="$key" -v v="$escaped" 'index($0, k"=") == 1 { print k"="v; next } { print }' "$KIOSK_ENV" >"$tmp"
-  else
-    cat "$KIOSK_ENV" >"$tmp"
-    printf '%s=%s\n' "$key" "$escaped" >>"$tmp"
-  fi
-  cat "$tmp" >"$KIOSK_ENV"
-  rm -f "$tmp"
-}
-
-ensure_wifi() {
-  [ "$KIOSK_WIFI_MANAGE" = "1" ] || { log "WiFi gestito fuori da questo script"; return 0; }
-  [ -x "$WIFI_HELPER" ] || { warn "Helper WiFi assente: $WIFI_HELPER"; return 0; }
-  local rc=0
-  sudo -n "$WIFI_HELPER" ensure || rc=$?
-  if [ "$rc" -eq 0 ]; then
-    log "WiFi ok ($(sudo -n "$WIFI_HELPER" current || true))"
-    return 0
-  fi
-  if [ "$KIOSK_WIFI_PROMPT" != "1" ]; then
-    warn "WiFi non disponibile (codice ${rc}) e prompt disattivato"
-    return 0
-  fi
-  command -v zenity >/dev/null 2>&1 || { warn "zenity assente, niente scelta WiFi"; return 0; }
-  local list ssid psk
-  list="$(sudo -n "$WIFI_HELPER" scan || true)"
-  [ -n "$list" ] || { warn "Nessuna rete WiFi visibile"; return 0; }
-  ssid="$(printf '%s\n' "$list" | zenity --list --title="KOR35 — WiFi" \
-    --text="kor35-larp non disponibile. Scegli un'altra rete (come sulla plancia dual-screen):" \
-    --column="SSID" \
-    --width=480 --height=360 2>/dev/null || true)"
-  [ -n "$ssid" ] || return 0
-  psk="$(zenity --entry --hide-text --title="KOR35 — WiFi" \
-    --text="Password per ${ssid}:" 2>/dev/null || true)"
-  [ -n "$psk" ] || return 0
-  if sudo -n "$WIFI_HELPER" connect "$ssid" "$psk"; then
-    update_env_key KIOSK_WIFI_FALLBACK_SSID "$ssid"
-    update_env_key KIOSK_WIFI_FALLBACK_PSK "$psk"
-    log "Rete di riserva salvata: ${ssid}"
-  else
-    zenity --error --text="Connessione a ${ssid} non riuscita." 2>/dev/null || true
-  fi
-}
-
-watch_event_wifi() {
-  [ "$KIOSK_WIFI_MANAGE" = "1" ] || return 0
-  [ -x "$WIFI_HELPER" ] || return 0
-  (
-    while true; do
-      sleep "${KIOSK_WIFI_WATCH_SECONDS:-8}"
-      sudo -n "$WIFI_HELPER" prefer || true
-    done
-  ) &
-  log "Controllo periodico della rete evento"
-}
-
-wait_for_x() {
+wait_for_display() {
   local _
+  if [ -S "${XDG_RUNTIME_DIR}/wayland-0" ] || [ -S "${XDG_RUNTIME_DIR}/wayland-1" ]; then
+    log "Sessione Wayland presente. Chromium userà Wayland, non Xwayland."
+    return 0
+  fi
   for _ in $(seq 1 60); do
     xset q >/dev/null 2>&1 && return 0
     sleep 1
   done
-  warn "X non disponibile su ${DISPLAY}"
+  warn "Né Wayland né X su ${DISPLAY}"
   return 1
 }
 
-configure_display() {
+configure_x11() {
   local out
+  command -v xrandr >/dev/null 2>&1 || return 0
+  xset q >/dev/null 2>&1 || return 0
   out="$(xrandr --query | awk '/ connected/{print $1; exit}')"
-  [ -n "$out" ] || { warn "Nessun output video"; return 0; }
-  log "Output ${out} modalità ${KIOSK_MODE} rotate ${KIOSK_ROTATE}"
+  [ -n "$out" ] || return 0
+  log "X11 ${out} mode ${KIOSK_MODE} rotate ${KIOSK_ROTATE}"
   if xrandr --query | awk -v o="$out" -v m="$KIOSK_MODE" '
       $1 == o { inside=1; next }
       inside && $1 ~ /^[A-Za-z]/ { exit }
       inside && $1 == m { found=1 }
       END { exit !found }
     '; then
-    xrandr --output "$out" --mode "$KIOSK_MODE" --rotate "$KIOSK_ROTATE" || xrandr --output "$out" --auto
+    xrandr --output "$out" --mode "$KIOSK_MODE" --rotate "$KIOSK_ROTATE" || xrandr --output "$out" --auto || true
   else
     xrandr --output "$out" --auto --rotate "$KIOSK_ROTATE" || true
   fi
-  echo "$out" >/tmp/kor35-kiosk-station-output
-}
-
-map_touch() {
-  local out dev_id
-  out="$(cat /tmp/kor35-kiosk-station-output 2>/dev/null || true)"
-  [ -n "$out" ] || return 0
-  command -v xinput >/dev/null 2>&1 || return 0
-  while IFS= read -r dev_id; do
-    [ -n "$dev_id" ] || continue
-    xinput map-to-output "$dev_id" "$out" 2>/dev/null || true
-  done < <(
-    xinput list | awk -F'id=' '
-      /[Tt]ouch|[Pp]en|[Ii][Ll]itek/ && !/[Kk]eyboard/ {
-        gsub(/[^0-9].*/, "", $2)
-        if ($2 != "") print $2
-      }
-    '
-  )
-}
-
-disable_blank() {
   xset s off || true
   xset -dpms || true
   xset s noblank || true
-  if command -v unclutter >/dev/null 2>&1; then
-    pkill -x unclutter 2>/dev/null || true
-    unclutter -idle 0.5 -root >/dev/null 2>&1 &
+}
+
+ozone_args() {
+  if [ -S "${XDG_RUNTIME_DIR}/wayland-0" ]; then
+    export WAYLAND_DISPLAY=wayland-0
+    printf '%s\n' "--ozone-platform=wayland"
+    return 0
   fi
+  if [ -S "${XDG_RUNTIME_DIR}/wayland-1" ]; then
+    export WAYLAND_DISPLAY=wayland-1
+    printf '%s\n' "--ozone-platform=wayland"
+    return 0
+  fi
+  unset WAYLAND_DISPLAY || true
+  printf '%s\n' "--ozone-platform=x11"
 }
 
 launch_chromium() {
-  local url="$1" chromium
+  local url="$1" chromium ozone
   chromium="$(find_chromium)" || { warn "Chromium non trovato"; return 1; }
+  ozone="$(ozone_args)"
   mkdir -p "$KIOSK_PROFILE"
   rm -f "$KIOSK_PROFILE/SingletonLock" "$KIOSK_PROFILE/SingletonSocket" "$KIOSK_PROFILE/SingletonCookie" 2>/dev/null || true
+  local -a gpu=()
+  if [ "$KIOSK_DISABLE_GPU" = "1" ]; then
+    gpu=(--disable-gpu)
+  fi
+  # shellcheck disable=SC2086
   "$chromium" \
     --no-first-run \
     --disable-session-crashed-bubble \
     --disable-infobars \
     --disable-dev-shm-usage \
-    --disable-pinch \
-    --overscroll-history-navigation=0 \
+    --disable-background-networking \
+    --disable-sync \
+    --disable-translate \
+    --renderer-process-limit=1 \
+    --disable-features=Translate,BackForwardCache,MediaRouter \
+    --disk-cache-size=1048576 \
     --ignore-certificate-errors \
+    --disable-ipv6 \
     --password-store=basic \
     --user-data-dir="$KIOSK_PROFILE" \
+    ${gpu[@]+"${gpu[@]}"} \
+    "$ozone" \
     --kiosk \
+    --start-fullscreen \
     --window-position=0,0 \
     --window-size=800,480 \
     --force-device-scale-factor=1 \
     "$url" &
   echo $! >/tmp/kor35-kiosk-station.pid
-  log "Chromium pid $(cat /tmp/kor35-kiosk-station.pid) → ${url}"
+  log "Chromium pid $(cat /tmp/kor35-kiosk-station.pid) → ${url} (${ozone})"
+}
+
+stop_chromium() {
+  local pid
+  pid="$(cat /tmp/kor35-kiosk-station.pid 2>/dev/null || true)"
+  if [ -n "$pid" ]; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  fi
 }
 
 main() {
-  local base url
-  wait_for_x || exit 1
-  ensure_wifi
-  watch_event_wifi
-  base="$(resolve_working_base)"
-  PILOT_BASE_URL="$base"
-  url="${base}${KIOSK_START_PATH}"
-  configure_display
-  disable_blank
-  map_touch
-  (
-    while true; do
-      sleep 45
-      map_touch
-    done
-  ) &
+  local base misses pid
+  wait_for_display || exit 1
+  maybe_low_ram
+  log_net
+  prepare_wifi_once
+  configure_x11
+  if command -v unclutter >/dev/null 2>&1 && xset q >/dev/null 2>&1; then
+    pkill -x unclutter 2>/dev/null || true
+    unclutter -idle 0.5 -root >/dev/null 2>&1 &
+  fi
+
   while true; do
-    launch_chromium "$url" || exit 1
-    wait "$(cat /tmp/kor35-kiosk-station.pid)" || true
-    log "Chromium terminato, riavvio"
+    base=""
+    misses=0
+    while [ "$misses" -lt 30 ]; do
+      if base="$(probe_base)"; then
+        break
+      fi
+      misses=$((misses + 1))
+      log "Server non raggiungibile (${misses}/30). Non stacco il WiFi, riprovo."
+      if [ "$misses" -eq 2 ] || [ "$misses" -eq 10 ]; then
+        repair_dns
+        log_net
+      fi
+      sleep 3
+      base=""
+    done
+    if [ -z "$base" ]; then
+      warn "healthz ancora muto. Apro comunque ${PILOT_BASE_URL:-$DEFAULT_BASE}"
+      base="$(normalize_base "${PILOT_BASE_URL:-$DEFAULT_BASE}")" || base="$DEFAULT_BASE"
+    else
+      log "Server ok: ${base}"
+    fi
+
+    launch_chromium "${base}${KIOSK_START_PATH}" || exit 1
+    pid="$(cat /tmp/kor35-kiosk-station.pid)"
+    misses=0
+    while kill -0 "$pid" 2>/dev/null; do
+      sleep 15
+      if server_up "$base"; then
+        misses=0
+      else
+        misses=$((misses + 1))
+        log "healthz perso (${misses})"
+        if [ "$misses" -ge 4 ]; then
+          log "Chiudo Chromium e riapro quando il server risponde"
+          stop_chromium
+          repair_dns
+          break
+        fi
+      fi
+    done
+    log "Chromium chiuso, nuovo giro"
     sleep 2
   done
 }

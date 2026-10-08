@@ -28,27 +28,21 @@ Se nello staff il login della console è spento, dopo il pulsante l'accesso è a
 
 ---
 
-## WiFi
+## Rete e schermo
 
-La **plancia dual-screen** (`deploy/raspberry-pilot-kiosk/`) non ha uno script WiFi: usa i profili NetworkManager salvati sul desktop. `kor35-larp` ha priorità, la rete di casa (Vodafone) è il ripiego.
+La plancia dual-screen non ha un loop che stacca il WiFi: NetworkManager tiene `kor35-larp`, e Chromium apre `https://www.kor35.it` quando il server risponde. Questa console ora fa lo stesso.
 
-Questa console 7" fa lo stesso, con un helper (`kor35-kiosk-wifi.sh`) perché all'accensione NetworkManager è spesso già sulla rete di casa mentre le EAP Omada comparono dopo:
-
-| Priorità | Rete | Quando |
-|----------|------|--------|
-| 1 | **`kor35-larp`** | Mirror in modalità evento (bosco), stessa LAN dei giocatori |
-| 2 | SSID di riserva in `/etc/kor35/kiosk-station.env` (o profilo già salvato, es. Vodafone) | Il bosco non si vede (laboratorio, casa) |
-| 3 | Scelta a schermo (zenity) | Nessuna delle due risponde e `KIOSK_WIFI_PROMPT=1` |
-
-All'avvio riprova `kor35-larp` per alcuni secondi. Se non c'è, resta sulla rete di casa. Ogni 8 secondi, se esiste un profilo `kor35-larp` (anche con underscore, `kor35_larp`) **stacca Vodafone/casa e alza quello**, anche quando lo scan da associati non elenca Omada — è lo stesso gesto della connessione manuale dal desktop. **Non riscrive la password** dei profili già salvati. Il profilo evento ha priorità 200, gli altri −100, così al boot successivo vince lui quando entrambe le reti si vedono.
+- Se `kor35-larp` è già connessa, lo script **non la tocca**.
+- Se non lo è, alza **una volta** il profilo salvato (anche `kor35_larp`). Non riscrive la password e non fa `connection down`.
+- Chromium parte solo dopo che `/api/healthz/` risponde. Se la pagina cade, lo chiude e riprova.
+- Il reset, se trova labwc o wayfire, passa a **Openbox su X11** (`raspi-config nonint do_wayland W1`) e chiede un reboot. È il desktop della plancia, e pesa meno di Wayland. Non installare un altro ambiente.
+- L'URL è forzato a `https://www.kor35.it`, come la plancia. In bosco il DNS del mirror lo risolve in locale.
 
 Non usare `Pi_Emergenza` / `10.42.0.1` per questa console.
 
-### Aggiornare gli script (Pi già installato, da SSH)
+### Azzerare e ripartire (SSH, utente pi)
 
-**Non** rilanciare `install-station-kiosk.sh`: riscrive `/etc/kor35/kiosk-station.env` e può svuotare la password.
-
-Da una shell SSH sul Pi (utente `pi`):
+**Non** rilanciare `install-station-kiosk.sh`: riscriverebbe le password. `reset-station-kiosk.sh` e `update-station-kiosk.sh` cancellano solo il profilo Chromium del kiosk e reinstallano gli script.
 
 ```bash
 REF=main
@@ -59,35 +53,40 @@ cd "$WORKDIR"
 stamp=$(date +%s)
 curl -fsSL -H 'Cache-Control: no-cache' -o kiosk-station.sh "${BASE}/kiosk-station.sh?${stamp}"
 curl -fsSL -H 'Cache-Control: no-cache' -o kor35-kiosk-wifi.sh "${BASE}/kor35-kiosk-wifi.sh?${stamp}"
+curl -fsSL -H 'Cache-Control: no-cache' -o reset-station-kiosk.sh "${BASE}/reset-station-kiosk.sh?${stamp}"
 curl -fsSL -H 'Cache-Control: no-cache' -o update-station-kiosk.sh "${BASE}/update-station-kiosk.sh?${stamp}"
-grep -q "Scan da .* non elenca" kor35-kiosk-wifi.sh || { echo "SCRIPT VECCHIO, riprova il curl"; exit 1; }
-chmod +x kiosk-station.sh kor35-kiosk-wifi.sh update-station-kiosk.sh
-sudo ./update-station-kiosk.sh
+curl -fsSL -H 'Cache-Control: no-cache' -o kiosk-station.service "${BASE}/kiosk-station.service?${stamp}"
+grep -q "non stacco il WiFi" kiosk-station.sh || { echo "SCRIPT VECCHIO, riprova il curl"; exit 1; }
+chmod +x kiosk-station.sh kor35-kiosk-wifi.sh reset-station-kiosk.sh update-station-kiosk.sh
+sudo ./reset-station-kiosk.sh
 ```
 
-Se `main` non ha ancora il commit, usa il branch al posto di `REF=main`, ad esempio `REF=cursor/station-kiosk-wifi-1661`.
-
-Verifica:
+Se lo script dice di passare a X11:
 
 ```bash
-nmcli -t -f NAME,TYPE,AUTOCONNECT-PRIORITY connection show
-sudo /usr/local/sbin/kor35-kiosk-wifi.sh current
-journalctl -u kiosk-station.service -n 40 --no-pager
+sudo reboot
+```
+
+Poi:
+
+```bash
 curl -fsS -k https://www.kor35.it/api/healthz/ && echo OK
+journalctl -u kiosk-station.service -n 40 --no-pager
 ```
 
-Nel log deve comparire `Passato a kor35-larp`, `Stacco` o `Già connesso a kor35-larp`. Se resta su Vodafone, spegni il kiosk, connettiti **una volta** a `kor35-larp` dal desktop (così esiste il profilo), poi riavvia il servizio: da quel momento lo script stacca da solo la casa.
+Nel log deve comparire `modello plancia: non stacco il WiFi` e `Server ok`.
 
-Rete di riserva (es. Vodafone) se non è già in env: edita solo quelle due righe, non il file intero.
+### Memoria e desktop
 
-```bash
-sudo nano /etc/kor35/kiosk-station.env
-# KIOSK_WIFI_FALLBACK_SSID=Vodafone-XXXX
-# KIOSK_WIFI_FALLBACK_PSK='password'
-sudo systemctl restart kiosk-station.service
-```
+Lo schermo bianco, con l'icona WiFi accesa, è spesso Chromium senza RAM oppure una finestra finita su Xwayland. La plancia che funziona usa **X11**, non Wayland.
 
-Il server resta `https://www.kor35.it`: in bosco il DNS del mirror lo risolve in locale.
+Se `free -h` mostra meno di 2 GB totali (Pi 4 da 1 GB):
+
+- il reset attiva **zram** (512 MB di swap compressa)
+- sotto i 250 MB liberi Chromium parte senza GPU
+- non serve un altro desktop: Openbox su X11, come la plancia, è già più leggero. Wayland + labwc + Chromium sul pannello 7" è il caso che avvisa «poca memoria»
+
+Non installare un ambiente più pesante. Se dopo il reboot X11 il pannello è ancora bianco, in `/etc/kor35/kiosk-station.env` aggiungi `KIOSK_DISABLE_GPU=1` e `sudo systemctl restart kiosk-station.service`.
 
 ---
 

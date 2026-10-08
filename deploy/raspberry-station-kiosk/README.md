@@ -13,7 +13,7 @@ All'avvio il browser apre `/pilot/?screen=station&viewport=800x480` (riquadro fi
 2. Dopo il tocco compare il QR. Il telefono del giocatore deve avere la statistica impostata nello staff (default ingegneria `0IN > 0`, scientifica `0SC > 0`, comunicazioni `0CO > 0`).
 3. La console entra nel layout compatto, pensato per 800×480. Ingegneria e scientifica usano le schede; comunicazioni mostra i colori di allarme.
 
-Il WiFi prova prima **`kor35-larp`** (mesh Omada, modalità evento / bosco) e la ripete per alcuni secondi: all'accensione la rete di casa è spesso già connessa mentre le EAP non sono ancora in elenco. Se il bosco non compare, usa l'SSID di riserva oppure chiede a schermo quale rete usare. A regime un controllo ogni 20 secondi passa a `kor35-larp` appena quella rete è visibile. Il kiosk riusa il profilo salvato dal desktop (come la plancia dual-screen) e non ne cambia la password: altrimenti l'associazione fallisce e il Pi torna sulla rete di casa.
+Il WiFi è quello della plancia dual-screen: NetworkManager tiene i profili e lo script **non stacca** la rete attuale. Se `kor35-larp` (o `kor35_larp`) è già connessa, non la tocca. Se non lo è, alza **una volta** il profilo salvato, senza riscrivere la password. Chromium parte solo quando `https://www.kor35.it/api/healthz/` risponde e si riapre se la pagina cade. Su un Pi con meno di 2 GB il reset attiva zram e, se il desktop è Wayland, passa a **Openbox su X11** (lo stesso modello della plancia, più leggero di labwc).
 
 ## Aggiornamento (Pi già installato)
 
@@ -27,11 +27,15 @@ mkdir -p "$WORKDIR" && cd "$WORKDIR"
 stamp=$(date +%s)
 curl -fsSL -H 'Cache-Control: no-cache' -o kiosk-station.sh "${BASE}/kiosk-station.sh?${stamp}"
 curl -fsSL -H 'Cache-Control: no-cache' -o kor35-kiosk-wifi.sh "${BASE}/kor35-kiosk-wifi.sh?${stamp}"
+curl -fsSL -H 'Cache-Control: no-cache' -o reset-station-kiosk.sh "${BASE}/reset-station-kiosk.sh?${stamp}"
 curl -fsSL -H 'Cache-Control: no-cache' -o update-station-kiosk.sh "${BASE}/update-station-kiosk.sh?${stamp}"
-grep -q "Scan da .* non elenca" kor35-kiosk-wifi.sh || { echo "SCRIPT VECCHIO, riprova il curl"; exit 1; }
-chmod +x *.sh
-sudo ./update-station-kiosk.sh
+curl -fsSL -H 'Cache-Control: no-cache' -o kiosk-station.service "${BASE}/kiosk-station.service?${stamp}"
+grep -q "non stacco il WiFi" kiosk-station.sh || { echo "SCRIPT VECCHIO, riprova il curl"; exit 1; }
+chmod +x kiosk-station.sh kor35-kiosk-wifi.sh reset-station-kiosk.sh update-station-kiosk.sh
+sudo ./reset-station-kiosk.sh
 ```
+
+Se il reset chiede X11, `sudo reboot`. Poi `journalctl -u kiosk-station.service -n 40 --no-pager`: devono comparire `modello plancia: non stacco il WiFi` e `Server ok`.
 
 ## Installazione
 
