@@ -8,6 +8,12 @@ import RichHtml from './RichHtml';
 import { emitToast } from '../utils/toastBus';
 
 const PersonaggioDuelloQrView = React.lazy(() => import('./PersonaggioDuelloQrView'));
+// Lazy a livello di modulo: dentro al render ogni passaggio crea un tipo nuovo
+// e il negozio (o bustina, contratto, scontro) si smonta e ricarica di continuo.
+const NegozioMercanteModal = React.lazy(() => import('./NegozioMercanteModal'));
+const BustinaCarteQrView = React.lazy(() => import('./BustinaCarteQrView'));
+const ContrattoQrView = React.lazy(() => import('./ContrattoQrView'));
+const ScontroCarteQrView = React.lazy(() => import('./ScontroCarteQrView'));
 import ComponentiRiparazionePicker, {
   selezioneToArray,
   validateSelezioneComponenti,
@@ -1259,8 +1265,7 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
     const qrId = data.dati?.qr_code_id || data.qrcode_id; 
 
     switch (data.tipo_modello) {
-      case 'negozio_mercante': {
-        const NegozioMercanteModal = React.lazy(() => import('./NegozioMercanteModal'));
+      case 'negozio_mercante':
         return (
           <React.Suspense fallback={<Loader className="animate-spin mx-auto" />}>
             <NegozioMercanteModal
@@ -1271,28 +1276,22 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             />
           </React.Suspense>
         );
-      }
 
-      case 'bustina_carte': {
-        const BustinaCarteQrView = React.lazy(() => import('./BustinaCarteQrView'));
+      case 'bustina_carte':
         return (
           <React.Suspense fallback={<Loader className="animate-spin mx-auto" />}>
             <BustinaCarteQrView data={data.dati} onClose={onClose} onLogout={onLogout} />
           </React.Suspense>
         );
-      }
 
-      case 'contratto': {
-        const ContrattoQrView = React.lazy(() => import('./ContrattoQrView'));
+      case 'contratto':
         return (
           <React.Suspense fallback={<Loader className="animate-spin mx-auto" />}>
             <ContrattoQrView data={data.dati} onClose={onClose} onLogout={onLogout} />
           </React.Suspense>
         );
-      }
 
-      case 'scontro_carte': {
-        const ScontroCarteQrView = React.lazy(() => import('./ScontroCarteQrView'));
+      case 'scontro_carte':
         return (
           <React.Suspense fallback={<Loader className="animate-spin mx-auto" />}>
             <ScontroCarteQrView
@@ -1303,7 +1302,6 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             />
           </React.Suspense>
         );
-      }
 
       case 'manifesto':
       case 'a_vista':

@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, createElement } from 'react';
+import { act, createElement, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 const api = vi.hoisted(() => ({
@@ -155,6 +155,48 @@ describe('QrResultModal resta aperta', () => {
       vi.advanceTimersByTime(1);
     });
     expect(onClose).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+
+  it('il negozio non si rimonta quando il genitore ridisegna', async () => {
+    const onClose = vi.fn();
+    const dati = { negozio_id: 3, nome: 'Inventurium', aperto: true, voci: [] };
+
+    function Harness() {
+      const [tick, setTick] = useState(0);
+      return createElement(
+        'div',
+        null,
+        createElement(
+          'button',
+          { type: 'button', onClick: () => setTick((n) => n + 1) },
+          `ridisegna ${tick}`,
+        ),
+        createElement(QrResultModal, {
+          data: { tipo_modello: 'negozio_mercante', qrcode_id: 'shop-inventurium', dati },
+          onClose,
+          onLogout: vi.fn(),
+        }),
+      );
+    }
+
+    const view = mount(createElement(Harness));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    });
+    const titolo = [...document.querySelectorAll('h2, [id]')].find((nodo) => nodo.textContent.includes('Inventurium'));
+    expect(titolo).toBeTruthy();
+
+    await act(async () => {
+      bottoneConTesto('ridisegna').click();
+    });
+    await act(async () => {
+      bottoneConTesto('ridisegna').click();
+    });
+
+    expect(titolo.isConnected).toBe(true);
+    expect(document.body.textContent).toContain('Inventurium');
+    expect(onClose).not.toHaveBeenCalled();
     view.unmount();
   });
 
