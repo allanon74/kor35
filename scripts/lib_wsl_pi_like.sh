@@ -2,7 +2,9 @@
 # Libreria comune per stack WSL Pi-like (sorgere da up/down/logs).
 # shellcheck shell=bash
 
-KOR35_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Se già impostato (es. copia installata in /usr/local/lib/kor35 per il timer prod),
+# non ricalcolare dal path dello script.
+KOR35_ROOT="${KOR35_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 WSL_PI_STACK_DIR="${WSL_PI_STACK_DIR:-$KOR35_ROOT/config/docker}"
 WSL_PI_COMPOSE_BASE_FILE="${WSL_PI_COMPOSE_BASE_FILE:-compose.base.yml}"
 WSL_PI_COMPOSE_FILE="${WSL_PI_COMPOSE_FILE:-compose.dev-home.yml}"

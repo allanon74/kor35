@@ -81,6 +81,17 @@ if [ ! -x "$REPO_PATH/scripts/backup_db_daily.sh" ]; then
 fi
 
 SYSTEMD_DIR="/etc/systemd/system"
+# Copia stabile fuori dal tree git: un deploy CI su main non deve ripristinare
+# lo script vecchio e far partire la retention a "0 giorni".
+INSTALL_LIB_DIR="/usr/local/lib/kor35"
+INSTALLED_BACKUP_SCRIPT="$INSTALL_LIB_DIR/backup_db_daily.sh"
+mkdir -p "$INSTALL_LIB_DIR"
+# Dipendenze usate da backup_db_daily.sh (path relativo alla SCRIPT_DIR installata)
+cp "$REPO_PATH/scripts/backup_db_daily.sh" "$INSTALLED_BACKUP_SCRIPT"
+cp "$REPO_PATH/scripts/lib_wsl_pi_like.sh" "$INSTALL_LIB_DIR/lib_wsl_pi_like.sh"
+chmod 755 "$INSTALLED_BACKUP_SCRIPT"
+chmod 644 "$INSTALL_LIB_DIR/lib_wsl_pi_like.sh"
+
 UNITS=(
   "kor35-db-backup.service"
   "kor35-db-backup.timer"
@@ -98,9 +109,23 @@ done
 
 # Parametrizzazione locale
 sed -i "s|/srv/kor35|$REPO_PATH|g" "$SYSTEMD_DIR/kor35-db-backup.service"
+# Timer esegue sempre la copia installata (non il file sotto /srv/kor35)
+sed -i "s|^ExecStart=.*$|ExecStart=$INSTALLED_BACKUP_SCRIPT --env prod|g" "$SYSTEMD_DIR/kor35-db-backup.service"
+sed -i "s|^WorkingDirectory=.*$|WorkingDirectory=$REPO_PATH|g" "$SYSTEMD_DIR/kor35-db-backup.service"
+# Root repo per lib_wsl_pi_like (la copia in /usr/local non è sotto il monorepo)
+if grep -q '^Environment=KOR35_ROOT=' "$SYSTEMD_DIR/kor35-db-backup.service"; then
+  sed -i "s|^Environment=KOR35_ROOT=.*$|Environment=KOR35_ROOT=$REPO_PATH|g" "$SYSTEMD_DIR/kor35-db-backup.service"
+else
+  sed -i "/^WorkingDirectory=/a Environment=KOR35_ROOT=$REPO_PATH" "$SYSTEMD_DIR/kor35-db-backup.service"
+fi
 sed -i "s|^OnCalendar=.*$|OnCalendar=$BACKUP_CALENDAR|g" "$SYSTEMD_DIR/kor35-db-backup.timer"
 sed -i "s|^Environment=KOR35_DB_BACKUP_DIR=.*$|Environment=KOR35_DB_BACKUP_DIR=$BACKUP_DIR|g" "$SYSTEMD_DIR/kor35-db-backup.service"
 sed -i "s|^Environment=KOR35_DB_BACKUP_KEEP=.*$|Environment=KOR35_DB_BACKUP_KEEP=$BACKUP_KEEP|g" "$SYSTEMD_DIR/kor35-db-backup.service"
+sed -i "s|^Environment=KOR35_DB_BACKUP_GROUP=.*$|Environment=KOR35_DB_BACKUP_GROUP=$BACKUP_GROUP|g" "$SYSTEMD_DIR/kor35-db-backup.service"
+# Se la riga GROUP manca (unit vecchia), aggiungila dopo KEEP
+if ! grep -q '^Environment=KOR35_DB_BACKUP_GROUP=' "$SYSTEMD_DIR/kor35-db-backup.service"; then
+  sed -i "/^Environment=KOR35_DB_BACKUP_KEEP=/a Environment=KOR35_DB_BACKUP_GROUP=$BACKUP_GROUP" "$SYSTEMD_DIR/kor35-db-backup.service"
+fi
 sed -i "s|^Environment=KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR=.*$|Environment=KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR=$BACKUP_DIR/monthly|g" "$SYSTEMD_DIR/kor35-db-backup.service"
 
 # Parent /var/backups/kor35 deve essere raggiungibile dal gruppo deploy
@@ -132,6 +157,7 @@ fi
 
 echo "Installazione backup DB produzione completata."
 echo "Repo path: $REPO_PATH"
+echo "Installed script: $INSTALLED_BACKUP_SCRIPT"
 echo "Backup dir: $BACKUP_DIR"
 echo "Calendar: $BACKUP_CALENDAR"
 echo "Keep last: $BACKUP_KEEP"

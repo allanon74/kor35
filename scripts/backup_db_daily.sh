@@ -29,6 +29,9 @@ KEEP="${KOR35_DB_BACKUP_KEEP:-10}"
 RETENTION_DAYS="${KOR35_DB_BACKUP_RETENTION_DAYS:-0}"
 MONTHLY_ARCHIVE_DIR="${KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR:-$BACKUP_DIR/monthly}"
 ENABLE_MONTHLY_ARCHIVE="${KOR35_DB_BACKUP_ENABLE_MONTHLY_ARCHIVE:-1}"
+# Se valorizzato e siamo root, i dump appena creati diventano root:GROUP mode 640
+# (così l'utente deploy può leggerli anche quando gira il timer systemd).
+BACKUP_GROUP="${KOR35_DB_BACKUP_GROUP:-}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -71,6 +74,11 @@ wsl_pi_compose exec -T db sh -lc '
 
 mv "$tmp_file" "$dump_file"
 sha256sum "$dump_file" >"$sha_file"
+
+if [ -n "$BACKUP_GROUP" ] && [ "$(id -u)" -eq 0 ] && getent group "$BACKUP_GROUP" >/dev/null 2>&1; then
+  chown "root:$BACKUP_GROUP" "$dump_file" "$sha_file" || true
+  chmod 640 "$dump_file" "$sha_file" || true
+fi
 
 echo "OK: $(basename "$dump_file")"
 
