@@ -55,7 +55,9 @@ from .engine import (
     prepara_sessione_nuovo_volo,
     staff_azione_sottosistema_sessione,
     staff_imposta_carburante_sessione,
+    staff_imposta_storage_sessione,
     capacita_carburante_serbatoi,
+    capacita_storage_batterie,
     intervallo_tick_effettivo_sessione,
     secondi_fino_valutazione_evento,
     termina_sessione_volo,
@@ -2045,6 +2047,79 @@ class StaffSottosistemaViewSet(viewsets.ModelViewSet):
         out["applicato"] = True
         return Response(out, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=["get", "post"], url_path="storage-sessione")
+    def storage_sessione(self, request, pk=None):
+        """
+        GET/POST carica batterie d'emergenza sulla sessione console (solo tipo batteria).
+
+        POST body: { "storage_attuale": <float> } oppure { "riempi": true }
+        """
+        sottos = self.get_object()
+        if str(sottos.tipo or "").strip().lower() != "batteria":
+            return Response(
+                {"error": "Operazione consentita solo su sottosistemi tipo batteria."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        sessione = _sessione_attiva_corrente()
+        massimo = capacita_storage_batterie()
+
+        def _payload(sess: Optional[SessioneVolo]) -> dict:
+            if sess is None:
+                return {
+                    "sessione_attiva": False,
+                    "storage_attuale": None,
+                    "storage_massimo": massimo,
+                    "sessione_stato": None,
+                    "pilota_nome": None,
+                    "sessione_id": None,
+                }
+            pilota = getattr(sess, "pilota", None)
+            return {
+                "sessione_attiva": True,
+                "storage_attuale": float(sess.storage_energia_attuale or 0.0),
+                "storage_massimo": massimo,
+                "sessione_stato": sess.stato,
+                "pilota_nome": getattr(pilota, "nome", str(pilota)) if pilota else "",
+                "sessione_id": str(sess.pk),
+            }
+
+        if request.method == "GET":
+            return Response(_payload(sessione))
+
+        if sessione is None:
+            return Response(
+                {"error": "Nessuna sessione console attiva (idle o in volo)."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if request.data.get("riempi") in (True, "true", "1", 1):
+            target = massimo
+        else:
+            raw = request.data.get("storage_attuale")
+            if raw is None:
+                return Response(
+                    {"error": "Specificare storage_attuale o riempi=true."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                target = float(raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "storage_attuale non valido."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        try:
+            with transaction.atomic():
+                sessione = staff_imposta_storage_sessione(sessione, target)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        out = _payload(sessione)
+        out["applicato"] = True
+        return Response(out, status=status.HTTP_200_OK)
+
 
 class StaffComandoViewSet(viewsets.ModelViewSet):
     queryset = ComandoNave.objects.all().order_by("codice")
@@ -2520,6 +2595,33 @@ class PilotCompattatoreSintesiCarburanteView(APIView):
             )
         try:
             payload = operazione_sintesi_carburante(allocazioni=allocazioni)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
+
+
+class PilotCompattatoreRicaricaBatterieView(APIView):
+    """
+    POST /api/pilot/compattatore/ricarica-batterie/
+    body { allocazioni: [{mattone_id, quantita}, ...] }  (1–3 unità totali)
+
+    Stessa resa del bruciatore carburante, versata nello storage delle batterie.
+    """
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsCompattatoreConsole]
+
+    def post(self, request):
+        from .compattatore_engine import operazione_ricarica_batterie
+
+        allocazioni = request.data.get("allocazioni") or request.data.get("componenti") or []
+        if not isinstance(allocazioni, list):
+            return Response(
+                {"error": "allocazioni deve essere una lista."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            payload = operazione_ricarica_batterie(allocazioni=allocazioni)
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(payload)

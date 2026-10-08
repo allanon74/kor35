@@ -145,6 +145,11 @@ urlpatterns = [
         name="pilot-compattatore-sintesi-carburante",
     ),
     path(
+        "compattatore/ricarica-batterie/",
+        views.PilotCompattatoreRicaricaBatterieView.as_view(),
+        name="pilot-compattatore-ricarica-batterie",
+    ),
+    path(
         "compattatore/energizza-minimo/",
         views.PilotCompattatoreEnergizzaMinimoView.as_view(),
         name="pilot-compattatore-energizza-minimo",

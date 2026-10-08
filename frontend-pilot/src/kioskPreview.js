@@ -23,6 +23,10 @@ export const PREVIEW_COMPATTATORE = {
     carburante_attuale: 640,
     carburante_massimo: 1000,
   },
+  ricarica_batterie: {
+    storage_attuale: 180,
+    storage_massimo: 500,
+  },
   stiva: {
     righe: COLORI.map(([id, sigla, nome, qty, indice]) => ({
       mattone_id: id,
