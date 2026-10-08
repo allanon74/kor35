@@ -3018,6 +3018,14 @@ export const staffGetPersonaggi = (params = {}, onLogout) => {
   );
 };
 
+/** Staff: eventi selezionabili nel filtro «Iscritti all'evento» (id, titolo, date, iscritti). */
+export const staffGetPersonaggiEventiOpzioni = (onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/personaggi/eventi-opzioni/',
+    { method: 'GET' },
+    onLogout,
+  );
+
 /** Staff: dettaglio completo personaggio per modale. */
 export const staffGetPersonaggioDetail = (id, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/`, { method: 'GET' }, onLogout);

@@ -27,6 +27,7 @@ import StaffDataTable from '../../staff/StaffDataTable';
 import { applyColumnFilters, applyMultiSort } from '../../staff/staffTableModel';
 import {
   staffGetPersonaggi,
+  staffGetPersonaggiEventiOpzioni,
   staffGetPersonaggioDetail,
   staffPatchPersonaggio,
   staffPatchPersonaggioSocialProfile,
@@ -73,12 +74,27 @@ function caricaIncludesCarriera(carica, carrieraId) {
 
 const TABS = PERSONAGGI_STAFF_TABS;
 
+/** Etichetta evento per il filtro iscritti: titolo + data inizio + numero iscritti. */
+function eventoOptionLabel(evento) {
+  const titolo = evento?.titolo || `Evento #${evento?.id}`;
+  const data = evento?.data_inizio ? new Date(evento.data_inizio) : null;
+  const dataLabel = data && !Number.isNaN(data.getTime())
+    ? data.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : '';
+  const iscritti = Number.isFinite(Number(evento?.iscritti))
+    ? `${Number(evento.iscritti)} iscritti`
+    : '';
+  const extra = [dataLabel, iscritti].filter(Boolean).join(' · ');
+  return extra ? `${titolo} (${extra})` : titolo;
+}
+
 const PersonaggiStaffManager = ({ onLogout }) => {
   const [filters, setFilters] = useState({
-    q: '', tipo: 'all', era: '', carriera: '', morto: 'vivo', page: 1,
+    q: '', evento: '', tipo: 'all', era: '', carriera: '', morto: 'vivo', page: 1,
   });
   const [listData, setListData] = useState({ results: [], count: 0, next: null, previous: null });
   const [loading, setLoading] = useState(true);
+  const [eventi, setEventi] = useState([]);
   const [ere, setEre] = useState([]);
   const [carriere, setCarriere] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -207,6 +223,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
     try {
       const data = await staffGetPersonaggi({
         q: filters.q,
+        evento: filters.evento,
         tipo: filters.tipo,
         era: filters.era,
         carriera: filters.carriera,
@@ -226,6 +243,9 @@ const PersonaggiStaffManager = ({ onLogout }) => {
   }, [loadList]);
 
   useEffect(() => {
+    staffGetPersonaggiEventiOpzioni(onLogout)
+      .then((d) => setEventi(Array.isArray(d) ? d : d?.results || []))
+      .catch(() => setEventi([]));
     getEre(onLogout).then((d) => Array.isArray(d) && setEre(d));
     staffGetCarriere(onLogout).then((d) => setCarriere(Array.isArray(d) ? d : d?.results || []));
     staffGetTipiCarriera(onLogout).then((d) => setTipiCarriera(Array.isArray(d) ? d : d?.results || []));
@@ -499,6 +519,11 @@ const PersonaggiStaffManager = ({ onLogout }) => {
     return cariche.filter((c) => caricaIncludesCarriera(c, cid));
   }, [cariche, membershipForm]);
 
+  const eventoSelezionato = useMemo(
+    () => eventi.find((ev) => String(ev.id) === String(filters.evento)) || null,
+    [eventi, filters.evento],
+  );
+
   const totalPages = Math.max(1, Math.ceil((listData.count || 0) / 40));
 
   const personaggioColumns = useMemo(() => buildPersonaggioListColumns(), []);
@@ -560,6 +585,33 @@ const PersonaggiStaffManager = ({ onLogout }) => {
               filtersOpen ? 'grid' : 'hidden'
             } lg:flex lg:flex-wrap grid-cols-2 gap-2 items-end`}
           >
+            <div className="min-w-0 col-span-2 lg:col-span-1">
+              <label htmlFor="staff-personaggi-evento" className="text-xs text-gray-500 block mb-1">
+                Iscritti all&apos;evento
+              </label>
+              <div className="flex items-center gap-2">
+                <select
+                  id="staff-personaggi-evento"
+                  className="w-full lg:w-auto min-h-11 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-sm lg:max-w-[260px]"
+                  value={filters.evento}
+                  onChange={(e) => setFilters((f) => ({ ...f, evento: e.target.value, page: 1 }))}
+                >
+                  <option value="">Tutti (nessun filtro evento)</option>
+                  {eventi.map((ev) => (
+                    <option key={ev.id} value={ev.id}>{eventoOptionLabel(ev)}</option>
+                  ))}
+                </select>
+                {filters.evento ? (
+                  <button
+                    type="button"
+                    onClick={() => setFilters((f) => ({ ...f, evento: '', page: 1 }))}
+                    className="min-h-11 shrink-0 rounded-lg border border-gray-700 bg-gray-800 px-3 text-xs font-bold text-gray-300"
+                  >
+                    Azzera
+                  </button>
+                ) : null}
+              </div>
+            </div>
             <div className="min-w-0">
               <label className="text-xs text-gray-500 block mb-1">Tipo</label>
               <select
@@ -634,6 +686,11 @@ const PersonaggiStaffManager = ({ onLogout }) => {
             </div>
           </div>
         </div>
+        {filters.evento && (
+          <p className="mt-2 text-xs text-teal-300">
+            Elenco limitato agli iscritti a «{eventoSelezionato?.titolo || `evento #${filters.evento}`}».
+          </p>
+        )}
         {message && !selected && (
           <p className="mt-2 text-sm text-teal-300">{message}</p>
         )}

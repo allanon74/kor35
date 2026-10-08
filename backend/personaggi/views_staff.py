@@ -2786,6 +2786,13 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
                 carriere_membership__data_a__isnull=True,
             )
 
+        evento_id = (params.get('evento') or '').strip()
+        if evento_id:
+            try:
+                qs = qs.filter(eventi_partecipati__id=int(evento_id))
+            except (TypeError, ValueError):
+                return Personaggio.objects.none()
+
         morto = (params.get('morto') or 'vivo').lower()
         if morto == 'vivo':
             qs = qs.filter(data_morte__isnull=True)
@@ -2796,6 +2803,18 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return self._staff_personaggi_queryset()
+
+    @action(detail=False, methods=['get'], url_path='eventi-opzioni')
+    def eventi_opzioni(self, request):
+        """Eventi per il filtro «Iscritti all'evento» (fonte: ``Evento.partecipanti``)."""
+        from gestione_plot.models import Evento
+
+        rows = list(
+            Evento.objects.annotate(iscritti=Count('partecipanti', distinct=True))
+            .order_by('-data_inizio')
+            .values('id', 'titolo', 'data_inizio', 'data_fine', 'iscritti')[:300]
+        )
+        return Response(rows)
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
