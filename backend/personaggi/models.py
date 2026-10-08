@@ -4150,11 +4150,60 @@ class Nodo(A_vista):
         super().save(*args, **kwargs)
 
 class Inventario(A_vista):
+    # Nome distinto da Personaggio.crediti_deposito (property sul saldo PG).
+    crediti_deposito_contenuti = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+        validators=[MinValueValidator(Decimal("0"))],
+        verbose_name="Crediti deposito contenuti",
+        help_text="Crediti (conto deposito) prelevabili da chi scansiona questo inventario QR non-PG.",
+    )
+
     class Meta: verbose_name = "Inventario"; verbose_name_plural = "Inventari"
     def __str__(self): return f"Inventario: {self.nome}"
     def get_oggetti(self, data=None):
         if data is None: data = timezone.now()
         return Oggetto.objects.filter(tracciamento_inventario__inventario=self, tracciamento_inventario__data_inizio__lte=data, tracciamento_inventario__data_fine__isnull=True)
+
+    def get_consumabili(self):
+        return self.consumabili_contenuti.all().order_by("-created_at", "nome")
+
+
+class ConsumabileInInventario(SyncableModel, models.Model):
+    """
+    Consumabile (tipicamente da tessitura alchemica) contenuto in un inventario QR non-PG.
+    Alla presa diventa ConsumabilePersonaggio sul PG scanner.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    inventario = models.ForeignKey(
+        Inventario,
+        on_delete=models.CASCADE,
+        related_name="consumabili_contenuti",
+    )
+    tessitura = models.ForeignKey(
+        "Tessitura",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="consumabili_in_inventari",
+        help_text="Tessitura di origine (Ad hoc / Alchimia), se nota.",
+    )
+    nome = models.CharField(max_length=200)
+    descrizione = models.TextField(blank=True, default="")
+    formula = models.TextField(blank=True, null=True, default=DEFAULT_WEAVE_FORMULA_TEMPLATE)
+    utilizzi_rimanenti = models.PositiveIntegerField(default=1)
+    data_scadenza = models.DateField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Consumabile in inventario QR"
+        verbose_name_plural = "Consumabili in inventario QR"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.nome} x{self.utilizzi_rimanenti} @ {self.inventario_id}"
 
 class OggettoInInventario(SyncableModel, models.Model):
     oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE, related_name="tracciamento_inventario")
@@ -4583,6 +4632,20 @@ class QrCode(SyncableModel, models.Model):
     data_creazione = models.DateTimeField(auto_now_add=True)
     testo = models.TextField(blank=True, null=True)
     vista = models.OneToOneField(A_vista, blank=True, null=True, on_delete=models.SET_NULL)
+    usi_max = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Usi massimi",
+        help_text=(
+            "Quante volte il contenuto può essere preso/appreso (o accreditato) prima che il QR si svuoti. "
+            "Vuoto = illimitato."
+        ),
+    )
+    usi_consumati = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Usi consumati",
+        help_text="Contatore acquisizioni/prelievi già effettuati su questo QR.",
+    )
     inventario_presente = models.BooleanField(
         default=False,
         help_text="Flag inventario QR staff: presente all'ultimo inventario.",
@@ -5604,6 +5667,7 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
     TIPO_CERIMONIALE = "cerimoniale"
     TIPO_ATTIVATA = "attivata"
     TIPO_NEGOZIO_MERCANTE = "negozio_mercante"
+    TIPO_CREDITI = "crediti"
     TIPO_CHOICES = (
         (TIPO_TESTO, "Testo"),
         (TIPO_NODO, "Nodo"),
@@ -5617,6 +5681,7 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
         (TIPO_CERIMONIALE, "Cerimoniale"),
         (TIPO_ATTIVATA, "Attivata"),
         (TIPO_NEGOZIO_MERCANTE, "Negozio mercante"),
+        (TIPO_CREDITI, "Crediti deposito"),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -5708,6 +5773,22 @@ class RandomQrPoolEffect(SyncableModel, models.Model):
         related_name="pool_effetti",
         help_text="Effetto: apre il listino del negozio mercante scelto.",
     )
+    crediti_importo_min = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="Solo crediti: importo minimo (o fisso se = max).",
+    )
+    crediti_importo_max = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="Solo crediti: importo massimo.",
+    )
 
     class Meta:
         verbose_name = "Effetto pool QR"
@@ -5771,6 +5852,64 @@ class DocumentoArchiviato(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.tipo}:{self.titolo} → {self.personaggio_id}"
+
+
+class QrCreditoDeposito(SyncableModel, models.Model):
+    """
+    QR che accredita crediti sul conto DEPOSITO del personaggio scanner.
+    Importo fisso (min=max) oppure random nell'intervallo [importo_min, importo_max].
+    Gli usi limitati/illimitati usano QrCode.usi_max / usi_consumati.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=100)
+    testo = models.TextField(blank=True, default="")
+    importo_min = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="Importo minimo (o fisso se uguale a importo_max).",
+    )
+    importo_max = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="Importo massimo (random uniforme incluso se diverso da min).",
+    )
+    qr_code = models.OneToOneField(
+        "QrCode",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="configurazione_credito",
+    )
+
+    class Meta:
+        verbose_name = "QR Credito deposito"
+        verbose_name_plural = "QR Credito deposito"
+        ordering = ["-created_at"]
+
+    def clean(self):
+        if self.importo_min is not None and self.importo_max is not None:
+            if self.importo_max < self.importo_min:
+                raise ValidationError({"importo_max": "Deve essere ≥ importo_min."})
+
+    def importo_estratto(self) -> Decimal:
+        """Importo fisso o random intero/centesimale nell'intervallo incluso."""
+        lo = Decimal(self.importo_min or 0)
+        hi = Decimal(self.importo_max or lo)
+        if hi < lo:
+            lo, hi = hi, lo
+        if lo == hi:
+            return lo
+        # Random a centesimi
+        lo_cents = int(lo * 100)
+        hi_cents = int(hi * 100)
+        return (Decimal(random.randint(lo_cents, hi_cents)) / Decimal("100")).quantize(Decimal("0.01"))
+
+    def __str__(self):
+        return f"Credito QR: {self.nome} [{self.importo_min}–{self.importo_max}]"
 
 
 class Trappola(SyncableModel, models.Model):

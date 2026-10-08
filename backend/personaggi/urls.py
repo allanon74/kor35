@@ -113,6 +113,7 @@ router.register(r'staff/minigioco-sezione-defaults', views_staff.MinigiocoSezion
 router.register(r'staff/serie-collezioni', views_staff.SerieCollezioneStaffViewSet, basename='staff-serie-collezioni')
 router.register(r'staff/trappole', views_staff.TrappolaStaffViewSet, basename='staff-trappole')
 router.register(r'staff/serie-qr', views_staff.SerieQrStaffViewSet, basename='staff-serie-qr')
+router.register(r'staff/qr-credito', views_staff.QrCreditoDepositoStaffViewSet, basename='staff-qr-credito')
 router.register(r'staff/tipologie-effetto', views_staff.TipologiaEffettoViewSet, basename='staff-tipologie-effetto')
 router.register(r'staff/effetti-casuali', views_staff.EffettoCasualeViewSet, basename='staff-effetti-casuali')
 router.register(r'staff/dichiarazioni', views_staff.DichiarazioneStaffViewSet, basename='staff-dichiarazioni')
@@ -266,6 +267,11 @@ urlpatterns = [
     path('api/transazioni/<int:pk>/conferma/', views.TransazioneConfermaView.as_view(), name='api_transazioni_conferma'),
     path('api/transazioni/ruba/', views.RubaView.as_view(), name='api_ruba'),
     path('api/transazioni/acquisisci/', views.AcquisisciView.as_view(), name='api_acquisisci'),
+    path(
+        'api/inventario-qr/prendi/',
+        views.InventarioQrPrendiView.as_view(),
+        name='api_inventario_qr_prendi',
+    ),
     path('api/serie-inventario/', views_serie.SerieInventarioView.as_view(), name='api_serie_inventario'),
     path(
         'api/serie-inventario/<uuid:assegnazione_id>/trasferisci/',

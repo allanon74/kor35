@@ -6,6 +6,7 @@ import StaffQrTab from '../StaffQrTab';
 import { associaQrDiretto } from '../../api';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
+import StaffQrUsiMaxField, { parseStaffQrUsiMax } from './StaffQrUsiMaxField';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 
 const InventarioManager = ({ onBack, onLogout }) => {
@@ -13,6 +14,7 @@ const InventarioManager = ({ onBack, onLogout }) => {
   const [view, setView] = useState('list'); // 'list' | 'editor'
   const [selectedItem, setSelectedItem] = useState(null);
   const [scanningForElement, setScanningForElement] = useState(null);
+  const [qrUsiMax, setQrUsiMax] = useState('1');
   const [pendingQrConflict, setPendingQrConflict] = useState(null);
   const [qrStatus, setQrStatus] = useState({ type: '', message: '' });
   const [listVersion, setListVersion] = useState(0);
@@ -35,6 +37,7 @@ const InventarioManager = ({ onBack, onLogout }) => {
   }, []);
 
   const handleScanQr = useCallback((elementId) => {
+    setQrUsiMax('1');
     setScanningForElement(elementId);
   }, []);
 
@@ -79,11 +82,13 @@ const InventarioManager = ({ onBack, onLogout }) => {
               Annulla
             </button>
           </div>
+          <StaffQrUsiMaxField value={qrUsiMax} onChange={setQrUsiMax} />
           <div className="flex-1">
             <StaffQrTab 
               onScanSuccess={async (qr_id) => {
+                const usiMax = parseStaffQrUsiMax(qrUsiMax);
                 try {
-                  await associaQrDiretto(scanningForElement, qr_id, onLogout);
+                  await associaQrDiretto(scanningForElement, qr_id, onLogout, false, usiMax);
                   setScanningForElement(null);
                   setQrStatus({ type: 'success', message: 'QR associato con successo.' });
                   setListVersion((v) => v + 1);
@@ -93,6 +98,7 @@ const InventarioManager = ({ onBack, onLogout }) => {
                       targetId: scanningForElement,
                       qrId: qr_id,
                       errorData: error.data,
+                      usiMax,
                     });
                     setScanningForElement(null);
                   } else {
@@ -116,7 +122,7 @@ const InventarioManager = ({ onBack, onLogout }) => {
           const p = pendingQrConflict;
           if (!p?.qrId || !p?.targetId) return;
           try {
-            await associaQrDiretto(p.targetId, p.qrId, onLogout, true);
+            await associaQrDiretto(p.targetId, p.qrId, onLogout, true, p.usiMax);
             setScanningForElement(null);
             setPendingQrConflict(null);
             setQrStatus({ type: 'success', message: 'QR riassociato con successo.' });

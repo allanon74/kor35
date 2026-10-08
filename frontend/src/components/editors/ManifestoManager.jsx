@@ -6,6 +6,7 @@ import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
 import StaffQrBadge from './StaffQrBadge';
+import StaffQrUsiMaxField from './StaffQrUsiMaxField';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import StaffMinigiocoPageToolbar from './StaffMinigiocoPageToolbar';
 import StaffMinigiocoUsaDefaultToggle from './StaffMinigiocoUsaDefaultToggle';
@@ -23,6 +24,7 @@ import {
 import {
   staffAssociaQrSerieQr,
   staffAssociaQrTrappola,
+  staffAssociaQrCredito,
   staffGetManifesti,
   staffCreateManifesto,
   staffUpdateManifesto,
@@ -41,6 +43,10 @@ import {
   staffCreateTrappola,
   staffUpdateTrappola,
   staffDeleteTrappola,
+  staffGetQrCredito,
+  staffCreateQrCredito,
+  staffUpdateQrCredito,
+  staffDeleteQrCredito,
   getEventi,
   resolveMediaUrl,
 } from '../../api';
@@ -49,6 +55,7 @@ const TABS = [
   { id: 'manifesti', label: 'Manifesti' },
   { id: 'serie', label: 'Serie' },
   { id: 'trappole', label: 'Trappole' },
+  { id: 'crediti', label: 'Crediti QR' },
 ];
 
 const emptyCondizioni = () => ({ operator: 'AND', requisiti: [] });
@@ -61,12 +68,13 @@ const ManifestoManager = ({ onBack, onLogout }) => {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [scanningId, setScanningId] = useState(null);
-  const [scanningKind, setScanningKind] = useState('manifesto'); // manifesto | serie | trappola
+  const [scanningKind, setScanningKind] = useState('manifesto'); // manifesto | serie | trappola | credito
   const [msg, setMsg] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [modalTab, setModalTab] = useState('dati');
   const [serieEditing, setSerieEditing] = useState(null);
   const [trappolaEditing, setTrappolaEditing] = useState(null);
+  const [creditoEditing, setCreditoEditing] = useState(null);
   const [serieQrEditing, setSerieQrEditing] = useState(null);
   const [seriePendingFiles, setSeriePendingFiles] = useState([]);
   const [serieImgBusy, setSerieImgBusy] = useState(false);
@@ -89,6 +97,15 @@ const ManifestoManager = ({ onBack, onLogout }) => {
   const [confirmResetSerie, setConfirmResetSerie] = useState(null);
   const [trappole, setTrappole] = useState([]);
   const [trappolaForm, setTrappolaForm] = useState({ id: null, nome: '', testo: '', durata_secondi: 60 });
+  const [creditiList, setCreditiList] = useState([]);
+  const [creditoForm, setCreditoForm] = useState({
+    id: null,
+    nome: '',
+    testo: '',
+    importo_min: '10',
+    importo_max: '10',
+    usi_max: '1',
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -104,19 +121,21 @@ const ManifestoManager = ({ onBack, onLogout }) => {
 
   const loadSerieTrappole = useCallback(async () => {
     try {
-      const [serie, sqr, traps, eventi] = await Promise.all([
+      const [serie, sqr, traps, crediti, eventi] = await Promise.all([
         staffGetSerieCollezioni(onLogout),
         staffGetSerieQr(onLogout),
         staffGetTrappole(onLogout),
+        staffGetQrCredito(onLogout),
         getEventi(onLogout).catch(() => []),
       ]);
       setSerieList(Array.isArray(serie) ? serie : serie?.results || []);
       setSerieQrList(Array.isArray(sqr) ? sqr : sqr?.results || []);
       setTrappole(Array.isArray(traps) ? traps : traps?.results || []);
+      setCreditiList(Array.isArray(crediti) ? crediti : crediti?.results || []);
       const evList = Array.isArray(eventi) ? eventi : eventi?.results || [];
       setEventiOptions(evList);
     } catch (e) {
-      setMsg(e.message || 'Errore caricamento serie/trappole');
+      setMsg(e.message || 'Errore caricamento serie/trappole/crediti');
     }
   }, [onLogout]);
 
@@ -126,6 +145,8 @@ const ManifestoManager = ({ onBack, onLogout }) => {
     handleQrScan,
     confirmConflict,
     cancelConflict,
+    qrUsiMax,
+    setQrUsiMax,
   } = useStaffQrAssociation({ onLogout, onReload: load });
 
   useEffect(() => {
@@ -133,7 +154,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
   }, [load]);
 
   useEffect(() => {
-    if (tab === 'serie' || tab === 'trappole') {
+    if (tab === 'serie' || tab === 'trappole' || tab === 'crediti') {
       loadSerieTrappole();
     }
   }, [tab, loadSerieTrappole]);
@@ -779,13 +800,93 @@ const ManifestoManager = ({ onBack, onLogout }) => {
     </div>
   );
 
+  const renderCrediti = () => (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center gap-2 flex-wrap">
+        <h2 className="text-xl font-bold">Crediti deposito (QR)</h2>
+        <button
+          type="button"
+          className="px-3 py-2 bg-emerald-700 rounded text-sm"
+          onClick={() => {
+            setCreditoForm({
+              id: null,
+              nome: '',
+              testo: '',
+              importo_min: '10',
+              importo_max: '10',
+              usi_max: '1',
+            });
+            setCreditoEditing(true);
+          }}
+        >
+          Nuovo QR credito
+        </button>
+      </div>
+      <p className="text-sm text-gray-400">
+        Alla scansione accredita crediti sul deposito (importo fisso se min=max, altrimenti random).
+        Usi massimi vuoto = illimitato. Compatibile con pool e minigiochi.
+      </p>
+      <ul className="space-y-2">
+        {creditiList.map((c) => (
+          <li key={c.id} className="flex items-center gap-2 bg-gray-800/40 px-3 py-2 rounded text-sm flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold">{c.nome}</div>
+              <div className="text-xs text-gray-400">
+                {c.importo_min}–{c.importo_max} CR
+                {c.usi_max == null ? ' · usi illimitati' : ` · usi ${c.usi_consumati || 0}/${c.usi_max}`}
+              </div>
+            </div>
+            <StaffQrBadge hasQr={c.has_qrcode} />
+            <button
+              type="button"
+              className="text-xs px-2 py-1 bg-gray-700 rounded"
+              onClick={() => {
+                setCreditoForm({
+                  id: c.id,
+                  nome: c.nome || '',
+                  testo: c.testo || '',
+                  importo_min: String(c.importo_min ?? ''),
+                  importo_max: String(c.importo_max ?? ''),
+                  usi_max: c.usi_max == null ? '' : String(c.usi_max),
+                });
+                setCreditoEditing(true);
+              }}
+            >
+              Modifica
+            </button>
+            <button
+              type="button"
+              className="text-xs px-2 py-1 bg-violet-800 rounded"
+              onClick={() => startScan(c.id, 'credito')}
+            >
+              Associa QR
+            </button>
+            <button
+              type="button"
+              className="text-red-400 text-xs"
+              onClick={() => setConfirmDelete({ type: 'credito', id: c.id, label: c.nome })}
+            >
+              Elimina
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+
   const scanTitle =
-    scanningKind === 'serie' ? 'Associa QR a serie' : scanningKind === 'trappola' ? 'Associa QR a trappola' : 'Associa QR a manifesto';
+    scanningKind === 'serie'
+      ? 'Associa QR a serie'
+      : scanningKind === 'trappola'
+        ? 'Associa QR a trappola'
+        : scanningKind === 'credito'
+          ? 'Associa QR a credito deposito'
+          : 'Associa QR a manifesto';
 
   return (
     <StaffToolShell maxWidth="4xl" className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold text-white tracking-tight">QR — Manifesti / Serie / Trappole</h1>
+        <h1 className="text-xl font-bold text-white tracking-tight">QR — Manifesti / Serie / Trappole / Crediti</h1>
         <StaffToolSubnav
           tabs={TABS}
           active={tab}
@@ -805,6 +906,88 @@ const ManifestoManager = ({ onBack, onLogout }) => {
       {tab === 'manifesti' && renderManifesti()}
       {tab === 'serie' && renderSerie()}
       {tab === 'trappole' && renderTrappole()}
+      {tab === 'crediti' && renderCrediti()}
+
+      {creditoEditing && (
+        <StaffEditorModal
+          title={creditoForm.id ? `Credito: ${creditoForm.nome || 'senza nome'}` : 'Nuovo QR credito'}
+          size="md"
+          onClose={() => setCreditoEditing(null)}
+          onSave={async () => {
+            if (!creditoForm.nome?.trim()) {
+              setMsg('Nome obbligatorio');
+              return;
+            }
+            try {
+              const payload = {
+                nome: creditoForm.nome,
+                testo: creditoForm.testo || '',
+                importo_min: creditoForm.importo_min || '0',
+                importo_max: creditoForm.importo_max || creditoForm.importo_min || '0',
+              };
+              if (creditoForm.id) {
+                await staffUpdateQrCredito(creditoForm.id, payload, onLogout);
+                setMsg('Credito QR aggiornato.');
+              } else {
+                await staffCreateQrCredito(payload, onLogout);
+                setMsg('Credito QR creato.');
+              }
+              setCreditoEditing(null);
+              await loadSerieTrappole();
+            } catch (e) {
+              setMsg(e.message || 'Salvataggio fallito');
+            }
+          }}
+        >
+          <div className="space-y-3">
+            <input
+              className="w-full bg-gray-900 border border-gray-600 rounded p-2"
+              placeholder="Nome"
+              value={creditoForm.nome}
+              onChange={(e) => setCreditoForm((f) => ({ ...f, nome: e.target.value }))}
+            />
+            <textarea
+              className="w-full bg-gray-900 border border-gray-600 rounded p-2 min-h-[80px]"
+              placeholder="Testo (opzionale)"
+              value={creditoForm.testo}
+              onChange={(e) => setCreditoForm((f) => ({ ...f, testo: e.target.value }))}
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="bg-gray-900 border border-gray-600 rounded p-2"
+                placeholder="Importo min"
+                value={creditoForm.importo_min}
+                onChange={(e) => setCreditoForm((f) => ({ ...f, importo_min: e.target.value }))}
+              />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="bg-gray-900 border border-gray-600 rounded p-2"
+                placeholder="Importo max"
+                value={creditoForm.importo_max}
+                onChange={(e) => setCreditoForm((f) => ({ ...f, importo_max: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 uppercase font-black block mb-1">
+                Usi massimi (vuoto = illimitato) — applicati all&apos;associazione QR
+              </label>
+              <input
+                type="number"
+                min="1"
+                className="w-full bg-gray-900 border border-gray-600 rounded p-2"
+                placeholder="Vuoto = illimitato"
+                value={creditoForm.usi_max}
+                onChange={(e) => setCreditoForm((f) => ({ ...f, usi_max: e.target.value }))}
+              />
+            </div>
+          </div>
+        </StaffEditorModal>
+      )}
 
       {serieEditing && (
         <StaffEditorModal
@@ -1132,6 +1315,16 @@ const ManifestoManager = ({ onBack, onLogout }) => {
               Chiudi
             </button>
           </div>
+          {(scanningKind === 'manifesto' || scanningKind === 'credito') && (
+            <StaffQrUsiMaxField
+              value={scanningKind === 'credito' ? creditoForm.usi_max : qrUsiMax}
+              onChange={
+                scanningKind === 'credito'
+                  ? (v) => setCreditoForm((f) => ({ ...f, usi_max: v }))
+                  : setQrUsiMax
+              }
+            />
+          )}
           <div className="flex-1">
             <StaffQrTab
               onScanSuccess={async (qr_id) => {
@@ -1145,11 +1338,23 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                   }
                 } else {
                   try {
-                    const assoc =
-                      scanningKind === 'serie'
-                        ? staffAssociaQrSerieQr
-                        : staffAssociaQrTrappola;
-                    await assoc(scanningId, qr_id, onLogout);
+                    if (scanningKind === 'credito') {
+                      const usiRaw = (creditoForm.usi_max ?? '').toString().trim();
+                      const usiMax = usiRaw === '' ? null : Number(usiRaw);
+                      await staffAssociaQrCredito(
+                        scanningId,
+                        qr_id,
+                        onLogout,
+                        false,
+                        Number.isFinite(usiMax) ? usiMax : null,
+                      );
+                    } else {
+                      const assoc =
+                        scanningKind === 'serie'
+                          ? staffAssociaQrSerieQr
+                          : staffAssociaQrTrappola;
+                      await assoc(scanningId, qr_id, onLogout);
+                    }
                     setScanningId(null);
                     setMsg('QR associato.');
                     await loadSerieTrappole();
@@ -1199,6 +1404,8 @@ const ManifestoManager = ({ onBack, onLogout }) => {
               await staffDeleteSerieCollezione(c.id, onLogout);
             } else if (c.type === 'trappola') {
               await staffDeleteTrappola(c.id, onLogout);
+            } else if (c.type === 'credito') {
+              await staffDeleteQrCredito(c.id, onLogout);
             }
             await loadSerieTrappole();
             setMsg('Eliminato.');

@@ -1,17 +1,22 @@
 import { useCallback, useState } from 'react';
 import { associaQrDiretto } from '../api';
+import { parseStaffQrUsiMax } from '../components/editors/StaffQrUsiMaxField';
 
 /**
  * Handler riusabile per associazione QR staff (scan + dialogo conflitto 409).
+ * @param {{ onLogout: Function, onReload?: Function }} opts
  */
 export function useStaffQrAssociation({ onLogout, onReload }) {
   const [pendingQrConflict, setPendingQrConflict] = useState(null);
   const [conflictLoading, setConflictLoading] = useState(false);
+  const [qrUsiMax, setQrUsiMax] = useState('1');
 
   const handleQrScan = useCallback(
-    async (targetId, qrId, { closeScan, onMessage } = {}) => {
+    async (targetId, qrId, { closeScan, onMessage, usiMax } = {}) => {
+      const resolved =
+        usiMax !== undefined ? usiMax : parseStaffQrUsiMax(qrUsiMax);
       try {
-        await associaQrDiretto(targetId, qrId, onLogout);
+        await associaQrDiretto(targetId, qrId, onLogout, false, resolved);
         closeScan?.();
         onMessage?.('QR associato.');
         onReload?.();
@@ -19,7 +24,7 @@ export function useStaffQrAssociation({ onLogout, onReload }) {
       } catch (error) {
         if (error.status === 409 && error.data?.already_associated) {
           closeScan?.();
-          setPendingQrConflict({ targetId, qrId, errorData: error.data });
+          setPendingQrConflict({ targetId, qrId, errorData: error.data, usiMax: resolved });
           return { ok: false, conflict: true };
         }
         closeScan?.();
@@ -27,7 +32,7 @@ export function useStaffQrAssociation({ onLogout, onReload }) {
         return { ok: false, message: error.message };
       }
     },
-    [onLogout, onReload]
+    [onLogout, onReload, qrUsiMax]
   );
 
   const confirmConflict = useCallback(
@@ -36,7 +41,7 @@ export function useStaffQrAssociation({ onLogout, onReload }) {
       if (!p?.qrId || !p?.targetId) return;
       setConflictLoading(true);
       try {
-        await associaQrDiretto(p.targetId, p.qrId, onLogout, true);
+        await associaQrDiretto(p.targetId, p.qrId, onLogout, true, p.usiMax);
         setPendingQrConflict(null);
         onMessage?.('QR associato (forzato).');
         onReload?.();
@@ -56,6 +61,8 @@ export function useStaffQrAssociation({ onLogout, onReload }) {
   return {
     pendingQrConflict,
     conflictLoading,
+    qrUsiMax,
+    setQrUsiMax,
     handleQrScan,
     confirmConflict,
     cancelConflict,

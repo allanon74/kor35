@@ -79,6 +79,7 @@ from .models import (
     TipologiaPersonaggio, abilita_tier, abilita_requisito, abilita_sbloccata, 
     abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, NodoRewardConfig, A_vista, Mattone, Caratteristica, CaratteristicaModificatore, InnescoTimer,
     RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect, Trappola, SerieCollezione, SerieAssegnazione, SerieImmagine, SerieQr,
+    QrCreditoDeposito, ConsumabileInInventario,
     MinigiocoPattern, MinigiocoPatternEntry, MinigiocoSezioneDefault, MinigiocoQrConfig,
     AURA, Aura, CARATTERISTICA, ELEMENTO, STATISTICA,
     CONDIZIONE, CULTO, VIA, ARTE, ARCHETIPO, CASTONE, NODO, KATA, MATTONE,
@@ -3152,10 +3153,14 @@ class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
             "attivata_nome",
             "negozio_mercante",
             "negozio_mercante_nome",
+            "crediti_importo_min",
+            "crediti_importo_max",
         )
         read_only_fields = ("id",)
 
     def validate(self, attrs):
+        from decimal import Decimal
+
         tipo = attrs.get("tipo") or getattr(self.instance, "tipo", None)
         from .models import RandomQrPoolEffect as E
 
@@ -3184,6 +3189,23 @@ class RandomQrPoolEffectStaffSerializer(serializers.ModelSerializer):
             if not val:
                 raise serializers.ValidationError(
                     {field: f"{label} obbligatorio per tipo «{tipo}»."}
+                )
+        if tipo == E.TIPO_CREDITI:
+            lo = attrs.get("crediti_importo_min")
+            hi = attrs.get("crediti_importo_max")
+            if lo is None and self.instance is not None:
+                lo = self.instance.crediti_importo_min
+            if hi is None and self.instance is not None:
+                hi = self.instance.crediti_importo_max
+            if lo is None or hi is None:
+                raise serializers.ValidationError(
+                    {
+                        "crediti_importo_min": "Importo min e max obbligatori per tipo crediti.",
+                    }
+                )
+            if Decimal(hi) < Decimal(lo):
+                raise serializers.ValidationError(
+                    {"crediti_importo_max": "Deve essere ≥ crediti_importo_min."}
                 )
         return attrs
 
@@ -3566,6 +3588,49 @@ class TrappolaStaffSerializer(serializers.ModelSerializer):
         return str(obj.qr_code_id) if obj.qr_code_id else None
 
 
+class QrCreditoDepositoStaffSerializer(serializers.ModelSerializer):
+    has_qrcode = serializers.SerializerMethodField()
+    qrcode_id = serializers.SerializerMethodField()
+    usi_max = serializers.SerializerMethodField()
+    usi_consumati = serializers.SerializerMethodField()
+
+    class Meta:
+        model = QrCreditoDeposito
+        fields = (
+            "id",
+            "nome",
+            "testo",
+            "importo_min",
+            "importo_max",
+            "has_qrcode",
+            "qrcode_id",
+            "usi_max",
+            "usi_consumati",
+        )
+        read_only_fields = ("id",)
+
+    def get_has_qrcode(self, obj):
+        return bool(obj.qr_code_id)
+
+    def get_qrcode_id(self, obj):
+        return str(obj.qr_code_id) if obj.qr_code_id else None
+
+    def get_usi_max(self, obj):
+        return obj.qr_code.usi_max if obj.qr_code_id else None
+
+    def get_usi_consumati(self, obj):
+        return obj.qr_code.usi_consumati if obj.qr_code_id else 0
+
+    def validate(self, attrs):
+        from decimal import Decimal
+
+        lo = attrs.get("importo_min", getattr(self.instance, "importo_min", None))
+        hi = attrs.get("importo_max", getattr(self.instance, "importo_max", None))
+        if lo is not None and hi is not None and Decimal(hi) < Decimal(lo):
+            raise serializers.ValidationError({"importo_max": "Deve essere ≥ importo_min."})
+        return attrs
+
+
 class SerieQrStaffSerializer(serializers.ModelSerializer):
     has_qrcode = serializers.SerializerMethodField()
     qrcode_id = serializers.SerializerMethodField()
@@ -3597,7 +3662,16 @@ class InventarioSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Inventario
-        fields = ('id', 'nome', 'testo', 'oggetti', 'oggetti_count', 'personaggio_id', 'is_personaggio')
+        fields = (
+            'id',
+            'nome',
+            'testo',
+            'crediti_deposito_contenuti',
+            'oggetti',
+            'oggetti_count',
+            'personaggio_id',
+            'is_personaggio',
+        )
     
     def get_personaggio_id(self, obj):
         # Se l'inventario è un Personaggio, restituisci il suo ID
@@ -3620,19 +3694,49 @@ class InventarioSerializer(serializers.ModelSerializer):
 class InventarioStaffSerializer(serializers.ModelSerializer):
     """Serializer per gestione inventari nello staff (CRUD completo)"""
     oggetti_count = serializers.SerializerMethodField()
+    consumabili_count = serializers.SerializerMethodField()
     is_personaggio = serializers.SerializerMethodField()
     has_qrcode = serializers.BooleanField(read_only=True)
     qrcode_id = serializers.CharField(read_only=True, allow_null=True)
 
     class Meta:
         model = Inventario
-        fields = ('id', 'nome', 'testo', 'oggetti_count', 'is_personaggio', 'has_qrcode', 'qrcode_id')
+        fields = (
+            'id',
+            'nome',
+            'testo',
+            'crediti_deposito_contenuti',
+            'oggetti_count',
+            'consumabili_count',
+            'is_personaggio',
+            'has_qrcode',
+            'qrcode_id',
+        )
     
     def get_oggetti_count(self, obj):
         return obj.get_oggetti().count()
+
+    def get_consumabili_count(self, obj):
+        return obj.consumabili_contenuti.count()
     
     def get_is_personaggio(self, obj):
         return hasattr(obj, 'proprietario')
+
+
+class ConsumabileInInventarioStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ConsumabileInInventario
+        fields = (
+            "id",
+            "inventario",
+            "tessitura",
+            "nome",
+            "descrizione",
+            "formula",
+            "utilizzi_rimanenti",
+            "data_scadenza",
+        )
+        read_only_fields = ("id",)
 
 
 class PersonaggioLogSerializer(serializers.ModelSerializer):
@@ -5264,6 +5368,8 @@ class AcquisisciSerializer(serializers.Serializer):
             qr = QrCode.objects.select_related("vista").get(id=str(data.get("qrcode_id")))
             if not qr.vista:
                 raise serializers.ValidationError("QrCode vuoto.")
+            if qr_logic.qr_usi_esauriti(qr):
+                raise serializers.ValidationError("Questo QR ha esaurito gli usi disponibili.")
             self.context["qr_code"] = qr
             v = qr.vista
             if hasattr(v, "oggetto"):
@@ -5296,6 +5402,17 @@ class AcquisisciSerializer(serializers.Serializer):
                 ok, msg = qr_logic.oggetto_puo_essere_acquisito_da_qr(self.context["richiedente"], item)
                 if not ok:
                     raise serializers.ValidationError(msg)
+            pg = self.context.get("richiedente")
+            # Tecniche già possedute: non consumare usi del QR
+            if pg is not None:
+                if isinstance(item, Infusione) and pg.infusioni_possedute.filter(pk=item.pk).exists():
+                    raise serializers.ValidationError("Possiedi già questa infusione.")
+                if isinstance(item, Tessitura) and pg.tessiture_possedute.filter(pk=item.pk).exists():
+                    raise serializers.ValidationError("Possiedi già questa tessitura.")
+                if isinstance(item, Cerimoniale) and pg.cerimoniali_posseduti.filter(pk=item.pk).exists():
+                    raise serializers.ValidationError("Possiedi già questo cerimoniale.")
+                if isinstance(item, Attivata) and pg.attivate_possedute.filter(pk=item.pk).exists():
+                    raise serializers.ValidationError("Possiedi già questa attivata.")
         except serializers.ValidationError:
             raise
         except QrCode.DoesNotExist:
@@ -5309,8 +5426,24 @@ class AcquisisciSerializer(serializers.Serializer):
         pg = self.context["richiedente"]
         qr = self.context["qr_code"]
         with transaction.atomic():
+            # select_related(vista) + FOR UPDATE non supportato su FK nullable (outer join).
+            qr = QrCode.objects.select_for_update().get(pk=qr.pk)
+            if not qr.vista_id or qr_logic.qr_usi_esauriti(qr):
+                raise serializers.ValidationError("QrCode non più disponibile.")
+
+            svuota = qr_logic.qr_deve_svuotarsi_dopo_uso(qr)
+            consegnato = item
+
             if isinstance(item, Oggetto):
-                item.sposta_in_inventario(pg)
+                if svuota:
+                    # Ultimo uso (o usi_max=1): sposta l'istanza collegata
+                    item.sposta_in_inventario(pg)
+                    consegnato = item
+                else:
+                    # Usi rimanenti / illimitati: clona, lascia il template sul QR
+                    clone = qr_logic.clona_oggetto_per_multi_uso_qr(item)
+                    clone.sposta_in_inventario(pg)
+                    consegnato = clone
             elif isinstance(item, Attivata):
                 pg.attivate_possedute.add(item)
             elif isinstance(item, Infusione):
@@ -5319,9 +5452,9 @@ class AcquisisciSerializer(serializers.Serializer):
                 pg.tessiture_possedute.add(item)
             elif isinstance(item, Cerimoniale):
                 pg.cerimoniali_posseduti.add(item)
-            qr.vista = None
-            qr.save()
-        return item
+
+            qr_logic.consuma_uso_qr(qr, svuota_vista=True)
+        return consegnato
 
 
 class GruppoSerializer(serializers.ModelSerializer):

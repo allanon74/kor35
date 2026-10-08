@@ -19,6 +19,7 @@ from .models import (
     PersonaggioInfusione, PersonaggioTessitura, PersonaggioCerimoniale,
     QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario, Manifesto, Nodo, NodoRewardConfig, InnescoTimer,
     RandomQrPool, RandomQrPoolMembership, RandomQrPoolEffect, Trappola, SerieCollezione, SerieImmagine, SerieQr,
+    QrCreditoDeposito, ConsumabileInInventario,
     A_vista, Attivata, MinigiocoQrConfig, MinigiocoBibliotecaImmagine,
     MinigiocoPattern, MinigiocoPatternEntry, MinigiocoSezioneDefault,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
@@ -102,6 +103,8 @@ from .serializers import (
     SerieImmagineStaffSerializer,
     TrappolaStaffSerializer,
     SerieQrStaffSerializer,
+    QrCreditoDepositoStaffSerializer,
+    ConsumabileInInventarioStaffSerializer,
     A_vistaSerializer,
     AttivataSerializer,
     PersonaggioPublicSerializer,
@@ -985,6 +988,149 @@ class InventarioStaffViewSet(viewsets.ModelViewSet):
             return Response({"error": "Oggetto non trovato in questo inventario"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["get"])
+    def consumabili(self, request, pk=None):
+        inventario = self.get_object()
+        ser = ConsumabileInInventarioStaffSerializer(inventario.get_consumabili(), many=True)
+        return Response(ser.data)
+
+    @action(detail=True, methods=["post"], url_path="aggiungi-consumabile")
+    def aggiungi_consumabile(self, request, pk=None):
+        """Crea un consumabile ad hoc (opz. da tessitura) nell'inventario QR."""
+        from datetime import date, timedelta
+
+        from personaggi.models import Tessitura
+
+        inventario = self.get_object()
+        tessitura_id = request.data.get("tessitura_id")
+        nome = (request.data.get("nome") or "").strip()
+        descrizione = request.data.get("descrizione") or ""
+        formula = request.data.get("formula")
+        utilizzi = int(request.data.get("utilizzi_rimanenti") or 1)
+        data_scadenza = request.data.get("data_scadenza")
+
+        tessitura = None
+        if tessitura_id:
+            try:
+                tessitura = Tessitura.objects.get(pk=tessitura_id)
+            except Tessitura.DoesNotExist:
+                return Response({"error": "Tessitura non trovata."}, status=status.HTTP_404_NOT_FOUND)
+            if not nome:
+                nome = tessitura.nome
+            if not descrizione:
+                descrizione = tessitura.testo or ""
+            if formula in (None, ""):
+                formula = getattr(tessitura, "formula", None) or getattr(
+                    tessitura, "formula_attacco", None
+                )
+
+        if not nome:
+            return Response({"error": "nome richiesto (o tessitura_id)."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not data_scadenza:
+            data_scadenza = (date.today() + timedelta(days=30)).isoformat()
+
+        row = ConsumabileInInventario.objects.create(
+            inventario=inventario,
+            tessitura=tessitura,
+            nome=nome,
+            descrizione=descrizione,
+            formula=formula,
+            utilizzi_rimanenti=max(1, utilizzi),
+            data_scadenza=data_scadenza,
+        )
+        return Response(ConsumabileInInventarioStaffSerializer(row).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="rimuovi-consumabile")
+    def rimuovi_consumabile(self, request, pk=None):
+        inventario = self.get_object()
+        cid = request.data.get("consumabile_id")
+        if not cid:
+            return Response({"error": "consumabile_id richiesto"}, status=status.HTTP_400_BAD_REQUEST)
+        deleted, _ = ConsumabileInInventario.objects.filter(pk=cid, inventario=inventario).delete()
+        if not deleted:
+            return Response({"error": "Consumabile non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"success": "Consumabile rimosso."})
+
+    @action(detail=True, methods=["post"], url_path="crea-da-infusione")
+    def crea_da_infusione(self, request, pk=None):
+        """Crea istanza Oggetto da Infusione e la mette nell'inventario QR."""
+        from personaggi.models import Infusione
+        from personaggi.services import GestioneOggettiService
+
+        inventario = self.get_object()
+        infusione_id = request.data.get("infusione_id")
+        if not infusione_id:
+            return Response({"error": "infusione_id richiesto"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            inf = Infusione.objects.get(pk=infusione_id)
+        except Infusione.DoesNotExist:
+            return Response({"error": "Infusione non trovata."}, status=status.HTTP_404_NOT_FOUND)
+
+        class _StaffProxy:
+            modificatori_calcolati = {}
+
+        oggetto = GestioneOggettiService.crea_oggetto_da_infusione(inf, _StaffProxy())
+        oggetto.sposta_in_inventario(inventario)
+        return Response(
+            {"success": f"Creato «{oggetto.nome}» nell'inventario.", "oggetto_id": oggetto.pk},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["post"], url_path="crea-da-oggetto-base")
+    def crea_da_oggetto_base(self, request, pk=None):
+        """Crea istanza da listino OggettoBase nell'inventario QR."""
+        from personaggi.models import OggettoBase
+        from personaggi.services import GestioneCraftingService
+
+        inventario = self.get_object()
+        base_id = request.data.get("oggetto_base_id")
+        if not base_id:
+            return Response({"error": "oggetto_base_id richiesto"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            template = OggettoBase.objects.get(pk=base_id)
+        except OggettoBase.DoesNotExist:
+            return Response({"error": "Oggetto base non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+        # crea_istanza mette nel PG: creiamo manualmente e spostiamo
+        from personaggi.models import Oggetto, OggettoStatistica, OggettoStatisticaBase
+
+        nuovo = Oggetto.objects.create(
+            nome=template.nome,
+            testo=template.descrizione,
+            tipo_oggetto=template.tipo_oggetto,
+            classe_oggetto=template.classe_oggetto,
+            slot_fisici_possibili=template.slot_fisici_possibili,
+            is_tecnologico=template.is_tecnologico,
+            costo_acquisto=template.costo,
+            attacco_base=template.attacco_base,
+            formula_builder_selezioni=template.formula_builder_selezioni or {},
+            oggetto_base_generatore=template,
+            in_vendita=False,
+            is_equipaggiato=False,
+            cariche_attuali=0,
+            is_pesante=template.is_pesante,
+        )
+        for stat_link in template.oggettobasestatisticabase_set.all():
+            OggettoStatisticaBase.objects.create(
+                oggetto=nuovo,
+                statistica=stat_link.statistica,
+                valore_base=stat_link.valore_base,
+            )
+        for mod_link in template.oggettobasemodificatore_set.all():
+            OggettoStatistica.objects.create(
+                oggetto=nuovo,
+                statistica=mod_link.statistica,
+                valore=mod_link.valore,
+                tipo_modificatore=mod_link.tipo_modificatore,
+                solo_oggetto_ospitante=mod_link.solo_oggetto_ospitante,
+            )
+        nuovo.sposta_in_inventario(inventario)
+        return Response(
+            {"success": f"Creato «{nuovo.nome}» nell'inventario.", "oggetto_id": nuovo.pk},
+            status=status.HTTP_201_CREATED,
+        )
 
 class OggettiSenzaPosizioneView(APIView):
     """Lista oggetti senza inventario (senza posizione)"""
@@ -2046,6 +2192,55 @@ class SerieQrStaffViewSet(viewsets.ModelViewSet):
                 "message": "QR associato alla serie.",
                 "qr_id": str(qr.id),
                 "serie_qr_id": str(serie_qr.id),
+            }
+        )
+
+
+class QrCreditoDepositoStaffViewSet(viewsets.ModelViewSet):
+    serializer_class = QrCreditoDepositoStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        return QrCreditoDeposito.objects.select_related("qr_code").order_by("-created_at")
+
+    @action(detail=True, methods=["post"], url_path="associa-qr")
+    def associa_qr(self, request, pk=None):
+        from personaggi.models import QrCode
+        from personaggi import qr_logic, qr_random_pool
+
+        cfg = self.get_object()
+        qr_id = request.data.get("qr_id")
+        force = bool(request.data.get("force", False))
+
+        if qr_id in (None, ""):
+            qr_random_pool.scollega_qr_da_credito(cfg)
+            return Response({"status": "success", "message": "QR scollegato.", "qr_id": None})
+
+        try:
+            qr = QrCode.objects.select_related("vista").get(pk=qr_id)
+        except QrCode.DoesNotExist:
+            return Response({"error": "QR Code non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+        usi_max_arg = ...
+        if "usi_max" in request.data:
+            try:
+                usi_max_arg = qr_logic.parse_usi_max_payload(request.data.get("usi_max"))
+            except ValueError as exc:
+                return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        ok, conflict = qr_random_pool.associa_qr_a_credito(
+            cfg, qr, force=force, usi_max=usi_max_arg
+        )
+        if not ok:
+            return Response(conflict, status=status.HTTP_409_CONFLICT)
+
+        return Response(
+            {
+                "status": "success",
+                "message": "QR associato al credito deposito.",
+                "qr_id": str(qr.id),
+                "credito_id": str(cfg.id),
+                "usi_max": qr.usi_max,
             }
         )
 
