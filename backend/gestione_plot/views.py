@@ -101,6 +101,16 @@ from .permissions import IsStaffOrMaster
 logger = logging.getLogger(__name__)
 WIDGET_TOKEN_RE = re.compile(r"{{WIDGET_([A-Z_]+):([A-Za-z0-9-]+)}}")
 
+# Finestra di protezione contro il doppio click su «Inizia evento» → «Termina evento».
+EVENTO_TERMINA_GUARD_SECONDS = 120
+
+
+def _flag_vero(value) -> bool:
+    """True per i valori booleani «veri» inviati da JSON o querystring."""
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in ("1", "true", "yes", "si", "sì", "on")
+
 class IsMasterOrReadOnly(permissions.BasePermission):
     """
     Gli Staffer leggono e scrivono, gli utenti non staff non vedono nulla.
@@ -303,6 +313,22 @@ class EventoViewSet(viewsets.ModelViewSet):
         if not evento.started_at or evento.ended_at:
             return Response({"detail": "Evento non in corso."}, status=status.HTTP_400_BAD_REQUEST)
         now = timezone.now()
+        # Il pulsante «Termina evento» compare nella stessa posizione di «Inizia evento»:
+        # un doppio click chiuderebbe l'evento appena avviato (tab Tasks sparita ai giocatori,
+        # prestiti restituiti, contratti chiusi). Serve conferma esplicita entro la finestra.
+        secondi_da_avvio = (now - evento.started_at).total_seconds()
+        if secondi_da_avvio < EVENTO_TERMINA_GUARD_SECONDS and not _flag_vero(request.data.get("force")):
+            return Response(
+                {
+                    "detail": (
+                        f"Evento avviato {int(secondi_da_avvio)}s fa: conferma la chiusura "
+                        "per terminarlo (force)."
+                    ),
+                    "code": "evento_appena_avviato",
+                    "secondi_da_avvio": int(secondi_da_avvio),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         with transaction.atomic():
             evento.ended_at = now
             evento.save(update_fields=["ended_at", "updated_at"])

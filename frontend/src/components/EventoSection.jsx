@@ -28,6 +28,8 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
     const [savingStaff, setSavingStaff] = useState(false);
     const [riallineaLoading, setRiallineaLoading] = useState(false);
     const [riassegnaLoading, setRiassegnaLoading] = useState(false);
+    const [statoEventoBusy, setStatoEventoBusy] = useState(false);
+    const [statoEventoError, setStatoEventoError] = useState('');
 
     const allStaff = useMemo(() => risorse.staff || [], [risorse.staff]);
     const allStaffIds = useMemo(() => normalizeStaffIds(allStaff), [allStaff]);
@@ -139,6 +141,64 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
         }
     }, [onRiassegnaPremiMancanti, handleLoadReport]);
 
+    const eventoInCorso = !!(evento?.started_at && !evento?.ended_at);
+
+    const handleIniziaEvento = useCallback(async () => {
+        if (!onIniziaEvento || statoEventoBusy) return;
+        const ok = window.confirm(
+            `Avviare «${evento?.titolo}»?\n\n`
+            + 'I partecipanti ricevono i premi di presenza e vedono la tab Tasks '
+            + 'per tutta la durata dell\'evento.',
+        );
+        if (!ok) return;
+        setStatoEventoError('');
+        setStatoEventoBusy(true);
+        try {
+            await onIniziaEvento();
+        } catch (e) {
+            setStatoEventoError(e?.data?.detail || e?.message || 'Avvio evento fallito');
+        } finally {
+            setStatoEventoBusy(false);
+        }
+    }, [onIniziaEvento, statoEventoBusy, evento?.titolo]);
+
+    /** Chiusura evento: doppia conferma se l'evento è stato avviato pochi secondi fa. */
+    const handleTerminaEvento = useCallback(async () => {
+        if (!onTerminaEvento || statoEventoBusy) return;
+        const ok = window.confirm(
+            `Terminare «${evento?.titolo}»?\n\n`
+            + 'La tab Tasks sparisce ai giocatori, i contratti si chiudono e i prestiti '
+            + 'del mercante vengono restituiti.',
+        );
+        if (!ok) return;
+        setStatoEventoError('');
+        setStatoEventoBusy(true);
+        try {
+            await onTerminaEvento({ force: false });
+        } catch (e) {
+            if (e?.status === 409 && e?.data?.code === 'evento_appena_avviato') {
+                const secondi = e?.data?.secondi_da_avvio ?? 0;
+                const forza = window.confirm(
+                    `Evento avviato ${secondi} secondi fa: se hai premuto due volte lo stesso `
+                    + 'pulsante, annulla e l\'evento resta in corso.\n\nTerminarlo davvero?',
+                );
+                if (!forza) {
+                    setStatoEventoBusy(false);
+                    return;
+                }
+                try {
+                    await onTerminaEvento({ force: true });
+                } catch (e2) {
+                    setStatoEventoError(e2?.data?.detail || e2?.message || 'Chiusura evento fallita');
+                }
+            } else {
+                setStatoEventoError(e?.data?.detail || e?.message || 'Chiusura evento fallita');
+            }
+        } finally {
+            setStatoEventoBusy(false);
+        }
+    }, [onTerminaEvento, statoEventoBusy, evento?.titolo]);
+
     if (!evento) return null;
 
     return (
@@ -169,8 +229,9 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                                 <> · {Number(evento.prestigio_base_inizio_evento)} Pr</>
                             ) : null}
                         </span>
-                        <span className={evento.started_at && !evento.ended_at ? "text-amber-300" : "text-gray-500"}>
-                            Stato: {evento.started_at && !evento.ended_at ? "IN CORSO" : "NON INIZIATO"}
+                        <span className={eventoInCorso ? "text-amber-300" : "text-gray-500"}>
+                            Stato: {eventoInCorso ? "IN CORSO" : "NON INIZIATO"}
+                            {eventoInCorso ? " · tab Tasks visibile ai giocatori" : null}
                         </span>
                     </div>
                     {Array.isArray(evento.missioni_riepilogo) && evento.missioni_riepilogo.length > 0 ? (
@@ -244,19 +305,23 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
 
                 {isMaster && (
                     <div className="flex flex-wrap gap-2">
-                        {!evento.started_at || evento.ended_at ? (
+                        {!eventoInCorso ? (
                             <button
-                                onClick={onIniziaEvento}
-                                className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-amber-500 transition-all"
+                                type="button"
+                                onClick={handleIniziaEvento}
+                                disabled={statoEventoBusy}
+                                className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-amber-500 transition-all disabled:opacity-50"
                             >
-                                Inizia evento
+                                {statoEventoBusy ? 'Avvio…' : 'Inizia evento'}
                             </button>
                         ) : (
                             <button
-                                onClick={onTerminaEvento}
-                                className="px-4 py-2 bg-rose-700 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-rose-600 transition-all"
+                                type="button"
+                                onClick={handleTerminaEvento}
+                                disabled={statoEventoBusy}
+                                className="px-4 py-2 bg-rose-700 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-rose-600 transition-all disabled:opacity-50"
                             >
-                                Termina evento
+                                {statoEventoBusy ? 'Chiusura…' : 'Termina evento'}
                             </button>
                         )}
                         {onRiallineaIscrizioni ? (
@@ -289,6 +354,9 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                         <button onClick={() => onDelete(evento.id)} className="p-2 bg-red-900/20 text-red-500 border border-red-900/30 rounded-lg hover:bg-red-600 hover:text-white transition-all">
                             <Trash2 size={20}/>
                         </button>
+                        {statoEventoError ? (
+                            <p className="w-full text-xs text-red-300 normal-case">{statoEventoError}</p>
+                        ) : null}
                     </div>
                 )}
             </div>

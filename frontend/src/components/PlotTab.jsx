@@ -373,9 +373,9 @@ const PlotTab = ({ onLogout }) => {
         await iniziaEvento(selectedEvento.id, onLogout);
         await refreshData();
     }, [selectedEvento, onLogout, refreshData]);
-    const handleTerminaEvento = useCallback(async () => {
+    const handleTerminaEvento = useCallback(async ({ force = false } = {}) => {
         if (!selectedEvento?.id) return;
-        await terminaEvento(selectedEvento.id, onLogout);
+        await terminaEvento(selectedEvento.id, onLogout, { force });
         await refreshData();
     }, [selectedEvento, onLogout, refreshData]);
     const handleReportRicompenseEvento = useCallback(async () => {

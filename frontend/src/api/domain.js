@@ -1493,8 +1493,13 @@ export const updateEvento = (id, data, onLogout) => fetchAuthenticated(`/api/plo
 export const deleteEvento = (id, onLogout) => fetchAuthenticated(`/api/plot/api/eventi/${id}/`, { method: 'DELETE' }, onLogout);
 export const iniziaEvento = (id, onLogout) =>
   fetchAuthenticated(`/api/plot/api/eventi/${id}/inizia/`, { method: 'POST', body: '{}' }, onLogout);
-export const terminaEvento = (id, onLogout) =>
-  fetchAuthenticated(`/api/plot/api/eventi/${id}/termina/`, { method: 'POST', body: '{}' }, onLogout);
+/** Chiusura evento: `force` serve per confermare la chiusura di un evento appena avviato. */
+export const terminaEvento = (id, onLogout, { force = false } = {}) =>
+  fetchAuthenticated(
+    `/api/plot/api/eventi/${id}/termina/`,
+    { method: 'POST', body: JSON.stringify({ force: !!force }) },
+    onLogout,
+  );
 export const riallineaIscrizioniEvento = (id, onLogout) =>
   fetchAuthenticated(`/api/plot/api/eventi/${id}/riallinea_iscrizioni/`, { method: 'POST', body: '{}' }, onLogout);
 export const reportRicompenseEvento = (id, onLogout) =>
