@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import os
 
+from django.utils import timezone
 from rest_framework import serializers
 
 from .comunicazioni import queryset_dipartimenti_bordo
+from .tempo_console import secondi_fino_a
 from .models import (
     ComandoCriticoGlobale,
     ComandoNave,
@@ -387,6 +389,7 @@ class StatoSottosistemaRuntimeSerializer(serializers.ModelSerializer):
         source="sottosistema.supporta_espulsione", read_only=True
     )
     colore_livello_attuale = serializers.SerializerMethodField()
+    secondi_ripristino = serializers.SerializerMethodField()
     durata_ripristino_secondi = serializers.IntegerField(
         source="sottosistema.durata_ripristino_secondi", read_only=True
     )
@@ -412,6 +415,7 @@ class StatoSottosistemaRuntimeSerializer(serializers.ModelSerializer):
             "online",
             "guasto_at",
             "recovery_at",
+            "secondi_ripristino",
             "livello_target",
             "livello_attuale",
             "invertito",
@@ -425,10 +429,16 @@ class StatoSottosistemaRuntimeSerializer(serializers.ModelSerializer):
         colori = obj.sottosistema.colori_per_livello or {}
         return str(colori.get(str(livello)) or "")
 
+    def get_secondi_ripristino(self, obj):
+        if obj.online or not obj.recovery_at:
+            return None
+        return secondi_fino_a(obj.recovery_at, timezone.now())
+
 
 class EventoAttivoSerializer(serializers.ModelSerializer):
     nome = serializers.CharField(source="evento.nome", read_only=True)
     descrizione = serializers.CharField(source="evento.descrizione", read_only=True)
+    secondi_rimanenti = serializers.SerializerMethodField()
 
     class Meta:
         model = EventoAttivoSessione
@@ -437,6 +447,7 @@ class EventoAttivoSerializer(serializers.ModelSerializer):
             "nome",
             "descrizione",
             "deadline_at",
+            "secondi_rimanenti",
             "ticks_rimanenti",
             "persiste_fino_st",
             "precipita_a_scadenza",
@@ -445,6 +456,10 @@ class EventoAttivoSerializer(serializers.ModelSerializer):
             "direzione_evento",
             "risolto_at",
         ]
+
+    def get_secondi_rimanenti(self, obj):
+        """Durata reale sull'orologio del nodo, non del browser kiosk."""
+        return secondi_fino_a(getattr(obj, "deadline_at", None), timezone.now())
 
 
 class TentativoCodiceSerializer(serializers.ModelSerializer):

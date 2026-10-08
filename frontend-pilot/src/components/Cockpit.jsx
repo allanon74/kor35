@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
+import { remainingSecondsUntil } from '../serverClock.js';
+import { useAnchoredSeconds, useGameNow, useTickingNow } from '../useServerClock.js';
 import FlightOpsPanel, { isAlimentazioneGroup } from './FlightOpsPanel.jsx';
 import {
   announceDefconChange,
@@ -22,14 +24,12 @@ function etichettaRotta(sessione) {
   return partenza || arrivo || '—';
 }
 
-function CountdownBox({ deadlineISO }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(id);
-  }, []);
-  if (!deadlineISO) return null;
-  const remaining = Math.max(0, Math.ceil((new Date(deadlineISO).getTime() - now) / 1000));
+function CountdownBox({ deadlineISO, secondiRimanenti, sampleKey, clientNow, gameNow }) {
+  const anchored = useAnchoredSeconds(secondiRimanenti, sampleKey || deadlineISO, clientNow);
+  const remaining = anchored != null
+    ? anchored
+    : remainingSecondsUntil(deadlineISO, gameNow);
+  if (remaining == null) return null;
   return <div className="countdown">{String(remaining).padStart(2, '0')}s</div>;
 }
 
@@ -271,23 +271,36 @@ function statusIcon(subsystem) {
   return { icon: '•', title: 'Stato standard' };
 }
 
-function eventUrgencyScore(ev) {
+function eventUrgencyScore(ev, gameNow) {
   let score = 0;
   if (ev?.precipita_a_scadenza) score += 1000;
-  const deadlineMs = ev?.deadline_at ? new Date(ev.deadline_at).getTime() : NaN;
-  if (Number.isFinite(deadlineMs)) {
-    const sec = Math.max(0, Math.floor((deadlineMs - Date.now()) / 1000));
+  const fromServer = Number(ev?.secondi_rimanenti);
+  const sec = ev?.secondi_rimanenti != null && ev?.secondi_rimanenti !== '' && Number.isFinite(fromServer)
+    ? Math.max(0, fromServer)
+    : remainingSecondsUntil(ev?.deadline_at, gameNow);
+  if (sec != null && Number.isFinite(sec)) {
     score += Math.max(0, 180 - sec);
   }
   return score;
 }
 
-function Subsystems({ sottosistemi, energia }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 500);
-    return () => clearInterval(id);
-  }, []);
+function RepairRemain({ secondi, deadlineISO, sampleKey, clientNow, gameNow, total }) {
+  const anchored = useAnchoredSeconds(secondi, sampleKey || deadlineISO, clientNow);
+  const remain = anchored != null ? anchored : remainingSecondsUntil(deadlineISO, gameNow);
+  if (remain == null) return null;
+  const safeTotal = Math.max(1, Number(total || 60));
+  const done = Math.max(0, Math.min(100, Math.round(((safeTotal - remain) / safeTotal) * 100)));
+  return (
+    <div style={{ marginTop: '0.2rem' }}>
+      <div>In riparazione {remain}s</div>
+      <div style={{ width: '100%', height: '6px', border: '1px solid #355', borderRadius: '8px' }}>
+        <div style={{ width: `${done}%`, height: '100%', background: '#6fdc8c' }} />
+      </div>
+    </div>
+  );
+}
+
+function Subsystems({ sottosistemi, energia, clientNow, gameNow, sampleKey }) {
   if (!sottosistemi || !sottosistemi.length) {
     return <p className="note">Nessun sottosistema registrato in questa sessione.</p>;
   }
@@ -311,19 +324,16 @@ function Subsystems({ sottosistemi, energia }) {
                 {Math.round(Number(energia?.carburante_attuale || 0))} / {Math.round(Number(energia?.carburante_massimo || 0))}
               </div>
             ) : null}
-            {!s.online && s.recovery_at ? (() => {
-              const remain = Math.max(0, Math.ceil((new Date(s.recovery_at).getTime() - now) / 1000));
-              const total = Math.max(1, Number(s.durata_ripristino_secondi || 60));
-              const done = Math.max(0, Math.min(100, Math.round(((total - remain) / total) * 100)));
-              return (
-                <div style={{ marginTop: '0.2rem' }}>
-                  <div>In riparazione {remain}s</div>
-                  <div style={{ width: '100%', height: '6px', border: '1px solid #355', borderRadius: '8px' }}>
-                    <div style={{ width: `${done}%`, height: '100%', background: '#6fdc8c' }} />
-                  </div>
-                </div>
-              );
-            })() : null}
+            {!s.online && (s.secondi_ripristino != null || s.recovery_at) ? (
+              <RepairRemain
+                secondi={s.secondi_ripristino}
+                deadlineISO={s.recovery_at}
+                sampleKey={sampleKey}
+                clientNow={clientNow}
+                gameNow={gameNow}
+                total={s.durata_ripristino_secondi}
+              />
+            ) : null}
           </div>
           <div className="subsys-status">{s.online ? 'ONLINE' : 'GUASTO'}</div>
         </div>
@@ -342,13 +352,16 @@ export default function Cockpit({
   onLogout, onResetSession, mode = 'both', onSubsystemSet,
   error, commandStatus,
 }) {
+  const clientNow = useTickingNow(250);
+  const gameNow = useGameNow(state?.server_time, clientNow);
+  const sampleKey = state?.server_time || '';
   const sessione = state.sessione || {};
   const decolloEffettuato = Boolean(state.decollo_effettuato);
   const eventiAttivi = Array.isArray(state.eventi_attivi)
     ? state.eventi_attivi
     : (state.evento_attivo ? [state.evento_attivo] : []);
   const eventiOrdinati = [...eventiAttivi].sort(
-    (a, b) => eventUrgencyScore(b) - eventUrgencyScore(a)
+    (a, b) => eventUrgencyScore(b, gameNow) - eventUrgencyScore(a, gameNow)
   );
   const eventiCriticiCount = eventiOrdinati.filter((ev) => Boolean(ev.precipita_a_scadenza)).length;
   const eventiNormaliCount = Math.max(0, eventiOrdinati.length - eventiCriticiCount);
@@ -647,7 +660,13 @@ export default function Cockpit({
                             }`}
                           >
                             <h2>{ev.nome}</h2>
-                            <CountdownBox deadlineISO={ev.deadline_at} />
+                            <CountdownBox
+                              deadlineISO={ev.deadline_at}
+                              secondiRimanenti={ev.secondi_rimanenti}
+                              sampleKey={sampleKey}
+                              clientNow={clientNow}
+                              gameNow={gameNow}
+                            />
                             <div className="descr">{ev.descrizione}</div>
                             <div className="event-meta">
                               {ev.precipita_a_scadenza ? 'Scadenza critica — esito CA se non risolto' : 'Risolvi entro il countdown'}
@@ -688,7 +707,13 @@ export default function Cockpit({
                       <span><i style={{ background: '#ff3b30' }} />L9</span>
                     </div>
                     <h3>Stato Sottosistemi</h3>
-                    <Subsystems sottosistemi={state.sottosistemi} energia={energia} />
+                    <Subsystems
+                      sottosistemi={state.sottosistemi}
+                      energia={energia}
+                      clientNow={clientNow}
+                      gameNow={gameNow}
+                      sampleKey={sampleKey}
+                    />
                   </div>
                 </div>
 
@@ -875,7 +900,13 @@ export default function Cockpit({
                   }`}
                 >
                   <h2>{ev.nome}</h2>
-                  <CountdownBox deadlineISO={ev.deadline_at} />
+                  <CountdownBox
+                    deadlineISO={ev.deadline_at}
+                    secondiRimanenti={ev.secondi_rimanenti}
+                    sampleKey={sampleKey}
+                    clientNow={clientNow}
+                    gameNow={gameNow}
+                  />
                   <div className="descr">{ev.descrizione}</div>
                   <div className="event-meta">
                     {ev.precipita_a_scadenza ? 'Scadenza critica — esito CA se non risolto' : 'Risolvi entro il countdown'}
@@ -916,7 +947,13 @@ export default function Cockpit({
             <span><i style={{ background: '#ff3b30' }} />L9</span>
           </div>
           <h3>Stato Sottosistemi</h3>
-          <Subsystems sottosistemi={state.sottosistemi} energia={energia} />
+          <Subsystems
+            sottosistemi={state.sottosistemi}
+            energia={energia}
+            clientNow={clientNow}
+            gameNow={gameNow}
+            sampleKey={sampleKey}
+          />
         </div>
       </div> : null}
 

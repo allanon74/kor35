@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
+import { useAnchoredSeconds, useTickingNow } from '../useServerClock.js';
 
 /** Ordine di default se lo staff non ha ancora salvato un protocollo. */
 const COLORI = [
@@ -149,7 +150,7 @@ export default function ComunicazioniScreen({ onLogout, onBack, preview = false,
   const [error, setError] = useState('');
   const [esito, setEsito] = useState('');
   const [busy, setBusy] = useState(false);
-  const [nowTick, setNowTick] = useState(Date.now());
+  const nowTick = useTickingNow(1000);
 
   const load = useCallback(async () => {
     if (preview) return;
@@ -165,10 +166,8 @@ export default function ComunicazioniScreen({ onLogout, onBack, preview = false,
   useEffect(() => {
     load();
     const id = window.setInterval(load, 3000);
-    const clock = window.setInterval(() => setNowTick(Date.now()), 1000);
     return () => {
       window.clearInterval(id);
-      window.clearInterval(clock);
     };
   }, [load]);
 
@@ -188,8 +187,14 @@ export default function ComunicazioniScreen({ onLogout, onBack, preview = false,
     });
   }, [protocolli]);
   const evento = quadro?.evento;
-  const reazione = evento?.in_reazione ? secondiRimanenti(evento.reazione_fino_at) : null;
-  void nowTick;
+  const anchoredReazione = useAnchoredSeconds(
+    evento?.in_reazione ? evento.secondi_reazione : null,
+    quadro?.server_time,
+    nowTick,
+  );
+  const reazione = evento?.in_reazione
+    ? (anchoredReazione != null ? anchoredReazione : secondiRimanenti(evento.reazione_fino_at))
+    : null;
 
   const dichiara = async (colore) => {
     if (busy) return;

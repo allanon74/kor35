@@ -17,6 +17,7 @@ from .allarme_equipaggio import (
     imposta_allarme_equipaggio_sessione,
     normalizza_allarme_equipaggio,
 )
+from .tempo_console import secondi_fino_a
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +288,9 @@ def quadro_comunicazioni(sessione) -> Dict[str, Any]:
             "reazione_fino_at": (
                 pending.reazione_fino_at.isoformat() if pending.reazione_fino_at else None
             ),
+            "secondi_reazione": (
+                secondi_fino_a(pending.reazione_fino_at, now) if in_reazione else None
+            ),
         }
     protocolli: List[Dict[str, Any]] = []
     for row in (
@@ -324,4 +328,5 @@ def quadro_comunicazioni(sessione) -> Dict[str, Any]:
         "sottosistemi_guasti": guasti,
         "protocolli": protocolli,
         "sessione_attiva": bool(sessione is not None and getattr(sessione, "is_attiva", False)),
+        "server_time": now.isoformat(),
     }
