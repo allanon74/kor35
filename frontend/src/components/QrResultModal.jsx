@@ -729,7 +729,7 @@ const PersonaggioView = ({ data, qrcodeId, onLogout, onStealSuccess }) => {
 //##################################################################
 // ## VISTA QR: TIPO OGGETTO / ATTIVATA (3d) ##
 //##################################################################
-const TecnicaAcquisizioneView = ({ qrId, tipo, data, onLogout, onClose, minigiocoSessionId = null }) => {
+const TecnicaAcquisizioneView = ({ qrId, tipo, data, onLogout, minigiocoSessionId = null }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -752,7 +752,6 @@ const TecnicaAcquisizioneView = ({ qrId, tipo, data, onLogout, onClose, minigioc
         minigiocoSessionId || data?._minigioco_session_id || null,
       );
       setMessage(response.success || 'Tecnica aggiunta alle tue possedute!');
-      setTimeout(() => onClose(), 2000);
     } catch (err) {
       setError(err.message || 'Errore imprevisto.');
       setIsLoading(false);
@@ -797,7 +796,7 @@ const TecnicaAcquisizioneView = ({ qrId, tipo, data, onLogout, onClose, minigioc
   );
 };
 
-const AcquisizioneView = ({ qrId, data, tipo, onLogout, onClose, minigiocoSessionId = null }) => {
+const AcquisizioneView = ({ qrId, data, tipo, onLogout, minigiocoSessionId = null }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -819,9 +818,6 @@ const AcquisizioneView = ({ qrId, data, tipo, onLogout, onClose, minigiocoSessio
         minigiocoSessionId || data?._minigioco_session_id || null,
       );
       setMessage(response.success || "Oggetto acquisito!");
-      setTimeout(() => {
-        onClose();
-      }, 2000);
     } catch (err) {
       setError(err.message || 'Errore imprevisto.');
       setIsLoading(false);
@@ -1117,6 +1113,15 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
   const [salvaBusy, setSalvaBusy] = useState(false);
   const lastProcessedQr = useRef(null); // Per evitare che il timer scatti multipli in caso di re-render
 
+  // La finestra resta finché il giocatore non preme Chiudi. Allo scadere dei 10 minuti si chiude da sola.
+  useEffect(() => {
+    if (!data || typeof onClose !== 'function') return undefined;
+    const timerId = window.setTimeout(() => {
+      onClose();
+    }, 10 * 60 * 1000);
+    return () => window.clearTimeout(timerId);
+  }, [data, onClose]);
+
   const salvaManifestoInArchivio = async (dati) => {
     if (!selectedCharacterId || !dati) return;
     try {
@@ -1336,7 +1341,6 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             tipo={data.tipo_modello}
             data={data.dati}
             onLogout={onLogout}
-            onClose={onClose}
             minigiocoSessionId={data._minigioco_session_id || null}
           />
         );
@@ -1361,7 +1365,6 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             data={data.dati}
             tipo="oggetto"
             onLogout={onLogout}
-            onClose={onClose}
             minigiocoSessionId={data._minigioco_session_id || null}
           />
         );
@@ -1376,7 +1379,6 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             data={data.dati}
             tipo="attivata"
             onLogout={onLogout}
-            onClose={onClose}
             minigiocoSessionId={data._minigioco_session_id || null}
           />
         );

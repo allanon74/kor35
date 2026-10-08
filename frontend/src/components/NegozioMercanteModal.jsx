@@ -305,7 +305,12 @@ const NegozioMercanteModal = ({ negozioId, listinoIniziale, onClose, onLogout })
   }, [voceAperta, listino?.voci]);
 
   return (
-    <Dialog open onClose={onClose} className="relative z-50">
+    <Dialog
+      open
+      // Il fondale, Escape e il pointer di apertura non chiudono: solo la X.
+      onClose={() => {}}
+      className="relative z-50"
+    >
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" aria-hidden="true" />
       <div className="fixed inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4">
         <Dialog.Panel className="w-full sm:max-w-2xl h-[96dvh] sm:h-auto sm:max-h-[90vh] flex flex-col bg-gray-900 border border-amber-700/40 rounded-t-xl sm:rounded-xl shadow-2xl min-w-0">
