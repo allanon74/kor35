@@ -45,6 +45,7 @@ def _html_modulo():
                 [107, "Data", None, 9, [[7001, None, 0]]],
                 [108, "Ora", None, 10, [[8001, None, 0]]],
                 [109, "Quasi fatto", "Ultimo blocco", 8, None],
+                [111, "Missioni", None, 18, [[9101, [["1", None], ["2", None], ["3", None], ["4", None], ["5", None]], 1]]],
                 [110, "Carica un file", None, 13, [[9001, None, 1]]],
             ],
             None,
@@ -82,8 +83,34 @@ class ParserSondaggioTests(SimpleTestCase):
         self.assertEqual(tipi["Voto"]["scala_min"], 1)
         self.assertEqual(tipi["Voto"]["scala_max_etichetta"], "Bene")
         self.assertEqual(tipi["Quasi fatto"]["tipo"], "sezione")
+        self.assertEqual(tipi["Missioni"]["tipo"], "valutazione")
+        self.assertTrue(tipi["Missioni"]["supportata"])
+        self.assertTrue(tipi["Missioni"]["obbligatoria"])
+        self.assertEqual(tipi["Missioni"]["opzioni"], ["1", "2", "3", "4", "5"])
+        self.assertEqual(tipi["Missioni"]["scala_min"], 1)
+        self.assertEqual(tipi["Missioni"]["scala_max"], 5)
+        self.assertFalse(any("Missioni" in voce for voce in analisi["avvisi"]))
         self.assertFalse(tipi["Carica un file"]["supportata"])
         self.assertTrue(any("Carica un file" in voce for voce in analisi["avvisi"]))
+
+    def test_valutazione_tre_stelle_e_default(self):
+        dati = [
+            None,
+            [
+                "",
+                [
+                    [1, "Breve", None, 18, [[11, [[1], [2], [3]], 0]]],
+                    [2, "Vuota", None, 18, [[12, None, 0]]],
+                ],
+                None, None, None, [0, 0], None, None, "Voti",
+            ],
+        ]
+        html = f"<html><script>var FB_PUBLIC_LOAD_DATA_ = {json.dumps(dati)};</script></html>"
+        tipi = {d["titolo"]: d for d in analizza_html_modulo(html)["domande"]}
+        self.assertEqual(tipi["Breve"]["opzioni"], ["1", "2", "3"])
+        self.assertEqual(tipi["Breve"]["scala_max"], 3)
+        self.assertEqual(tipi["Vuota"]["opzioni"], ["1", "2", "3", "4", "5"])
+        self.assertTrue(tipi["Vuota"]["supportata"])
 
     def test_corpo_invio_caselle_ripetute(self):
         analisi = analizza_html_modulo(_html_modulo())
@@ -140,6 +167,7 @@ class ApiSondaggioTests(APITestCase):
             "entry.3001": "Tank",
             "entry.5001": ["Esplorato"],
             "entry.6001": "4",
+            "entry.9101": "5",
         }
 
     def test_import_rifiuta_host_estraneo_senza_rete(self):
@@ -221,6 +249,13 @@ class ApiSondaggioTests(APITestCase):
         analisi = analizza_html_modulo(_html_modulo())
         with self.assertRaises(ValidationError):
             valida_risposte(analisi["domande"], {**self._risposte_valide(), "entry.6001": "9"})
+
+    def test_valutazione_solo_livelli_del_modulo(self):
+        analisi = analizza_html_modulo(_html_modulo())
+        with self.assertRaises(ValidationError):
+            valida_risposte(analisi["domande"], {**self._risposte_valide(), "entry.9101": "6"})
+        pulite = valida_risposte(analisi["domande"], self._risposte_valide())
+        self.assertEqual(pulite["entry.9101"], "5")
 
     def test_inoltro_solo_su_master(self):
         creato = self._importa()

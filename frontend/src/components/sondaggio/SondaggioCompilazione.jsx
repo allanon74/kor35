@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ExternalLink, Loader2 } from 'lucide-react';
+import { CheckCircle2, ExternalLink, Loader2, Star } from 'lucide-react';
 
 const campoClass =
   'w-full min-h-11 rounded-lg border border-gray-600 bg-gray-950 px-3 py-2 text-base text-white outline-none focus:border-indigo-400';
@@ -44,7 +44,23 @@ function testoRisposta(domanda, valori) {
         : '';
     return etichetta ? `${valore} · ${etichetta}` : String(valore);
   }
+  if (domanda.tipo === 'valutazione') {
+    const livelli = livelliValutazione(domanda);
+    const indice = livelli.indexOf(String(valore));
+    if (indice < 0) return String(valore);
+    return `${indice + 1} su ${livelli.length}`;
+  }
   return String(valore);
+}
+
+function livelliValutazione(domanda) {
+  const opzioni = (domanda.opzioni || []).map((voce) => String(voce)).filter(Boolean);
+  if (opzioni.length) return opzioni;
+  const minimo = Number(domanda.scala_min ?? 1);
+  const massimo = Number(domanda.scala_max ?? 5);
+  const gradini = [];
+  for (let n = minimo; n <= massimo; n += 1) gradini.push(String(n));
+  return gradini.length ? gradini : ['1', '2', '3', '4', '5'];
 }
 
 function BloccoDomanda({ domanda, valore, onChange, solaLettura }) {
@@ -181,6 +197,42 @@ function Controllo({ domanda, valore, onChange }) {
             </label>
           );
         })}
+      </div>
+    );
+  }
+  if (domanda.tipo === 'valutazione') {
+    const livelli = livelliValutazione(domanda);
+    const selezionato = livelli.indexOf(String(valore || ''));
+    return (
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label={domanda.titolo}>
+          {livelli.map((etichetta, indice) => {
+            const attiva = selezionato >= 0 && indice <= selezionato;
+            return (
+              <button
+                key={etichetta}
+                type="button"
+                role="radio"
+                aria-checked={selezionato === indice}
+                aria-label={`${indice + 1} su ${livelli.length}`}
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg"
+                onClick={() => onChange(etichetta)}
+              >
+                <Star
+                  size={28}
+                  className={attiva ? 'fill-amber-400 text-amber-400' : 'text-gray-500'}
+                  aria-hidden
+                />
+              </button>
+            );
+          })}
+        </div>
+        {(domanda.scala_min_etichetta || domanda.scala_max_etichetta) ? (
+          <p className="flex justify-between gap-3 text-xs text-gray-400">
+            <span className="break-words">{domanda.scala_min_etichetta}</span>
+            <span className="break-words text-right">{domanda.scala_max_etichetta}</span>
+          </p>
+        ) : null}
       </div>
     );
   }

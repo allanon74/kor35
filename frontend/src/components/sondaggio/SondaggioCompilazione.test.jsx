@@ -83,6 +83,43 @@ describe('SondaggioCompilazione', () => {
     unmount();
   });
 
+  it('invia il livello scelto sulle stelle', () => {
+    const conStelle = {
+      ...sondaggio,
+      domande: [
+        ...sondaggio.domande,
+        {
+          id: 'entry.9',
+          titolo: 'Come valuti le missioni',
+          tipo: 'valutazione',
+          obbligatoria: true,
+          supportata: true,
+          opzioni: ['1', '2', '3', '4', '5'],
+          scala_min: 1,
+          scala_max: 5,
+        },
+      ],
+    };
+    const onInvia = vi.fn();
+    const { host, unmount } = mount(createElement(SondaggioCompilazione, { sondaggio: conStelle, onInvia }));
+    const input = host.querySelector('input[type="text"]');
+    const radio = host.querySelector('input[value="Tank"]');
+    const stella = host.querySelector('button[aria-label="4 su 5"]');
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'Ada');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      radio.click();
+      stella.click();
+    });
+    act(() => {
+      host.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(onInvia).toHaveBeenCalledWith({ 'entry.1': 'Ada', 'entry.2': 'Tank', 'entry.9': '4' });
+    expect(host.textContent).not.toContain('solo sul modulo Google');
+    unmount();
+  });
+
   it('mostra la risposta già inviata senza richiedere un nuovo invio', () => {
     const compilato = {
       ...sondaggio,
