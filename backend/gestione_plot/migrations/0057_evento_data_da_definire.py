@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("gestione_plot", "0055_evento_premio_avvio_at"),
+        ("gestione_plot", "0056_missione_proposta"),
     ]
 
     operations = [
