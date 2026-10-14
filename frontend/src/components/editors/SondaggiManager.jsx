@@ -31,6 +31,11 @@ function formattaQuando(iso) {
 function etichettaRisposta(domanda, valore) {
   if (Array.isArray(valore)) return valore.join(', ');
   if (valore == null || valore === '') return '—';
+  if (domanda?.tipo === 'valutazione') {
+    const livelli = (domanda.opzioni || []).map((voce) => String(voce));
+    const indice = livelli.indexOf(String(valore));
+    if (indice >= 0) return `${indice + 1} su ${livelli.length}`;
+  }
   return String(valore);
 }
 

@@ -36,6 +36,7 @@ TIPI_GOOGLE = {
     8: "sezione",
     9: "data",
     10: "ora",
+    18: "valutazione",
 }
 TIPI_COMPILABILI = {
     "testo_breve",
@@ -44,6 +45,7 @@ TIPI_COMPILABILI = {
     "menu",
     "caselle",
     "scala",
+    "valutazione",
     "data",
     "ora",
 }
@@ -112,20 +114,43 @@ def _testo(valore, limite: int) -> str:
     return valore.replace("\x00", "").strip()[:limite]
 
 
+def _etichetta_opzione(voce) -> str:
+    primo = voce[0] if isinstance(voce, list) and voce else voce
+    if isinstance(primo, bool):
+        return ""
+    if isinstance(primo, int):
+        return str(primo)
+    if isinstance(primo, str):
+        return _testo(primo, 300)
+    return ""
+
+
 def _opzioni(dettaglio) -> list[str]:
     if not isinstance(dettaglio, list) or len(dettaglio) < 2 or not isinstance(dettaglio[1], list):
         return []
     trovate = []
     for voce in dettaglio[1]:
-        if isinstance(voce, list) and voce and isinstance(voce[0], str):
-            etichetta = _testo(voce[0], 300)
-        elif isinstance(voce, str):
-            etichetta = _testo(voce, 300)
-        else:
-            etichetta = ""
+        etichetta = _etichetta_opzione(voce)
         if etichetta and etichetta not in trovate:
             trovate.append(etichetta)
     return trovate
+
+
+def _completa_valutazione(opzioni, scala_min, scala_max):
+    """Le stelle di Google (tipo 18) si inviano come il testo dell'opzione, di solito «1»…«5»."""
+    if not opzioni and scala_min is not None and scala_max is not None:
+        span = int(scala_max) - int(scala_min)
+        if 1 <= span <= 9:
+            opzioni = [str(n) for n in range(int(scala_min), int(scala_max) + 1)]
+    if not opzioni:
+        return ["1", "2", "3", "4", "5"], 1, 5
+    numeri = []
+    for voce in opzioni:
+        try:
+            numeri.append(int(voce))
+        except (TypeError, ValueError):
+            return opzioni, scala_min, scala_max
+    return opzioni, min(numeri), max(numeri)
 
 
 def _obbligatoria(dettaglio) -> bool:
@@ -203,6 +228,8 @@ def _analizza_dati(dati) -> dict:
         scala_min, scala_max, scala_min_etichetta, scala_max_etichetta = _scala(dettaglio)
         if tipo == "scala" and (scala_min is None or scala_max is None):
             scala_min, scala_max = 1, 5
+        if tipo == "valutazione":
+            opzioni, scala_min, scala_max = _completa_valutazione(opzioni, scala_min, scala_max)
         supportata = (
             tipo in TIPI_COMPILABILI
             and bool(entry)

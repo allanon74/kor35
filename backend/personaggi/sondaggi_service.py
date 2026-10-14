@@ -126,6 +126,22 @@ def valida_risposte(domande, grezze) -> dict:
                 raise ValidationError(f"«{domanda['titolo']}» è sopra il massimo.")
             pulite[chiave] = str(numero)
             continue
+        if tipo == "valutazione":
+            ammesse = [str(voce) for voce in (domanda.get("opzioni") or [])]
+            if ammesse and testo not in ammesse:
+                raise ValidationError(f"«{domanda['titolo']}» richiede un livello previsto.")
+            if not ammesse:
+                try:
+                    numero = int(testo)
+                except (TypeError, ValueError) as exc:
+                    raise ValidationError(f"«{domanda['titolo']}» richiede un numero.") from exc
+                minimo = int(domanda.get("scala_min") if domanda.get("scala_min") is not None else 1)
+                massimo = int(domanda.get("scala_max") if domanda.get("scala_max") is not None else 5)
+                if numero < minimo or numero > massimo:
+                    raise ValidationError(f"«{domanda['titolo']}» è fuori dai livelli.")
+                testo = str(numero)
+            pulite[chiave] = testo
+            continue
         if tipo == "data":
             if not _DATA_RE.match(testo):
                 raise ValidationError(f"«{domanda['titolo']}» richiede una data.")
