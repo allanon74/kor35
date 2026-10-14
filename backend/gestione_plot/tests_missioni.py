@@ -13,7 +13,7 @@ from gestione_plot.missioni_service import (
     riepilogo_premi_evento,
     totali_task_evento,
 )
-from gestione_plot.models import Evento, Missione, MissioneEvento
+from gestione_plot.models import Evento, Missione, MissioneEvento, MissioneProposta, MissioneRisoluzione
 from gestione_plot.serializers import EventoSerializer
 from personaggi.campagna_moduli import MODULO_ACCESSO_OPEN, MODULO_TASKS, apply_moduli_accesso
 from personaggi.models import (
@@ -24,6 +24,7 @@ from personaggi.models import (
     Campagna,
     CampagnaUtente,
     Carriera,
+    Messaggio,
     Personaggio,
     TipoCarriera,
     TipologiaPersonaggio,
@@ -508,4 +509,194 @@ class MissioniVisibilitaApiTests(APITestCase):
         data = resp.json()
         self.assertEqual(len(data["tasks"]), 1)
         self.assertTrue(data["tasks"][0]["attiva"])
+
+    def _avvia_e_iscrivi(self, *personaggi):
+        self.evento.started_at = timezone.now()
+        self.evento.ended_at = None
+        self.evento.save(update_fields=["started_at", "ended_at", "updated_at"])
+        for pg in personaggi:
+            self.evento.partecipanti.add(pg)
+
+    def test_mie_non_espone_allineamento(self):
+        self.missione.allineamento = Missione.ALLINEAMENTO_LUMINOSA
+        self.missione.save(update_fields=["allineamento", "updated_at"])
+        self._avvia_e_iscrivi(self.pg)
+        resp = self._mie(self.player, self.pg)
+        self.assertEqual(resp.status_code, 200)
+        row = resp.json()[0]
+        self.assertNotIn("allineamento", row)
+        self.assertEqual(row["titolo"], "Recupera il relitto")
+
+    def test_risoluzione_non_solo_primo_resta_per_gli_altri_e_per_chi_ha_completato(self):
+        self.missione.premio_solo_primo = False
+        self.missione.reward_prestigio = 3
+        self.missione.save(update_fields=["premio_solo_primo", "reward_prestigio", "updated_at"])
+        self._avvia_e_iscrivi(self.pg, self.pg_other)
+        resp = self._post(
+            self.staffer,
+            "/api/plot/api/missioni/assegna-risoluzione/",
+            {
+                "missione_id": str(self.missione.id),
+                "evento_id": self.evento.id,
+                "personaggio_id": self.pg.id,
+            },
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.link.refresh_from_db()
+        self.missione.refresh_from_db()
+        self.assertTrue(self.link.attiva)
+        self.assertTrue(self.missione.attiva)
+        self.assertTrue(Missione.objects.filter(pk=self.missione.pk).exists())
+
+        mie = self._mie(self.player, self.pg).json()
+        self.assertEqual(len(mie), 1)
+        self.assertTrue(mie[0]["svolta"])
+        self.assertFalse(mie[0]["effettuabile"])
+
+        altre = self._mie(self.other, self.pg_other).json()
+        self.assertEqual(len(altre), 1)
+        self.assertEqual(altre[0]["titolo"], "Recupera il relitto")
+        self.assertFalse(altre[0]["svolta"])
+        self.assertTrue(altre[0]["effettuabile"])
+
+    def test_solo_primo_sparisce_agli_altri_ma_resta_a_chi_lha_completata(self):
+        self.missione.premio_solo_primo = True
+        self.missione.save(update_fields=["premio_solo_primo", "updated_at"])
+        self._avvia_e_iscrivi(self.pg, self.pg_other)
+        self._post(
+            self.staffer,
+            "/api/plot/api/missioni/assegna-risoluzione/",
+            {
+                "missione_id": str(self.missione.id),
+                "evento_id": self.evento.id,
+                "personaggio_id": self.pg.id,
+            },
+        )
+        mie = self._mie(self.player, self.pg).json()
+        self.assertEqual([row["titolo"] for row in mie], ["Recupera il relitto"])
+        self.assertTrue(mie[0]["svolta"])
+        altre = self._mie(self.other, self.pg_other).json()
+        self.assertEqual(altre, [])
+
+    def test_completata_resta_se_il_link_viene_spento_dopo(self):
+        self._avvia_e_iscrivi(self.pg, self.pg_other)
+        self._post(
+            self.staffer,
+            "/api/plot/api/missioni/assegna-risoluzione/",
+            {
+                "missione_id": str(self.missione.id),
+                "evento_id": self.evento.id,
+                "personaggio_id": self.pg.id,
+            },
+        )
+        self.link.attiva = False
+        self.link.save(update_fields=["attiva", "updated_at"])
+        mie = self._mie(self.player, self.pg).json()
+        self.assertEqual(len(mie), 1)
+        self.assertTrue(mie[0]["svolta"])
+        altre = self._mie(self.other, self.pg_other).json()
+        self.assertEqual(altre, [])
+
+    def test_soluzione_manuale_non_accredita_finche_lo_staff_non_accetta(self):
+        self.missione.tipo_risoluzione = Missione.TIPO_MANUALE
+        self.missione.reward_prestigio = 5
+        self.missione.reward_crediti = Decimal("12.00")
+        self.missione.save(update_fields=[
+            "tipo_risoluzione", "reward_prestigio", "reward_crediti", "updated_at",
+        ])
+        self._avvia_e_iscrivi(self.pg)
+        resp = self._post(
+            self.player,
+            "/api/plot/api/missioni/proponi-soluzione/",
+            {
+                "missione_id": str(self.missione.id),
+                "evento_id": self.evento.id,
+                "personaggio_id": self.pg.id,
+                "testo": "Ho consegnato il relitto al molo.",
+            },
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(resp.json()["stato"], MissioneProposta.STATO_IN_ATTESA)
+        self.assertFalse(MissioneRisoluzione.objects.filter(personaggio=self.pg).exists())
+        self.pg.refresh_from_db()
+        self.assertEqual(self.pg.prestigio, 0)
+        mie = self._mie(self.player, self.pg).json()
+        self.assertFalse(mie[0]["svolta"])
+        self.assertEqual(mie[0]["proposta"]["testo"], "Ho consegnato il relitto al molo.")
+
+        coda = self._get(self.staffer, "/api/plot/api/missioni/proposte/")
+        self.assertEqual(coda.status_code, 200)
+        self.assertEqual(len(coda.json()), 1)
+        self.assertEqual(self._get(self.player, "/api/plot/api/missioni/proposte/").status_code, 403)
+
+        acc = self._post(
+            self.staffer,
+            "/api/plot/api/missioni/accetta-proposta/",
+            {"proposta_id": resp.json()["id"]},
+        )
+        self.assertEqual(acc.status_code, 200, acc.content)
+        self.assertEqual(acc.json()["stato"], MissioneProposta.STATO_ACCETTATA)
+        self.assertEqual(MissioneRisoluzione.objects.filter(personaggio=self.pg).count(), 1)
+        self.pg.refresh_from_db()
+        self.assertEqual(self.pg.prestigio, 5)
+        mie = self._mie(self.player, self.pg).json()
+        self.assertTrue(mie[0]["svolta"])
+        self.assertFalse(mie[0]["effettuabile"])
+
+    def test_soluzione_quest_facoltativa_e_rifiuto_con_messaggio(self):
+        self.missione.tipo_risoluzione = Missione.TIPO_QUEST
+        self.missione.save(update_fields=["tipo_risoluzione", "updated_at"])
+        self._avvia_e_iscrivi(self.pg)
+        resp = self._post(
+            self.player,
+            "/api/plot/api/missioni/proponi-soluzione/",
+            {
+                "missione_id": str(self.missione.id),
+                "evento_id": self.evento.id,
+                "personaggio_id": self.pg.id,
+                "testo": "Ho chiuso la quest ma il premio non è arrivato.",
+            },
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        vuoto = self._post(
+            self.staffer,
+            "/api/plot/api/missioni/rifiuta-proposta/",
+            {"proposta_id": resp.json()["id"], "messaggio": "   "},
+        )
+        self.assertEqual(vuoto.status_code, 400)
+        rifiuto = self._post(
+            self.staffer,
+            "/api/plot/api/missioni/rifiuta-proposta/",
+            {
+                "proposta_id": resp.json()["id"],
+                "messaggio": "Manca la prova del molo.",
+            },
+        )
+        self.assertEqual(rifiuto.status_code, 200, rifiuto.content)
+        self.assertFalse(MissioneRisoluzione.objects.filter(personaggio=self.pg).exists())
+        msg = Messaggio.objects.get(destinatario_personaggio=self.pg)
+        self.assertIn("Manca la prova del molo.", msg.testo)
+        self.assertIn("non è stata accettata", msg.testo)
+        mie = self._mie(self.player, self.pg).json()
+        self.assertEqual(mie[0]["proposta"]["stato"], MissioneProposta.STATO_RIFIUTATA)
+        self.assertEqual(mie[0]["proposta"]["messaggio_rifiuto"], "Manca la prova del molo.")
+        self.assertTrue(mie[0]["effettuabile"])
+
+        di_nuovo = self._post(
+            self.player,
+            "/api/plot/api/missioni/proponi-soluzione/",
+            {
+                "missione_id": str(self.missione.id),
+                "evento_id": self.evento.id,
+                "personaggio_id": self.pg.id,
+                "testo": "Seconda consegna, con la prova.",
+            },
+        )
+        self.assertEqual(di_nuovo.status_code, 201, di_nuovo.content)
+        self.assertEqual(
+            MissioneProposta.objects.filter(
+                personaggio=self.pg, stato=MissioneProposta.STATO_IN_ATTESA
+            ).count(),
+            1,
+        )
 

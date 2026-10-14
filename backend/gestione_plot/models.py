@@ -1668,6 +1668,72 @@ class MissioneRisoluzione(SyncableModel, models.Model):
         return f"{self.missione_id} / {self.evento_id} → PG {self.personaggio_id}"
 
 
+class MissioneProposta(SyncableModel, models.Model):
+    """
+    Soluzione inviata dal giocatore, in attesa di verifica staff.
+
+    Non accredita il premio: lo staff accetta (crea la risoluzione) oppure
+    rifiuta con un messaggio al personaggio.
+    """
+
+    STATO_IN_ATTESA = "IN_ATTESA"
+    STATO_ACCETTATA = "ACCETTATA"
+    STATO_RIFIUTATA = "RIFIUTATA"
+    STATO_CHOICES = [
+        (STATO_IN_ATTESA, "In attesa"),
+        (STATO_ACCETTATA, "Accettata"),
+        (STATO_RIFIUTATA, "Rifiutata"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    missione = models.ForeignKey(Missione, on_delete=models.CASCADE, related_name="proposte")
+    evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name="proposte_missioni")
+    personaggio = models.ForeignKey(
+        Personaggio,
+        on_delete=models.CASCADE,
+        related_name="proposte_missioni",
+    )
+    testo = models.TextField(verbose_name="Soluzione")
+    stato = models.CharField(
+        max_length=12,
+        choices=STATO_CHOICES,
+        default=STATO_IN_ATTESA,
+        db_index=True,
+    )
+    messaggio_rifiuto = models.TextField(blank=True, default="")
+    risposta_at = models.DateTimeField(null=True, blank=True)
+    risposta_da = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="proposte_missioni_risposte",
+    )
+    risoluzione = models.ForeignKey(
+        MissioneRisoluzione,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="proposte",
+    )
+
+    class Meta:
+        verbose_name = "Soluzione task"
+        verbose_name_plural = "Soluzioni task"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["stato", "evento"], name="missprop_stato_evento_idx"),
+            models.Index(
+                fields=["personaggio", "missione", "evento"],
+                name="missprop_pg_miss_evt_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.personaggio_id} → {self.missione_id} ({self.stato})"
+
+
 class StaffCompito(SyncableModel, models.Model):
     """Compito operativo di staff/master/aiuto-staff con scadenza e preavviso."""
 

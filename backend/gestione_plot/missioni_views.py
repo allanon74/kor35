@@ -21,13 +21,26 @@ from rest_framework.serializers import (
 from personaggi.campagna_moduli import MODULO_TASKS, ModuloStaffGateMixin
 from personaggi.models import Personaggio, PropostaTecnica
 
-from .models import Evento, GiornoEvento, Missione, MissioneEvento, MissioneRisoluzione, Quest
+from .models import (
+    Evento,
+    GiornoEvento,
+    Missione,
+    MissioneEvento,
+    MissioneProposta,
+    MissioneRisoluzione,
+    Quest,
+)
 from .missioni_service import (
+    accetta_proposta,
     assegna_risoluzione,
     eventi_attivi_ids,
+    invia_soluzione,
     lista_missioni_per_personaggio,
+    lista_proposte,
+    rifiuta_proposta,
     riepilogo_task_evento,
     set_missione_attiva_evento,
+    serializza_proposta,
 )
 from .views import IsMasterOrReadOnly, _is_campaign_staff_plus
 
@@ -193,6 +206,34 @@ class MissioneRisoluzioneSerializer(ModelSerializer):
         read_only_fields = fields
 
 
+class ProponiSoluzioneSerializer(Serializer):
+    missione_id = UUIDField()
+    evento_id = IntegerField()
+    personaggio_id = IntegerField()
+    testo = CharField(max_length=4000, trim_whitespace=True)
+
+    def validate_testo(self, value):
+        testo = (value or "").strip()
+        if not testo:
+            raise ValidationError("Scrivi la soluzione prima di inviarla.")
+        return testo
+
+
+class RifiutaPropostaSerializer(Serializer):
+    proposta_id = UUIDField()
+    messaggio = CharField(max_length=2000, trim_whitespace=True)
+
+    def validate_messaggio(self, value):
+        messaggio = (value or "").strip()
+        if not messaggio:
+            raise ValidationError("Scrivi il messaggio da inviare al giocatore.")
+        return messaggio
+
+
+class AccettaPropostaSerializer(Serializer):
+    proposta_id = UUIDField()
+
+
 class AssegnaRisoluzioneSerializer(Serializer):
     missione_id = UUIDField()
     evento_id = IntegerField()
@@ -215,9 +256,12 @@ class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
         return MissioneSerializer
 
     def get_permissions(self):
-        if self.action in ("mie", "evento_attivo"):
+        if self.action in ("mie", "evento_attivo", "proponi_soluzione"):
             return [permissions.IsAuthenticated()]
-        if self.action in ("assegna", "set_attiva_evento", "evento_tasks", "list", "retrieve", "riepilogo_evento"):
+        if self.action in (
+            "assegna", "set_attiva_evento", "evento_tasks", "list", "retrieve",
+            "riepilogo_evento", "proposte", "accetta_proposta_action", "rifiuta_proposta_action",
+        ):
             return [permissions.IsAuthenticated(), IsCampaignStaffPlus()]
         # CRUD definizione: Master (IsMasterOrReadOnly già richiede staff+ e write=master)
         return [permissions.IsAuthenticated(), IsMasterOrReadOnly()]
@@ -375,6 +419,76 @@ class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
         if gate:
             return gate
         return Response(lista_missioni_per_personaggio(pg))
+
+    @action(detail=False, methods=["post"], url_path="proponi-soluzione")
+    def proponi_soluzione(self, request):
+        """Il PG invia (o aggiorna) la soluzione. Non accredita il premio."""
+        from personaggi.campagna_moduli import modulo_gate_response
+
+        ser = ProponiSoluzioneSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+        personaggio = get_object_or_404(Personaggio, pk=data["personaggio_id"])
+        if personaggio.proprietario_id != request.user.id and not _is_campaign_staff_plus(request):
+            return Response({"detail": "Non autorizzato."}, status=403)
+        gate = modulo_gate_response(
+            personaggio, MODULO_TASKS, user=request.user, error_key="detail"
+        )
+        if gate:
+            return gate
+        missione = get_object_or_404(Missione, pk=data["missione_id"])
+        evento = get_object_or_404(Evento, pk=data["evento_id"])
+        try:
+            proposta = invia_soluzione(
+                missione=missione,
+                evento=evento,
+                personaggio=personaggio,
+                testo=data["testo"],
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(serializza_proposta(proposta), status=201)
+
+    @action(detail=False, methods=["get"], url_path="proposte")
+    def proposte(self, request):
+        """Coda staff delle soluzioni inviate dai personaggi."""
+        stato = (request.query_params.get("stato") or MissioneProposta.STATO_IN_ATTESA).strip()
+        if stato in ("tutte", "ALL", "*"):
+            stato = None
+        elif stato not in {
+            MissioneProposta.STATO_IN_ATTESA,
+            MissioneProposta.STATO_ACCETTATA,
+            MissioneProposta.STATO_RIFIUTATA,
+        }:
+            return Response({"detail": "Stato non valido."}, status=400)
+        evento_id = request.query_params.get("evento") or None
+        return Response(lista_proposte(stato=stato, evento_id=evento_id))
+
+    @action(detail=False, methods=["post"], url_path="accetta-proposta")
+    def accetta_proposta_action(self, request):
+        ser = AccettaPropostaSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        proposta = get_object_or_404(MissioneProposta, pk=ser.validated_data["proposta_id"])
+        try:
+            proposta = accetta_proposta(proposta, utente=request.user)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(serializza_proposta(proposta))
+
+    @action(detail=False, methods=["post"], url_path="rifiuta-proposta")
+    def rifiuta_proposta_action(self, request):
+        ser = RifiutaPropostaSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        proposta = get_object_or_404(MissioneProposta, pk=ser.validated_data["proposta_id"])
+        try:
+            proposta = rifiuta_proposta(
+                proposta,
+                utente=request.user,
+                messaggio=ser.validated_data["messaggio"],
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(serializza_proposta(proposta))
 
     @action(detail=False, methods=["get"], url_path=r"riepilogo-evento/(?P<evento_id>[^/.]+)")
     def riepilogo_evento(self, request, evento_id=None):

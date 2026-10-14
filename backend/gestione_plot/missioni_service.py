@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from personaggi.models import Carriera, Messaggio, Personaggio, get_active_korp_ids
 
-from .models import Evento, Missione, MissioneEvento, MissioneRisoluzione
+from .models import Evento, Missione, MissioneEvento, MissioneProposta, MissioneRisoluzione
 
 ZERO = Decimal("0.00")
 
@@ -336,24 +336,57 @@ def set_missione_attiva_evento(missione: Missione, evento: Evento, attiva: bool)
     return link
 
 
+def _proposta_pubblica(proposta: MissioneProposta | None) -> dict | None:
+    if proposta is None:
+        return None
+    return {
+        "id": str(proposta.id),
+        "stato": proposta.stato,
+        "testo": proposta.testo,
+        "messaggio_rifiuto": proposta.messaggio_rifiuto or "",
+        "evento_id": proposta.evento_id,
+        "created_at": proposta.created_at.isoformat() if proposta.created_at else None,
+    }
+
+
+def _scegli_proposta(candidati: list[MissioneProposta]) -> MissioneProposta | None:
+    """Preferisce la proposta ancora aperta, altrimenti la più recente."""
+    if not candidati:
+        return None
+    aperte = [p for p in candidati if p.stato == MissioneProposta.STATO_IN_ATTESA]
+    pool = aperte or candidati
+    return max(pool, key=lambda p: p.created_at or timezone.now())
+
+
 def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
     """
     Visibili al giocatore solo le task legate a eventi ATTIVI in cui il PG
     è iscritto, con link MissioneEvento.attiva e catalogo Missione.attiva,
     non esclusive (oppure esclusive della propria KORP).
-    Il payload giocatore non include il mittente KORP: evidenza solo
-    le task sovrapagate (fattore > 1) della propria KORP.
+    Il payload giocatore non include il mittente KORP né l'allineamento
+    (luminosa/oscura/grigia): evidenza solo le task sovrapagate (fattore > 1)
+    della propria KORP.
+
+    Una risoluzione non spegne la task per gli altri, salvo ``premio_solo_primo``.
+    Le task già risolte dal PG restano nell'elenco (sezione completate) anche
+    se il link evento viene spento dopo.
     """
     attivi = set(eventi_attivi_per_personaggio(personaggio))
     if not attivi:
         return []
 
+    visibili = Missione.objects.filter(
+        attiva=True,
+        evento_links__evento_id__in=attivi,
+        evento_links__attiva=True,
+    )
+    completate_pg = Missione.objects.filter(
+        risoluzioni__personaggio=personaggio,
+        risoluzioni__evento_id__in=attivi,
+        evento_links__evento_id__in=attivi,
+    )
     missioni = list(
-        Missione.objects.filter(
-            attiva=True,
-            evento_links__evento_id__in=attivi,
-            evento_links__attiva=True,
-        )
+        (visibili | completate_pg)
         .select_related("korp")
         .prefetch_related("evento_links")
         .distinct()
@@ -387,48 +420,71 @@ def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
         ).values_list("missione_id", "evento_id"):
             presi.add((str(mid), eid))
 
+    proposte_per_missione: dict[str, list[MissioneProposta]] = {}
+    if missioni:
+        for proposta in MissioneProposta.objects.filter(
+            personaggio=personaggio,
+            missione__in=missioni,
+            evento_id__in=attivi,
+        ):
+            proposte_per_missione.setdefault(str(proposta.missione_id), []).append(proposta)
+
     rows = []
     for m in missioni:
         if not personaggio_puo_svolgere(m, personaggio):
             continue
-        # Solo eventi in corso, con PG iscritto e link attivo
-        eventi_ids = [
-            link.evento_id
-            for link in m.evento_links.all()
-            if link.evento_id in attivi and link.attiva
-        ]
+        miei_r = [r for r in rmap.get(str(m.id), []) if r["evento_id"] in attivi]
+        risolti_eventi = {r["evento_id"] for r in miei_r}
+        # Link attivo (catalogo acceso) oppure evento già risolto da questo PG,
+        # anche se lo staff ha poi spento il link: la completata resta in elenco.
+        eventi_ids = []
+        for link in m.evento_links.all():
+            if link.evento_id not in attivi:
+                continue
+            gia_risolta = link.evento_id in risolti_eventi
+            if gia_risolta or (m.attiva and link.attiva):
+                eventi_ids.append(link.evento_id)
         if not eventi_ids:
             continue
-        miei_r = [r for r in rmap.get(str(m.id), []) if r["evento_id"] in attivi]
         svolta = len(miei_r) > 0
         effettuabile = False
+        evento_soluzione_id = None
         for eid in eventi_ids:
-            gia_mia = any(r["evento_id"] == eid for r in miei_r)
+            gia_mia = eid in risolti_eventi
             if gia_mia:
                 continue
             if m.premio_solo_primo and (str(m.id), eid) in presi:
                 continue
-            effettuabile = True
-            break
-        if not effettuabile and not svolta:
-            if m.premio_solo_primo:
+            if not m.attiva:
                 continue
+            effettuabile = True
+            evento_soluzione_id = eid
+            break
+        # Sparisce per gli altri solo se è «premio solo al primo» e già presa.
+        # Una risoluzione ordinaria non toglie la task a chi non l'ha ancora fatta.
+        if not effettuabile and not svolta:
+            continue
 
         view = ricompensa_per_visualizzazione(m, personaggio, is_primo=True)
+        proposte_m = [
+            p for p in proposte_per_missione.get(str(m.id), [])
+            if p.evento_id in eventi_ids
+        ]
         rows.append({
             "id": str(m.id),
             "sync_id": str(m.sync_id),
             "titolo": m.titolo,
             "descrizione": m.descrizione,
             "tipo_risoluzione": m.tipo_risoluzione,
-            "allineamento": m.allineamento or Missione.ALLINEAMENTO_GRIGIA,
             "premio_solo_primo": m.premio_solo_primo,
             "attiva": m.attiva,
             "ordine": m.ordine,
             "eventi_ids": eventi_ids,
+            "evento_soluzione_id": evento_soluzione_id,
             "svolta": svolta,
             "effettuabile": effettuabile,
             "risoluzioni": miei_r,
+            "proposta": _proposta_pubblica(_scegli_proposta(proposte_m)),
             "is_korp_bonus": view["is_korp_bonus"],
             "fattore_crediti_applicato": str(view["fattore_crediti_applicato"]),
             "fattore_prestigio_applicato": str(view["fattore_prestigio_applicato"]),
@@ -449,3 +505,164 @@ def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
 
     rows.sort(key=sort_key)
     return rows
+
+
+def _evento_aperto_per_soluzione(missione: Missione, evento: Evento, personaggio: Personaggio) -> None:
+    """Controlli condivisi prima di accettare una soluzione dal giocatore."""
+    if evento.ended_at is not None or evento.started_at is None:
+        raise ValueError("La task si può segnare solo mentre l'evento è in corso.")
+    if not evento.partecipanti.filter(pk=personaggio.pk).exists():
+        raise ValueError("Il personaggio non è iscritto a questo evento.")
+    link = MissioneEvento.objects.filter(missione=missione, evento=evento).first()
+    if not link:
+        raise ValueError("La task non è associata a questo evento.")
+    if not missione.attiva or not link.attiva:
+        raise ValueError("La task non è attiva per questo evento.")
+    if not personaggio_puo_svolgere(missione, personaggio):
+        raise ValueError("Non puoi svolgere questa task.")
+    if MissioneRisoluzione.objects.filter(
+        missione=missione, evento=evento, personaggio=personaggio
+    ).exists():
+        raise ValueError("Hai già completato questa task.")
+    if missione.premio_solo_primo and not _is_primo(missione.id, evento.id):
+        raise ValueError("Questa task è già stata risolta da un altro personaggio.")
+
+
+def serializza_proposta(proposta: MissioneProposta) -> dict:
+    missione = proposta.missione
+    return {
+        "id": str(proposta.id),
+        "stato": proposta.stato,
+        "testo": proposta.testo,
+        "messaggio_rifiuto": proposta.messaggio_rifiuto or "",
+        "created_at": proposta.created_at.isoformat() if proposta.created_at else None,
+        "updated_at": proposta.updated_at.isoformat() if proposta.updated_at else None,
+        "risposta_at": proposta.risposta_at.isoformat() if proposta.risposta_at else None,
+        "missione_id": str(proposta.missione_id),
+        "missione_titolo": missione.titolo if missione else "",
+        "tipo_risoluzione": missione.tipo_risoluzione if missione else "",
+        "evento_id": proposta.evento_id,
+        "evento_titolo": proposta.evento.titolo if proposta.evento_id else "",
+        "personaggio_id": proposta.personaggio_id,
+        "personaggio_nome": proposta.personaggio.nome if proposta.personaggio_id else "",
+        "risoluzione_id": str(proposta.risoluzione_id) if proposta.risoluzione_id else None,
+    }
+
+
+@transaction.atomic
+def invia_soluzione(
+    *,
+    missione: Missione,
+    evento: Evento,
+    personaggio: Personaggio,
+    testo: str,
+) -> MissioneProposta:
+    """
+    Il giocatore segna la soluzione. Per le task manuali (generali) è l'unico
+    canale del personaggio; per quest, tecniche e post è facoltativo.
+    Non crea la risoluzione e non accredita il premio.
+    """
+    testo = (testo or "").strip()
+    if not testo:
+        raise ValueError("Scrivi la soluzione prima di inviarla.")
+    if len(testo) > 4000:
+        raise ValueError("La soluzione è troppo lunga.")
+    _evento_aperto_per_soluzione(missione, evento, personaggio)
+    esistente = (
+        MissioneProposta.objects.select_for_update()
+        .filter(
+            missione=missione,
+            evento=evento,
+            personaggio=personaggio,
+            stato=MissioneProposta.STATO_IN_ATTESA,
+        )
+        .first()
+    )
+    if esistente:
+        esistente.testo = testo
+        esistente.save(update_fields=["testo", "updated_at"])
+        return esistente
+    return MissioneProposta.objects.create(
+        missione=missione,
+        evento=evento,
+        personaggio=personaggio,
+        testo=testo,
+        stato=MissioneProposta.STATO_IN_ATTESA,
+    )
+
+
+def lista_proposte(*, stato: str | None = None, evento_id=None) -> list[dict]:
+    qs = MissioneProposta.objects.select_related("missione", "evento", "personaggio")
+    if stato:
+        qs = qs.filter(stato=stato)
+    if evento_id:
+        qs = qs.filter(evento_id=evento_id)
+    return [serializza_proposta(p) for p in qs.order_by("-created_at")[:200]]
+
+
+def _notifica_rifiuto(proposta: MissioneProposta, messaggio: str, mittente) -> None:
+    pg = proposta.personaggio
+    titolo = proposta.missione.titolo
+    Messaggio.objects.create(
+        mittente=mittente,
+        tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
+        destinatario_personaggio=pg,
+        titolo=f"Soluzione non accettata: {titolo}"[:150],
+        testo=(
+            f"La soluzione inviata per la task «{titolo}» non è stata accettata.\n\n"
+            f"{messaggio.strip()}"
+        ),
+        campagna=pg.campagna,
+        is_staff_message=True,
+    )
+
+
+@transaction.atomic
+def accetta_proposta(proposta: MissioneProposta, *, utente) -> MissioneProposta:
+    proposta = (
+        MissioneProposta.objects.select_for_update()
+        .select_related("missione", "evento", "personaggio")
+        .get(pk=proposta.pk)
+    )
+    if proposta.stato != MissioneProposta.STATO_IN_ATTESA:
+        raise ValueError("Questa soluzione è già stata gestita.")
+    ris = assegna_risoluzione(
+        missione=proposta.missione,
+        evento=proposta.evento,
+        personaggio=proposta.personaggio,
+        note=proposta.testo,
+        auto_claim=True,
+    )
+    proposta.stato = MissioneProposta.STATO_ACCETTATA
+    proposta.risoluzione = ris
+    proposta.risposta_at = timezone.now()
+    proposta.risposta_da = utente
+    proposta.save(update_fields=[
+        "stato", "risoluzione", "risposta_at", "risposta_da", "updated_at",
+    ])
+    return proposta
+
+
+@transaction.atomic
+def rifiuta_proposta(proposta: MissioneProposta, *, utente, messaggio: str) -> MissioneProposta:
+    messaggio = (messaggio or "").strip()
+    if not messaggio:
+        raise ValueError("Scrivi il messaggio da inviare al giocatore.")
+    if len(messaggio) > 2000:
+        raise ValueError("Il messaggio è troppo lungo.")
+    proposta = (
+        MissioneProposta.objects.select_for_update()
+        .select_related("missione", "evento", "personaggio")
+        .get(pk=proposta.pk)
+    )
+    if proposta.stato != MissioneProposta.STATO_IN_ATTESA:
+        raise ValueError("Questa soluzione è già stata gestita.")
+    proposta.stato = MissioneProposta.STATO_RIFIUTATA
+    proposta.messaggio_rifiuto = messaggio
+    proposta.risposta_at = timezone.now()
+    proposta.risposta_da = utente
+    proposta.save(update_fields=[
+        "stato", "messaggio_rifiuto", "risposta_at", "risposta_da", "updated_at",
+    ])
+    _notifica_rifiuto(proposta, messaggio, utente)
+    return proposta

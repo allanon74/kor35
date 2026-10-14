@@ -1541,6 +1541,29 @@ export const getMissioniMie = (personaggioId, onLogout) =>
     { method: 'GET' },
     onLogout,
   );
+export const proponiSoluzioneMissione = (data, onLogout) =>
+  fetchAuthenticated('/api/plot/api/missioni/proponi-soluzione/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }, onLogout);
+export const getMissioniProposte = (params = {}, onLogout) => {
+  const qs = new URLSearchParams();
+  Object.entries(params || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+  });
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return fetchAuthenticated(`/api/plot/api/missioni/proposte/${suffix}`, { method: 'GET' }, onLogout);
+};
+export const accettaMissioneProposta = (propostaId, onLogout) =>
+  fetchAuthenticated('/api/plot/api/missioni/accetta-proposta/', {
+    method: 'POST',
+    body: JSON.stringify({ proposta_id: propostaId }),
+  }, onLogout);
+export const rifiutaMissioneProposta = (propostaId, messaggio, onLogout) =>
+  fetchAuthenticated('/api/plot/api/missioni/rifiuta-proposta/', {
+    method: 'POST',
+    body: JSON.stringify({ proposta_id: propostaId, messaggio }),
+  }, onLogout);
 /** Stato evento ufficialmente in corso (Inizia senza Termina) — per visibilità tab Tasks. */
 export const getMissioniEventoAttivo = (personaggioId, onLogout) => {
   const qs = personaggioId

@@ -7,7 +7,7 @@ from .models import (
     ConfigurazioneSito, LinkSocial, PayPalImpostazioniGlobali, IscrizioneEventoPagamento,
     IscrizioneEventoPagamentoOpzione, EventoIscrizioneOpzione, EventoPremioPersonaggio,
     CreazioneGuidataFlusso, CreazioneGuidataPasso, CreazioneGuidataScelta,
-    Missione, MissioneEvento, MissioneRisoluzione,
+    Missione, MissioneEvento, MissioneRisoluzione, MissioneProposta,
     StaffCompito, StaffCompitoAssegnazione, CalendarioFeedToken,
     StaffCompitoAutomatico, StaffCompitoAutomaticoAssegnazione,
 )
@@ -525,6 +525,14 @@ class MissioneRisoluzioneAdmin(admin.ModelAdmin):
     list_display = ("missione", "evento", "personaggio", "is_primo", "ricompensa_reclamata", "resolved_at")
     list_filter = ("is_primo", "ricompensa_reclamata")
     readonly_fields = ("sync_id", "updated_at", "created_at", "resolved_at")
+
+
+@admin.register(MissioneProposta)
+class MissionePropostaAdmin(admin.ModelAdmin):
+    list_display = ("missione", "evento", "personaggio", "stato", "created_at", "risposta_at")
+    list_filter = ("stato",)
+    search_fields = ("testo", "messaggio_rifiuto", "personaggio__nome", "missione__titolo")
+    readonly_fields = ("sync_id", "updated_at", "created_at")
 
 
 class StaffCompitoAssegnazioneInline(admin.TabularInline):

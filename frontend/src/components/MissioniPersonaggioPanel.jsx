@@ -1,8 +1,179 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, ListTodo, RefreshCw } from 'lucide-react';
-import { getMissioniMie } from '../api';
+import { CheckCircle2, ChevronDown, ListTodo, RefreshCw } from 'lucide-react';
+import { getMissioniMie, proponiSoluzioneMissione } from '../api';
+import RichHtml from './RichHtml';
 
-/** Elenco task del PG: sovrapagate della propria KORP evidenziate, senza mittente. */
+export const SOLUZIONE_DISCLAIMER =
+  'Invia la soluzione solo se hai compiuto quel che era richiesto ma non hai ricevuto il compenso.';
+
+function premioLabel(m) {
+  const cr = Number(m.reward_crediti || 0).toLocaleString('it-IT');
+  return `${cr} Cr · ${m.reward_prestigio || 0} Pr`;
+}
+
+function TaskCard({ task, open, onToggle, onLogout, personaggioId, onSaved }) {
+  const korpBonus = !!task.is_korp_bonus;
+  const proposta = task.proposta || null;
+  const inAttesa = proposta?.stato === 'IN_ATTESA';
+  const rifiutata = proposta?.stato === 'RIFIUTATA';
+  const [testo, setTesto] = useState(proposta?.testo || '');
+  const [busy, setBusy] = useState(false);
+  const [errore, setErrore] = useState('');
+
+  useEffect(() => {
+    setTesto(proposta?.testo || '');
+  }, [proposta?.id, proposta?.testo, proposta?.stato]);
+
+  const invia = async () => {
+    const eventoId = task.evento_soluzione_id || task.eventi_ids?.[0];
+    if (!eventoId || !personaggioId) return;
+    setBusy(true);
+    setErrore('');
+    try {
+      await proponiSoluzioneMissione({
+        missione_id: task.id,
+        evento_id: eventoId,
+        personaggio_id: Number(personaggioId),
+        testo,
+      }, onLogout);
+      onSaved?.();
+    } catch (err) {
+      setErrore(err?.message || 'Invio non riuscito');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li
+      className={`rounded-lg border ${
+        korpBonus
+          ? 'border-violet-500/60 bg-violet-950/40'
+          : task.svolta
+            ? 'border-emerald-900/60 bg-emerald-950/20'
+            : 'border-gray-800 bg-gray-900/40'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex min-h-11 w-full flex-col gap-1 px-3 py-2 text-left"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <span className="min-w-0 break-words font-semibold text-white">{task.titolo}</span>
+          <ChevronDown
+            size={16}
+            className={`mt-0.5 shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {korpBonus ? (
+            <span className="rounded bg-violet-800/60 px-1.5 py-0.5 text-[10px] uppercase text-violet-100">
+              Sovrapagata ×{task.fattore_crediti_applicato} Cr · ×{task.fattore_prestigio_applicato} Pr
+            </span>
+          ) : null}
+          {task.svolta ? (
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase text-emerald-300">
+              <CheckCircle2 size={12} /> Completata
+            </span>
+          ) : inAttesa ? (
+            <span className="text-[10px] uppercase text-amber-300">Soluzione in attesa</span>
+          ) : rifiutata ? (
+            <span className="text-[10px] uppercase text-red-300">Soluzione rifiutata</span>
+          ) : task.effettuabile ? (
+            <span className="text-[10px] uppercase text-lime-400">Disponibile</span>
+          ) : null}
+        </div>
+        {!open && task.descrizione ? (
+          <p className="text-[11px] text-gray-400 line-clamp-2">{task.descrizione}</p>
+        ) : null}
+        <div className={`font-mono text-xs ${korpBonus ? 'font-bold text-violet-200' : 'text-lime-200'}`}>
+          {premioLabel(task)}
+        </div>
+      </button>
+      {open ? (
+        <div className="space-y-3 border-t border-white/5 px-3 py-3">
+          {task.descrizione ? (
+            <RichHtml content={task.descrizione} className="text-sm text-gray-200" />
+          ) : (
+            <p className="text-sm text-gray-500">Nessuna descrizione.</p>
+          )}
+          {task.svolta ? (
+            <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-100">
+              Task completata.
+              {proposta?.testo ? (
+                <p className="mt-1 whitespace-pre-wrap text-emerald-50/90">{proposta.testo}</p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {rifiutata && proposta?.messaggio_rifiuto ? (
+                <p className="rounded-lg border border-red-800/60 bg-red-950/40 px-3 py-2 text-sm text-red-100 whitespace-pre-wrap">
+                  {proposta.messaggio_rifiuto}
+                </p>
+              ) : null}
+              <label className="block text-xs font-semibold text-gray-300" htmlFor={`soluzione-${task.id}`}>
+                Soluzione
+                <textarea
+                  id={`soluzione-${task.id}`}
+                  value={testo}
+                  onChange={(e) => setTesto(e.target.value)}
+                  rows={4}
+                  maxLength={4000}
+                  className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-base text-white"
+                  placeholder="Descrivi come hai svolto la task"
+                />
+              </label>
+              <p className="text-[11px] leading-snug text-amber-100/90">{SOLUZIONE_DISCLAIMER}</p>
+              {errore ? <p className="text-xs text-red-400">{errore}</p> : null}
+              <button
+                type="button"
+                onClick={invia}
+                disabled={busy || !testo.trim()}
+                className="min-h-11 w-full rounded-lg bg-lime-700 px-4 text-sm font-bold text-white hover:bg-lime-600 disabled:opacity-40 sm:w-auto"
+              >
+                {busy ? 'Invio…' : inAttesa ? 'Aggiorna soluzione' : 'Invia soluzione'}
+              </button>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function TaskList({ title, hint, rows, empty, openId, setOpenId, onLogout, personaggioId, onSaved }) {
+  return (
+    <div className="space-y-2">
+      <div>
+        <h3 className="text-xs font-black uppercase tracking-wide text-gray-300">{title}</h3>
+        {hint ? <p className="text-[11px] text-gray-500">{hint}</p> : null}
+      </div>
+      {rows.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-gray-700 bg-gray-900/40 p-4 text-center text-sm text-gray-500">
+          {empty}
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {rows.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              open={openId === task.id}
+              onToggle={() => setOpenId((cur) => (cur === task.id ? null : task.id))}
+              onLogout={onLogout}
+              personaggioId={personaggioId}
+              onSaved={onSaved}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Elenco task del PG: sovrapagate della propria KORP evidenziate, senza mittente né allineamento. */
 export default function MissioniPersonaggioPanel({
   personaggioId,
   personaggioNome,
@@ -12,6 +183,7 @@ export default function MissioniPersonaggioPanel({
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [openId, setOpenId] = useState(null);
 
   const load = useCallback(async () => {
     if (!personaggioId) return;
@@ -29,27 +201,33 @@ export default function MissioniPersonaggioPanel({
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    setOpenId(null);
+  }, [personaggioId]);
+
   if (!personaggioId) return null;
 
   const shellClass = standalone
     ? 'space-y-4'
     : 'rounded-xl border border-lime-900/60 bg-lime-950/20 p-4';
+  const aperte = rows.filter((row) => !row.svolta);
+  const completate = rows.filter((row) => row.svolta);
 
   return (
     <section className={shellClass}>
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <ListTodo className="text-lime-400 shrink-0" size={standalone ? 24 : 20} />
+        <div className="flex min-w-0 items-center gap-2">
+          <ListTodo className="shrink-0 text-lime-400" size={standalone ? 24 : 20} />
           <div className="min-w-0">
             <h2 className={`font-black uppercase tracking-wide text-lime-200 ${standalone ? 'text-lg' : 'text-sm'}`}>
               Tasks
             </h2>
             {standalone && personaggioNome ? (
-              <p className="text-xs text-gray-400 truncate">{personaggioNome}</p>
+              <p className="truncate text-xs text-gray-400">{personaggioNome}</p>
             ) : null}
             {standalone ? (
               <p className="mt-1 text-xs text-gray-500">
-                Task dell&apos;evento attivo. Quelle evidenziate sono sovrapagate per la tua KORP.
+                Apri una task per leggere la descrizione. Quelle evidenziate sono sovrapagate per la tua KORP.
               </p>
             ) : null}
           </div>
@@ -58,69 +236,40 @@ export default function MissioniPersonaggioPanel({
           type="button"
           onClick={load}
           disabled={loading}
-          className="shrink-0 rounded-lg border border-gray-700 bg-gray-900/60 p-2 text-gray-300 hover:text-white hover:border-lime-700 disabled:opacity-40"
+          className="min-h-11 shrink-0 rounded-lg border border-gray-700 bg-gray-900/60 px-3 text-gray-300 hover:border-lime-700 hover:text-white disabled:opacity-40"
           aria-label="Aggiorna task"
           title="Aggiorna"
         >
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
-      {error ? <p className="mb-2 text-xs text-red-400">{error}</p> : null}
+      {error ? <p className="text-xs text-red-400">{error}</p> : null}
       {loading && rows.length === 0 ? (
         <p className="text-xs text-gray-500">Caricamento…</p>
-      ) : rows.length === 0 ? (
-        <p className="text-sm text-gray-500 rounded-xl border border-dashed border-gray-700 bg-gray-900/40 p-6 text-center">
-          Nessuna task disponibile per l&apos;evento attivo.
-        </p>
       ) : (
-        <ul className="space-y-2">
-          {rows.map((m) => {
-            const korpBonus = !!m.is_korp_bonus;
-            return (
-              <li
-                key={m.id}
-                className={`rounded-lg border px-3 py-2 ${
-                  korpBonus
-                    ? 'border-violet-500/60 bg-violet-950/40'
-                    : m.svolta
-                      ? 'border-gray-700 bg-gray-900/50 opacity-80'
-                      : 'border-gray-800 bg-gray-900/40'
-                }`}
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-white">{m.titolo}</span>
-                  {m.allineamento && m.allineamento !== 'GRIGIA' ? (
-                    <span
-                      className={`rounded px-1.5 py-0.5 text-[10px] uppercase ${
-                        m.allineamento === 'LUMINOSA'
-                          ? 'bg-amber-900/50 text-amber-100'
-                          : 'bg-violet-900/50 text-violet-100'
-                      }`}
-                    >
-                      {m.allineamento === 'LUMINOSA' ? 'Luminosa' : 'Oscura'}
-                    </span>
-                  ) : null}
-                  {korpBonus ? (
-                    <span className="rounded bg-violet-800/60 px-1.5 py-0.5 text-[10px] uppercase text-violet-100">
-                      Sovrapagata ×{m.fattore_crediti_applicato} Cr · ×{m.fattore_prestigio_applicato} Pr
-                    </span>
-                  ) : null}
-                  {m.svolta ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] uppercase text-emerald-400">
-                      <CheckCircle2 size={12} /> Svolta
-                    </span>
-                  ) : m.effettuabile ? (
-                    <span className="text-[10px] uppercase text-lime-400">Disponibile</span>
-                  ) : null}
-                </div>
-                {m.descrizione ? <p className="mt-1 text-[11px] text-gray-400 line-clamp-2">{m.descrizione}</p> : null}
-                <div className={`mt-1 font-mono text-xs ${korpBonus ? 'font-bold text-violet-200' : 'text-lime-200'}`}>
-                  {Number(m.reward_crediti || 0).toLocaleString('it-IT')} Cr · {m.reward_prestigio || 0} Pr
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="space-y-5">
+          <TaskList
+            title="Da svolgere"
+            rows={aperte}
+            empty="Nessuna task da svolgere per l'evento attivo."
+            openId={openId}
+            setOpenId={setOpenId}
+            onLogout={onLogout}
+            personaggioId={personaggioId}
+            onSaved={load}
+          />
+          <TaskList
+            title="Completate"
+            hint="Restano qui anche dopo che lo staff ha accettato la soluzione."
+            rows={completate}
+            empty="Nessuna task completata in questo evento."
+            openId={openId}
+            setOpenId={setOpenId}
+            onLogout={onLogout}
+            personaggioId={personaggioId}
+            onSaved={load}
+          />
+        </div>
       )}
     </section>
   );

@@ -9,6 +9,7 @@ import {
   updateMissione,
 } from '../../api';
 import EventoTasksLivePanel from '../EventoTasksLivePanel';
+import MissioniPropostePanel from './MissioniPropostePanel';
 import {
   LabeledField,
   StaffFieldGrid,
@@ -356,9 +357,10 @@ export default function MissioniManager({ onLogout }) {
   return (
     <StaffToolShell fill>
       {error ? <p className="mb-3 px-4 pt-3 text-sm text-red-400">{error}</p> : null}
-      <div className="flex h-full min-h-0 flex-col p-4">
-        <EventoTasksLivePanel onLogout={onLogout} className="mb-4 shrink-0" />
-        <div className="min-h-0 flex-1">
+      <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
+        <EventoTasksLivePanel onLogout={onLogout} className="shrink-0" />
+        <MissioniPropostePanel onLogout={onLogout} className="shrink-0" />
+        <div className="min-h-[28rem] flex-1">
           <MasterGenericList
           title="Tasks (missioni)"
           items={items}
