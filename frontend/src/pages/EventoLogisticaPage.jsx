@@ -77,9 +77,15 @@ export default function EventoLogisticaPage() {
           <div className="mt-4 flex flex-wrap gap-4 text-sm text-white/90">
             <span className="inline-flex items-center gap-1.5">
               <Clock size={15} />
-              {formatDate(evento.data_inizio)}
-              {evento.data_fine && evento.data_fine !== evento.data_inizio && (
-                <> – {formatDate(evento.data_fine)}</>
+              {evento.data_da_definire ? (
+                'Data da definire'
+              ) : (
+                <>
+                  {formatDate(evento.data_inizio)}
+                  {evento.data_fine && evento.data_fine !== evento.data_inizio && (
+                    <> – {formatDate(evento.data_fine)}</>
+                  )}
+                </>
               )}
             </span>
             {evento.luogo && (

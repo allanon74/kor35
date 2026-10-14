@@ -36,9 +36,10 @@ export default function WidgetEventi() {
     });
   };
 
-  // Determina se l'evento è nel futuro
-  const isFuturo = (dataInizio) => {
-    return new Date(dataInizio) > new Date();
+  const isProssimo = (evento) => {
+    if (typeof evento.e_prossimo === 'boolean') return evento.e_prossimo;
+    if (!evento.data_inizio) return !!evento.data_da_definire;
+    return new Date(evento.data_inizio) > new Date();
   };
 
   if (loading) {
@@ -85,16 +86,16 @@ export default function WidgetEventi() {
             <div 
               key={evento.id} 
               className={`p-4 rounded-lg border-l-4 transition-all hover:shadow-md max-w-full min-w-0 overflow-hidden ${
-                isFuturo(evento.data_inizio) 
+                isProssimo(evento)
                   ? 'bg-green-50 border-green-500' 
                   : 'bg-gray-50 border-gray-400'
               }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-bold text-gray-800 mb-2 flex flex-wrap items-center gap-2">
+                  <h4 className="font-bold text-gray-800 mb-2 flex flex-wrap items-center gap-2 break-words">
                     {evento.titolo}
-                    {isFuturo(evento.data_inizio) && (
+                    {isProssimo(evento) && (
                       <span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full font-normal">
                         Prossimo
                       </span>
@@ -111,11 +112,17 @@ export default function WidgetEventi() {
                   
                   <div className="flex flex-wrap gap-3 text-xs text-gray-500">
                     <div className="flex items-center gap-1.5">
-                      <Clock size={14} className="text-red-700" />
+                      <Clock size={14} className="text-red-700 shrink-0" />
                       <span>
-                        {formatDate(evento.data_inizio)}
-                        {evento.data_fine && evento.data_fine !== evento.data_inizio && (
-                          <> - {formatDate(evento.data_fine)}</>
+                        {evento.data_da_definire ? (
+                          'Data da definire'
+                        ) : (
+                          <>
+                            {formatDate(evento.data_inizio)}
+                            {evento.data_fine && evento.data_fine !== evento.data_inizio && (
+                              <> - {formatDate(evento.data_fine)}</>
+                            )}
+                          </>
                         )}
                       </span>
                     </div>
