@@ -44,6 +44,19 @@ from personaggi.carte_lobby_service import (
 )
 from personaggi.models import Campagna, Personaggio, QrCode, TipologiaPersonaggio
 
+
+def _passa_turno(duello_id, personaggio):
+    """Un passa avanza solo la fase: servono più passaggi per chiudere il turno."""
+    from personaggi.carte_collezionabili_models import DuelloCarte
+
+    prima = DuelloCarte.objects.get(pk=duello_id).turno_personaggio_id
+    ultimo = None
+    for _ in range(4):
+        ultimo = esegui_azione_duello(duello_id, personaggio, "passa", {})
+        if DuelloCarte.objects.get(pk=duello_id).turno_personaggio_id != prima:
+            return ultimo
+    return ultimo
+
 User = get_user_model()
 MAZZO_SIZE = 15
 
@@ -160,7 +173,7 @@ class CarteDuelloLiveTests(TestCase):
             {"carta_posseduta_id": cp_id, "slot_eroe": 1},
         )
         self.assertEqual(dopo["turno_personaggio_id"], turno_id)
-        dopo_pass = esegui_azione_duello(duello_id, pg_turno, "passa", {})
+        dopo_pass = _passa_turno(duello_id, pg_turno)
         self.assertNotEqual(dopo_pass["turno_personaggio_id"], turno_id)
 
 
@@ -285,15 +298,15 @@ class CarteDuelloManaTests(TestCase):
         vista1 = get_duello_per_giocatore(duello_id, primo)
         self.assertEqual(vista1["stato_gioco"]["campo"][str(primo.id)]["energia"], 1)
 
-        esegui_azione_duello(duello_id, primo, "passa", {})
-        esegui_azione_duello(duello_id, secondo, "passa", {})
+        _passa_turno(duello_id, primo)
+        _passa_turno(duello_id, secondo)
         vista3 = get_duello_per_giocatore(duello_id, primo)
         campo = vista3["stato_gioco"]["campo"][str(primo.id)]
         self.assertEqual(campo["turno_numero"], 2)
         self.assertEqual(campo["energia"], 2)
 
-        esegui_azione_duello(duello_id, primo, "passa", {})
-        esegui_azione_duello(duello_id, secondo, "passa", {})
+        _passa_turno(duello_id, primo)
+        _passa_turno(duello_id, secondo)
         vista5 = get_duello_per_giocatore(duello_id, primo)
         campo = vista5["stato_gioco"]["campo"][str(primo.id)]
         self.assertEqual(campo["turno_numero"], 3)
@@ -572,7 +585,7 @@ class CarteDuelloCombattimentoTests(TestCase):
         duello.refresh_from_db()
         self.assertEqual(duello.stato_gioco[key_b]["salute_eroi"][0], 3)
 
-        esegui_azione_duello(duello.id, self.pg_a, "passa", {})
+        _passa_turno(duello.id, self.pg_a)
         duello.refresh_from_db()
         self.assertEqual(duello.stato_gioco[key_b]["salute_eroi"][0], 4)
 
@@ -584,8 +597,8 @@ class CarteDuelloCombattimentoTests(TestCase):
         )
         altro = self.pg_b if pg_turno.id == self.pg_a.id else self.pg_a
         esegui_azione_duello(duello_id, pg_turno, "attacca", {"slot_eroe": 0})
-        esegui_azione_duello(duello_id, pg_turno, "passa", {})
-        esegui_azione_duello(duello_id, altro, "passa", {})
+        _passa_turno(duello_id, pg_turno)
+        _passa_turno(duello_id, altro)
         vista = get_duello_per_giocatore(duello_id, pg_turno)
         campo = vista["stato_gioco"]["campo"][str(pg_turno.id)]
         self.assertEqual(campo["eroi_esauriti"], [False, False])
@@ -702,7 +715,7 @@ class CarteDuelloCombattimentoTests(TestCase):
         duello.refresh_from_db()
         self.assertEqual(duello.stato_gioco["terra"]["carta_posseduta_id"], str(terra_a.id))
 
-        esegui_azione_duello(duello.id, self.pg_a, "passa", {})
+        _passa_turno(duello.id, self.pg_a)
         esegui_azione_duello(
             duello.id, self.pg_b, "gioca_carta", {"carta_posseduta_id": str(terra_b.id)},
         )

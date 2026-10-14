@@ -12,8 +12,11 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from personaggi.campaigns import get_or_create_base_campaign
 from personaggi.models import (
     A_vista,
+    CAMPAGNA_ROLE_STAFFER,
+    CampagnaUtente,
     Era,
     Manifesto,
     Personaggio,
@@ -26,6 +29,7 @@ from pilotaggio.models import (
     EventoNave,
     PercorsoVolo,
     PilotConsoleToken,
+    PilotRuntimeConfig,
     SequenzaVolo,
     SessioneVolo,
     SottosistemaNave,
@@ -37,6 +41,21 @@ from pilotaggio.models import (
     SESSIONE_STATO_VOLO,
     SEQUENZA_DECOLLO,
 )
+
+
+def _abilita_login_console():
+    cfg = PilotRuntimeConfig.get_solo()
+    cfg.login_required_console = True
+    cfg.save(update_fields=["login_required_console", "updated_at"])
+
+
+def _promuovi_staff_campagna(user):
+    campagna = get_or_create_base_campaign()
+    CampagnaUtente.objects.update_or_create(
+        campagna=campagna,
+        user=user,
+        defaults={"ruolo": CAMPAGNA_ROLE_STAFFER, "attivo": True},
+    )
 
 
 def _crea_pilota_con_0pi(nome="Pilota", valore_0pi=2):
@@ -63,6 +82,9 @@ def _crea_qr_per_personaggio(pg):
 
 
 class QrLoginTests(TestCase):
+    def setUp(self):
+        _abilita_login_console()
+
     def test_login_ok_con_0pi(self):
         user, pg = _crea_pilota_con_0pi(valore_0pi=1)
         qr = _crea_qr_per_personaggio(pg)
@@ -202,9 +224,8 @@ class SessioneEndToEndTests(TestCase):
         res = self.client_api.post(
             "/api/pilot/session/command/", {"codice": "A12"}, format="json"
         )
-        self.assertEqual(res.status_code, 200, res.content)
-        body = res.json()
-        self.assertEqual(body["sessione"]["stato"], SESSIONE_STATO_VOLO)
+        self.assertEqual(res.status_code, 410, res.content)
+        self.assertIn("regolazione energetica", res.json()["error"])
 
     def test_secondo_pilota_vede_stessa_sessione_nave(self):
         """Una nave: il pilota B vede la missione avviata dal pilota A."""
@@ -297,6 +318,7 @@ class SessioneEndToEndTests(TestCase):
 @override_settings(PILOT_CONSOLE_ENABLED=True)
 class TicketLoginFlowTests(TestCase):
     def setUp(self):
+        _abilita_login_console()
         self.user, self.pg = _crea_pilota_con_0pi(nome="PilotaTicket", valore_0pi=2)
         self.console_client = APIClient()
         self.phone_client = APIClient()
@@ -330,7 +352,8 @@ class StaffSottosistemaAssociaQrTests(TestCase):
         )
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)
-        self.sottos = SottosistemaNave.objects.create(codice="ZQR", nome="Propulsione test")
+        _promuovi_staff_campagna(self.staff)
+        self.sottos = SottosistemaNave.objects.create(codice="W", nome="Propulsione test")
         self.qr = QrCode.objects.create()
 
     def test_associa_qr_senza_vista_crea_manifesto(self):
@@ -376,6 +399,7 @@ class StaffSessioneLiveTests(TestCase):
         )
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)
+        _promuovi_staff_campagna(self.staff)
         self.pilota_user, self.pilota = _crea_pilota_con_0pi(nome="PilotaLive", valore_0pi=1)
         self.sottos = SottosistemaNave.objects.create(
             codice="V", nome="LiveTest", attivo=True
@@ -489,6 +513,7 @@ class StaffSerbatoioCarburanteTests(TestCase):
         )
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)
+        _promuovi_staff_campagna(self.staff)
         _, self.pilota = _crea_pilota_con_0pi(nome="PilotaFuel", valore_0pi=1)
         self.serbatoio = SottosistemaNave.objects.create(
             codice="U",

@@ -105,10 +105,13 @@ class CarteMercatoServiceTests(TestCase):
         )
         offerta = OffertaScambioCarte.objects.get()
         crediti_b_prima = self.pg_b.crediti
-        crediti_a_prima = self.pg_a.crediti
+        deposito_a_prima = self.pg_a.crediti_deposito
         accetta_offerta_scambio(self.pg_b, offerta.id)
+        for pg in (self.pg_a, self.pg_b):
+            if hasattr(pg, "_eco_aggregati"):
+                del pg._eco_aggregati
         self.assertEqual(self.pg_b.crediti, crediti_b_prima - Decimal("100"))
-        self.assertEqual(self.pg_a.crediti, crediti_a_prima + Decimal("90"))
+        self.assertEqual(self.pg_a.crediti_deposito, deposito_a_prima + Decimal("90"))
         offerta.refresh_from_db()
         self.assertEqual(offerta.commissione_crediti, Decimal("10.00"))
 

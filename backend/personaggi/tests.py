@@ -52,18 +52,25 @@ from .services import GestioneOggettiService
 from .sso import _upsert_local_user
 
 
+def _campagna_kor35():
+    """La campagna base esiste già (signal utenti e default SQL su migrate)."""
+    campagna, _ = Campagna.objects.get_or_create(
+        slug="kor35",
+        defaults={
+            "nome": "Kor35",
+            "is_default": True,
+            "is_base": True,
+            "attiva": True,
+        },
+    )
+    return campagna
+
+
 class CampagnaAdminApiTests(APITestCase):
     def setUp(self):
         self.staff = User.objects.create_user(username="staff", password="x", is_staff=True)
         self.client.force_authenticate(user=self.staff)
-
-        self.kor35 = Campagna.objects.create(
-            slug="kor35",
-            nome="Kor35",
-            is_default=True,
-            is_base=True,
-            attiva=True,
-        )
+        self.kor35 = _campagna_kor35()
 
     def test_create_new_default_unsets_previous_default(self):
         response = self.client.post(
@@ -111,13 +118,7 @@ class ActiveCampaignValidationTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="player", password="x")
         self.client.force_authenticate(user=self.user)
-        self.kor35 = Campagna.objects.create(
-            slug="kor35",
-            nome="Kor35",
-            is_default=True,
-            is_base=True,
-            attiva=True,
-        )
+        self.kor35 = _campagna_kor35()
         self.alt = Campagna.objects.create(
             slug="alt-camp",
             nome="Alt Camp",
@@ -152,13 +153,7 @@ class ActiveCampaignValidationTests(APITestCase):
 
 class UserDefaultCampaignMembershipTests(APITestCase):
     def setUp(self):
-        self.kor35 = Campagna.objects.create(
-            slug="kor35",
-            nome="Kor35",
-            is_default=True,
-            is_base=True,
-            attiva=True,
-        )
+        self.kor35 = _campagna_kor35()
 
     def test_new_user_is_auto_assigned_to_base_campaign(self):
         user = User.objects.create_user(username="newbie", password="x")
@@ -184,13 +179,7 @@ class UserDefaultCampaignMembershipTests(APITestCase):
 
 class ArcanaSSONewUserCampaignAssignmentTests(APITestCase):
     def setUp(self):
-        self.kor35 = Campagna.objects.create(
-            slug="kor35",
-            nome="Kor35",
-            is_default=True,
-            is_base=True,
-            attiva=True,
-        )
+        self.kor35 = _campagna_kor35()
         Campagna.objects.create(
             slug="alt-camp",
             nome="Alt Camp",
@@ -219,6 +208,7 @@ class ArcanaSSONewUserCampaignAssignmentTests(APITestCase):
             email="legacy-user@example.com",
             password="legacy-pass",
         )
+        CampagnaUtente.objects.filter(user=existing).delete()
         self.assertFalse(CampagnaUtente.objects.filter(user=existing).exists())
 
         profile = {
@@ -237,13 +227,7 @@ class ArcanaSSONewUserCampaignAssignmentTests(APITestCase):
 
 class LocalLoginCampaignRepairTests(APITestCase):
     def setUp(self):
-        self.kor35 = Campagna.objects.create(
-            slug="kor35",
-            nome="Kor35",
-            is_default=True,
-            is_base=True,
-            attiva=True,
-        )
+        self.kor35 = _campagna_kor35()
 
     def test_local_login_repairs_missing_active_membership_for_player(self):
         user = User.objects.create_user(
@@ -262,7 +246,7 @@ class LocalLoginCampaignRepairTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(CampagnaUtente.objects.filter(user=user, campagna=self.kor35, attivo=True).exists())
 
-    def test_local_login_does_not_auto_assign_staff_or_superuser(self):
+    def test_local_login_ripara_lo_staff_ma_non_il_superuser(self):
         staff = User.objects.create_user(
             username="staff-no-campaign",
             email="staff-no-campaign@example.com",
@@ -289,7 +273,9 @@ class LocalLoginCampaignRepairTests(APITestCase):
         )
         self.assertEqual(r_staff.status_code, status.HTTP_200_OK)
         self.assertEqual(r_super.status_code, status.HTTP_200_OK)
-        self.assertFalse(CampagnaUtente.objects.filter(user=staff).exists())
+        self.assertTrue(
+            CampagnaUtente.objects.filter(user=staff, campagna=self.kor35, attivo=True).exists()
+        )
         self.assertFalse(CampagnaUtente.objects.filter(user=superuser).exists())
 
 
@@ -514,7 +500,8 @@ class AINFormaSwapTests(APITestCase):
         self.assertTrue(
             PersonaggioAbilita.objects.filter(personaggio=self.personaggio, abilita=camaleonte).exists()
         )
-        html = self.personaggio.get_testo_formattato_per_item(camaleonte)
+        pg = Personaggio.objects.get(pk=self.personaggio.pk)
+        html = pg.get_testo_formattato_per_item(camaleonte)
         self.assertIn("Forma del giorno", html)
 
 
@@ -764,12 +751,15 @@ class RisorsePoolUiVisibilityTests(APITestCase):
             is_risorsa_pool=True,
             massimo_pool_sigla="FRT",
         )
-        pb = dict(self.pg.punteggi_base or {})
-        pb[self.stat_frt.nome] = 2
-        pb[self.stat_teo.nome] = 0
-        pb[self.stat_cap.nome] = 0
-        self.pg.punteggi_base = pb
-        self.pg.save(update_fields=["punteggi_base", "updated_at"])
+        PersonaggioStatisticaBase.objects.create(
+            personaggio=self.pg, statistica=self.stat_frt, valore_base=2
+        )
+        PersonaggioStatisticaBase.objects.create(
+            personaggio=self.pg, statistica=self.stat_teo, valore_base=0
+        )
+        PersonaggioStatisticaBase.objects.create(
+            personaggio=self.pg, statistica=self.stat_cap, valore_base=0
+        )
 
     def test_risorse_pool_ui_solo_massimo_scheda_positivo(self):
         ser = PersonaggioDetailSerializer()
