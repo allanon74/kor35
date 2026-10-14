@@ -11,6 +11,8 @@ from personaggi.models import Personaggio
 from personaggi.sondaggi_google import ErroreModuloGoogle
 from personaggi.sondaggi_models import RispostaSondaggio, Sondaggio
 from personaggi.sondaggi_service import (
+    applica_premi_da_richiesta,
+    eroga_premi_mancanti,
     importa_modulo,
     inoltra_sospese,
     registra_risposta,
@@ -163,6 +165,10 @@ class SondaggioStaffDettaglioView(APIView):
                 if not isinstance(valore, bool):
                     return Response({"error": f"{campo} deve essere vero o falso."}, status=400)
                 setattr(sondaggio, campo, valore)
+        try:
+            applica_premi_da_richiesta(sondaggio, request.data)
+        except ValidationError as exc:
+            return Response({"error": _messaggio(exc)}, status=400)
         sondaggio.save()
         return Response(serializza_staff(sondaggio, con_risposte=True))
 
@@ -207,4 +213,20 @@ class SondaggioStaffInoltraView(APIView):
         esito = inoltra_sospese(sondaggio)
         payload = serializza_staff(sondaggio, con_risposte=True)
         payload["inoltro"] = esito
+        return Response(payload)
+
+
+class SondaggioStaffPremiView(APIView):
+    permission_classes = [IsStaffOrMaster]
+
+    def post(self, request, sondaggio_id):
+        campagna, errore = _campagna_staff(request)
+        if errore:
+            return errore
+        sondaggio, errore = _sondaggio_campagna(campagna, sondaggio_id)
+        if errore:
+            return errore
+        erogati = eroga_premi_mancanti(sondaggio)
+        payload = serializza_staff(sondaggio, con_risposte=True)
+        payload["premi_appena_erogati"] = erogati
         return Response(payload)

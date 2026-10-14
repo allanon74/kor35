@@ -4,6 +4,8 @@ import os
 from unittest.mock import patch
 from urllib.parse import parse_qs
 
+from decimal import Decimal
+
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
@@ -24,7 +26,7 @@ from personaggi.sondaggi_google import (
     normalizza_url_modulo,
 )
 from personaggi.sondaggi_models import RispostaSondaggio, Sondaggio
-from personaggi.sondaggi_service import registra_risposta, valida_risposte
+from personaggi.sondaggi_service import eroga_premi_mancanti, registra_risposta, valida_risposte
 
 FORM_ID = "1FAIpQLSabcDEFghiJKLmnop"
 FORM_URL = f"https://docs.google.com/forms/d/e/{FORM_ID}/viewform?usp=sharing"
@@ -324,3 +326,79 @@ class ApiSondaggioTests(APITestCase):
         risposta.refresh_from_db()
         self.assertIsNotNone(risposta.google_inviato_at)
         self.assertEqual(RispostaSondaggio.objects.filter(pk=risposta.pk, google_inviato_at__isnull=False).count(), 1)
+
+    def test_premio_solo_al_primo_invio(self):
+        creato = self._importa()
+        self.client.force_authenticate(self.staff)
+        patch = self.client.patch(
+            f"/api/personaggi/api/staff/sondaggi/{creato['id']}/",
+            {
+                "premio_pc": 2,
+                "premio_crediti_correnti": "10.50",
+                "premio_crediti_deposito": "3",
+                "consenti_modifica": True,
+            },
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(patch.status_code, 200, patch.content)
+        self.assertEqual(patch.json()["premio_pc"], 2)
+        self.assertEqual(patch.json()["premio_crediti_correnti"], "10.50")
+        self.assertEqual(patch.json()["premio_crediti_deposito"], "3.00")
+
+        rifiuto = self.client.patch(
+            f"/api/personaggi/api/staff/sondaggi/{creato['id']}/",
+            {"premio_pc": -1},
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(rifiuto.status_code, 400)
+
+        self.client.force_authenticate(self.player)
+        invio = self.client.post(
+            f"/api/personaggi/api/sondaggi/{creato['id']}/risposta/?personaggio_id={self.personaggio.id}",
+            {"risposte": self._risposte_valide()},
+            format="json",
+        )
+        self.assertEqual(invio.status_code, 201, invio.content)
+        ricevuto = invio.json()["premio_ricevuto"]
+        self.assertEqual(ricevuto["pc"], 2)
+        self.assertEqual(ricevuto["crediti_correnti"], "10.50")
+        self.assertEqual(ricevuto["crediti_deposito"], "3.00")
+        pg = Personaggio.objects.get(pk=self.personaggio.pk)
+        self.assertEqual(pg.crediti_corrente, Decimal("10.50"))
+        self.assertEqual(pg.crediti_deposito, Decimal("3.00"))
+        self.assertEqual(pg.movimenti_pc.filter(descrizione__startswith="Sondaggio").count(), 1)
+
+        aggiorna = self.client.post(
+            f"/api/personaggi/api/sondaggi/{creato['id']}/risposta/?personaggio_id={self.personaggio.id}",
+            {"risposte": {**self._risposte_valide(), "entry.1475351979": "Ada Due"}},
+            format="json",
+        )
+        self.assertEqual(aggiorna.status_code, 200, aggiorna.content)
+        pg = Personaggio.objects.get(pk=self.personaggio.pk)
+        self.assertEqual(pg.crediti_corrente, Decimal("10.50"))
+        self.assertEqual(pg.movimenti_pc.filter(descrizione__startswith="Sondaggio").count(), 1)
+
+    def test_premio_mancante_accreditato_dopo(self):
+        creato = self._importa()
+        sondaggio = Sondaggio.objects.get(pk=creato["id"])
+        registra_risposta(sondaggio, self.personaggio, self.player, self._risposte_valide())
+        sondaggio.premio_pc = 4
+        sondaggio.premio_crediti_correnti = Decimal("1.00")
+        sondaggio.save(update_fields=["premio_pc", "premio_crediti_correnti", "updated_at"])
+        self.client.force_authenticate(self.staff)
+        risposta = self.client.post(
+            f"/api/personaggi/api/staff/sondaggi/{creato['id']}/premi/",
+            {},
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(risposta.status_code, 200, risposta.content)
+        self.assertEqual(risposta.json()["premi_appena_erogati"], 1)
+        self.assertEqual(risposta.json()["premi_mancanti"], 0)
+        pg = Personaggio.objects.get(pk=self.personaggio.pk)
+        self.assertEqual(pg.punti_caratteristica, 8 + 4)
+        self.assertEqual(pg.crediti_corrente, Decimal("1.00"))
+        di_nuovo = eroga_premi_mancanti(sondaggio)
+        self.assertEqual(di_nuovo, 0)

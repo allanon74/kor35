@@ -4825,3 +4825,9 @@ export const staffSondaggiInoltra = (id, onLogout) =>
         method: 'POST',
         body: JSON.stringify({}),
     }, onLogout);
+
+export const staffSondaggiPremi = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_SONDAGGI}/${id}/premi/`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+    }, onLogout);

@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
+from personaggi.economia_crediti import CONTO_CORRENTE, CONTO_DEPOSITO
 from personaggi.sondaggi_google import (
     ErroreModuloGoogle,
     analizza_html_modulo,
@@ -190,6 +193,136 @@ def valida_risposte(domande, grezze) -> dict:
     return pulite
 
 
+_MAX_PC = 10000
+_MAX_CREDITI = Decimal("1000000.00")
+
+
+def _importo_crediti(valore, nome: str) -> Decimal:
+    if isinstance(valore, bool) or valore is None:
+        raise ValidationError(f"{nome} deve essere un importo.")
+    testo = str(valore).strip().replace(",", ".")
+    if testo == "":
+        return Decimal("0.00")
+    try:
+        numero = Decimal(testo)
+    except (InvalidOperation, ValueError) as exc:
+        raise ValidationError(f"{nome} deve essere un importo.") from exc
+    numero = numero.quantize(Decimal("0.01"))
+    if numero < 0 or numero > _MAX_CREDITI:
+        raise ValidationError(f"{nome} deve essere tra 0 e {_MAX_CREDITI}.")
+    return numero
+
+
+def _importo_pc(valore) -> int:
+    if isinstance(valore, bool) or valore is None:
+        raise ValidationError("I PC del premio devono essere un numero intero.")
+    testo = str(valore).strip().replace(",", ".")
+    if testo == "":
+        return 0
+    try:
+        numero = Decimal(testo)
+    except (InvalidOperation, ValueError) as exc:
+        raise ValidationError("I PC del premio devono essere un numero intero.") from exc
+    if numero != numero.to_integral_value():
+        raise ValidationError("I PC del premio devono essere un numero intero.")
+    intero = int(numero)
+    if intero < 0 or intero > _MAX_PC:
+        raise ValidationError(f"I PC del premio devono essere tra 0 e {_MAX_PC}.")
+    return intero
+
+
+def applica_premi_da_richiesta(sondaggio: Sondaggio, dati) -> None:
+    """Aggiorna gli importi del premio se presenti nella richiesta staff."""
+    if not isinstance(dati, dict):
+        return
+    if "premio_pc" in dati:
+        sondaggio.premio_pc = _importo_pc(dati.get("premio_pc"))
+    if "premio_crediti_correnti" in dati:
+        sondaggio.premio_crediti_correnti = _importo_crediti(
+            dati.get("premio_crediti_correnti"),
+            "I crediti correnti del premio",
+        )
+    if "premio_crediti_deposito" in dati:
+        sondaggio.premio_crediti_deposito = _importo_crediti(
+            dati.get("premio_crediti_deposito"),
+            "I crediti di deposito del premio",
+        )
+
+
+def premio_configurato(sondaggio: Sondaggio) -> bool:
+    return (
+        int(sondaggio.premio_pc or 0) > 0
+        or Decimal(sondaggio.premio_crediti_correnti or 0) > 0
+        or Decimal(sondaggio.premio_crediti_deposito or 0) > 0
+    )
+
+
+def _descrizione_premio(sondaggio: Sondaggio) -> str:
+    titolo = (sondaggio.titolo or "Sondaggio").strip() or "Sondaggio"
+    return f"Sondaggio «{titolo}»"[:200]
+
+
+def eroga_premio(risposta: RispostaSondaggio) -> bool:
+    """
+    Accredita PC e crediti del sondaggio, una sola volta per risposta.
+    Se il premio configurato è zero, non segna la risposta come pagata:
+    lo staff può accreditarla dopo aver impostato gli importi.
+    """
+    if risposta.premio_erogato_at or not risposta.personaggio_id:
+        return False
+    sondaggio = risposta.sondaggio
+    pc = int(sondaggio.premio_pc or 0)
+    corrente = Decimal(sondaggio.premio_crediti_correnti or 0).quantize(Decimal("0.01"))
+    deposito = Decimal(sondaggio.premio_crediti_deposito or 0).quantize(Decimal("0.01"))
+    if pc <= 0 and corrente <= 0 and deposito <= 0:
+        return False
+    personaggio = risposta.personaggio
+    descrizione = _descrizione_premio(sondaggio)
+    if pc > 0:
+        personaggio.modifica_pc(pc, descrizione)
+    if corrente > 0:
+        personaggio.modifica_crediti(corrente, descrizione, conto=CONTO_CORRENTE)
+    if deposito > 0:
+        personaggio.modifica_crediti(deposito, descrizione, conto=CONTO_DEPOSITO)
+    parti = []
+    if pc > 0:
+        parti.append(f"{pc} PC")
+    if corrente > 0:
+        parti.append(f"{corrente} CR correnti")
+    if deposito > 0:
+        parti.append(f"{deposito} CR deposito")
+    personaggio.aggiungi_log(f"Premio sondaggio «{sondaggio.titolo}»: {', '.join(parti)}")
+    risposta.premio_pc = pc
+    risposta.premio_crediti_correnti = corrente
+    risposta.premio_crediti_deposito = deposito
+    risposta.premio_erogato_at = timezone.now()
+    risposta.save(update_fields=[
+        "premio_pc",
+        "premio_crediti_correnti",
+        "premio_crediti_deposito",
+        "premio_erogato_at",
+        "updated_at",
+    ])
+    return True
+
+
+def eroga_premi_mancanti(sondaggio: Sondaggio) -> int:
+    """Accredita il premio attuale a chi ha già risposto e non l'ha ancora ricevuto."""
+    if not premio_configurato(sondaggio):
+        return 0
+    erogati = 0
+    with transaction.atomic():
+        qs = (
+            sondaggio.risposte.select_for_update()
+            .filter(premio_erogato_at__isnull=True, personaggio__isnull=False)
+            .order_by("created_at")
+        )
+        for risposta in qs:
+            if eroga_premio(risposta):
+                erogati += 1
+    return erogati
+
+
 def registra_risposta(sondaggio: Sondaggio, personaggio, utente, grezze) -> tuple[RispostaSondaggio, bool]:
     if not sondaggio.attivo:
         raise ValidationError("Questo sondaggio non è aperto.")
@@ -222,6 +355,7 @@ def registra_risposta(sondaggio: Sondaggio, personaggio, utente, grezze) -> tupl
             if not esistente or not sondaggio.consenti_modifica:
                 raise ValidationError("Hai già inviato questo sondaggio.")
             return _aggiorna_risposta(esistente, pulite, utente), False
+        eroga_premio(creata)
         return creata, True
 
 
@@ -239,8 +373,23 @@ def ha_domande_esterne(domande) -> bool:
     return any(not d.get("supportata") for d in (domande or []))
 
 
+def _premio_dict(pc, corrente, deposito) -> dict:
+    return {
+        "pc": int(pc or 0),
+        "crediti_correnti": f"{Decimal(corrente or 0):.2f}",
+        "crediti_deposito": f"{Decimal(deposito or 0):.2f}",
+    }
+
+
 def serializza_per_giocatore(sondaggio: Sondaggio, risposta: RispostaSondaggio | None) -> dict:
     gia = risposta is not None
+    premio_ricevuto = None
+    if risposta and risposta.premio_erogato_at:
+        premio_ricevuto = _premio_dict(
+            risposta.premio_pc,
+            risposta.premio_crediti_correnti,
+            risposta.premio_crediti_deposito,
+        )
     return {
         "id": str(sondaggio.id),
         "titolo": sondaggio.titolo,
@@ -251,6 +400,12 @@ def serializza_per_giocatore(sondaggio: Sondaggio, risposta: RispostaSondaggio |
         "mia_risposta": risposta.risposte if risposta else None,
         "inviata_il": risposta.created_at.isoformat() if risposta else None,
         "link_esterno": sondaggio.google_form_url if ha_domande_esterne(sondaggio.domande) else "",
+        "premio": _premio_dict(
+            sondaggio.premio_pc,
+            sondaggio.premio_crediti_correnti,
+            sondaggio.premio_crediti_deposito,
+        ),
+        "premio_ricevuto": premio_ricevuto,
     }
 
 
@@ -269,6 +424,14 @@ def serializza_staff(sondaggio: Sondaggio, *, con_risposte: bool = False) -> dic
         "attivo": sondaggio.attivo,
         "consenti_modifica": sondaggio.consenti_modifica,
         "inoltra_email": sondaggio.inoltra_email,
+        "premio_pc": int(sondaggio.premio_pc or 0),
+        "premio_crediti_correnti": f"{Decimal(sondaggio.premio_crediti_correnti or 0):.2f}",
+        "premio_crediti_deposito": f"{Decimal(sondaggio.premio_crediti_deposito or 0):.2f}",
+        "premi_mancanti": (
+            qs.filter(premio_erogato_at__isnull=True, personaggio__isnull=False).count()
+            if premio_configurato(sondaggio)
+            else 0
+        ),
         "creato_il": sondaggio.created_at.isoformat(),
         "risposte_totali": totale,
         "risposte_inoltrate": inoltrate,
@@ -286,6 +449,12 @@ def serializza_staff(sondaggio: Sondaggio, *, con_risposte: bool = False) -> dic
                 "aggiornata_il": riga.updated_at.isoformat() if riga.updated_at else "",
                 "google_inviato_il": riga.google_inviato_at.isoformat() if riga.google_inviato_at else "",
                 "google_errore": riga.google_errore,
+                "premio_erogato": bool(riga.premio_erogato_at),
+                "premio": _premio_dict(
+                    riga.premio_pc,
+                    riga.premio_crediti_correnti,
+                    riga.premio_crediti_deposito,
+                ) if riga.premio_erogato_at else None,
             })
         payload["risposte"] = righe
     return payload

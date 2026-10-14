@@ -340,6 +340,22 @@ function Controllo({ domanda, valore, onChange }) {
   return null;
 }
 
+function testoPremio(premio) {
+  if (!premio) return '';
+  const parti = [];
+  const pc = Number(premio.pc || 0);
+  const corrente = Number(premio.crediti_correnti || 0);
+  const deposito = Number(premio.crediti_deposito || 0);
+  if (pc > 0) parti.push(`${pc} PC`);
+  if (corrente > 0) {
+    parti.push(`${corrente.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CR correnti`);
+  }
+  if (deposito > 0) {
+    parti.push(`${deposito.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CR di deposito`);
+  }
+  return parti.join(', ');
+}
+
 export default function SondaggioCompilazione({ sondaggio, invio = false, errore = '', onInvia }) {
   const [valori, setValori] = useState(() => statoIniziale(sondaggio));
   const [erroreLocale, setErroreLocale] = useState('');
@@ -368,6 +384,9 @@ export default function SondaggioCompilazione({ sondaggio, invio = false, errore
     onInvia?.(valori);
   };
 
+  const premioAnnuncio = !solaLettura ? testoPremio(sondaggio?.premio) : '';
+  const premioRicevuto = testoPremio(sondaggio?.premio_ricevuto);
+
   if (solaLettura) {
     return (
       <div className="space-y-4">
@@ -375,6 +394,11 @@ export default function SondaggioCompilazione({ sondaggio, invio = false, errore
           <CheckCircle2 className="mt-0.5 shrink-0" size={18} />
           <p className="text-sm">Risposta registrata. Grazie.</p>
         </div>
+        {premioRicevuto ? (
+          <p className="rounded-xl border border-indigo-800 bg-indigo-950/40 px-3 py-2 text-sm text-indigo-100 break-words">
+            Premio accreditato: {premioRicevuto}.
+          </p>
+        ) : null}
         {domande.map((domanda) => (
           <BloccoDomanda
             key={domanda.id}
@@ -390,6 +414,11 @@ export default function SondaggioCompilazione({ sondaggio, invio = false, errore
 
   return (
     <form className="space-y-5" onSubmit={invia}>
+      {premioAnnuncio ? (
+        <p className="rounded-xl border border-indigo-800 bg-indigo-950/40 px-3 py-2 text-sm text-indigo-100 break-words">
+          Completando il sondaggio ricevi {premioAnnuncio}.
+        </p>
+      ) : null}
       {sondaggio?.link_esterno ? (
         <a
           href={sondaggio.link_esterno}
