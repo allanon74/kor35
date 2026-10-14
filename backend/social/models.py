@@ -602,6 +602,12 @@ def normalize_media_field_path(field_file, upload_prefix: str) -> None:
     """
     if not field_file or not field_file.name:
         return
+    if not hasattr(field_file, "storage"):
+        name = field_file.name.replace("\\", "/")
+        basename = os.path.basename(name)
+        if basename and field_file.name != basename:
+            field_file.name = basename
+        return
     prefix = upload_prefix.rstrip("/")
     name = field_file.name.replace("\\", "/")
     basename = os.path.basename(name)
@@ -637,7 +643,7 @@ def prepare_image_upload(field_file, upload_prefix: str):
     if not field_file:
         return field_file
     normalize_media_field_path(field_file, upload_prefix)
-    if is_new_file_upload(field_file):
+    if is_new_file_upload(field_file) or not hasattr(field_file, "storage"):
         return optimize_uploaded_image(field_file)
     return field_file
 

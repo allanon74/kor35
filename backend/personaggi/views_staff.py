@@ -3009,6 +3009,7 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
         """GET: saldo riserva + ultime puntate. POST: delta o valore assoluto."""
         from decimal import Decimal, InvalidOperation
 
+        from personaggi.economia_crediti import saldo_deposito
         from personaggi.scommesse_models import PuntataScommessa
         from personaggi.serializers_scommesse import PuntataScommessaSerializer
 
@@ -3026,7 +3027,7 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
             )
             ctx = {"personaggio": personaggio, "staff_view": True}
             return Response({
-                "riserva": str(personaggio.riserva or Decimal("0.00")),
+                "riserva": str(saldo_deposito(personaggio)),
                 "crediti": personaggio.crediti,
                 "puntate": PuntataScommessaSerializer(puntate, many=True, context=ctx).data,
             })
@@ -3059,7 +3060,7 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
         personaggio.refresh_from_db()
         return Response({
             "status": "success",
-            "riserva": str(personaggio.riserva),
+            "riserva": str(saldo_deposito(personaggio)),
             "detail": self._serialize_detail(personaggio, request),
         })
 

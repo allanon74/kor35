@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from personaggi.economia_crediti import CONTO_DEPOSITO, modifica_crediti, saldo_deposito
 from personaggi.models import (
     CAMPAGNA_ROLE_MASTER,
     Campagna,
@@ -41,8 +42,9 @@ class StaffRiservaScommesseTests(TestCase):
             proprietario=cls.master,
             campagna=cls.campagna,
             tipologia=cls.tipologia,
-            riserva=Decimal("50.00"),
+            riserva=Decimal("0.00"),
         )
+        modifica_crediti(cls.pg, Decimal("50.00"), "Seed deposito test", conto=CONTO_DEPOSITO)
 
     def setUp(self):
         self.client = APIClient()
@@ -65,7 +67,8 @@ class StaffRiservaScommesseTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.pg.refresh_from_db()
-        self.assertEqual(self.pg.riserva, Decimal("75.50"))
+        self.assertEqual(saldo_deposito(self.pg), Decimal("75.50"))
+        self.assertEqual(self.pg.riserva, Decimal("0.00"))
 
     def test_set_riserva(self):
         resp = self.client.post(
@@ -76,4 +79,5 @@ class StaffRiservaScommesseTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.pg.refresh_from_db()
-        self.assertEqual(self.pg.riserva, Decimal("10.00"))
+        self.assertEqual(saldo_deposito(self.pg), Decimal("10.00"))
+        self.assertEqual(self.pg.riserva, Decimal("0.00"))

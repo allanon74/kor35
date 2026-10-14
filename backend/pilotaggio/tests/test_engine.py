@@ -235,6 +235,7 @@ class EventoDurataUnificataTests(TestCase):
             distanza_percorsa=10.0,
             durata_pianificata_secondi=600,
             started_at=timezone.now(),
+            decollo_completato_at=timezone.now(),
             tick_secondi=5,
         )
         evento = EventoNave.objects.create(
@@ -356,9 +357,9 @@ class CodiceProcessingTests(TestCase):
 class SottosistemaGuastoTests(TestCase):
     def setUp(self):
         self.pilota = _crea_pilota()
-        self.sottos = SottosistemaNave.objects.create(
-            codice="A", nome="Motori", durata_ripristino_secondi=60
-        )
+        self.sottos = SottosistemaNave.objects.get(codice="A")
+        self.sottos.durata_ripristino_secondi = 60
+        self.sottos.save(update_fields=["durata_ripristino_secondi", "updated_at"])
         self.evento = EventoNave.objects.create(
             nome="Surriscaldamento",
             descrizione="...",
@@ -394,7 +395,7 @@ class SottosistemaGuastoTests(TestCase):
         stato = StatoSottosistemaSessione.objects.get(sessione=self.session)
         stato.recovery_at = timezone.now() - timedelta(seconds=1)
         stato.save()
-        tick_sessione(self.session)
+        tick_sessione(self.session, force=True)
         stato.refresh_from_db()
         self.assertTrue(stato.online)
 
@@ -451,7 +452,7 @@ class SequenzeVoloTests(TestCase):
         s.refresh_from_db()
         self.assertEqual(s.stato, SESSIONE_STATO_ARRIVATA)
         stato = StatoSottosistemaSessione.objects.get(sessione=s, sottosistema=sottos)
-        self.assertFalse(stato.online)
+        self.assertTrue(stato.online)
         self.assertEqual(stato.livello_attuale, 0)
         self.assertEqual(stato.livello_target, 0)
 

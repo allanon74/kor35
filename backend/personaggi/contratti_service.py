@@ -980,7 +980,10 @@ def risposta_qr_contratto(qr_code, request):
         return None
     if not request.user.is_authenticated:
         return Response({"error": "Autenticazione richiesta."}, status=status.HTTP_401_UNAUTHORIZED)
-    raw_pid = request.query_params.get("personaggio_id")
+    params = getattr(request, "query_params", None)
+    if params is None:
+        params = request.GET
+    raw_pid = params.get("personaggio_id")
     try:
         pid = int(raw_pid)
     except (TypeError, ValueError):

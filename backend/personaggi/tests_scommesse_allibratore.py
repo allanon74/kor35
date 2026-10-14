@@ -124,6 +124,7 @@ class ScommesseAllibratoreTests(TestCase):
         )
         self.allibratore.refresh_from_db()
         self.assertEqual(self.allibratore.crediti, crediti_all_prima)
+        deposito_prima = self.allibratore.crediti_deposito
 
         self.calendario.data_risoluzione = timezone.now() - timezone.timedelta(minutes=5)
         self.calendario.save(update_fields=["data_risoluzione", "updated_at"])
@@ -131,9 +132,11 @@ class ScommesseAllibratoreTests(TestCase):
 
         puntata = PuntataScommessa.objects.get(codice=codice)
         self.allibratore.refresh_from_db()
+        if hasattr(self.allibratore, "_eco_aggregati"):
+            del self.allibratore._eco_aggregati
         self.assertEqual(puntata.stato, PuntataScommessa.STATO_WON)
         self.assertEqual(puntata.vincita, Decimal("22.00"))
-        delta = self.allibratore.crediti - crediti_all_prima
+        delta = self.allibratore.crediti_deposito - deposito_prima
         self.assertEqual(delta, Decimal("1.76"))
 
     def test_commissione_non_su_puntata_persa(self):

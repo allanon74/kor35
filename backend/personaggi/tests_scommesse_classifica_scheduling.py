@@ -136,11 +136,15 @@ class ScommesseSchedulingTests(TestCase):
         )
 
     def test_sfasamento_sposta_prima_finestra(self):
+        ancora = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0) + timezone.timedelta(days=40)
+        self.prog.data_ancora_cadenza = ancora
+        self.prog.sfasamento_giorni = 0
+        self.prog.save(update_fields=["data_ancora_cadenza", "sfasamento_giorni", "updated_at"])
         prog2 = ProgrammazioneTorneoScommesse.objects.create(
             sport=SportScommesse.objects.create(nome="Altro sport", tipo_risultato="calcio"),
             attiva=False,
             sfasamento_giorni=5,
-            data_ancora_cadenza=self.prog.data_ancora_cadenza,
+            data_ancora_cadenza=ancora,
         )
         a0, r0 = prossima_finestra_cadenza(self.prog)
         a5, r5 = prossima_finestra_cadenza(prog2)
