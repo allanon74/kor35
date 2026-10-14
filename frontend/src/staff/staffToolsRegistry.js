@@ -148,6 +148,7 @@ export const STAFF_TOOLS_REGISTRY = {
   'carte-collezionabili': { id: 'carte-collezionabili', label: 'Carte collezionabili', icon: CreditCard, color: 'bg-violet-900', componentKey: 'carte-collezionabili' },
   tasks: { id: 'tasks', label: 'Tasks', icon: ListTodo, color: 'bg-lime-800', componentKey: 'tasks' },
   contratti: { id: 'contratti', label: 'Contratti', icon: FileSignature, color: 'bg-amber-800', componentKey: 'contratti' },
+  sondaggi: { id: 'sondaggi', label: 'Sondaggi', icon: ClipboardCheck, color: 'bg-indigo-700', componentKey: 'sondaggi' },
   'personaggi-eliminati': { id: 'personaggi-eliminati', label: 'Personaggi eliminati', icon: Skull, color: 'bg-red-900', componentKey: 'personaggi-eliminati' },
   personaggi: { id: 'personaggi', label: 'Personaggi', icon: Users, color: 'bg-teal-700', componentKey: 'personaggi' },
   'regole-transazioni': { id: 'regole-transazioni', label: 'Regole scambi e spese', icon: ArrowLeftRight, color: 'bg-amber-800', componentKey: 'regole-transazioni' },
@@ -165,7 +166,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       palette: 'indigo',
       order: 0,
       collapsed_default: false,
-      tool_ids: ['plot', 'pilotaggio', 'app-links', 'calendario-compiti', 'manifesti', 'qr-crediti', 'nodi', 'innesco-timer', 'qr-random-pool', 'minigioco-pattern', 'qr-debug', 'scommesse', 'negozi-mercante', 'carte-collezionabili', 'tasks', 'contratti'],
+      tool_ids: ['plot', 'pilotaggio', 'app-links', 'calendario-compiti', 'manifesti', 'qr-crediti', 'nodi', 'innesco-timer', 'qr-random-pool', 'minigioco-pattern', 'qr-debug', 'scommesse', 'negozi-mercante', 'carte-collezionabili', 'tasks', 'contratti', 'sondaggi'],
     },
     {
       id: 'database',
@@ -213,7 +214,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
 };
 
 const GLOBAL_ONLY_TOOLS = new Set(['arcana-profiles', 'campagne', 'maintenance']);
-const STAFFER_TOOLS = new Set(['messaggi', 'chiamate', 'plot', 'tasks', 'contratti', 'app-links', 'calendario-compiti', 'rubriche', 'pool-pg']);
+const STAFFER_TOOLS = new Set(['messaggi', 'chiamate', 'plot', 'tasks', 'contratti', 'sondaggi', 'app-links', 'calendario-compiti', 'rubriche', 'pool-pg']);
 const MASTER_EXCLUDED = new Set(['campagne', 'arcana-profiles', 'maintenance']);
 const HEAD_EXCLUDED = new Set(['arcana-profiles', 'maintenance']);
 

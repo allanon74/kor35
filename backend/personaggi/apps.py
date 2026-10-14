@@ -10,6 +10,9 @@ class PersonaggiConfig(AppConfig):
         import personaggi.signals
         import personaggi.sync_tombstone_signals  # noqa: F401
         import personaggi.contratti_signals  # noqa: F401
+        from personaggi.sondaggi_google import registra_segnale_inoltro
+
+        registra_segnale_inoltro()
         from personaggi import signals as personaggi_signals
 
         for model in self.get_models():
