@@ -522,6 +522,7 @@ urlpatterns = [
     path('api/staff/sondaggi/<uuid:sondaggio_id>/', views_sondaggi.SondaggioStaffDettaglioView.as_view(), name='staff-sondaggio'),
     path('api/staff/sondaggi/<uuid:sondaggio_id>/aggiorna/', views_sondaggi.SondaggioStaffAggiornaView.as_view(), name='staff-sondaggio-aggiorna'),
     path('api/staff/sondaggi/<uuid:sondaggio_id>/inoltra/', views_sondaggi.SondaggioStaffInoltraView.as_view(), name='staff-sondaggio-inoltra'),
+    path('api/staff/sondaggi/<uuid:sondaggio_id>/premi/', views_sondaggi.SondaggioStaffPremiView.as_view(), name='staff-sondaggio-premi'),
 
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
     path('api/chiamate/ice-servers/', chiamate_views.ChiamataIceServersView.as_view(), name='chiamate-ice-servers'),

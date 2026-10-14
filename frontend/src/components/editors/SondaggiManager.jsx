@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ClipboardCheck, Loader2, RefreshCw, Send, Trash2 } from 'lucide-react';
+import { ClipboardCheck, Coins, Loader2, RefreshCw, Send, Trash2 } from 'lucide-react';
 import {
   staffSondaggiAggiorna,
   staffSondaggiElimina,
@@ -7,6 +7,7 @@ import {
   staffSondaggiImporta,
   staffSondaggiInoltra,
   staffSondaggiPatch,
+  staffSondaggiPremi,
 } from '../../api';
 import {
   StaffToolShell,
@@ -114,6 +115,9 @@ export default function SondaggiManager({ onLogout }) {
       attivo: dettaglio.attivo,
       consenti_modifica: dettaglio.consenti_modifica,
       inoltra_email: dettaglio.inoltra_email,
+      premio_pc: dettaglio.premio_pc,
+      premio_crediti_correnti: dettaglio.premio_crediti_correnti,
+      premio_crediti_deposito: dettaglio.premio_crediti_deposito,
     }, onLogout);
     setDettaglio(aggiornato);
     await ricaricaLista();
@@ -131,6 +135,13 @@ export default function SondaggiManager({ onLogout }) {
     const esito = aggiornato.inoltro || {};
     setInfo(`Copiate sul foglio: ${esito.inviate || 0}. Errori: ${esito.errori || 0}. Saltate: ${esito.saltate || 0}.`);
     await ricaricaLista();
+  });
+
+  const accreditaPremi = () => esegui(async () => {
+    const aggiornato = await staffSondaggiPremi(dettaglio.id, onLogout);
+    setDettaglio(aggiornato);
+    await ricaricaLista();
+    setInfo(`Premi accreditati: ${aggiornato.premi_appena_erogati ?? 0}.`);
   });
 
   const elimina = () => {
@@ -238,6 +249,40 @@ export default function SondaggiManager({ onLogout }) {
                   onChange={(e) => setDettaglio({ ...dettaglio, descrizione: e.target.value })}
                 />
               </label>
+              <div className="space-y-2 rounded-xl border border-gray-700 bg-gray-950 p-3">
+                <p className="flex items-center gap-2 text-sm font-semibold text-white">
+                  <Coins size={16} className="shrink-0 text-amber-300" />
+                  Premio al primo invio
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {[
+                    ['premio_pc', 'PC', '1'],
+                    ['premio_crediti_correnti', 'Crediti correnti', '0.01'],
+                    ['premio_crediti_deposito', 'Crediti di deposito', '0.01'],
+                  ].map(([campo, etichetta, step]) => (
+                    <label key={campo} className="block min-w-0 space-y-1">
+                      <span className="text-sm text-gray-300">{etichetta}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step={step}
+                        inputMode="decimal"
+                        className="min-h-11 w-full rounded-lg border border-gray-600 bg-gray-900 px-3 text-base text-white"
+                        value={dettaglio[campo] ?? 0}
+                        onChange={(e) => setDettaglio({ ...dettaglio, [campo]: e.target.value })}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 break-words">
+                  Zero su una voce significa nessun premio di quel tipo. Chi ha già compilato prima di salvare gli importi non lo riceve da solo.
+                </p>
+                {(dettaglio.premi_mancanti || 0) > 0 ? (
+                  <button type="button" className={`${staffSecondaryBtnClass} min-h-11`} disabled={occupato} onClick={accreditaPremi}>
+                    Accredita a chi ha già risposto ({dettaglio.premi_mancanti})
+                  </button>
+                ) : null}
+              </div>
               <div className="flex flex-col gap-2">
                 {[
                   ['attivo', 'Visibile ai giocatori'],
@@ -300,6 +345,7 @@ export default function SondaggiManager({ onLogout }) {
                     <p className="text-xs text-gray-500">
                       {riga.google_inviato_il ? `Sul foglio dal ${formattaQuando(riga.google_inviato_il)}` : 'Non ancora sul foglio Google'}
                       {riga.google_errore ? ` · ${riga.google_errore}` : ''}
+                      {riga.premio_erogato ? ` · Premio: ${riga.premio.pc} PC, ${riga.premio.crediti_correnti} CR correnti, ${riga.premio.crediti_deposito} CR deposito` : ''}
                     </p>
                     <dl className="mt-2 space-y-1">
                       {(dettaglio.domande || []).filter((d) => d.supportata && d.tipo !== 'sezione').flatMap((domanda) => (

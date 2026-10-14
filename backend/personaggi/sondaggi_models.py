@@ -40,6 +40,22 @@ class Sondaggio(SyncableModel, models.Model):
         default=True,
         help_text="Se il modulo Google raccoglie l'email, invia quella dell'account.",
     )
+    premio_pc = models.PositiveIntegerField(
+        default=0,
+        help_text="PC accreditati al personaggio al primo invio del sondaggio.",
+    )
+    premio_crediti_correnti = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Crediti del conto corrente accreditati al primo invio.",
+    )
+    premio_crediti_deposito = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Crediti del conto deposito accreditati al primo invio.",
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -79,6 +95,14 @@ class RispostaSondaggio(SyncableModel, models.Model):
         related_name="risposte_sondaggio",
     )
     risposte = models.JSONField(default=dict, blank=True)
+    premio_pc = models.PositiveIntegerField(default=0)
+    premio_crediti_correnti = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    premio_crediti_deposito = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    premio_erogato_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Quando il premio di questo invio è stato accreditato. Vuoto se non c'era premio.",
+    )
     google_inviato_at = models.DateTimeField(null=True, blank=True)
     google_claim_at = models.DateTimeField(null=True, blank=True)
     google_errore = models.CharField(max_length=500, blank=True, default="")

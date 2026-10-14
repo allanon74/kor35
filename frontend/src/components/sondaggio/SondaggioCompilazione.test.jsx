@@ -172,4 +172,23 @@ describe('SondaggioCompilazione', () => {
     expect(host.querySelector('form')).toBeNull();
     unmount();
   });
+
+  it('annuncia il premio prima dell\'invio e dopo l\'accredito', () => {
+    const conPremio = {
+      ...sondaggio,
+      premio: { pc: 2, crediti_correnti: '10.50', crediti_deposito: '0.00' },
+    };
+    const { host, unmount } = mount(createElement(SondaggioCompilazione, { sondaggio: conPremio, onInvia: vi.fn() }));
+    expect(host.textContent).toContain('Completando il sondaggio ricevi 2 PC, 10,50 CR correnti.');
+    unmount();
+    const ricevuto = {
+      ...sondaggio,
+      gia_risposto: true,
+      mia_risposta: { 'entry.1': 'Ada', 'entry.2': 'Tank' },
+      premio_ricevuto: { pc: 2, crediti_correnti: '10.50', crediti_deposito: '3.00' },
+    };
+    const letto = mount(createElement(SondaggioCompilazione, { sondaggio: ricevuto, onInvia: vi.fn() }));
+    expect(letto.host.textContent).toContain('Premio accreditato: 2 PC, 10,50 CR correnti, 3,00 CR di deposito.');
+    letto.unmount();
+  });
 });
