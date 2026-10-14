@@ -4780,3 +4780,48 @@ export const postCalendarioFeedTokenRigenera = (onLogout) =>
         method: 'POST',
         body: JSON.stringify({}),
     }, onLogout);
+
+const SONDAGGI_API = '/api/personaggi/api/sondaggi';
+const STAFF_SONDAGGI = '/api/personaggi/api/staff/sondaggi';
+
+export const sondaggiGetStato = (charId, onLogout) =>
+    fetchAuthenticated(`${SONDAGGI_API}/?personaggio_id=${encodeURIComponent(charId)}&breve=1`, { method: 'GET' }, onLogout);
+
+export const sondaggiGetElenco = (charId, onLogout) =>
+    fetchAuthenticated(`${SONDAGGI_API}/?personaggio_id=${encodeURIComponent(charId)}`, { method: 'GET' }, onLogout);
+
+export const sondaggiInviaRisposta = (sondaggioId, charId, risposte, onLogout) =>
+    fetchAuthenticated(`${SONDAGGI_API}/${sondaggioId}/risposta/?personaggio_id=${encodeURIComponent(charId)}`, {
+        method: 'POST',
+        body: JSON.stringify({ risposte }),
+    }, onLogout);
+
+export const staffSondaggiGet = (onLogout, id) =>
+    fetchAuthenticated(id ? `${STAFF_SONDAGGI}/${id}/` : `${STAFF_SONDAGGI}/`, { method: 'GET' }, onLogout);
+
+export const staffSondaggiImporta = (data, onLogout) =>
+    fetchAuthenticated(`${STAFF_SONDAGGI}/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffSondaggiPatch = (id, data, onLogout) =>
+    fetchAuthenticated(`${STAFF_SONDAGGI}/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffSondaggiElimina = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_SONDAGGI}/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffSondaggiAggiorna = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_SONDAGGI}/${id}/aggiorna/`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+    }, onLogout);
+
+export const staffSondaggiInoltra = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_SONDAGGI}/${id}/inoltra/`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+    }, onLogout);
