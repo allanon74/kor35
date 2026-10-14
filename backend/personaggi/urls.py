@@ -1,7 +1,7 @@
 from django.urls import path, include
 # from rest_framework.authtoken.views import obtain_auth_token
 
-from . import views, views_staff, views_serie, views_scommesse, views_carte, views_carte_platform, watch_views, views_economia, views_notifiche, chiamate_views, views_contratti, views_pool_pg
+from . import views, views_staff, views_serie, views_scommesse, views_carte, views_carte_platform, watch_views, views_economia, views_notifiche, chiamate_views, views_contratti, views_pool_pg, views_sondaggi
 from rest_framework import routers
 
 from rest_framework.routers import DefaultRouter
@@ -515,6 +515,13 @@ urlpatterns = [
     path('api/staff/contratti/modelli/', views_contratti.ContrattiStaffListaView.as_view(), name='staff-contratti-modelli'),
     path('api/staff/contratti/modelli/<uuid:modello_id>/', views_contratti.ContrattiStaffDettaglioView.as_view(), name='staff-contratti-modello'),
     path('api/staff/contratti/runtime/', views_contratti.ContrattiStaffRuntimeView.as_view(), name='staff-contratti-runtime'),
+
+    path('api/sondaggi/', views_sondaggi.SondaggiGiocatoreView.as_view(), name='sondaggi-giocatore'),
+    path('api/sondaggi/<uuid:sondaggio_id>/risposta/', views_sondaggi.SondaggioRispostaView.as_view(), name='sondaggio-risposta'),
+    path('api/staff/sondaggi/', views_sondaggi.SondaggiStaffView.as_view(), name='staff-sondaggi'),
+    path('api/staff/sondaggi/<uuid:sondaggio_id>/', views_sondaggi.SondaggioStaffDettaglioView.as_view(), name='staff-sondaggio'),
+    path('api/staff/sondaggi/<uuid:sondaggio_id>/aggiorna/', views_sondaggi.SondaggioStaffAggiornaView.as_view(), name='staff-sondaggio-aggiorna'),
+    path('api/staff/sondaggi/<uuid:sondaggio_id>/inoltra/', views_sondaggi.SondaggioStaffInoltraView.as_view(), name='staff-sondaggio-inoltra'),
 
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
     path('api/chiamate/ice-servers/', chiamate_views.ChiamataIceServersView.as_view(), name='chiamate-ice-servers'),

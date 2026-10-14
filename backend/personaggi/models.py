@@ -10929,6 +10929,14 @@ from personaggi.contratti_models import (  # noqa: E402, F401
 )
 
 # ============================================================================
+# SONDAGGI (Google Form in-app)
+# ============================================================================
+from personaggi.sondaggi_models import (  # noqa: E402, F401
+    RispostaSondaggio,
+    Sondaggio,
+)
+
+# ============================================================================
 # SIGNALS - Inizializzazione automatica
 # ============================================================================
 

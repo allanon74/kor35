@@ -8,7 +8,7 @@ import { useCharacter } from './CharacterContext';
 import { useMieiStaffCompiti } from './StaffCompitiWidget';
 import { campagnaRuoloLabel } from '../lib/campagnaRuoli';
 import { TimerOverlay } from './TimerOverlay';
-import { getPilotNavigationConfig, fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota, carteGetStato, getMissioniEventoAttivo, contrattiGetAccesso, getPoolPgGiocatoreVisibili } from '../api';
+import { getPilotNavigationConfig, fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota, carteGetStato, getMissioniEventoAttivo, contrattiGetAccesso, getPoolPgGiocatoreVisibili, sondaggiGetStato } from '../api';
 import packageInfo from '../../package.json';
 import { isWebPushEnabled } from '../lib/webpush';
 import { ensureAppServiceWorker } from '../lib/appServiceWorker';
@@ -67,6 +67,7 @@ const TAB_LOADERS = {
   scommesse: () => import('./ScommesseTab.jsx'),
   carte: () => import('./CarteCollezionabiliTab.jsx'),
   contratti: () => import('./ContrattiTab.jsx'),
+  sondaggio: () => import('./SondaggioTab.jsx'),
 };
 
 const lazyTab = (id) => lazy(TAB_LOADERS[id]);
@@ -116,6 +117,7 @@ const AVAILABLE_TABS = [
     { id: 'scommesse', label: 'Scommesse', icon: Trophy, component: lazyTab('scommesse'), requiresModulo: 'scommesse' },
     { id: 'carte', label: 'Carte', icon: CreditCard, component: lazyTab('carte'), requiresCarteAccess: true, requiresModulo: 'carte' },
     { id: 'contratti', label: 'Contratti', icon: FileSignature, component: lazyTab('contratti'), requiresContrattiAccess: true, requiresModulo: 'contratti' },
+    { id: 'sondaggio', label: 'Sondaggio', icon: ClipboardCheck, component: lazyTab('sondaggio'), requiresSondaggioAccess: true },
 ];
 
 const DEFAULT_SHORTCUTS = ['inventario', 'abilita', 'messaggi', 'qr'];
@@ -192,6 +194,9 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const [stivaAccessSigla, setStivaAccessSigla] = useState(DEFAULT_STIVA_ACCESS_STAT_SIGLA);
   const [carteTabEnabled, setCarteTabEnabled] = useState(false);
   const [contrattiTabEnabled, setContrattiTabEnabled] = useState(false);
+  const [sondaggioTabEnabled, setSondaggioTabEnabled] = useState(false);
+  const [sondaggioStatoPronto, setSondaggioStatoPronto] = useState(false);
+  const [sondaggiDaCompilare, setSondaggiDaCompilare] = useState(0);
   const [tasksEventoStato, setTasksEventoStato] = useState(null);
   const [poolVisibili, setPoolVisibili] = useState([]);
   const [poolTabsReady, setPoolTabsReady] = useState(false);
@@ -409,6 +414,34 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     return () => { cancelled = true; };
   }, [contrattiModuloOk, selectedCharacterId, onLogout]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setSondaggioStatoPronto(false);
+    const loadSondaggi = async () => {
+      if (!selectedCharacterId) {
+        setSondaggioTabEnabled(false);
+        setSondaggiDaCompilare(0);
+        setSondaggioStatoPronto(true);
+        return;
+      }
+      try {
+        const stato = await sondaggiGetStato(selectedCharacterId, onLogout);
+        if (cancelled) return;
+        setSondaggioTabEnabled(!!stato?.visibile);
+        setSondaggiDaCompilare(Number(stato?.da_compilare) || 0);
+      } catch {
+        if (!cancelled) {
+          setSondaggioTabEnabled(false);
+          setSondaggiDaCompilare(0);
+        }
+      } finally {
+        if (!cancelled) setSondaggioStatoPronto(true);
+      }
+    };
+    loadSondaggi();
+    return () => { cancelled = true; };
+  }, [selectedCharacterId, onLogout]);
+
   const tasksModuloOk = canAccessModulo('tasks');
 
   /**
@@ -497,9 +530,10 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       if (tab.requiresStivaAccess) return stivaTabEnabled;
       if (tab.requiresCarteAccess) return carteTabEnabled;
       if (tab.requiresContrattiAccess) return contrattiTabEnabled;
+      if (tab.requiresSondaggioAccess) return sondaggioTabEnabled;
       return true;
     },
-    [stivaTabEnabled, carteTabEnabled, contrattiTabEnabled, tasksEventoAttivo, canAccessModulo],
+    [stivaTabEnabled, carteTabEnabled, contrattiTabEnabled, sondaggioTabEnabled, tasksEventoAttivo, canAccessModulo],
   );
 
   const [razzaModalOpen, setRazzaModalOpen] = useState(false);
@@ -1037,6 +1071,12 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   }, [activeTab, tasksEventoAttivo]);
 
   useEffect(() => {
+    if (activeTab === 'sondaggio' && sondaggioStatoPronto && !sondaggioTabEnabled) {
+      setActiveTab('game');
+    }
+  }, [activeTab, sondaggioTabEnabled, sondaggioStatoPronto]);
+
+  useEffect(() => {
     if (activeTab !== 'watch') return;
     if (!selectedCharacterId) return;
     if (!watchTabEnabled) setActiveTab('game');
@@ -1313,6 +1353,10 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                             badgeCount = unreadCount; 
                             badgeColor = 'bg-purple-600';
                         }
+                    }
+                    if (tab.id === 'sondaggio' && sondaggiDaCompilare > 0) {
+                        badgeCount = sondaggiDaCompilare;
+                        badgeColor = 'bg-indigo-500';
                     }
 
                     return (
@@ -1624,13 +1668,14 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                     <Menu size={28} aria-hidden="true" />
                     
                     {/* PALLINI NOTIFICHE HEADER */}
-                    <div className="absolute top-1 right-1 flex flex-col gap-0.5 pointer-events-none" aria-hidden={!hasAdminNotif && !hasStaffMsgNotif && !hasMsgNotif && !hasJobNotif && !hasCompitoNotif && !needRefresh}>
+                    <div className="absolute top-1 right-1 flex flex-col gap-0.5 pointer-events-none" aria-hidden={!hasAdminNotif && !hasStaffMsgNotif && !hasMsgNotif && !hasJobNotif && !hasCompitoNotif && !needRefresh && sondaggiDaCompilare <= 0}>
                         {hasAdminNotif && <span className="block h-2.5 w-2.5 rounded-full ring-1 ring-gray-900 bg-red-600 animate-pulse shadow-sm" title="Admin Pending" role="status" aria-label="Proposte admin in attesa" />}
                         {/* [MODIFICA] Pallino verde se staff msg */}
                         {hasStaffMsgNotif && <span className="block h-2.5 w-2.5 rounded-full ring-1 ring-gray-900 bg-green-500 animate-pulse shadow-sm" title="Staff Msg" role="status" aria-label="Messaggi staff non letti" />}
                         {(!hasStaffMsgNotif && hasMsgNotif) && <span className="block h-2.5 w-2.5 rounded-full ring-1 ring-gray-900 bg-purple-500 shadow-sm" title="Messaggi" role="status" aria-label="Messaggi non letti" />}
                         {hasJobNotif && <span className="block h-2.5 w-2.5 rounded-full ring-1 ring-gray-900 bg-amber-500 shadow-sm" title="Lavori" role="status" aria-label="Lavori pendenti" />}
                         {hasCompitoNotif && <span className="block h-2.5 w-2.5 rounded-full ring-1 ring-gray-900 bg-sky-400 shadow-sm" title="Compiti" role="status" aria-label="Compiti in scadenza" />}
+                        {sondaggiDaCompilare > 0 && <span className="block h-2.5 w-2.5 rounded-full ring-1 ring-gray-900 bg-indigo-400 shadow-sm" title="Sondaggio" role="status" aria-label="Sondaggio da compilare" />}
                         {needRefresh && <span className="block h-2.5 w-2.5 rounded-full ring-1 ring-gray-900 bg-blue-500 animate-bounce shadow-sm" title="Update" role="status" aria-label="Aggiornamento disponibile" />}
                     </div>
                   </button>
