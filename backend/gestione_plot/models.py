@@ -92,6 +92,14 @@ class Evento(SyncableModel, models.Model):
     )
     data_inizio = models.DateTimeField()
     data_fine = models.DateTimeField()
+    data_da_definire = models.BooleanField(
+        default=False,
+        verbose_name="Data da definire",
+        help_text=(
+            "Se attivo, le date restano in anagrafica per lo staff ma non compaiono "
+            "sul sito né nel calendario pubblico."
+        ),
+    )
     sinossi = models.TextField(blank=True)
     luogo = models.CharField(max_length=255, blank=True)
     logistiche_pubbliche = models.TextField(

@@ -227,6 +227,9 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                     <div className="flex flex-wrap gap-4 text-[10px] font-bold uppercase text-gray-400 italic">
                         <span className="flex items-center gap-1"><MapPin size={12} className="text-indigo-400"/> {evento.luogo || 'Senza luogo'}</span>
                         <span className="flex items-center gap-1"><Calendar size={12} className="text-indigo-400"/> {new Date(evento.data_inizio).toLocaleDateString()}</span>
+                        {evento.data_da_definire && (
+                            <span className="text-amber-300 normal-case not-italic">Data da definire sul sito</span>
+                        )}
                         <span className="text-indigo-400 flex items-center gap-1">
                             <Star size={12} /> Premio iscritti: {evento.pc_guadagnati ?? 1} PC ·{' '}
                             {Number(evento.crediti_base_inizio_evento ?? 0).toLocaleString('it-IT', {

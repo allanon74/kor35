@@ -225,6 +225,7 @@ const PlotTab = ({ onLogout }) => {
                 const pcEv = parseInt(String(raw.pc_guadagnati ?? '1'), 10);
                 raw.pc_guadagnati = Number.isFinite(pcEv) && pcEv >= 0 ? pcEv : 1;
                 raw.iscrizione_test_attiva = !!raw.iscrizione_test_attiva;
+                raw.data_da_definire = !!raw.data_da_definire;
                 try {
                     const coords = normalizeCoordinatesForSave(raw.latitudine, raw.longitudine);
                     raw.latitudine = coords.latitudine;
@@ -665,6 +666,7 @@ const PlotTab = ({ onLogout }) => {
                                 prestigio_base_inizio_evento: 0,
                                 iscrizione_costo_euro: 0,
                                 iscrizione_test_attiva: false,
+                                data_da_definire: false,
                                 iscrizione_opzioni: [],
                             })
                         }
@@ -697,6 +699,23 @@ const PlotTab = ({ onLogout }) => {
                                     </div>
                                     <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Inizio</label><ItalianDateInput className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formData.data_inizio || ''} onChange={(v) => setFormData({ ...formData, data_inizio: v })} /></div>
                                     <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Fine</label><ItalianDateInput className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formData.data_fine || ''} onChange={(v) => setFormData({ ...formData, data_fine: v })} /></div>
+                                    <label className="md:col-span-2 flex items-start gap-3 min-h-11 cursor-pointer text-sm text-gray-300">
+                                        <input
+                                            type="checkbox"
+                                            className="mt-1 rounded border-gray-600 shrink-0"
+                                            checked={!!formData.data_da_definire}
+                                            onChange={(e) =>
+                                                setFormData({ ...formData, data_da_definire: e.target.checked })
+                                            }
+                                        />
+                                        <span className="min-w-0">
+                                            <span className="font-bold text-gray-200">Data da definire</span>
+                                            <span className="block text-[11px] text-gray-500 leading-snug">
+                                                Le date restano salvate per lo staff. Sul sito e nel calendario pubblico
+                                                compare solo «Data da definire», senza le date provvisorie.
+                                            </span>
+                                        </span>
+                                    </label>
                                     <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Luogo</label><input className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formData.luogo || ''} onChange={e => setFormData({...formData, luogo: e.target.value})} /></div>
                                     <div>
                                         <label className="text-[10px] font-bold text-gray-500 uppercase px-1">PC premio presenza</label>
@@ -1166,6 +1185,7 @@ const PlotTab = ({ onLogout }) => {
                                         {ev.data_inizio
                                             ? new Date(ev.data_inizio).toLocaleDateString('it-IT')
                                             : '—'}
+                                        {ev.data_da_definire ? ' · data da definire' : ''}
                                     </div>
                                 </button>
                             ))}

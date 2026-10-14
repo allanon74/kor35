@@ -335,7 +335,7 @@ class EventoSerializer(serializers.ModelSerializer):
             'started_at', 'ended_at', 'staff_assegnato', 'partecipanti',
             'giorni', 'staff_details', 'partecipanti_details',
             'iscrizione_apertura', 'iscrizione_chiusura', 'iscrizione_costo_euro',
-            'iscrizione_test_attiva', 'iscrizione_opzioni', 'voci_portare',
+            'iscrizione_test_attiva', 'data_da_definire', 'iscrizione_opzioni', 'voci_portare',
             'missioni_riepilogo', 'missioni_riepilogo_totali',
         ]
 
@@ -393,15 +393,31 @@ class EventoPubblicoSerializer(serializers.ModelSerializer):
     """
     Serializer semplificato per gli eventi pubblici (homepage).
     Mostra solo le informazioni essenziali senza dati sensibili.
+    Con «data da definire» le date non escono nel payload.
     """
     ha_info_logistiche = serializers.SerializerMethodField()
+    e_prossimo = serializers.SerializerMethodField()
 
     class Meta:
         model = Evento
         fields = [
             'id', 'titolo', 'sinossi', 'data_inizio', 'data_fine', 'luogo',
-            'ha_info_logistiche',
+            'data_da_definire', 'e_prossimo', 'ha_info_logistiche',
         ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.data_da_definire:
+            data['data_inizio'] = None
+            data['data_fine'] = None
+        return data
+
+    def get_e_prossimo(self, obj):
+        from django.utils import timezone
+
+        if not obj.data_inizio:
+            return bool(obj.data_da_definire)
+        return obj.data_inizio > timezone.now()
 
     def get_ha_info_logistiche(self, obj):
         from .evento_coordinate import evento_ha_info_logistiche

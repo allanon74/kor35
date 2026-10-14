@@ -1044,19 +1044,10 @@ class PublicEventiViewSet(viewsets.ReadOnlyModelViewSet):
         return EventoPubblicoSerializer
 
     def get_queryset(self):
-        from django.utils import timezone
-        from datetime import timedelta
+        from .eventi_pubblici import eventi_pubblici_queryset
 
-        # Data di oggi e data limite per eventi passati (30 giorni fa)
-        oggi = timezone.now()
-        trenta_giorni_fa = oggi - timedelta(days=30)
-
-        # Restituisce eventi che:
-        # - Sono nel futuro (data_inizio >= oggi), O
-        # - Sono finiti da meno di 30 giorni (data_fine >= 30 giorni fa)
-        return Evento.objects.filter(
-            data_fine__gte=trenta_giorni_fa
-        ).order_by('data_inizio')
+        # Ultimi 30 giorni e futuri, senza eventi di prova iscrizione.
+        return eventi_pubblici_queryset()
 
     def retrieve(self, request, *args, **kwargs):
         from .evento_coordinate import evento_ha_info_logistiche

@@ -61,13 +61,9 @@ def calendario_feed_payload(user) -> dict:
 
 
 def eventi_queryset_for_ics():
-    from gestione_plot.models import Evento
+    from gestione_plot.eventi_pubblici import eventi_calendario_queryset
 
-    cutoff = timezone.now() - timedelta(days=30)
-    return (
-        Evento.objects.filter(data_fine__gte=cutoff, iscrizione_test_attiva=False)
-        .order_by("data_inizio")
-    )
+    return eventi_calendario_queryset()
 
 
 def assegnazioni_queryset_for_ics(user):
