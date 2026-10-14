@@ -39,6 +39,21 @@ function etichettaRisposta(domanda, valore) {
   return String(valore);
 }
 
+function vociRisposta(domanda, risposte) {
+  if (domanda?.tipo === 'griglia') {
+    return (domanda.righe || []).map((riga) => ({
+      chiave: riga.id,
+      etichetta: `${domanda.titolo} — ${riga.titolo}`,
+      valore: etichettaRisposta(riga, risposte?.[riga.id]),
+    }));
+  }
+  return [{
+    chiave: domanda.id,
+    etichetta: domanda.titolo,
+    valore: etichettaRisposta(domanda, risposte?.[domanda.id]),
+  }];
+}
+
 export default function SondaggiManager({ onLogout }) {
   const [url, setUrl] = useState('');
   const [aperto, setAperto] = useState(true);
@@ -287,11 +302,13 @@ export default function SondaggiManager({ onLogout }) {
                       {riga.google_errore ? ` · ${riga.google_errore}` : ''}
                     </p>
                     <dl className="mt-2 space-y-1">
-                      {(dettaglio.domande || []).filter((d) => d.supportata && d.tipo !== 'sezione').map((domanda) => (
-                        <div key={domanda.id} className="grid grid-cols-1 gap-0.5 sm:grid-cols-[10rem_minmax(0,1fr)]">
-                          <dt className="text-xs text-gray-500 break-words">{domanda.titolo}</dt>
-                          <dd className="text-sm text-gray-100 break-words">{etichettaRisposta(domanda, riga.risposte?.[domanda.id])}</dd>
-                        </div>
+                      {(dettaglio.domande || []).filter((d) => d.supportata && d.tipo !== 'sezione').flatMap((domanda) => (
+                        vociRisposta(domanda, riga.risposte).map((voce) => (
+                          <div key={voce.chiave} className="grid grid-cols-1 gap-0.5 sm:grid-cols-[10rem_minmax(0,1fr)]">
+                            <dt className="text-xs text-gray-500 break-words">{voce.etichetta}</dt>
+                            <dd className="text-sm text-gray-100 break-words">{voce.valore}</dd>
+                          </div>
+                        ))
                       ))}
                     </dl>
                   </article>

@@ -120,6 +120,46 @@ describe('SondaggioCompilazione', () => {
     unmount();
   });
 
+  it('invia una scelta per ogni riga della griglia', () => {
+    const conGriglia = {
+      ...sondaggio,
+      domande: [
+        {
+          id: 'griglia.1',
+          titolo: 'Come valuti le missioni legate ai voli della Mist Glider?',
+          tipo: 'griglia',
+          obbligatoria: true,
+          supportata: true,
+          opzioni: ['Scadente', 'Buono', 'Ottimo'],
+          righe: [
+            { id: 'entry.11', titolo: 'Divertimento', obbligatoria: true, opzioni: ['Scadente', 'Buono', 'Ottimo'] },
+            { id: 'entry.12', titolo: 'Immersione', obbligatoria: true, opzioni: ['Scadente', 'Buono', 'Ottimo'] },
+          ],
+        },
+      ],
+    };
+    const onInvia = vi.fn();
+    const { host, unmount } = mount(createElement(SondaggioCompilazione, { sondaggio: conGriglia, onInvia }));
+    act(() => {
+      host.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(onInvia).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('Divertimento');
+    const bottoni = host.querySelectorAll('button[type="button"]');
+    const buono = [...bottoni].find((nodo) => nodo.textContent === 'Buono');
+    const ottimo = [...bottoni].filter((nodo) => nodo.textContent === 'Ottimo');
+    act(() => {
+      buono.click();
+      ottimo[1].click();
+    });
+    act(() => {
+      host.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(onInvia).toHaveBeenCalledWith({ 'entry.11': 'Buono', 'entry.12': 'Ottimo' });
+    expect(host.textContent).not.toContain('solo sul modulo Google');
+    unmount();
+  });
+
   it('mostra la risposta già inviata senza richiedere un nuovo invio', () => {
     const compilato = {
       ...sondaggio,
