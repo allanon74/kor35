@@ -112,6 +112,53 @@ class ParserSondaggioTests(SimpleTestCase):
         self.assertEqual(tipi["Vuota"]["opzioni"], ["1", "2", "3", "4", "5"])
         self.assertTrue(tipi["Vuota"]["supportata"])
 
+    def test_griglia_scelta_per_riga(self):
+        dati = [
+            None,
+            [
+                "",
+                [
+                    [1, "Come valuti le missioni legate ai voli della Mist Glider?", None, 7, [
+                        [1059234330, [["Scadente"], ["Insufficiente"], ["Discreto"], ["Buono"], ["Ottimo"]], 1, ["Divertimento"], None, None, None, None, None, None, None, [0]],
+                        [195821262, [["Scadente"], ["Insufficiente"], ["Discreto"], ["Buono"], ["Ottimo"]], 1, ["Qualità "], None, None, None, None, None, None, None, [0]],
+                        [620368220, [["Scadente"], ["Insufficiente"], ["Discreto"], ["Buono"], ["Ottimo"]], 1, ["Immersione"], None, None, None, None, None, None, None, [0]],
+                    ]],
+                    [2, "Gli incontri con i PNG ti sono sembrati equilibrati e coerenti con la storia?", None, 7, [
+                        [1510955258, [["per nulla"], ["poco"], ["discretamente"], ["molto"], ["perfettamente"]], 1, ["Equilibrio"]],
+                        [1096896749, [["per nulla"], ["poco"], ["discretamente"], ["molto"], ["perfettamente"]], 1, ["Coerenza"]],
+                    ]],
+                ],
+                None, None, None, [0, 0], None, None, "Feedback",
+            ],
+        ]
+        html = f"<html><script>var FB_PUBLIC_LOAD_DATA_ = {json.dumps(dati)};</script></html>"
+        analisi = analizza_html_modulo(html)
+        tipi = {d["titolo"]: d for d in analisi["domande"]}
+        voli = tipi["Come valuti le missioni legate ai voli della Mist Glider?"]
+        png = tipi["Gli incontri con i PNG ti sono sembrati equilibrati e coerenti con la storia?"]
+        self.assertEqual(voli["tipo"], "griglia")
+        self.assertTrue(voli["supportata"])
+        self.assertEqual([r["titolo"] for r in voli["righe"]], ["Divertimento", "Qualità", "Immersione"])
+        self.assertEqual(voli["righe"][0]["id"], "entry.1059234330")
+        self.assertEqual(voli["righe"][0]["opzioni"][3], "Buono")
+        self.assertTrue(png["supportata"])
+        self.assertEqual([r["titolo"] for r in png["righe"]], ["Equilibrio", "Coerenza"])
+        self.assertFalse(analisi["avvisi"])
+        risposte = {
+            "entry.1059234330": "Buono",
+            "entry.195821262": "Ottimo",
+            "entry.620368220": "Discreto",
+            "entry.1510955258": "molto",
+            "entry.1096896749": "perfettamente",
+        }
+        pulite = valida_risposte(analisi["domande"], risposte)
+        self.assertEqual(pulite["entry.195821262"], "Ottimo")
+        with self.assertRaises(ValidationError):
+            valida_risposte(analisi["domande"], {**risposte, "entry.1096896749": "forse"})
+        coppie = costruisci_corpo_invio(analisi["domande"], risposte)
+        self.assertIn(("entry.1059234330", "Buono"), coppie)
+        self.assertIn(("entry.1096896749", "perfettamente"), coppie)
+
     def test_corpo_invio_caselle_ripetute(self):
         analisi = analizza_html_modulo(_html_modulo())
         coppie = costruisci_corpo_invio(

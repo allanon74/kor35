@@ -9,6 +9,13 @@ function statoIniziale(sondaggio) {
   const salvate = sondaggio?.mia_risposta || {};
   for (const domanda of sondaggio?.domande || []) {
     if (!domanda.supportata || domanda.tipo === 'sezione') continue;
+    if (domanda.tipo === 'griglia') {
+      for (const riga of domanda.righe || []) {
+        const salvata = salvate[riga.id];
+        base[riga.id] = salvata == null ? '' : String(salvata);
+      }
+      continue;
+    }
     const salvata = salvate[domanda.id];
     if (domanda.tipo === 'caselle') {
       base[domanda.id] = Array.isArray(salvata) ? salvata : [];
@@ -22,7 +29,17 @@ function statoIniziale(sondaggio) {
 function titoliMancanti(domande, valori) {
   const mancanti = [];
   for (const domanda of domande || []) {
-    if (!domanda.supportata || !domanda.obbligatoria || domanda.tipo === 'sezione') continue;
+    if (!domanda.supportata || domanda.tipo === 'sezione') continue;
+    if (domanda.tipo === 'griglia') {
+      for (const riga of domanda.righe || []) {
+        if (!riga.obbligatoria) continue;
+        if (!String(valori[riga.id] || '').trim()) {
+          mancanti.push(`${domanda.titolo} — ${riga.titolo}`);
+        }
+      }
+      continue;
+    }
+    if (!domanda.obbligatoria) continue;
     const valore = valori[domanda.id];
     const vuoto = domanda.tipo === 'caselle'
       ? !valore || valore.length === 0
@@ -53,6 +70,14 @@ function testoRisposta(domanda, valori) {
   return String(valore);
 }
 
+function testoGriglia(domanda, valori) {
+  return (domanda.righe || []).map((riga) => {
+    const valore = valori?.[riga.id];
+    const testo = valore == null || valore === '' ? '—' : String(valore);
+    return `${riga.titolo}: ${testo}`;
+  }).join('\n');
+}
+
 function livelliValutazione(domanda) {
   const opzioni = (domanda.opzioni || []).map((voce) => String(voce)).filter(Boolean);
   if (opzioni.length) return opzioni;
@@ -63,7 +88,7 @@ function livelliValutazione(domanda) {
   return gradini.length ? gradini : ['1', '2', '3', '4', '5'];
 }
 
-function BloccoDomanda({ domanda, valore, onChange, solaLettura }) {
+function BloccoDomanda({ domanda, valore, valori, onChange, onChangeRiga, solaLettura }) {
   if (domanda.tipo === 'sezione') {
     return (
       <div className="pt-2">
@@ -96,13 +121,57 @@ function BloccoDomanda({ domanda, valore, onChange, solaLettura }) {
         <p className="text-sm text-gray-400 break-words">{domanda.descrizione}</p>
       ) : null}
       {solaLettura ? (
-        <p className="rounded-lg bg-gray-950 px-3 py-2 text-base text-gray-100 break-words">
-          {testoRisposta(domanda, { [domanda.id]: valore })}
+        <p className="rounded-lg bg-gray-950 px-3 py-2 text-base text-gray-100 break-words whitespace-pre-wrap">
+          {domanda.tipo === 'griglia'
+            ? testoGriglia(domanda, valori)
+            : testoRisposta(domanda, { [domanda.id]: valore })}
         </p>
+      ) : domanda.tipo === 'griglia' ? (
+        <Griglia domanda={domanda} valori={valori} onChange={onChangeRiga} />
       ) : (
         <Controllo domanda={domanda} valore={valore} onChange={onChange} />
       )}
     </fieldset>
+  );
+}
+
+function Griglia({ domanda, valori, onChange }) {
+  return (
+    <div className="space-y-4">
+      {(domanda.righe || []).map((riga) => {
+        const scelte = riga.opzioni?.length ? riga.opzioni : (domanda.opzioni || []);
+        const selezionata = String(valori?.[riga.id] || '');
+        return (
+          <div key={riga.id} className="min-w-0 space-y-2">
+            <p className="text-sm font-medium text-gray-200 break-words">
+              {riga.titolo}
+              {riga.obbligatoria ? <span className="text-rose-300"> *</span> : null}
+            </p>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={riga.titolo}>
+              {scelte.map((opzione) => {
+                const attiva = selezionata === opzione;
+                return (
+                  <button
+                    key={opzione}
+                    type="button"
+                    role="radio"
+                    aria-checked={attiva}
+                    className={`min-h-11 rounded-lg px-3 text-sm font-semibold break-words ${
+                      attiva
+                        ? 'bg-indigo-600 text-white'
+                        : 'border border-gray-600 bg-gray-950 text-gray-200'
+                    }`}
+                    onClick={() => onChange?.(riga.id, opzione)}
+                  >
+                    {opzione}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -311,6 +380,7 @@ export default function SondaggioCompilazione({ sondaggio, invio = false, errore
             key={domanda.id}
             domanda={domanda}
             valore={sondaggio.mia_risposta?.[domanda.id]}
+            valori={sondaggio.mia_risposta || {}}
             solaLettura
           />
         ))}
@@ -336,7 +406,9 @@ export default function SondaggioCompilazione({ sondaggio, invio = false, errore
           key={domanda.id}
           domanda={domanda}
           valore={valori[domanda.id]}
+          valori={valori}
           onChange={(nuovo) => setValori((corrente) => ({ ...corrente, [domanda.id]: nuovo }))}
+          onChangeRiga={(id, nuovo) => setValori((corrente) => ({ ...corrente, [id]: nuovo }))}
         />
       ))}
       {messaggio ? (

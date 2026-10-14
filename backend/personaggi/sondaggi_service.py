@@ -61,10 +61,14 @@ def salva_analisi(campagna, canonico: str, form_id: str, analisi: dict, *, attiv
 
 
 def _domande_compilabili(domande) -> list[dict]:
-    return [
-        d for d in (domande or [])
-        if d.get("supportata") and d.get("tipo") != "sezione" and str(d.get("id") or "").startswith("entry.")
-    ]
+    scelte = []
+    for domanda in domande or []:
+        if not domanda.get("supportata") or domanda.get("tipo") == "sezione":
+            continue
+        ident = str(domanda.get("id") or "")
+        if domanda.get("tipo") == "griglia" or ident.startswith("entry."):
+            scelte.append(domanda)
+    return scelte
 
 
 def valida_risposte(domande, grezze) -> dict:
@@ -76,6 +80,26 @@ def valida_risposte(domande, grezze) -> dict:
         tipo = domanda["tipo"]
         valore = grezze.get(chiave)
         obbligatorio = bool(domanda.get("obbligatoria"))
+        if tipo == "griglia":
+            for riga in domanda.get("righe") or []:
+                chiave_riga = str(riga.get("id") or "")
+                if not chiave_riga.startswith("entry."):
+                    continue
+                valore_riga = grezze.get(chiave_riga)
+                obbligo_riga = bool(riga.get("obbligatoria"))
+                titolo_riga = f"{domanda['titolo']} — {riga.get('titolo') or 'riga'}"
+                if valore_riga is None or valore_riga == "" or valore_riga == []:
+                    if obbligo_riga:
+                        raise ValidationError(f"Rispondi a «{titolo_riga}».")
+                    continue
+                if isinstance(valore_riga, list):
+                    raise ValidationError(f"«{titolo_riga}» accetta una sola risposta.")
+                testo_riga = str(valore_riga).strip()
+                ammesse = [str(voce) for voce in (riga.get("opzioni") or domanda.get("opzioni") or [])]
+                if testo_riga not in ammesse:
+                    raise ValidationError(f"Scelta non prevista in «{titolo_riga}».")
+                pulite[chiave_riga] = testo_riga
+            continue
         if tipo == "caselle":
             if valore in (None, "", []):
                 if obbligatorio:

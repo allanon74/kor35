@@ -179,6 +179,63 @@ def _scala(dettaglio) -> tuple[int | None, int | None, str, str]:
     return minimo, massimo, etichetta_min, etichetta_max
 
 
+def _etichetta_riga(dettaglio) -> str:
+    if not isinstance(dettaglio, list) or len(dettaglio) < 4:
+        return ""
+    voce = dettaglio[3]
+    if isinstance(voce, str):
+        return _testo(voce, 300)
+    if not isinstance(voce, list):
+        return ""
+    parti = []
+    for pezzo in voce:
+        if isinstance(pezzo, str):
+            testo = _testo(pezzo, 300)
+        elif isinstance(pezzo, list) and pezzo and isinstance(pezzo[0], str):
+            testo = _testo(pezzo[0], 300)
+        else:
+            testo = ""
+        if testo:
+            parti.append(testo)
+    return " ".join(parti)[:300]
+
+
+def _domanda_griglia(titolo, descrizione, dettagli_utili):
+    """Griglia a scelta singola: ogni riga ha il suo entry e le colonne sono le opzioni."""
+    righe = []
+    for dettaglio in dettagli_utili:
+        if not dettaglio or isinstance(dettaglio[0], bool) or not isinstance(dettaglio[0], int):
+            return None
+        opzioni = _opzioni(dettaglio)
+        if not opzioni:
+            return None
+        entry = str(dettaglio[0])
+        righe.append({
+            "id": f"entry.{entry}",
+            "entry_id": entry,
+            "titolo": _etichetta_riga(dettaglio) or f"Riga {len(righe) + 1}",
+            "obbligatoria": _obbligatoria(dettaglio),
+            "opzioni": opzioni,
+        })
+    if not righe:
+        return None
+    return {
+        "id": f"griglia.{righe[0]['entry_id']}",
+        "entry_id": "",
+        "titolo": titolo,
+        "descrizione": descrizione,
+        "tipo": "griglia",
+        "obbligatoria": any(riga["obbligatoria"] for riga in righe),
+        "opzioni": righe[0]["opzioni"],
+        "righe": righe,
+        "scala_min": None,
+        "scala_max": None,
+        "scala_min_etichetta": "",
+        "scala_max_etichetta": "",
+        "supportata": True,
+    }
+
+
 def _analizza_dati(dati) -> dict:
     if len(dati) < 2 or not isinstance(dati[1], list):
         raise ErroreModuloGoogle("Il modulo Google non contiene domande.")
@@ -217,6 +274,28 @@ def _analizza_dati(dati) -> dict:
                 "scala_max_etichetta": "",
                 "supportata": True,
             })
+            continue
+        if tipo == "griglia":
+            griglia = _domanda_griglia(titolo_domanda, descrizione_domanda, dettagli_utili)
+            if griglia is None:
+                avvisi.append(f"«{titolo_domanda}» non è compilabile nell'app (tipo non supportato).")
+                domande.append({
+                    "id": f"domanda-{indice}",
+                    "entry_id": "",
+                    "titolo": titolo_domanda,
+                    "descrizione": descrizione_domanda,
+                    "tipo": "non_supportato",
+                    "obbligatoria": False,
+                    "opzioni": [],
+                    "righe": [],
+                    "scala_min": None,
+                    "scala_max": None,
+                    "scala_min_etichetta": "",
+                    "scala_max_etichetta": "",
+                    "supportata": False,
+                })
+            else:
+                domande.append(griglia)
             continue
         if len(dettagli_utili) != 1:
             tipo = "non_supportato"
@@ -316,6 +395,18 @@ def costruisci_corpo_invio(domande, risposte, email: str = "") -> list[tuple[str
     coppie: list[tuple[str, str]] = []
     for domanda in domande or []:
         if not domanda.get("supportata") or domanda.get("tipo") == "sezione":
+            continue
+        if domanda.get("tipo") == "griglia":
+            for riga in domanda.get("righe") or []:
+                chiave_riga = riga.get("id") or ""
+                if not str(chiave_riga).startswith("entry."):
+                    continue
+                valore_riga = (risposte or {}).get(chiave_riga)
+                if valore_riga is None or valore_riga == "" or valore_riga == []:
+                    continue
+                testo_riga = str(valore_riga).strip()
+                if testo_riga:
+                    coppie.append((chiave_riga, testo_riga))
             continue
         chiave = domanda.get("id") or ""
         if not chiave.startswith("entry."):
