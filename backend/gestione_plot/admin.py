@@ -100,8 +100,9 @@ class EventoAdmin(SModelAdmin):
         'iscrizione_costo_euro',
         'iscrizione_test_attiva',
         'data_da_definire',
+        'archiviato_at',
     )
-    list_filter = ('data_inizio', 'iscrizione_test_attiva', 'data_da_definire')
+    list_filter = ('data_inizio', 'iscrizione_test_attiva', 'data_da_definire', 'archiviato_at')
     search_fields = ('titolo',)
     inlines = [EventoIscrizioneOpzioneInline, GiornoEventoInline]
     filter_horizontal = ('staff_assegnato', 'partecipanti')

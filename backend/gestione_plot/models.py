@@ -160,6 +160,15 @@ class Evento(SyncableModel, models.Model):
         verbose_name="Test iscrizione (solo Master campagna principale)",
         help_text="Se attivo, l'evento compare solo a Master/Head Master della campagna principale (slug kor35) per provare PayPal in sandbox.",
     )
+    archiviato_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Archiviato il",
+        help_text=(
+            "Se valorizzato, il plot è in archivio: lo staff lo consulta in sola lettura "
+            "e non compare più tra gli eventi live o le iscrizioni."
+        ),
+    )
 
     class Meta:
         verbose_name = "Evento"

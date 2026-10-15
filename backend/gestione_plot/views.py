@@ -97,6 +97,7 @@ from .wiki_staff_ops import get_wiki_staff_ops_info, sync_wiki_staff_ops
 from django.contrib.auth.models import AnonymousUser, User
 
 from .permissions import IsStaffOrMaster
+from .plot_archivio import BloccaPlotArchiviatoMixin
 
 logger = logging.getLogger(__name__)
 WIDGET_TOKEN_RE = re.compile(r"{{WIDGET_([A-Z_]+):([A-Za-z0-9-]+)}}")
@@ -199,7 +200,7 @@ class IsWikiEditorOrMasterForStaffOnly(permissions.BasePermission):
             return _is_campaign_master_plus(request)
         return _is_campaign_wiki_editor_plus(request)
 
-class EventoViewSet(viewsets.ModelViewSet):
+class EventoViewSet(BloccaPlotArchiviatoMixin, viewsets.ModelViewSet):
     serializer_class = EventoSerializer
     permission_classes = [IsMasterOrReadOnly]
 
@@ -238,7 +239,7 @@ class EventoViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="opzioni")
     def opzioni(self, request):
         """Elenco leggero id+titolo per select staff (es. editor Tasks). Evita EventoSerializer completo."""
-        qs = Evento.objects.order_by("-data_inizio")
+        qs = Evento.objects.filter(archiviato_at__isnull=True).order_by("-data_inizio")
         if not request.user.is_superuser:
             qs = qs.filter(staff_assegnato=request.user)
         return Response(list(qs.values("id", "titolo")))
@@ -267,6 +268,24 @@ class EventoViewSet(viewsets.ModelViewSet):
                 "longitudine": format(lng, "f"),
             }
         )
+
+    @action(detail=True, methods=["post"])
+    def archivia(self, request, pk=None):
+        """Sposta il plot in archivio: resta consultabile e non è più modificabile."""
+        evento = self.get_object()
+        if not evento.archiviato_at:
+            evento.archiviato_at = timezone.now()
+            evento.save(update_fields=["archiviato_at", "updated_at"])
+        return Response(self.get_serializer(evento).data)
+
+    @action(detail=True, methods=["post"])
+    def ripristina(self, request, pk=None):
+        """Riporta un plot archiviato tra quelli modificabili."""
+        evento = self.get_object()
+        if evento.archiviato_at:
+            evento.archiviato_at = None
+            evento.save(update_fields=["archiviato_at", "updated_at"])
+        return Response(self.get_serializer(evento).data)
 
     @action(detail=True, methods=["post"])
     def inizia(self, request, pk=None):
@@ -579,12 +598,12 @@ class EventoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-class GiornoEventoViewSet(viewsets.ModelViewSet):
+class GiornoEventoViewSet(BloccaPlotArchiviatoMixin, viewsets.ModelViewSet):
     queryset = GiornoEvento.objects.all()
     serializer_class = GiornoEventoSerializer
     permission_classes = [IsMasterOrReadOnly]
 
-class QuestViewSet(viewsets.ModelViewSet):
+class QuestViewSet(BloccaPlotArchiviatoMixin, viewsets.ModelViewSet):
     serializer_class = QuestSerializer
     permission_classes = [IsMasterOrReadOnly]
     
@@ -603,7 +622,7 @@ class QuestViewSet(viewsets.ModelViewSet):
             'fasi__tasks'
         )
 
-class QuestMostroViewSet(viewsets.ModelViewSet):
+class QuestMostroViewSet(BloccaPlotArchiviatoMixin, viewsets.ModelViewSet):
     """
     Gestione istanze mostri. Permette di aggiornare PV/Armatura in tempo reale.
     """
@@ -619,7 +638,7 @@ class QuestMostroViewSet(viewsets.ModelViewSet):
         mostro.save()
         return Response({'status': 'ok', 'punti_vita': mostro.punti_vita})
 
-class QuestVistaViewSet(viewsets.ModelViewSet):
+class QuestVistaViewSet(BloccaPlotArchiviatoMixin, viewsets.ModelViewSet):
     queryset = QuestVista.objects.all()
     serializer_class = QuestVistaSerializer
     permission_classes = [IsStaffOrMaster]
@@ -753,17 +772,17 @@ class MostroTemplateViewSet(viewsets.ModelViewSet): # Cambiato da ReadOnlyModelV
     serializer_class = MostroTemplateSerializer
     permission_classes = [IsStaffOrMaster]
 
-class PngAssegnatoViewSet(viewsets.ModelViewSet):
+class PngAssegnatoViewSet(BloccaPlotArchiviatoMixin, viewsets.ModelViewSet):
     queryset = PngAssegnato.objects.all()
     serializer_class = PngAssegnatoSerializer
     permission_classes = [IsMasterOrReadOnly]
     
-class StaffOffGameViewSet(viewsets.ModelViewSet):
+class StaffOffGameViewSet(BloccaPlotArchiviatoMixin, viewsets.ModelViewSet):
     queryset = StaffOffGame.objects.all()
     serializer_class = StaffOffGameSerializer
 
 
-class EventoVocePortareViewSet(viewsets.ModelViewSet):
+class EventoVocePortareViewSet(BloccaPlotArchiviatoMixin, viewsets.ModelViewSet):
     serializer_class = EventoVocePortareSerializer
     permission_classes = [IsEventoVocePortarePermission]
     lookup_field = 'id'
@@ -804,12 +823,12 @@ class EventoVocePortareViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         instance.delete()
     
-class QuestFaseViewSet(viewsets.ModelViewSet):
+class QuestFaseViewSet(BloccaPlotArchiviatoMixin, viewsets.ModelViewSet):
     queryset = QuestFase.objects.all()
     serializer_class = QuestFaseSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-class QuestTaskViewSet(viewsets.ModelViewSet):
+class QuestTaskViewSet(BloccaPlotArchiviatoMixin, viewsets.ModelViewSet):
     queryset = QuestTask.objects.all()
     serializer_class = QuestTaskSerializer
     permission_classes = [permissions.IsAuthenticated]

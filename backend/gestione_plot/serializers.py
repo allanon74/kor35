@@ -327,12 +327,13 @@ class EventoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Evento
+        read_only_fields = ('archiviato_at',)
         fields = [
             'id', 'titolo', 'sinossi', 'data_inizio', 'data_fine',
             'luogo', 'logistiche_pubbliche', 'latitudine', 'longitudine',
             'pc_guadagnati', 'crediti_guadagnati', 'crediti_base_inizio_evento',
             'prestigio_base_inizio_evento',
-            'started_at', 'ended_at', 'staff_assegnato', 'partecipanti',
+            'started_at', 'ended_at', 'archiviato_at', 'staff_assegnato', 'partecipanti',
             'giorni', 'staff_details', 'partecipanti_details',
             'iscrizione_apertura', 'iscrizione_chiusura', 'iscrizione_costo_euro',
             'iscrizione_test_attiva', 'data_da_definire', 'iscrizione_opzioni', 'voci_portare',
