@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useCallback, useEffect, memo } from 'react';
 import {
-    MapPin, Edit2, Trash2, Calendar,
+    MapPin, Edit2, Trash2, Calendar, Archive,
     Users, Star, UserPlus, X, ChevronDown, ChevronUp, ShieldCheck, Ticket, RefreshCw,
 } from 'lucide-react';
+import { plotArchiviato, plotConcluso } from '../lib/plotSelezione';
 import { RichTextViewer } from './RichTextDisplay';
 import EventoPortateSection from './EventoPortateSection';
 import EventoTasksLivePanel from './EventoTasksLivePanel';
@@ -31,7 +32,7 @@ const fmtCr = (valore) => Number(valore || 0).toLocaleString('it-IT', {
 
 const fmtPr = (valore) => Number(valore || 0).toLocaleString('it-IT');
 
-const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRiassegnaPremiMancanti, onRiallineaIscrizioni, onRefresh, onRefreshRisorse, risorseLoading = false, onLogout }) => {
+const EventoSection = ({ evento, isMaster, solaLettura = false, canToggleTasks, risorse, onEdit, onDelete, onArchivia, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRiassegnaPremiMancanti, onRiallineaIscrizioni, onRefresh, onRefreshRisorse, risorseLoading = false, onLogout }) => {
     const [showPartecipanti, setShowPartecipanti] = useState(false);
     const [showRicompense, setShowRicompense] = useState(false);
     const [reportLoading, setReportLoading] = useState(false);
@@ -157,6 +158,15 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
     }, [onRiassegnaPremiMancanti, handleLoadReport]);
 
     const eventoInCorso = !!(evento?.started_at && !evento?.ended_at);
+    const puoScrivere = isMaster && !solaLettura && !plotArchiviato(evento);
+    const eventoConcluso = plotConcluso(evento);
+    const statoLabel = plotArchiviato(evento)
+        ? 'ARCHIVIATO'
+        : eventoInCorso
+            ? 'IN CORSO'
+            : eventoConcluso
+                ? 'CONCLUSO'
+                : 'NON INIZIATO';
 
     const riepilogoTask = useMemo(() => righeRiepilogoTask(evento), [evento]);
     const totaliTask = useMemo(
@@ -217,8 +227,8 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                 <div className="space-y-1">
                     <div className="flex items-center gap-3">
                         <h1 className="text-3xl font-black uppercase text-white tracking-tighter">{evento.titolo}</h1>
-                        {isMaster && (
-                            <button onClick={() => onEdit('evento', evento)} className="p-1.5 bg-gray-800 rounded-lg text-indigo-400 hover:text-white transition-colors">
+                        {puoScrivere && (
+                            <button onClick={() => onEdit('evento', evento)} className="min-h-11 min-w-11 p-1.5 bg-gray-800 rounded-lg text-indigo-400 hover:text-white transition-colors" aria-label="Modifica plot">
                                 <Edit2 size={18}/>
                             </button>
                         )}
@@ -241,8 +251,8 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                                 <> · {Number(evento.prestigio_base_inizio_evento)} Pr</>
                             ) : null}
                         </span>
-                        <span className={eventoInCorso ? "text-amber-300" : "text-gray-500"}>
-                            Stato: {eventoInCorso ? "IN CORSO" : "NON INIZIATO"}
+                        <span className={eventoInCorso ? "text-amber-300" : eventoConcluso || plotArchiviato(evento) ? "text-gray-400" : "text-gray-500"}>
+                            Stato: {statoLabel}
                             {eventoInCorso ? " · tab Tasks visibile ai giocatori" : null}
                         </span>
                     </div>
@@ -343,14 +353,14 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                     )}
                 </div>
 
-                {isMaster && (
+                {puoScrivere && (
                     <div className="flex flex-wrap gap-2">
                         {!eventoInCorso ? (
                             <button
                                 type="button"
                                 onClick={() => setStatoDialog({ tipo: 'inizia' })}
                                 disabled={statoEventoBusy}
-                                className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-amber-500 transition-all disabled:opacity-50"
+                                className="min-h-11 px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-amber-500 transition-all disabled:opacity-50"
                             >
                                 {statoEventoBusy ? 'Avvio…' : 'Inizia evento'}
                             </button>
@@ -359,7 +369,7 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                                 type="button"
                                 onClick={() => setStatoDialog({ tipo: 'termina' })}
                                 disabled={statoEventoBusy}
-                                className="px-4 py-2 bg-rose-700 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-rose-600 transition-all disabled:opacity-50"
+                                className="min-h-11 px-4 py-2 bg-rose-700 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-rose-600 transition-all disabled:opacity-50"
                             >
                                 {statoEventoBusy ? 'Chiusura…' : 'Termina evento'}
                             </button>
@@ -391,9 +401,19 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                         <button onClick={onAddGiorno} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-emerald-500 transition-all">
                             + Giorno
                         </button>
-                        <button onClick={() => onDelete(evento.id)} className="p-2 bg-red-900/20 text-red-500 border border-red-900/30 rounded-lg hover:bg-red-600 hover:text-white transition-all">
+                        <button onClick={() => onDelete(evento.id)} className="min-h-11 min-w-11 p-2 bg-red-900/20 text-red-500 border border-red-900/30 rounded-lg hover:bg-red-600 hover:text-white transition-all" aria-label="Elimina plot">
                             <Trash2 size={20}/>
                         </button>
+                        {onArchivia ? (
+                            <button
+                                type="button"
+                                onClick={onArchivia}
+                                className="inline-flex min-h-11 items-center gap-2 px-4 py-2 bg-amber-950/60 text-amber-200 border border-amber-800 rounded-lg text-xs font-black uppercase hover:bg-amber-900"
+                            >
+                                <Archive size={16} aria-hidden />
+                                Archivia
+                            </button>
+                        ) : null}
                         {statoEventoError ? (
                             <p className="w-full text-xs text-red-300 normal-case">{statoEventoError}</p>
                         ) : null}
@@ -401,7 +421,7 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                 )}
             </div>
 
-            {(isMaster || canToggleTasks) && evento?.id && onLogout ? (
+            {!solaLettura && (isMaster || canToggleTasks) && evento?.id && onLogout ? (
                 <EventoTasksLivePanel onLogout={onLogout} eventoId={evento.id} compact />
             ) : null}
 
@@ -415,7 +435,7 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                     </button>
                     {reportLoading ? <p className="text-xs text-gray-400">Caricamento report…</p> : null}
                     {reportError ? <p className="text-xs text-red-300">{reportError}</p> : null}
-                    {showRicompense && reportData?.ricompense?.some((r) => !r.premio_gia_assegnato) ? (
+                    {puoScrivere && showRicompense && reportData?.ricompense?.some((r) => !r.premio_gia_assegnato) ? (
                         <button
                             type="button"
                             disabled={riassegnaLoading}
@@ -492,7 +512,7 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                     ) : null}
                 </div>
                 <p className="text-[10px] text-gray-500 normal-case font-medium">
-                    {isMaster
+                    {puoScrivere
                         ? 'Spunta i membri staff presenti. Di default tutti risultano selezionati.'
                         : 'Elenco staff assegnato a questo evento.'}
                     {savingStaff ? ' · Salvataggio…' : null}
@@ -511,13 +531,13 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                                             checked
                                                 ? 'border-indigo-500/40 bg-indigo-900/25 text-indigo-100'
                                                 : 'border-gray-800 bg-gray-900/40 text-gray-400'
-                                        } ${!isMaster || savingStaff ? 'cursor-default' : 'cursor-pointer hover:border-indigo-500/30'}`}
+                                        } ${!puoScrivere || savingStaff ? 'cursor-default' : 'cursor-pointer hover:border-indigo-500/30'}`}
                                     >
                                         <input
                                             type="checkbox"
                                             className="rounded border-gray-600 text-indigo-500 focus:ring-indigo-500"
                                             checked={checked}
-                                            disabled={!isMaster || savingStaff}
+                                            disabled={!puoScrivere || savingStaff}
                                             onChange={(e) => handleStaffToggle(user.id, e.target.checked)}
                                         />
                                         <span className="font-semibold truncate">{staffLabel(user)}</span>
@@ -534,7 +554,7 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
 
             <EventoPortateSection
                 evento={evento}
-                isMaster={isMaster}
+                isMaster={puoScrivere}
                 onRefresh={onRefresh}
                 onLogout={onLogout}
             />
@@ -557,8 +577,8 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                             {evento.partecipanti_details?.map(char => (
                                 <div key={char.id} className="flex items-center gap-2 bg-gray-800 border border-gray-700 px-2 py-1 rounded text-[11px]">
                                     <span>{char.nome}</span>
-                                    {isMaster && (
-                                        <button onClick={() => handleListChange('partecipanti', char.id, 'remove')} className="text-gray-500 hover:text-red-500">
+                                    {puoScrivere && (
+                                        <button onClick={() => handleListChange('partecipanti', char.id, 'remove')} className="min-h-11 min-w-11 text-gray-500 hover:text-red-500" aria-label={`Rimuovi ${char.nome}`}>
                                             <X size={12}/>
                                         </button>
                                     )}
@@ -566,7 +586,7 @@ const EventoSection = ({ evento, isMaster, canToggleTasks, risorse, onEdit, onDe
                             ))}
                         </div>
 
-                        {isMaster && (
+                        {puoScrivere && (
                             <div className="flex items-center gap-2 bg-gray-950/50 p-3 rounded-xl border border-gray-800">
                                 <UserPlus size={14} className="text-emerald-500"/>
                                 <select 

@@ -123,6 +123,7 @@ def _events_in_registration_window(now):
             iscrizione_chiusura__isnull=False,
             iscrizione_apertura__lte=now,
             iscrizione_chiusura__gte=now,
+            archiviato_at__isnull=True,
         )
         .filter(
             Q(iscrizione_costo_euro__gt=0)
@@ -300,7 +301,7 @@ def iscrizioni_evento_crea_ordine(request):
         opzione_sync_ids = [opzione_sync_ids]
 
     evento = Evento.objects.filter(id=evento_id).prefetch_related("iscrizione_opzioni").first()
-    if not evento:
+    if not evento or evento.archiviato_at:
         return Response({"error": "Evento non trovato"}, status=status.HTTP_404_NOT_FOUND)
 
     now = timezone.now()

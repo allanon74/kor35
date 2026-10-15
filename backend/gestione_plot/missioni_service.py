@@ -308,7 +308,11 @@ def riepilogo_task_evento(evento: Evento) -> dict:
 def eventi_attivi_ids():
     """Eventi ufficialmente in corso (Inizia evento senza Termina)."""
     return list(
-        Evento.objects.filter(started_at__isnull=False, ended_at__isnull=True)
+        Evento.objects.filter(
+            started_at__isnull=False,
+            ended_at__isnull=True,
+            archiviato_at__isnull=True,
+        )
         .values_list("id", flat=True)
     )
 
@@ -326,6 +330,8 @@ def eventi_attivi_per_personaggio(personaggio: Personaggio) -> list[int]:
 
 def set_missione_attiva_evento(missione: Missione, evento: Evento, attiva: bool) -> MissioneEvento:
     """Attiva/disattiva una task per un evento (stato live, default True)."""
+    if evento.archiviato_at:
+        raise ValueError("Plot archiviato: sola consultazione.")
     link = MissioneEvento.objects.filter(missione=missione, evento=evento).first()
     if not link:
         raise ValueError("La task non è associata a questo evento.")

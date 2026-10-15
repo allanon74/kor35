@@ -1494,6 +1494,10 @@ export const getEventiOpzioni = (onLogout) =>
 export const createEvento = (data, onLogout) => fetchAuthenticated('/api/plot/api/eventi/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
 export const updateEvento = (id, data, onLogout) => fetchAuthenticated(`/api/plot/api/eventi/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 export const deleteEvento = (id, onLogout) => fetchAuthenticated(`/api/plot/api/eventi/${id}/`, { method: 'DELETE' }, onLogout);
+export const archiviaEvento = (id, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/eventi/${id}/archivia/`, { method: 'POST', body: '{}' }, onLogout);
+export const ripristinaEvento = (id, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/eventi/${id}/ripristina/`, { method: 'POST', body: '{}' }, onLogout);
 /**
  * Avvio evento. `riassegnaPremi` omesso = prima chiamata: se qualcuno ha già incassato
  * il premio il backend risponde 409 `premi_gia_assegnati` e lo staff deve scegliere.

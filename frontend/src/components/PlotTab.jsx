@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { 
     getEventi, associaQrAVista, getRisorseEditor, getAVistaDisponibili,
-    createEvento, updateEvento, deleteEvento, iniziaEvento, terminaEvento, reportRicompenseEvento, riallineaIscrizioniEvento, riassegnaPremiMancantiEvento,
+    createEvento, updateEvento, deleteEvento, archiviaEvento, ripristinaEvento, iniziaEvento, terminaEvento, reportRicompenseEvento, riallineaIscrizioniEvento, riassegnaPremiMancantiEvento,
     createGiorno, updateGiorno, deleteGiorno,
     createQuest, updateQuest, deleteQuest,
     addPngToQuest, addMostroToQuest, addVistaToQuest,
@@ -15,7 +15,7 @@ import {
     plotRisorseCacheKey,
 } from '../api';
 import { useCharacter } from './CharacterContext';
-import { Plus, X, Save, Printer, Calendar } from 'lucide-react';
+import { Plus, X, Save, Printer, Calendar, Archive, RotateCcw } from 'lucide-react';
 import EventoSection from './EventoSection';
 import GiornoSection from './GiornoSection';
 import StaffQrTab from './StaffQrTab';
@@ -38,6 +38,7 @@ import {
 } from '../staff/StaffToolShell';
 import { UiLoadingState } from './ui/AsyncState';
 import { emitToast } from '../utils/toastBus';
+import { ordinaPlot, plotArchiviato, plotConcluso, plotPredefinito } from '../lib/plotSelezione';
 
 const plotToastError = (message) => {
     emitToast({
@@ -81,6 +82,8 @@ const PlotTab = ({ onLogout }) => {
     const [formData, setFormData] = useState({});
     const [scanningForVista, setScanningForVista] = useState(null);
     const [pendingQrPlotReplace, setPendingQrPlotReplace] = useState(null);
+    const [pendingArchivio, setPendingArchivio] = useState(null);
+    const [archivioBusy, setArchivioBusy] = useState(false);
 
     const loadRisorseEditor = useCallback(async (campaignSlug = activeCampaign) => {
         setRisorseLoading(true);
@@ -124,9 +127,8 @@ const PlotTab = ({ onLogout }) => {
                 return;
             }
             
-            const sortedEvents = evData.sort((a, b) => new Date(a.data_inizio) - new Date(b.data_inizio));
-            const today = new Date().setHours(0,0,0,0);
-            const nextEvent = sortedEvents.find(ev => new Date(ev.data_inizio) >= today) || sortedEvents[0];
+            const sortedEvents = ordinaPlot(evData);
+            const nextEvent = plotPredefinito(sortedEvents);
             
             setEventi(sortedEvents);
             if (nextEvent) {
@@ -153,12 +155,14 @@ const PlotTab = ({ onLogout }) => {
 
     const refreshData = useCallback(async () => {
         const data = await getEventi(onLogout);
-        const sorted = data.sort((a, b) => new Date(a.data_inizio) - new Date(b.data_inizio));
+        const sorted = ordinaPlot(Array.isArray(data) ? data : []);
         setEventi(sorted);
         setSelectedEvento(prev => {
-            if (!prev) return sorted[0];
-            const updated = sorted.find(e => e.id === prev.id);
-            return updated || sorted[0];
+            if (prev) {
+                const updated = sorted.find((e) => String(e.id) === String(prev.id));
+                if (updated) return updated;
+            }
+            return plotPredefinito(sorted);
         });
     }, [onLogout]);
 
@@ -308,6 +312,24 @@ const PlotTab = ({ onLogout }) => {
             refreshData(); 
         } 
     }, [onLogout, refreshData]);
+
+    const confermaArchivio = useCallback(async () => {
+        if (!pendingArchivio || !selectedEvento?.id) return;
+        setArchivioBusy(true);
+        try {
+            if (pendingArchivio === 'archivia') {
+                await archiviaEvento(selectedEvento.id, onLogout);
+            } else {
+                await ripristinaEvento(selectedEvento.id, onLogout);
+            }
+            setPendingArchivio(null);
+            await refreshData();
+        } catch (e) {
+            plotToastError(e?.message || 'Operazione sull\'archivio non riuscita.');
+        } finally {
+            setArchivioBusy(false);
+        }
+    }, [pendingArchivio, selectedEvento, onLogout, refreshData]);
     
     const handleDeleteGiorno = useCallback(async (id) => { 
         if(window.confirm("Eliminare giorno?")) { 
@@ -612,6 +634,22 @@ const PlotTab = ({ onLogout }) => {
         printWindow.document.close();
     }, [selectedEvento]);
 
+    const eventiAttivi = useMemo(
+        () => eventi.filter((ev) => !plotArchiviato(ev)),
+        [eventi],
+    );
+    const eventiArchiviati = useMemo(
+        () => eventi.filter((ev) => plotArchiviato(ev)),
+        [eventi],
+    );
+    const solaLettura = plotArchiviato(selectedEvento);
+    const etichettaStatoPlot = (ev) => {
+        if (plotArchiviato(ev)) return 'Archivio';
+        if (ev?.started_at && !ev?.ended_at) return 'In corso';
+        if (plotConcluso(ev)) return 'Concluso';
+        return 'Aperto';
+    };
+
     // Check di loading DOPO tutti gli hook
     if (loading) {
         return (
@@ -641,10 +679,10 @@ const PlotTab = ({ onLogout }) => {
             >
                 <div className="mt-3 flex gap-2">
                 <select 
-                    className="flex-1 bg-gray-900 p-3 rounded-xl border border-gray-800 font-black text-indigo-400 outline-none cursor-pointer transition-all hover:border-indigo-500"
-                    value={selectedEvento?.id || ''} 
+                    className="flex-1 min-w-0 bg-gray-900 p-3 rounded-xl border border-gray-800 font-black text-indigo-400 outline-none cursor-pointer transition-all hover:border-indigo-500"
+                    value={selectedEvento ? String(selectedEvento.id) : ''} 
                     onChange={(e) => {
-                        const found = eventi.find(ev => ev.id === parseInt(e.target.value));
+                        const found = eventi.find((ev) => String(ev.id) === e.target.value);
                         if (found) setSelectedEvento(found);
                     }}
                     disabled={eventi.length === 0}
@@ -653,7 +691,26 @@ const PlotTab = ({ onLogout }) => {
                     {eventi.length === 0 ? (
                         <option value="">Nessun evento disponibile</option>
                     ) : (
-                        eventi.map(ev => <option key={ev.id} value={ev.id}>{ev.titolo?.toUpperCase() || 'Senza titolo'}</option>)
+                        <>
+                            <optgroup label="Plot aperti">
+                                {eventiAttivi.length === 0 ? (
+                                    <option value="" disabled>Nessun plot attivo</option>
+                                ) : eventiAttivi.map((ev) => (
+                                    <option key={ev.id} value={String(ev.id)}>
+                                        {(ev.titolo || 'Senza titolo').toUpperCase()} · {etichettaStatoPlot(ev)}
+                                    </option>
+                                ))}
+                            </optgroup>
+                            <optgroup label="Archivio (sola consultazione)">
+                                {eventiArchiviati.length === 0 ? (
+                                    <option value="" disabled>Nessun plot archiviato</option>
+                                ) : eventiArchiviati.map((ev) => (
+                                    <option key={ev.id} value={String(ev.id)}>
+                                        {(ev.titolo || 'Senza titolo').toUpperCase()} · Archivio
+                                    </option>
+                                ))}
+                            </optgroup>
+                        </>
                     )}
                 </select>
                 {canManagePlot && (
@@ -1160,35 +1217,78 @@ const PlotTab = ({ onLogout }) => {
 
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {eventi.length > 0 && (
-                    <div className="px-4 pt-4 pb-3 border-b border-gray-800 bg-gray-950/50">
-                        <div className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-3 flex items-center gap-2">
-                            <Calendar size={14} className="text-indigo-400 shrink-0" aria-hidden />
-                            Eventi
+                    <div className="px-4 pt-4 pb-3 border-b border-gray-800 bg-gray-950/50 space-y-4">
+                        <div>
+                            <div className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-3 flex items-center gap-2">
+                                <Calendar size={14} className="text-indigo-400 shrink-0" aria-hidden />
+                                Plot aperti
+                            </div>
+                            {eventiAttivi.length === 0 ? (
+                                <p className="text-xs text-gray-500">Nessun plot attivo.</p>
+                            ) : (
+                                <div className="flex gap-2 overflow-x-auto pb-1">
+                                    {eventiAttivi.map((ev) => (
+                                        <button
+                                            key={ev.id}
+                                            type="button"
+                                            onClick={() => setSelectedEvento(ev)}
+                                            className={`shrink-0 text-left min-h-11 min-w-[200px] max-w-[300px] rounded-xl border px-4 py-3 transition-all ${
+                                                String(selectedEvento?.id) === String(ev.id)
+                                                    ? 'border-indigo-500 bg-indigo-950/50 shadow-lg shadow-indigo-900/25'
+                                                    : 'border-gray-800 bg-gray-900/90 hover:border-gray-600'
+                                            }`}
+                                        >
+                                            <div className="font-black text-sm text-white uppercase tracking-tight line-clamp-2 break-words">
+                                                {ev.titolo || 'Senza titolo'}
+                                            </div>
+                                            <div className="text-[10px] text-gray-500 mt-1.5 flex items-center gap-1 flex-wrap">
+                                                <Calendar size={10} className="shrink-0 opacity-70" aria-hidden />
+                                                {ev.data_inizio
+                                                    ? new Date(ev.data_inizio).toLocaleDateString('it-IT')
+                                                    : '—'}
+                                                {ev.data_da_definire ? ' · data da definire' : ''}
+                                                <span className="text-indigo-300">· {etichettaStatoPlot(ev)}</span>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
-                        <div className="flex gap-2 overflow-x-auto pb-1">
-                            {eventi.map((ev) => (
-                                <button
-                                    key={ev.id}
-                                    type="button"
-                                    onClick={() => setSelectedEvento(ev)}
-                                    className={`shrink-0 text-left min-w-[200px] max-w-[300px] rounded-xl border px-4 py-3 transition-all ${
-                                        selectedEvento?.id === ev.id
-                                            ? 'border-indigo-500 bg-indigo-950/50 shadow-lg shadow-indigo-900/25'
-                                            : 'border-gray-800 bg-gray-900/90 hover:border-gray-600'
-                                    }`}
-                                >
-                                    <div className="font-black text-sm text-white uppercase tracking-tight line-clamp-2">
-                                        {ev.titolo || 'Senza titolo'}
-                                    </div>
-                                    <div className="text-[10px] text-gray-500 mt-1.5 flex items-center gap-1">
-                                        <Calendar size={10} className="shrink-0 opacity-70" aria-hidden />
-                                        {ev.data_inizio
-                                            ? new Date(ev.data_inizio).toLocaleDateString('it-IT')
-                                            : '—'}
-                                        {ev.data_da_definire ? ' · data da definire' : ''}
-                                    </div>
-                                </button>
-                            ))}
+                        <div>
+                            <div className="text-[10px] font-black uppercase text-amber-200/80 tracking-widest mb-3 flex items-center gap-2">
+                                <Archive size={14} className="shrink-0" aria-hidden />
+                                Plot archiviati
+                                <span className="text-gray-500 font-bold normal-case tracking-normal">sola consultazione</span>
+                            </div>
+                            {eventiArchiviati.length === 0 ? (
+                                <p className="text-xs text-gray-500">Nessun plot archiviato.</p>
+                            ) : (
+                                <div className="flex gap-2 overflow-x-auto pb-1">
+                                    {eventiArchiviati.map((ev) => (
+                                        <button
+                                            key={ev.id}
+                                            type="button"
+                                            onClick={() => setSelectedEvento(ev)}
+                                            className={`shrink-0 text-left min-h-11 min-w-[200px] max-w-[300px] rounded-xl border px-4 py-3 transition-all ${
+                                                String(selectedEvento?.id) === String(ev.id)
+                                                    ? 'border-amber-500 bg-amber-950/40 shadow-lg shadow-amber-900/20'
+                                                    : 'border-gray-800 bg-gray-900/70 hover:border-amber-800'
+                                            }`}
+                                        >
+                                            <div className="font-black text-sm text-amber-50 uppercase tracking-tight line-clamp-2 break-words">
+                                                {ev.titolo || 'Senza titolo'}
+                                            </div>
+                                            <div className="text-[10px] text-gray-500 mt-1.5 flex items-center gap-1 flex-wrap">
+                                                <Archive size={10} className="shrink-0 opacity-70" aria-hidden />
+                                                {ev.archiviato_at
+                                                    ? new Date(ev.archiviato_at).toLocaleDateString('it-IT')
+                                                    : 'Archivio'}
+                                                {ev.data_inizio ? ` · ${new Date(ev.data_inizio).toLocaleDateString('it-IT')}` : ''}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -1211,14 +1311,37 @@ const PlotTab = ({ onLogout }) => {
                     </div>
                 ) : (
                     <>
+                        {selectedEvento && solaLettura && (
+                            <div className="mx-4 mt-4 rounded-xl border border-amber-800/70 bg-amber-950/40 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                                <p className="text-sm text-amber-100 min-w-0 break-words">
+                                    Plot archiviato
+                                    {selectedEvento.archiviato_at
+                                        ? ` il ${new Date(selectedEvento.archiviato_at).toLocaleString('it-IT')}`
+                                        : ''}
+                                    . Sola consultazione: date, quest e iscrizioni non si modificano.
+                                </p>
+                                {canManagePlot && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setPendingArchivio('ripristina')}
+                                        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-emerald-700 bg-emerald-950/60 px-4 py-2 text-xs font-black uppercase text-emerald-200 hover:bg-emerald-900"
+                                    >
+                                        <RotateCcw size={16} aria-hidden />
+                                        Ripristina
+                                    </button>
+                                )}
+                            </div>
+                        )}
                         {selectedEvento && (
                             <EventoSection 
                                 evento={selectedEvento} 
                                     isMaster={canManagePlot}
-                                    canToggleTasks={canResolveTasks}
+                                    solaLettura={solaLettura}
+                                    canToggleTasks={canResolveTasks && !solaLettura}
                                 risorse={risorse}
                                 onEdit={startEdit} 
                                 onDelete={handleDeleteEvento}
+                                onArchivia={() => setPendingArchivio('archivia')}
                                 onUpdateEvento={handleUpdateEvento}
                                 onAddGiorno={handleAddGiorno}
                                 onIniziaEvento={handleIniziaEvento}
@@ -1238,7 +1361,7 @@ const PlotTab = ({ onLogout }) => {
                                     key={giorno.id} 
                                     giorno={giorno} 
                                     gIdx={gIdx} 
-                                    isMaster={canManagePlot} 
+                                    isMaster={canManagePlot && !solaLettura} 
                                     risorse={risorse}
                                     onEdit={startEdit} 
                                     onDelete={handleDeleteGiorno} 
@@ -1247,7 +1370,7 @@ const PlotTab = ({ onLogout }) => {
                                     onEditTask={handleEditTask}
                                     eventoId={selectedEvento?.id}
                                     onLogout={onLogout}
-                                    canResolveTasks={canResolveTasks}
+                                    canResolveTasks={canResolveTasks && !solaLettura}
                                 />
                             ))}
                         </div>
@@ -1285,6 +1408,20 @@ const PlotTab = ({ onLogout }) => {
                 </div>
             )}
 
+            <ConfirmDialog
+                open={Boolean(pendingArchivio)}
+                title={pendingArchivio === 'ripristina' ? 'Ripristina plot' : 'Archivia plot'}
+                message={
+                    pendingArchivio === 'ripristina'
+                        ? `«${selectedEvento?.titolo || 'Plot'}» torna tra i plot aperti e si può modificare di nuovo.`
+                        : `«${selectedEvento?.titolo || 'Plot'}» va in archivio: resta consultabile e non si può più modificare. Se risulta ancora in corso, non conta più come evento live.`
+                }
+                confirmLabel={pendingArchivio === 'ripristina' ? 'Ripristina' : 'Archivia'}
+                confirmTone={pendingArchivio === 'ripristina' ? 'warning' : 'danger'}
+                loading={archivioBusy}
+                onCancel={() => { if (!archivioBusy) setPendingArchivio(null); }}
+                onConfirm={confermaArchivio}
+            />
             <ConfirmDialog
                 open={Boolean(pendingQrPlotReplace)}
                 title="QR già associato"

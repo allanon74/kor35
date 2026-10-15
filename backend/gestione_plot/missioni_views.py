@@ -131,6 +131,8 @@ class MissioneSerializer(ModelSerializer):
         return attrs
 
     def _sync_eventi(self, missione, eventi_ids, eventi_links=None):
+        from .plot_archivio import unisci_target_plot
+
         if eventi_links is not None:
             target = {}
             for row in eventi_links:
@@ -140,6 +142,17 @@ class MissioneSerializer(ModelSerializer):
                 link.evento_id: link
                 for link in MissioneEvento.objects.filter(missione=missione)
             }
+            archiviati = set(
+                Evento.objects.filter(
+                    pk__in=set(esistenti) | set(target),
+                    archiviato_at__isnull=False,
+                ).values_list("pk", flat=True)
+            )
+            target = unisci_target_plot(
+                {eid: link.attiva for eid, link in esistenti.items()},
+                target,
+                archiviati,
+            )
             for eid in set(esistenti) - set(target):
                 esistenti[eid].delete()
             for eid, attiva in target.items():
@@ -157,18 +170,33 @@ class MissioneSerializer(ModelSerializer):
         if eventi_ids is None:
             return
         ids = [int(x) for x in eventi_ids]
-        esistenti = set(
-            MissioneEvento.objects.filter(missione=missione).values_list("evento_id", flat=True)
+        esistenti_links = {
+            link.evento_id: link
+            for link in MissioneEvento.objects.filter(missione=missione)
+        }
+        esistenti = set(esistenti_links)
+        target = {eid: True for eid in ids}
+        archiviati = set(
+            Evento.objects.filter(
+                pk__in=esistenti | set(target),
+                archiviato_at__isnull=False,
+            ).values_list("pk", flat=True)
         )
-        target = set(ids)
-        for eid in esistenti - target:
+        target = unisci_target_plot(
+            {eid: link.attiva for eid, link in esistenti_links.items()},
+            target,
+            archiviati,
+        )
+        for eid in esistenti - set(target):
             MissioneEvento.objects.filter(missione=missione, evento_id=eid).delete()
-        for eid in target - esistenti:
+        for eid, attiva in target.items():
+            if eid in esistenti:
+                continue
             if Evento.objects.filter(pk=eid).exists():
                 MissioneEvento.objects.get_or_create(
                     missione=missione,
                     evento_id=eid,
-                    defaults={"attiva": True},
+                    defaults={"attiva": attiva},
                 )
 
     def create(self, validated_data):

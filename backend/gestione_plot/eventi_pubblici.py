@@ -16,6 +16,7 @@ def eventi_pubblici_queryset(now=None):
     return Evento.objects.filter(
         data_fine__gte=trenta_giorni_fa,
         iscrizione_test_attiva=False,
+        archiviato_at__isnull=True,
     ).order_by("data_inizio")
 
 
