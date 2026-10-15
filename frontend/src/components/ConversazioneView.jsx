@@ -123,7 +123,7 @@ const ConversazioneView = ({
                 {markingRead ? '…' : 'Segna letti'}
               </button>
             ) : null}
-            {chiamateAbilitate ? (
+            {chiamateAbilitate && (conversazione.partecipanti || []).every((p) => p.tipo !== 'pg' || p.chiamabile !== false) ? (
             <button
               type="button"
               onClick={async () => {

@@ -224,7 +224,7 @@ const ComposeMessageModal = ({
     const delayDebounceFn = setTimeout(async () => {
       if (!isStaffMessage && query.length >= 2 && !selectedRecipient) {
         try {
-          const data = await searchPersonaggi(query, selectedSenderId || currentCharacterId);
+          const data = await searchPersonaggi(query, selectedSenderId || currentCharacterId, null, 'messaggio');
           setResults(data);
         } catch (err) {
           console.error('Errore ricerca', err);
@@ -530,7 +530,7 @@ const ComposeMessageModal = ({
                         Cambia
                       </button>
                     )}
-                    {selectedRecipient && chiamateAbilitate ? (
+                    {selectedRecipient && chiamateAbilitate && selectedRecipient.chiamabile !== false ? (
                       <button
                         type="button"
                         onClick={async () => {

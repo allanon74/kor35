@@ -2858,8 +2858,21 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
             'prefettura_esterna', 'tipologia', 'impostazioni_ui',
             'punti_luminosi', 'punti_oscuri', 'punti_grigi',
             'foto_trucco', 'foto_outfit', 'clear_foto_trucco', 'clear_foto_outfit',
+            'png_tag_instafame', 'png_chiamabile',
+            'png_destinatario_messaggi', 'png_pubblica_instafame',
         }
         payload = {k: v for k, v in request.data.items() if k in allowed}
+        from personaggi.png_presenza_social import personaggio_e_png
+
+        flag_png = {
+            'png_tag_instafame', 'png_chiamabile',
+            'png_destinatario_messaggi', 'png_pubblica_instafame',
+        }
+        if flag_png.intersection(payload) and not personaggio_e_png(personaggio):
+            return Response(
+                {'detail': 'Per i PG tag, chiamate, messaggi e pubblicazione InstaFame sono sempre attivi.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         for key in ('foto_trucco', 'foto_outfit'):
             if key in request.FILES:
                 payload[key] = request.FILES[key]

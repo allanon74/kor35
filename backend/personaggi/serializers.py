@@ -5084,6 +5084,10 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
     foto_trucco = serializers.ImageField(required=False, allow_null=True, write_only=True)
     foto_outfit = serializers.ImageField(required=False, allow_null=True, write_only=True)
     social_profile = serializers.SerializerMethodField()
+    png_tag_instafame = serializers.BooleanField(required=False)
+    png_chiamabile = serializers.BooleanField(required=False)
+    png_destinatario_messaggi = serializers.BooleanField(required=False)
+    png_pubblica_instafame = serializers.BooleanField(required=False)
 
     class Meta:
         model = Personaggio
@@ -5107,6 +5111,8 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'oggetti_inventario', 'eventi_partecipati', 'watch_binding', 'impostazioni_ui',
             'foto_trucco_url', 'foto_outfit_url', 'foto_trucco', 'foto_outfit',
             'social_profile',
+            'png_tag_instafame', 'png_chiamabile',
+            'png_destinatario_messaggi', 'png_pubblica_instafame',
         )
         read_only_fields = (
             'proprietario', 'proprietario_nome', 'proprietario_username',
@@ -5637,10 +5643,16 @@ class PersonaggioAutocompleteSerializer(serializers.ModelSerializer):
     slots_occupati = serializers.SerializerMethodField()
     is_mine = serializers.SerializerMethodField() # <--- NUOVO CAMPO
     nome = serializers.SerializerMethodField()
+    chiamabile = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
-        fields = ('id', 'nome', 'slots_occupati', 'is_mine') # <--- AGGIUNTO QUI
+        fields = ('id', 'nome', 'slots_occupati', 'is_mine', 'chiamabile') # <--- AGGIUNTO QUI
+
+    def get_chiamabile(self, obj):
+        from personaggi.png_presenza_social import CAMPO_CHIAMATA, funzione_social_abilitata
+
+        return funzione_social_abilitata(obj, CAMPO_CHIAMATA)
 
     def get_nome(self, obj):
         from social.display_names import social_display_name

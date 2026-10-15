@@ -202,6 +202,9 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
         personaggio = self.get_personaggio()
         if not personaggio:
             raise permissions.PermissionDenied("Nessun personaggio selezionabile per questo utente.")
+        from personaggi.png_presenza_social import richiedi_pubblicazione_instafame
+
+        richiedi_pubblicazione_instafame(personaggio)
         visibilita = serializer.validated_data.get("visibilita")
         korp_visibilita = serializer.validated_data.get("korp_visibilita")
         if visibilita == SOCIAL_VISIBILITY_KORP:
@@ -572,6 +575,9 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         personaggio = self.get_personaggio()
         if not personaggio:
             raise permissions.PermissionDenied("Nessun personaggio selezionabile per questo utente.")
+        from personaggi.png_presenza_social import richiedi_pubblicazione_instafame
+
+        richiedi_pubblicazione_instafame(personaggio)
         visibilita = serializer.validated_data.get("visibilita")
         korp_visibilita = serializer.validated_data.get("korp_visibilita")
         if visibilita == SOCIAL_VISIBILITY_KORP:
@@ -935,6 +941,9 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
             return paginator.get_paginated_response(serializer.data)
         serializer = SocialGroupPostSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        from personaggi.png_presenza_social import richiedi_pubblicazione_instafame
+
+        richiedi_pubblicazione_instafame(personaggio)
         obj = serializer.save(group=group, autore=personaggio)
         return Response(SocialGroupPostSerializer(obj).data, status=status.HTTP_201_CREATED)
 
@@ -1011,6 +1020,7 @@ class SocialProfileMeView(APIView):
             return None
         profile, _ = SocialProfile.objects.select_related(
             "personaggio",
+            "personaggio__tipologia",
             "personaggio__era",
             "personaggio__prefettura",
             "personaggio__prefettura__regione",
@@ -1022,7 +1032,7 @@ class SocialProfileMeView(APIView):
         profile = self._get_or_create_profile(request)
         if not profile:
             return Response({"detail": "Nessun personaggio trovato."}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(SocialProfileSerializer(profile).data)
+        return Response(SocialProfileSerializer(profile, context={"request": request}).data)
 
     def put(self, request):
         profile = self._get_or_create_profile(request)
@@ -1045,6 +1055,14 @@ class SocialProfileMeView(APIView):
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
             serializer.save()
+            from personaggi.png_presenza_social import applica_presenza_social
+
+            if isinstance(request.data, dict) or hasattr(request.data, "get"):
+                applica_presenza_social(
+                    profile.personaggio,
+                    request.data.get("presenza_social"),
+                    request.user,
+                )
             if str(request.data.get("clear_firma_banner", "")).lower() in ("1", "true", "yes"):
                 if profile.firma_banner:
                     profile.firma_banner.delete(save=False)
@@ -1064,6 +1082,7 @@ class SocialProfileDetailView(APIView):
         gate_modulo_social(request, personaggio)
         profile, _ = SocialProfile.objects.select_related(
             "personaggio",
+            "personaggio__tipologia",
             "personaggio__era",
             "personaggio__prefettura",
             "personaggio__prefettura__regione",

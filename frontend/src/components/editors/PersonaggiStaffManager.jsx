@@ -10,6 +10,7 @@ import StaffCostumePhotosSection from '../StaffCostumePhotosSection';
 import StaffQrTab from '../StaffQrTab';
 import SearchableSelect from './SearchableSelect';
 import InstafameNicknameInput from '../InstafameNicknameInput';
+import PngPresenzaSocialFields, { presenzaSocialToPayload } from '../PngPresenzaSocialFields';
 import ProfileImageField from '../ProfileImageField';
 import InstafameFirmaEditor from '../InstafameFirmaEditor';
 import { prepareProfileImageForUpload } from '../../utils/profileImage';
@@ -1413,6 +1414,55 @@ const PersonaggiStaffManager = ({ onLogout }) => {
 
                   {modalTab === 'instafame' && (
                     <div className="space-y-6 text-sm">
+                      <div className="rounded-lg border border-gray-700 bg-gray-900/40 p-4 space-y-4">
+                        {detail.giocante === false ? (
+                          <>
+                            <PngPresenzaSocialFields
+                              values={{
+                                tag_instafame: detail.png_tag_instafame,
+                                chiamabile: detail.png_chiamabile,
+                                destinatario_messaggi: detail.png_destinatario_messaggi,
+                                pubblica_instafame: detail.png_pubblica_instafame,
+                              }}
+                              disabled={saving}
+                              onChange={(key, checked) => {
+                                const field = {
+                                  tag_instafame: 'png_tag_instafame',
+                                  chiamabile: 'png_chiamabile',
+                                  destinatario_messaggi: 'png_destinatario_messaggi',
+                                  pubblica_instafame: 'png_pubblica_instafame',
+                                }[key];
+                                setDetail((d) => ({ ...d, [field]: checked }));
+                              }}
+                            />
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={() => {
+                                const flags = presenzaSocialToPayload({
+                                  tag_instafame: detail.png_tag_instafame,
+                                  chiamabile: detail.png_chiamabile,
+                                  destinatario_messaggi: detail.png_destinatario_messaggi,
+                                  pubblica_instafame: detail.png_pubblica_instafame,
+                                });
+                                handleSaveFields({
+                                  png_tag_instafame: flags.tag_instafame,
+                                  png_chiamabile: flags.chiamabile,
+                                  png_destinatario_messaggi: flags.destinatario_messaggi,
+                                  png_pubblica_instafame: flags.pubblica_instafame,
+                                });
+                              }}
+                              className="min-h-11 px-4 py-2 bg-pink-800 hover:bg-pink-700 rounded font-bold text-sm disabled:opacity-50"
+                            >
+                              Salva presenza social
+                            </button>
+                          </>
+                        ) : (
+                          <p className="text-xs text-gray-400">
+                            Personaggio giocante: tag, chiamate, messaggi e pubblicazione su InstaFame sono sempre attivi.
+                          </p>
+                        )}
+                      </div>
                       <div className="rounded-lg border border-gray-700 bg-gray-900/40 p-4 space-y-4">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-pink-300">Profilo social</h3>
                         {detail.social_profile ? (

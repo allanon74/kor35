@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Bell, Camera, Copy, Heart, ImagePlus, MessageCircle, Newspaper, Pencil, PlusSquare, Send, Sparkles, Star, Trash2, Users, Video } from 'lucide-react';
+import { Bell, Camera, Copy, Heart, ImagePlus, MessageCircle, Newspaper, Pencil, Phone, PlusSquare, Send, Sparkles, Star, Trash2, Users, Video } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import {
   socialAcceptGroupInvite,
@@ -65,6 +65,8 @@ import { isStoryActive, storyExpiresAtMs } from '../utils/story';
 import { HASHTAG_INLINE_REGEX, normalizeHashtagFilter } from '../utils/hashtags';
 import { findActiveMention, replaceActiveMention } from '../utils/instafameMentions';
 import { prepareProfileImageForUpload } from '../utils/profileImage';
+import PngPresenzaSocialFields, { presenzaSocialToPayload } from './PngPresenzaSocialFields';
+import { useChiamataVocale } from './ChiamataVocaleProvider';
 
 const formatProfilePrefettura = (profileData) => {
   if (!profileData?.prefettura_nome) return '-';
@@ -181,7 +183,19 @@ const compressImageFile = (file, maxEdge = STORY_IMAGE_MAX_EDGE, quality = 0.82)
 const SocialTab = ({ onLogout, onOpenMessages }) => {
   const PAGE_SIZE = 30;
   const MAX_POST_IMAGES = 8;
-  const { selectedCharacterId, isAdmin, personaggiList, selectCharacter, preferredCharacterId, canAccessModulo } = useCharacter();
+  const {
+    selectedCharacterId,
+    isAdmin,
+    personaggiList,
+    selectCharacter,
+    preferredCharacterId,
+    canAccessModulo,
+    isCampaignStaffer,
+    isDjangoStaff,
+    isGlobalSuperuser,
+  } = useCharacter();
+  const staffVeNotaPg = isCampaignStaffer || isDjangoStaff || isGlobalSuperuser;
+  const { startCall, busy: callBusy } = useChiamataVocale();
   const rubricheAbilitate = canAccessModulo ? canAccessModulo('rubriche') : true;
   const [posts, setPosts] = useState([]);
   const [stories, setStories] = useState([]);
@@ -208,6 +222,8 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const [storyMentionSuggestions, setStoryMentionSuggestions] = useState([]);
   const [korpList, setKorpList] = useState([]);
   const [profile, setProfile] = useState(null);
+  const puoPubblicare = profile?.presenza_social ? profile.presenza_social.pubblica_instafame !== false : true;
+  const chiamateAbilitate = canAccessModulo ? canAccessModulo('chiamate') : true;
   const [loading, setLoading] = useState(true);
   const [expandedPostId, setExpandedPostId] = useState(null);
   const [highlightCommentId, setHighlightCommentId] = useState(null);
@@ -231,6 +247,11 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const [hasMorePosts, setHasMorePosts] = useState(false);
   const [loadingMorePosts, setLoadingMorePosts] = useState(false);
   const [showComposer, setShowComposer] = useState(false);
+  useEffect(() => {
+    if (puoPubblicare) return;
+    setShowComposer(false);
+    setShowStoryComposer(false);
+  }, [puoPubblicare]);
   const [isCreatingPost, setIsCreatingPost] = useState(false);
   const [isCreatingStory, setIsCreatingStory] = useState(false);
   const [showIdentityModal, setShowIdentityModal] = useState(false);
@@ -380,6 +401,10 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     firma_banner: null,
     firma_banner_rotazione: 0,
     clear_firma_banner: false,
+    tag_instafame: true,
+    chiamabile: true,
+    destinatario_messaggi: true,
+    pubblica_instafame: true,
   });
   const [ere, setEre] = useState([]);
   const [characterLocation, setCharacterLocation] = useState({
@@ -518,7 +543,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       setStoryMentionSuggestions([]);
       return;
     }
-    const res = await searchPersonaggi(active.query, selectedCharacterId);
+    const res = await searchPersonaggi(active.query, selectedCharacterId, null, 'menzione');
     setStoryMentionSuggestions(Array.isArray(res) ? res : []);
   };
 
@@ -611,6 +636,10 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           foto_principale: null,
           foto_rotazione: 0,
           firma_testo: profileData.firma_testo || '',
+          tag_instafame: profileData.presenza_social?.tag_instafame !== false,
+          chiamabile: profileData.presenza_social?.chiamabile !== false,
+          destinatario_messaggi: profileData.presenza_social?.destinatario_messaggi !== false,
+          pubblica_instafame: profileData.presenza_social?.pubblica_instafame !== false,
           firma_banner: null,
           firma_banner_rotazione: 0,
           clear_firma_banner: false,
@@ -736,13 +765,13 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       setMentionSuggestions([]);
       return;
     }
-    const res = await searchPersonaggi(active.query, selectedCharacterId);
+    const res = await searchPersonaggi(active.query, selectedCharacterId, null, 'menzione');
     setMentionSuggestions(Array.isArray(res) ? res : []);
   };
 
   const loadMentionSuggestions = async (query) => {
     if (!query) return [];
-    const res = await searchPersonaggi(query, selectedCharacterId);
+    const res = await searchPersonaggi(query, selectedCharacterId, null, 'menzione');
     return Array.isArray(res) ? res : [];
   };
 
@@ -769,7 +798,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       setEditMentionSuggestions([]);
       return;
     }
-    const res = await searchPersonaggi(active.query, selectedCharacterId);
+    const res = await searchPersonaggi(active.query, selectedCharacterId, null, 'menzione');
     setEditMentionSuggestions(Array.isArray(res) ? res : []);
   };
 
@@ -989,6 +1018,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       id: selectedProfile.personaggio,
       nome: selectedProfile.personaggio_nome || `PG ${selectedProfile.personaggio}`,
       isStaff: false,
+      chiamabile: selectedProfile.chiamabile !== false,
     });
     setSelectedProfile(null);
   };
@@ -1122,6 +1152,9 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       professioni: profileForm.professioni || '',
       firma_testo: profileForm.firma_testo || '',
     };
+    if (profile?.presenza_social?.modificabile) {
+      profilePayload.presenza_social = presenzaSocialToPayload(profileForm);
+    }
     let preparedPhoto = null;
     let preparedFirmaBanner = null;
     try {
@@ -1812,7 +1845,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
         </button>
       </section>
 
-      {socialViewMode === 'FEED' && showComposer && (
+      {socialViewMode === 'FEED' && puoPubblicare && showComposer && (
       <section className="grid grid-cols-1 gap-4">
         <form onSubmit={handleCreatePost} className="rounded-2xl border border-indigo-500/30 bg-gray-900/70 p-3 md:p-4 space-y-3 max-w-4xl mx-auto w-full">
           <div className="flex items-center gap-2 text-indigo-300 font-bold"><PlusSquare size={18} /> Nuovo Post</div>
@@ -1987,14 +2020,16 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           <div className="flex items-center justify-between mb-2">
             <div className="text-sm font-bold text-amber-200">Storie</div>
             <div className="flex items-center gap-2">
+              {puoPubblicare && (
               <button
                 type="button"
                 onClick={() => setShowStoryComposer((v) => !v)}
-                className="text-xs px-2 py-1 rounded-lg border border-fuchsia-300/20 bg-fuchsia-900/20 hover:bg-fuchsia-900/30 text-fuchsia-100/90"
+                className="text-xs min-h-11 px-3 py-1 rounded-lg border border-fuchsia-300/20 bg-fuchsia-900/20 hover:bg-fuchsia-900/30 text-fuchsia-100/90"
                 title="Nuova story"
               >
                 Nuova
               </button>
+              )}
               <button
                 type="button"
                 onClick={loadStories}
@@ -2006,7 +2041,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               </button>
             </div>
           </div>
-          {showStoryComposer && (
+          {puoPubblicare && showStoryComposer && (
             <form onSubmit={submitStory} className="mb-3 rounded-xl border border-amber-300/15 bg-black/25 p-3 space-y-2">
               <InstafameTextArea
                 className="!border-amber-300/15 !bg-black/25 rounded-xl"
@@ -2249,14 +2284,16 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-pink-300 font-bold">
             <Sparkles size={18} /> Feed
+            {puoPubblicare && (
             <button
               type="button"
               onClick={() => setShowComposer((s) => !s)}
-              className="inline-flex items-center justify-center gap-1 bg-indigo-700/90 hover:bg-indigo-600 rounded-lg px-2 py-1 text-[11px] md:text-xs font-bold border border-indigo-400/30"
+              className="inline-flex items-center justify-center gap-1 min-h-11 bg-indigo-700/90 hover:bg-indigo-600 rounded-lg px-2 py-1 text-[11px] md:text-xs font-bold border border-indigo-400/30"
             >
               <PlusSquare size={13} />
               {showComposer ? 'Chiudi' : 'Nuovo post'}
             </button>
+            )}
             {hashtagFilter && (
               <span className="inline-flex items-center gap-2 ml-1 text-[11px] px-2 py-1 rounded-full bg-fuchsia-900/50 border border-fuchsia-400/40 text-fuchsia-100">
                 #{hashtagFilter}
@@ -2896,6 +2933,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                         </div>
                       </div>
                     )}
+                      {puoPubblicare && (
                       <div className="rounded-2xl border border-amber-500/20 bg-gray-900/85 p-4 space-y-3 shadow-[0_8px_28px_rgba(0,0,0,0.22)]">
                       <div className="text-sm font-bold text-indigo-200">Nuovo post nel gruppo</div>
                       <form onSubmit={handleCreateGroupPost} className="space-y-2">
@@ -2935,9 +2973,10 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                             onChange={(e) => handleGroupPostMediaChange(e.target.files?.[0] || null)}
                           />
                         </div>
-                        <button className="bg-linear-to-r from-indigo-700 to-fuchsia-700 hover:from-indigo-600 hover:to-fuchsia-600 rounded px-3 py-2 text-sm font-bold">Pubblica nel gruppo</button>
+                        <button className="bg-linear-to-r from-indigo-700 to-fuchsia-700 hover:from-indigo-600 hover:to-fuchsia-600 rounded px-3 py-2 text-sm font-bold min-h-11">Pubblica nel gruppo</button>
                       </form>
                     </div>
+                      )}
                     <div className="rounded-2xl border border-amber-500/20 bg-gray-900/85 p-4 space-y-2 shadow-[0_8px_28px_rgba(0,0,0,0.22)]">
                       <div className="text-sm font-bold text-pink-200">Post del gruppo</div>
                       {groupPosts.length === 0 && <div className="text-xs text-gray-400">Nessun post nel gruppo.</div>}
@@ -3084,6 +3123,18 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               eraReadonlyClassName="w-full bg-gray-800 rounded p-2 border border-gray-700 text-sm text-gray-200"
             />
             <textarea className="w-full bg-gray-800 rounded p-2 border border-gray-700 min-h-20" placeholder="Descrizione" value={profileForm.descrizione} onChange={(e) => setProfileForm((p) => ({ ...p, descrizione: e.target.value }))} />
+            {profile?.presenza_social?.modificabile && (
+              <PngPresenzaSocialFields
+                values={profileForm}
+                onChange={(key, checked) => setProfileForm((p) => ({ ...p, [key]: checked }))}
+                disabled={profileSaving}
+              />
+            )}
+            {staffVeNotaPg && profile?.presenza_social?.e_png === false && (
+              <p className="text-[11px] text-gray-400">
+                Personaggio giocante: tag, chiamate, messaggi e pubblicazione su InstaFame sono sempre attivi.
+              </p>
+            )}
             <InstafameFirmaEditor
               firmaTesto={profileForm.firma_testo}
               firmaBannerFile={profileForm.firma_banner}
@@ -3150,10 +3201,22 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
             <div>Descrizione: <span className="text-white">{selectedProfile.descrizione || '-'}</span></div>
           </div>
           {selectedProfile.personaggio !== Number(selectedCharacterId) && (
-            <div className="space-y-2 pt-2 border-t border-gray-700">
-              <button onClick={openUnifiedComposerFromProfile} className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 rounded px-3 py-2 text-sm">
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-700">
+              {selectedProfile.puo_ricevere_messaggi !== false && (
+              <button onClick={openUnifiedComposerFromProfile} className="inline-flex items-center gap-2 min-h-11 bg-indigo-600 hover:bg-indigo-500 rounded px-3 py-2 text-sm">
                 <Send size={14} /> Apri messaggi privati
               </button>
+              )}
+              {selectedProfile.chiamabile !== false && chiamateAbilitate && (
+              <button
+                type="button"
+                disabled={callBusy}
+                onClick={() => startCall({ personaggioId: selectedProfile.personaggio })}
+                className="inline-flex items-center gap-2 min-h-11 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 rounded px-3 py-2 text-sm"
+              >
+                <Phone size={14} /> Chiama
+              </button>
+              )}
             </div>
           )}
         </div>

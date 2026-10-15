@@ -6806,6 +6806,39 @@ class Personaggio(Inventario):
         verbose_name="Badge InstaFame",
         help_text="Badge verificato mostrato nel profilo social e sotto il nome su post/storie.",
     )
+    png_tag_instafame = models.BooleanField(
+        default=True,
+        verbose_name="PnG taggabile su InstaFame",
+        help_text=(
+            "Solo per personaggi non giocanti. Se disattivo, il PnG non compare "
+            "nei suggerimenti @ e non viene citato. I PG restano sempre taggabili."
+        ),
+    )
+    png_chiamabile = models.BooleanField(
+        default=True,
+        verbose_name="PnG chiamabile",
+        help_text=(
+            "Solo per PnG. Se disattivo, gli altri non possono avviare una chiamata "
+            "vocale verso questo personaggio. I PG sono sempre chiamabili."
+        ),
+    )
+    png_destinatario_messaggi = models.BooleanField(
+        default=True,
+        verbose_name="PnG destinatario messaggi",
+        help_text=(
+            "Solo per PnG. Se disattivo, non compare nella ricerca destinatari. "
+            "Rispondere a un messaggio già inviato dal PnG resta possibile. "
+            "I PG sono sempre destinatari."
+        ),
+    )
+    png_pubblica_instafame = models.BooleanField(
+        default=True,
+        verbose_name="PnG può postare su InstaFame",
+        help_text=(
+            "Solo per PnG. Se disattivo, non può pubblicare post, storie o post "
+            "nei gruppi. Commenti e like restano disponibili. I PG possono sempre pubblicare."
+        ),
+    )
     data_nascita = models.DateTimeField(default=timezone.now)
     data_morte = models.DateTimeField(null=True, blank=True)
     eliminato_at = models.DateTimeField(
