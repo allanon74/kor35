@@ -115,4 +115,6 @@ def personaggi_ids_for_mention_tokens(tokens):
             ).values_list("id", flat=True)
         )
 
-    return list(found_ids)
+    from personaggi.png_presenza_social import CAMPO_TAG, filtra_ids_funzione
+
+    return filtra_ids_funzione(found_ids, CAMPO_TAG)

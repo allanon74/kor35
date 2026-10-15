@@ -2861,8 +2861,10 @@ class ConversazioniView(APIView):
                 "mittente",
                 "mittente_personaggio",
                 "mittente_personaggio__social_profile",
+                "mittente_personaggio__tipologia",
                 "destinatario_personaggio",
                 "destinatario_personaggio__social_profile",
+                "destinatario_personaggio__tipologia",
                 "in_risposta_a",
             )
         )
@@ -2895,11 +2897,17 @@ class ConversazioniView(APIView):
                     partecipanti = [{"tipo": "staff", "id": 0, "nome": "Staff"}]
                     titolo = "Staff"
                 elif counterpart is not None:
+                    from personaggi.png_presenza_social import (
+                        CAMPO_CHIAMATA,
+                        funzione_social_abilitata,
+                    )
+
                     partecipanti = [
                         {
                             "tipo": "pg",
                             "id": counterpart.id,
                             "nome": social_display_name(counterpart),
+                            "chiamabile": funzione_social_abilitata(counterpart, CAMPO_CHIAMATA),
                         }
                     ]
                     titolo = social_display_name(counterpart)
@@ -3330,7 +3338,7 @@ class PersonaggioAutocompleteView(generics.ListAPIView):
             return Personaggio.objects.none()
         
         # 1. Filtro base
-        qs = Personaggio.objects.select_related("social_profile")
+        qs = Personaggio.objects.select_related("social_profile", "tipologia")
         
         # Se c'è una query di testo, filtriamo per nome o nickname InstaFame
         if query:
@@ -3352,6 +3360,11 @@ class PersonaggioAutocompleteView(generics.ListAPIView):
                 qs = qs.filter(id__in=valid_ids)
             except Infusione.DoesNotExist:
                 pass
+
+        from personaggi.png_presenza_social import queryset_presenza_social
+
+        uso = (self.request.query_params.get("uso") or "").strip().lower()
+        qs = queryset_presenza_social(qs, uso)
 
         return qs[:10]
 
@@ -3417,7 +3430,19 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
             personaggio_mittente = Personaggio.objects.select_for_update().get(id=personaggio_mittente.id)
             destinatario = validated.get('destinatario_personaggio')
             if destinatario:
-                destinatario = Personaggio.objects.select_for_update().get(id=destinatario.id)
+                destinatario = (
+                    Personaggio.objects.select_for_update()
+                    .select_related("tipologia")
+                    .get(id=destinatario.id)
+                )
+                if not is_staff_message:
+                    from personaggi.png_presenza_social import messaggio_verso_personaggio_consentito
+
+                    ok_dest, err_dest = messaggio_verso_personaggio_consentito(
+                        personaggio_mittente, destinatario
+                    )
+                    if not ok_dest:
+                        raise serializers.ValidationError({"destinatario_id": err_dest})
 
             oggetti_da_trasferire = []
             if not is_staff_message and oggetti_ids:

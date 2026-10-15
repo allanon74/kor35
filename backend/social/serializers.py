@@ -72,6 +72,7 @@ class SocialProfileSerializer(serializers.ModelSerializer):
     era_provenienza = serializers.SerializerMethodField()
     badge_instafame = serializers.SerializerMethodField()
     cariche_social = serializers.SerializerMethodField()
+    presenza_social = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialProfile
@@ -99,6 +100,7 @@ class SocialProfileSerializer(serializers.ModelSerializer):
             "segno_zodiacale",
             "badge_instafame",
             "cariche_social",
+            "presenza_social",
         )
         read_only_fields = (
             "personaggio",
@@ -117,6 +119,7 @@ class SocialProfileSerializer(serializers.ModelSerializer):
             "can_edit_era",
             "badge_instafame",
             "cariche_social",
+            "presenza_social",
         )
 
     def get_badge_instafame(self, obj):
@@ -124,6 +127,13 @@ class SocialProfileSerializer(serializers.ModelSerializer):
 
     def get_cariche_social(self, obj):
         return social_cariche_for_personaggio(obj.personaggio)
+
+    def get_presenza_social(self, obj):
+        from personaggi.png_presenza_social import presenza_social_payload
+
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        return presenza_social_payload(obj.personaggio, user=user)
 
     def get_nome_pubblico(self, obj):
         return social_display_name_from_profile(obj)
@@ -167,6 +177,8 @@ class SocialProfilePublicSerializer(serializers.ModelSerializer):
     era_provenienza = serializers.SerializerMethodField()
     badge_instafame = serializers.SerializerMethodField()
     cariche_social = serializers.SerializerMethodField()
+    chiamabile = serializers.SerializerMethodField()
+    puo_ricevere_messaggi = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialProfile
@@ -188,11 +200,23 @@ class SocialProfilePublicSerializer(serializers.ModelSerializer):
             "segno_zodiacale",
             "badge_instafame",
             "cariche_social",
+            "chiamabile",
+            "puo_ricevere_messaggi",
         )
         read_only_fields = fields
 
     def get_personaggio_nome(self, obj):
         return social_display_name_from_profile(obj)
+
+    def get_chiamabile(self, obj):
+        from personaggi.png_presenza_social import CAMPO_CHIAMATA, funzione_social_abilitata
+
+        return funzione_social_abilitata(obj.personaggio, CAMPO_CHIAMATA)
+
+    def get_puo_ricevere_messaggi(self, obj):
+        from personaggi.png_presenza_social import CAMPO_MESSAGGIO, funzione_social_abilitata
+
+        return funzione_social_abilitata(obj.personaggio, CAMPO_MESSAGGIO)
 
     def get_badge_instafame(self, obj):
         return get_personaggio_badge_instafame(obj.personaggio)

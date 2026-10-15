@@ -391,6 +391,10 @@ def avvia_chiamata(*, chiamante: Personaggio, chiamato: Personaggio | None, vers
         raise ValueError("Destinatario non raggiungibile.")
     if chiamato.pk == chiamante.pk:
         raise ValueError("Non puoi chiamare te stesso.")
+    from personaggi.png_presenza_social import CAMPO_CHIAMATA, funzione_social_abilitata
+
+    if not funzione_social_abilitata(chiamato, CAMPO_CHIAMATA):
+        raise ValueError(f"{chiamato.nome} non può ricevere chiamate.")
     dest_mod = modulo_accesso_error(chiamato, MODULO_CHIAMATE, user=chiamato.proprietario)
     if dest_mod:
         raise ValueError(f"{chiamato.nome} non può ricevere chiamate in questa campagna.")

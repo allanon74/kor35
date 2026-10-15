@@ -94,7 +94,11 @@ class ChiamataVocaleListCreateView(APIView):
             chiamato_id = data.get("chiamato_id") or data.get("chiamato")
             if not chiamato_id:
                 return Response({"detail": "chiamato_id obbligatorio."}, status=status.HTTP_400_BAD_REQUEST)
-            chiamato = Personaggio.objects.filter(pk=chiamato_id).select_related("proprietario").first()
+            chiamato = (
+                Personaggio.objects.filter(pk=chiamato_id)
+                .select_related("proprietario", "tipologia")
+                .first()
+            )
             if not chiamato:
                 return Response({"detail": "Destinatario non trovato."}, status=status.HTTP_404_NOT_FOUND)
         try:
