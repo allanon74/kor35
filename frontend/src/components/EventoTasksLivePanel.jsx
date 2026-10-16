@@ -99,7 +99,7 @@ export default function EventoTasksLivePanel({
             </h3>
           </div>
           {evento?.titolo ? (
-            <p className="mt-0.5 truncate text-[11px] text-gray-400">{evento.titolo}</p>
+            <p className="mt-0.5 break-words text-[11px] text-gray-400">{evento.titolo}</p>
           ) : null}
           <p className="mt-1 text-[10px] text-gray-500">
             Attiva = visibile ai PG iscritti e risolvibile. Disattiva = invisibile e non risolvibile.
@@ -128,14 +128,14 @@ export default function EventoTasksLivePanel({
             return (
               <li
                 key={row.id}
-                className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 ${
+                className={`flex flex-col gap-2 rounded-lg border px-2.5 py-2 sm:flex-row sm:items-center sm:justify-between ${
                   liveOn && !catalogOff
                     ? 'border-lime-800/60 bg-lime-950/40'
                     : 'border-gray-800 bg-gray-900/50'
                 }`}
               >
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-white">{row.titolo}</div>
+                  <div className="break-words text-sm font-semibold text-white">{row.titolo}</div>
                   <div className="mt-0.5 flex flex-wrap gap-1.5 text-[10px] uppercase text-gray-500">
                     {row.tipo_risoluzione ? <span>{row.tipo_risoluzione}</span> : null}
                     {row.korp_nome ? (
@@ -152,7 +152,7 @@ export default function EventoTasksLivePanel({
                   type="button"
                   disabled={busy}
                   onClick={() => toggle(row, !liveOn)}
-                  className={`inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-[10px] font-black uppercase transition-colors disabled:opacity-40 ${
+                  className={`inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-1 rounded-lg px-3 py-2 text-[10px] font-black uppercase transition-colors disabled:opacity-40 sm:w-auto ${
                     liveOn
                       ? 'bg-lime-700 text-white hover:bg-lime-600'
                       : 'bg-gray-800 text-gray-300 hover:bg-gray-700'

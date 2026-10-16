@@ -98,7 +98,7 @@ export default function MissioniPropostePanel({ onLogout, className = '' }) {
       ) : rows.length === 0 ? (
         <p className="text-xs text-gray-500">Nessuna soluzione in attesa.</p>
       ) : (
-        <ul className="max-h-96 space-y-2 overflow-y-auto pr-1">
+        <ul className="min-w-0 space-y-2">
           {rows.map((row) => {
             const busy = busyId === row.id;
             const aperto = rifiutoId === row.id;

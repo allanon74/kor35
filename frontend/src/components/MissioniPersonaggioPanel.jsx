@@ -214,7 +214,7 @@ export default function MissioniPersonaggioPanel({
   const completate = rows.filter((row) => row.svolta);
 
   return (
-    <section className={shellClass}>
+    <section className={`min-w-0 ${shellClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <ListTodo className="shrink-0 text-lime-400" size={standalone ? 24 : 20} />

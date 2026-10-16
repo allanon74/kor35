@@ -4,6 +4,7 @@
  * Record con sotto-liste: tab «Dati» + tab catalogo/figli (vedi StaffModalTabs).
  */
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 
 export function StaffModal({
@@ -17,14 +18,15 @@ export function StaffModal({
   children,
 }) {
   if (!open) return null;
-  return (
+  const dialog = (
     <div
-      className="fixed inset-0 z-[200] flex items-end justify-center bg-black/80 p-2 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[200] overflow-y-auto overscroll-contain bg-black/80"
       onClick={onClose}
       role="presentation"
     >
+      <div className="flex min-h-full items-end justify-center sm:items-center sm:p-4">
       <div
-        className={`flex max-h-[94vh] w-full flex-col rounded-xl border border-gray-600 bg-gray-950 shadow-2xl ${
+        className={`flex max-h-[min(94dvh,94vh)] w-full min-w-0 flex-col rounded-t-2xl border border-gray-600 bg-gray-950 shadow-2xl sm:rounded-xl ${
           wide ? 'max-w-4xl' : 'max-w-2xl'
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -32,9 +34,9 @@ export function StaffModal({
         aria-modal="true"
         aria-labelledby="staff-modal-title"
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-gray-800 px-4 py-3">
-          <h3 id="staff-modal-title" className="text-lg font-bold text-white">{title}</h3>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white" aria-label="Chiudi">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-800 px-4 py-3">
+          <h3 id="staff-modal-title" className="min-w-0 break-words text-lg font-bold text-white">{title}</h3>
+          <button type="button" onClick={onClose} className="inline-flex min-h-11 min-w-11 items-center justify-center text-gray-400 hover:text-white" aria-label="Chiudi">
             <X size={22} />
           </button>
         </div>
@@ -59,8 +61,11 @@ export function StaffModal({
           )}
         </div>
       </div>
+      </div>
     </div>
   );
+  if (typeof document === 'undefined') return dialog;
+  return createPortal(dialog, document.body);
 }
 
 export function StaffListToolbar({ title, count, onAdd, addLabel = 'Nuovo' }) {
@@ -154,7 +159,7 @@ export function LabeledField({
 }
 
 export function staffInputClass(extra = '') {
-  return `w-full rounded border border-gray-600 bg-gray-900 px-2 py-1.5 text-sm text-white ${extra}`;
+  return `w-full min-h-11 rounded border border-gray-600 bg-gray-900 px-2 py-2 text-base text-white sm:text-sm ${extra}`;
 }
 
 export function StaffFieldGrid({ children, cols = 2 }) {

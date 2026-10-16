@@ -424,12 +424,12 @@ const MasterGenericList = ({
                 Stai per eliminare: <span className="text-gray-200 font-semibold">{getItemLabel(pendingDeleteItem)}</span>
               </p>
             </div>
-            <div className="p-4 flex justify-end gap-2">
+            <div className="flex flex-col-reverse gap-2 p-4 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={() => setPendingDeleteItem(null)}
                 disabled={isDeleting}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-bold text-white disabled:opacity-60"
+                className="min-h-11 w-full rounded-lg bg-gray-700 px-4 py-2 text-sm font-bold text-white hover:bg-gray-600 disabled:opacity-60 sm:w-auto"
               >
                 Annulla
               </button>
@@ -437,7 +437,7 @@ const MasterGenericList = ({
                 type="button"
                 onClick={handleConfirmDelete}
                 disabled={isDeleting}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-bold text-white disabled:opacity-60"
+                className="min-h-11 w-full rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-60 sm:w-auto"
               >
                 {isDeleting ? 'Eliminazione...' : 'Elimina'}
               </button>

@@ -152,7 +152,7 @@ export default function MissioneSoluzioneManuale({ onLogout }) {
   }
 
   return (
-    <section className="max-w-xl space-y-4">
+    <section className="w-full min-w-0 max-w-xl space-y-4">
       <div>
         <h2 className="text-sm font-black uppercase tracking-wide text-white">Soluzione manuale</h2>
         <p className="mt-1 text-sm text-gray-400">

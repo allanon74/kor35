@@ -268,6 +268,7 @@ export default function MissioniManager({ onLogout }) {
       {
         key: 'tipo',
         header: 'Tipo',
+        mobileRole: 'subtitle',
         getSortValue: (x) => x.tipo_risoluzione || '',
         render: (x) => x.tipo_risoluzione,
         width: 130,
@@ -275,6 +276,7 @@ export default function MissioniManager({ onLogout }) {
       {
         key: 'allineamento',
         header: 'Allineamento',
+        mobileRole: 'meta',
         getSortValue: (x) => x.allineamento || 'GRIGIA',
         render: (x) => {
           const key = x.allineamento || 'GRIGIA';
@@ -286,12 +288,14 @@ export default function MissioniManager({ onLogout }) {
       {
         key: 'korp',
         header: 'KORP',
+        mobileRole: 'subtitle',
         getSortValue: (x) => x.korp_nome || 'Generica',
         render: (x) => (x.korp_nome ? `${x.korp_nome}${x.esclusiva ? ' · esclusiva' : ''}` : 'Generica'),
       },
       {
         key: 'crediti',
         header: 'Crediti',
+        mobileRole: 'meta',
         getSortValue: (x) => Number(x.reward_crediti || 0),
         render: (x) => Number(x.reward_crediti || 0).toLocaleString('it-IT'),
         align: 'right',
@@ -300,6 +304,7 @@ export default function MissioniManager({ onLogout }) {
       {
         key: 'prestigio',
         header: 'Prestigio',
+        mobileRole: 'meta',
         getSortValue: (x) => Number(x.reward_prestigio || 0),
         render: (x) => x.reward_prestigio || 0,
         align: 'center',
@@ -308,6 +313,7 @@ export default function MissioniManager({ onLogout }) {
       {
         key: 'eventi',
         header: 'Eventi',
+        mobileRole: 'meta',
         getSortValue: (x) => x.eventi_count ?? (x.eventi || []).length,
         render: (x) => x.eventi_count ?? (x.eventi || []).length,
         align: 'center',
@@ -316,6 +322,7 @@ export default function MissioniManager({ onLogout }) {
       {
         key: 'attiva',
         header: 'Catalogo',
+        mobileRole: 'meta',
         getSortValue: (x) => (x.attiva === false ? 0 : 1),
         render: (x) => (
           <span className={x.attiva === false ? 'text-gray-500' : 'text-lime-400'}>
@@ -328,6 +335,7 @@ export default function MissioniManager({ onLogout }) {
       {
         key: 'ordine',
         header: 'Ordine',
+        mobileRole: 'hidden',
         getSortValue: (x) => x.ordine ?? 0,
         render: (x) => x.ordine ?? 0,
         align: 'center',
@@ -374,9 +382,9 @@ export default function MissioniManager({ onLogout }) {
           <StaffToolSubnav className="mb-3 mt-3" tabs={SCHEDE} active={scheda} onChange={setScheda} />
         </div>
         {error && scheda === 'tasks' ? <p className="px-4 pt-3 text-sm text-red-400">{error}</p> : null}
-        <StaffToolBody className={scheda === 'tasks' ? 'flex min-h-0 flex-col !overflow-hidden' : ''}>
+        <StaffToolBody className={scheda === 'tasks' ? 'lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden' : ''}>
           {scheda === 'tasks' ? (
-            <div className="flex min-h-[28rem] min-w-0 flex-1 flex-col">
+            <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
               <MasterGenericList
                 title="Catalogo task"
                 items={items}
@@ -385,6 +393,7 @@ export default function MissioniManager({ onLogout }) {
                 loading={loading}
                 persistKey="staff-tasks-missioni"
                 pinnedToolbar
+                comfortableFilters
                 addLabel="Nuova"
                 emptyMessage="Nessuna task definita."
                 searchPlaceholder="Cerca titolo, KORP…"
@@ -449,12 +458,12 @@ export default function MissioniManager({ onLogout }) {
           <LabeledField label="Descrizione" className="mt-3">
             <textarea className={staffInputClass()} rows={3} value={form.descrizione} onChange={(e) => setForm({ ...form, descrizione: e.target.value })} />
           </LabeledField>
-          <div className="mt-3 flex flex-wrap gap-4 text-sm">
-            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={!!form.esclusiva} onChange={(e) => setForm({ ...form, esclusiva: e.target.checked })} /> Esclusiva KORP</label>
-            <label className="inline-flex items-center gap-2" title="Se spento, la task non è usabile in nessun evento.">
+          <div className="mt-3 flex flex-col gap-1 text-sm sm:flex-row sm:flex-wrap sm:gap-4">
+            <label className="inline-flex min-h-11 items-center gap-2"><input type="checkbox" checked={!!form.esclusiva} onChange={(e) => setForm({ ...form, esclusiva: e.target.checked })} /> Esclusiva KORP</label>
+            <label className="inline-flex min-h-11 items-center gap-2" title="Se spento, la task non è usabile in nessun evento.">
               <input type="checkbox" checked={!!form.attiva} onChange={(e) => setForm({ ...form, attiva: e.target.checked })} /> Nel catalogo
             </label>
-            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={!!form.premio_solo_primo} onChange={(e) => setForm({ ...form, premio_solo_primo: e.target.checked })} /> Premio solo al primo</label>
+            <label className="inline-flex min-h-11 items-center gap-2"><input type="checkbox" checked={!!form.premio_solo_primo} onChange={(e) => setForm({ ...form, premio_solo_primo: e.target.checked })} /> Premio solo al primo</label>
           </div>
         </StaffSection>
 
@@ -480,8 +489,8 @@ export default function MissioniManager({ onLogout }) {
               const checked = (form.eventi_ids || []).map(Number).includes(Number(ev.id));
               const attivaInizio = form.eventi_attiva?.[String(ev.id)] !== false;
               return (
-                <div key={ev.id} className="flex flex-wrap items-center gap-3 rounded px-1 py-1 text-sm hover:bg-gray-900/60">
-                  <label className="flex min-w-0 flex-1 items-center gap-2">
+                <div key={ev.id} className="flex min-h-11 flex-wrap items-center gap-3 rounded px-1 py-1 text-sm hover:bg-gray-900/60">
+                  <label className="flex min-h-11 min-w-0 flex-1 items-center gap-2">
                     <input
                       type="checkbox"
                       checked={checked}
@@ -490,7 +499,7 @@ export default function MissioniManager({ onLogout }) {
                     <span className="truncate">{ev.titolo}</span>
                   </label>
                   {checked ? (
-                    <label className="inline-flex items-center gap-1.5 text-[11px] text-lime-200">
+                    <label className="inline-flex min-h-11 items-center gap-1.5 text-[11px] text-lime-200">
                       <input
                         type="checkbox"
                         checked={attivaInizio}

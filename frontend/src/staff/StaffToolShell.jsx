@@ -262,7 +262,7 @@ export function StaffToolSubnav({ tabs, active, onChange, className = '' }) {
             key={t.id}
             type="button"
             onClick={() => onChange?.(t.id)}
-            className={`min-h-11 rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${
+            className={`min-h-11 max-w-full shrink-0 rounded-lg px-3 py-2 text-center text-xs font-bold uppercase leading-tight tracking-wide transition-colors ${
               isActive
                 ? 'bg-indigo-600 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
