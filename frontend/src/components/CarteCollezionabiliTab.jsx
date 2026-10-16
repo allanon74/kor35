@@ -25,6 +25,7 @@ import CardFrame from '../carte/CardFrame';
 import { LoreFullModal } from '../carte/cardTextBlocks';
 import { useDuelloLive } from '../carte/useDuelloLive';
 import MazzoDuelloBuilder from '../carte/MazzoDuelloBuilder';
+import TavoloDuello from '../carte/TavoloDuello';
 import MercatoCartePanel from '../carte/MercatoCartePanel';
 import {
   buildCollezioneView,
@@ -521,30 +522,12 @@ export default function CarteCollezionabiliTab({ onLogout }) {
   const mioCampo = activeDuello?.stato_gioco?.campo?.[String(charId)] || {};
   const mieiEroi = mioCampo.eroi || [null, null];
   const miaEnergia = mioCampo.energia ?? 0;
-  const manaMassimo = mioCampo.mana_massimo ?? 3;
-  const turnoFlags = mioCampo.turno_flags || {};
-  const faseTurno = mioCampo.fase_turno || 'APE';
-  const faseTurnoLabel = mioCampo.fase_turno_label || 'Apertura';
-  const guscioEroi = mioCampo.guscio_eroi || [0, 0];
-  const bonusLeader = mioCampo.bonus_leader || [];
-  const inFaseCombattimento = faseTurno === 'COM';
-  const inFaseChiusura = faseTurno === 'CHI';
-  const passaLabel = faseTurno === 'APE'
-    ? 'Vai al combattimento'
-    : faseTurno === 'COM'
-      ? 'Fine combattimento'
-      : 'Passa turno';
-  const permanenteGiocato = !!turnoFlags.permanente_giocato;
-  const effettoGiocato = !!turnoFlags.effetto_giocato;
   const avversarioId = activeDuello?.sfidante?.id === charId
     ? activeDuello?.sfidato?.id
     : activeDuello?.sfidante?.id;
   const campoAvversario = avversarioId
     ? (activeDuello?.stato_gioco?.campo?.[String(avversarioId)] || {})
     : {};
-  const mieiEroiEsauriti = mioCampo.eroi_esauriti || [false, false];
-  const eroiIsLeader = mioCampo.eroi_is_leader || [false, false];
-  const difensoreSlotAvversario = campoAvversario.difensore_slot;
   const terraCondivisa = activeDuello?.stato_gioco?.terra_condivisa;
   const terraCpId = terraCondivisa?.carta_posseduta_id || null;
 
@@ -569,11 +552,6 @@ export default function CarteCollezionabiliTab({ onLogout }) {
   const nomeCartaDuello = (cpId) => (cpId ? (activeDuello.carte?.[cpId]?.nome || 'carta') : '—');
 
   const mieiOggetti = mioCampo.oggetti || {};
-
-  const nomeOggettoSuEroe = (slot) => {
-    const oid = mieiOggetti[String(slot)];
-    return oid ? nomeCartaDuello(oid) : null;
-  };
 
   const saluteEroeCampo = (campo, slot) => {
     const cpId = (campo?.eroi || [])[slot];
@@ -605,77 +583,6 @@ export default function CarteCollezionabiliTab({ onLogout }) {
     });
     return out;
   }, [activeDuello, mieiEroi, mieiOggetti, terraCpId, terraCondivisa, charId]);
-
-  const renderGiocaCartaButtons = (cpId, meta) => {
-    const tipo = meta?.tipo;
-    const costo = meta?.costo_gioco ?? 0;
-    const manaOk = miaEnergia >= costo;
-    const disabledBase = duelBusy || !manaOk || inFaseCombattimento;
-    if (tipo === 'PG') {
-      if (permanenteGiocato) return null;
-      return [0, 1].map((slot) => (
-        !mieiEroi[slot] ? (
-          <button
-            key={`${cpId}-slot-${slot}`}
-            type="button"
-            disabled={disabledBase}
-            className="rounded border border-indigo-700 px-2 py-1 hover:bg-indigo-950/40 disabled:opacity-40"
-            onClick={() => handleDuelloAzione('gioca_carta', {
-              carta_posseduta_id: cpId,
-              slot_eroe: slot,
-            })}
-          >
-            {meta?.nome || 'PG'} → eroe {slot}
-          </button>
-        ) : null
-      ));
-    }
-    if (tipo === 'OGG') {
-      if (permanenteGiocato) return null;
-      return [0, 1].map((slot) => (
-        mieiEroi[slot] && !mieiOggetti[String(slot)] ? (
-          <button
-            key={`${cpId}-ogg-${slot}`}
-            type="button"
-            disabled={disabledBase}
-            className="rounded border border-amber-800 px-2 py-1 hover:bg-amber-950/30 disabled:opacity-40"
-            onClick={() => handleDuelloAzione('gioca_carta', {
-              carta_posseduta_id: cpId,
-              slot_eroe: slot,
-            })}
-          >
-            {meta?.nome || 'Oggetto'} → eroe {slot}
-          </button>
-        ) : null
-      ));
-    }
-    if (tipo === 'LUO') {
-      if (permanenteGiocato) return null;
-      return (
-        <button
-          key={cpId}
-          type="button"
-          disabled={disabledBase}
-          className="rounded border border-emerald-800 px-2 py-1 hover:bg-emerald-950/30 disabled:opacity-40"
-          onClick={() => handleDuelloAzione('gioca_carta', { carta_posseduta_id: cpId })}
-        >
-          Gioca luogo: {meta?.nome || 'carta'}
-        </button>
-      );
-    }
-    if (effettoGiocato) return null;
-    return (
-      <button
-        key={cpId}
-        type="button"
-        disabled={disabledBase}
-        className="rounded border border-gray-600 px-2 py-1 hover:bg-gray-800 disabled:opacity-40"
-        onClick={() => handleDuelloAzione('gioca_carta', { carta_posseduta_id: cpId })}
-      >
-        Gioca {meta?.nome || 'carta'}
-      </button>
-    );
-  };
 
   const reliquiarioMap = data?.reliquiario || {};
   const carteById = useMemo(() => {
@@ -1312,124 +1219,16 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                   </div>
                 )}
                 {activeDuello.stato === 'COR' && activeDuello.modalita_partita !== 'MAN' && (
-                  <div className="mb-2 rounded border border-gray-800 bg-gray-950/50 p-2 text-[10px] text-gray-400">
-                    <p className="mb-1 font-bold uppercase tracking-wide text-gray-300">Campo</p>
-                    <p>
-                      Mana {miaEnergia}/{manaMassimo}
-                      {mioCampo.turno_numero ? ` · turno ${mioCampo.turno_numero}` : ''}
-                      {' · '}
-                      Fase: {faseTurnoLabel}
-                      {' · '}
-                      Mazzo {mioCampo.mazzo_count ?? 0}
-                      {' · '}
-                      Scarto {mioCampo.scarto_count ?? 0}
-                    </p>
-                    {bonusLeader.length > 0 && (
-                      <p className="text-amber-300/90">
-                        Leader: {bonusLeader.join(' · ')}
-                      </p>
-                    )}
-                    <p>
-                      Terra condivisa: {nomeCartaDuello(terraCpId)}
-                      {terraCpId && terraCondivisa?.giocatore_id === String(charId) ? ' (tua)' : ''}
-                    </p>
-                    {[0, 1].map((slot) => (
-                      mieiEroi[slot] ? (
-                        <p key={`campo-eroe-${slot}`}>
-                          Eroe {slot}: {nomeCartaDuello(mieiEroi[slot])}
-                          {eroiIsLeader[slot] ? ' · Leader' : ''}
-                          {saluteEroeCampo(mioCampo, slot) != null ? ` (${saluteEroeCampo(mioCampo, slot)} PV)` : ''}
-                          {(guscioEroi[slot] || 0) > 0 ? ` · Guscio ${guscioEroi[slot]}` : ''}
-                          {mieiEroiEsauriti[slot] ? ' · esaurito' : ''}
-                          {nomeOggettoSuEroe(slot) ? ` · ${nomeOggettoSuEroe(slot)}` : ''}
-                        </p>
-                      ) : null
-                    ))}
-                  </div>
-                )}
-                {activeDuello.stato === 'COR' && activeDuello.modalita_partita !== 'MAN' && isMioTurno && (
-                  <div className="mb-2 space-y-2">
-                    <div className="flex flex-wrap gap-1">
-                      {miaMano.flatMap((cpId) => {
-                        const meta = activeDuello.carte?.[cpId];
-                        return renderGiocaCartaButtons(cpId, meta) || [];
-                      })}
-                      <button
-                        type="button"
-                        disabled={duelBusy}
-                        className="rounded bg-gray-700 px-2 py-1"
-                        onClick={() => handleDuelloAzione('passa')}
-                      >
-                        {passaLabel}
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-1 border-t border-gray-800 pt-2">
-                      {[0, 1].map((slotAtk) => (
-                        mieiEroi[slotAtk] && !mieiEroiEsauriti[slotAtk] ? (
-                          <div key={`atk-grp-${slotAtk}`} className="flex flex-wrap gap-1">
-                            <button
-                              type="button"
-                              disabled={duelBusy || inFaseChiusura || difensoreSlotAvversario != null}
-                              className="rounded bg-red-900 px-2 py-1 disabled:opacity-40"
-                              title={
-                                inFaseChiusura
-                                  ? 'In fase finale non puoi attaccare'
-                                  : difensoreSlotAvversario != null
-                                    ? 'Devi attaccare il Difensore avversario'
-                                    : undefined
-                              }
-                              onClick={() => handleDuelloAzione('attacca', { slot_eroe: slotAtk })}
-                            >
-                              Eroe {slotAtk} → Influenza
-                            </button>
-                            {[0, 1].map((slotAvv) => (
-                              (campoAvversario.eroi || [])[slotAvv]
-                              && (difensoreSlotAvversario == null || difensoreSlotAvversario === slotAvv) ? (
-                                <button
-                                  key={`atk-${slotAtk}-avv-${slotAvv}`}
-                                  type="button"
-                                  disabled={duelBusy || inFaseChiusura}
-                                  className="rounded bg-red-950 px-2 py-1 disabled:opacity-40"
-                                  onClick={() => handleDuelloAzione('attacca', {
-                                    slot_eroe: slotAtk,
-                                    bersaglio_eroe_slot: slotAvv,
-                                  })}
-                                >
-                                  Eroe {slotAtk} → avv. {slotAvv}
-                                  {slotAvv === difensoreSlotAvversario ? ' (Difensore)' : ''}
-                                  {(campoAvversario.eroi_is_leader || [])[slotAvv] ? ' (Leader)' : ''}
-                                  {saluteEroeCampo(campoAvversario, slotAvv) != null
-                                    ? ` (${saluteEroeCampo(campoAvversario, slotAvv)} PV)`
-                                    : ''}
-                                </button>
-                              ) : null
-                            ))}
-                          </div>
-                        ) : null
-                      ))}
-                    </div>
-                    {abilitaManualiCampo.length > 0 && (
-                      <div className="flex flex-wrap gap-1 border-t border-gray-800 pt-2">
-                        {abilitaManualiCampo.map((ab) => (
-                          <button
-                            key={`ab-${ab.cpId}-${ab.index}-${ab.codice}`}
-                            type="button"
-                            disabled={duelBusy || inFaseChiusura}
-                            className="rounded bg-violet-900 px-2 py-1 text-[11px] disabled:opacity-40"
-                            title={`${ab.cartaNome} — ${ab.nome}`}
-                            onClick={() => handleDuelloAzione('attiva_abilita', {
-                              carta_posseduta_id: ab.cpId,
-                              script_index: ab.index,
-                              script_codice: ab.codice || undefined,
-                            })}
-                          >
-                            {ab.nome}
-                            <span className="ml-1 text-violet-300/80">({ab.cartaNome})</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <TavoloDuello
+                    duello={activeDuello}
+                    charId={charId}
+                    busy={duelBusy}
+                    onAzione={handleDuelloAzione}
+                    keywords={cardKeywords}
+                    tagsGlossary={cardTagsGlossary}
+                    temaEnergie={data?.tema_energie}
+                    abilita={abilitaManualiCampo}
+                  />
                 )}
                 {activeDuello.stato === 'FIN' && (
                   <p className="text-emerald-300">Duello terminato.</p>

@@ -788,6 +788,16 @@ def _duello_ha_scelta_effetto_aperta(duello: DuelloCarte) -> bool:
     return idx < len(steps) and steps[idx].get("type") == "player_choice"
 
 
+def _immagine_relativa(carta) -> str | None:
+    campo = getattr(carta, "immagine", None)
+    if not campo:
+        return None
+    try:
+        return campo.url or None
+    except ValueError:
+        return None
+
+
 def _carte_snapshot(ids: list[str]) -> dict[str, dict]:
     from personaggi.carte_carta_effects import lista_abilita_manuali_carta
     from personaggi.carte_collezionabili_models import CartaPosseduta
@@ -810,6 +820,9 @@ def _carte_snapshot(ids: list[str]) -> dict[str, dict]:
             "iniziativa": c.iniziativa,
             "salute_attuale": c.salute,
             "costo_gioco": c.costo_gioco,
+            "rarita": c.rarita,
+            "layout_versione": c.layout_versione,
+            "immagine_url": _immagine_relativa(c),
             "testo_gioco": c.testo_gioco,
             "tags": [
                 {"codice": t.codice, "nome": t.nome}
@@ -886,6 +899,7 @@ def serializza_duello(duello: DuelloCarte, viewer: Personaggio | None = None) ->
             "difensore_slot": slot_difensore(lato),
             "mazzo_count": len(lato.get("mazzo") or []),
             "scarto_count": len(lato.get("scarto") or []),
+            "mano_count": len(lato.get("mano") or []),
         }
 
     payload = {
