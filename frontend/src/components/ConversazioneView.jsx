@@ -28,6 +28,8 @@ const ConversazioneView = ({
     conversazione.titolo ||
     (conversazione.partecipanti || []).map((p) => p.nome).filter(Boolean).join(', ') ||
     'Conversazione';
+  const isGruppo = conversazione.tipo === 'gruppo' || String(conversazione.conversazione_id || '').startsWith('gruppo_');
+  const isStaffThread = !isGruppo && (conversazione.conversazione_id === 'staff' || titolo === 'Staff');
 
   const incomingUnread = (conversazione.messaggi || []).filter(
     (m) =>
@@ -45,7 +47,7 @@ const ConversazioneView = ({
   const handleRispondi = async () => {
     if (!testoRisposta.trim()) return;
     const lastId = conversazione.messaggi?.[conversazione.messaggi.length - 1]?.id;
-    if (!lastId) return;
+    if (!isGruppo && !lastId) return;
 
     setIsSending(true);
     try {
@@ -90,8 +92,8 @@ const ConversazioneView = ({
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-900/90 gap-2">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="rounded-full bg-indigo-600/25 p-2 text-indigo-300 shrink-0">
-              {titolo === 'Staff' ? <Shield className="w-5 h-5" /> : <MessageCircle className="w-5 h-5" />}
+            <div className={`rounded-full p-2 shrink-0 ${isStaffThread ? 'bg-red-600/25 text-red-300' : isGruppo ? 'bg-emerald-600/25 text-emerald-300' : 'bg-indigo-600/25 text-indigo-300'}`}>
+              {isStaffThread ? <Shield className="w-5 h-5" /> : isGruppo ? <Users className="w-5 h-5" /> : <MessageCircle className="w-5 h-5" />}
             </div>
             <div className="min-w-0">
               <h2 className="text-lg font-bold text-white truncate flex items-center gap-2">
@@ -105,7 +107,9 @@ const ConversazioneView = ({
               <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-400">
                 <Users className="w-3.5 h-3.5 shrink-0" />
                 <span className="truncate">
-                  {(conversazione.partecipanti || []).map((p) => p.nome).join(', ') || 'Chat'}
+                  {conversazione.sottotitolo
+                    || (conversazione.partecipanti || []).map((p) => p.nome).join(', ')
+                    || 'Chat'}
                 </span>
               </div>
             </div>
@@ -123,11 +127,11 @@ const ConversazioneView = ({
                 {markingRead ? '…' : 'Segna letti'}
               </button>
             ) : null}
-            {chiamateAbilitate && (conversazione.partecipanti || []).every((p) => p.tipo !== 'pg' || p.chiamabile !== false) ? (
+            {chiamateAbilitate && !isGruppo && (conversazione.partecipanti || []).every((p) => p.tipo !== 'pg' || p.chiamabile !== false) ? (
             <button
               type="button"
               onClick={async () => {
-                const isStaff = titolo === 'Staff' || conversazione.conversazione_id === 'staff';
+                const isStaff = isStaffThread;
                 const other = (conversazione.partecipanti || []).find((p) => p.tipo === 'pg' && p.id);
                 try {
                   if (isStaff) {
@@ -240,7 +244,7 @@ const ConversazioneView = ({
               className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
             >
               <Reply className="w-5 h-5" />
-              Rispondi
+              {isGruppo ? 'Scrivi' : 'Rispondi'}
             </button>
           ) : (
             <div className="space-y-2">
@@ -248,7 +252,7 @@ const ConversazioneView = ({
               <RichTextEditor
                 value={testoRisposta}
                 onChange={setTestoRisposta}
-                placeholder="Scrivi la tua risposta…"
+                placeholder={isGruppo ? 'Scrivi al gruppo…' : 'Scrivi la tua risposta…'}
                 minHeight={130}
                 maxHeight="32vh"
               />

@@ -4121,9 +4121,10 @@ export const fetchStaffMessages = async (onLogout) => {
 /**
  * Marca un messaggio staff come letto.
  */
-export const markStaffMessageAsRead = async (messageId, onLogout) => {
+export const markStaffMessageAsRead = async (messageId, onLogout, letto = true) => {
     return fetchAuthenticated(`/api/personaggi/api/staff/messages/${messageId}/leggi/`, {
-        method: 'POST'
+        method: 'POST',
+        body: JSON.stringify({ letto: Boolean(letto) }),
     }, onLogout);
 };
 
@@ -4150,6 +4151,36 @@ export const getConversazioni = async (personaggioId, onLogout) => {
 /**
  * Risponde a un messaggio creando un thread.
  */
+export const markConversazioneLetta = async (personaggioId, conversazioneId, onLogout) => {
+    return fetchAuthenticated(
+        '/api/personaggi/api/messaggi/conversazioni/leggi/',
+        {
+            method: 'POST',
+            body: JSON.stringify({
+                personaggio_id: personaggioId,
+                conversazione_id: conversazioneId,
+            }),
+        },
+        onLogout
+    );
+};
+
+export const sendGruppoMessage = async (personaggioId, gruppoId, testo, titolo, onLogout) => {
+    return fetchAuthenticated(
+        '/api/personaggi/api/messaggi/gruppo/send/',
+        {
+            method: 'POST',
+            body: JSON.stringify({
+                personaggio_id: personaggioId,
+                gruppo_id: gruppoId,
+                testo,
+                titolo: titolo || '',
+            }),
+        },
+        onLogout
+    );
+};
+
 export const rispondiMessaggio = async (messaggioId, personaggioId, testo, titolo, onLogout) => {
     return fetchAuthenticated(
         `/api/personaggi/api/messaggi/${messaggioId}/rispondi/`,

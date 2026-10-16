@@ -81,16 +81,17 @@ const AdminMessageTab = ({ onLogout }) => {
 
     // Marca messaggio come letto/non letto
     const handleToggleRead = async (messageId, currentStatus) => {
-        // Optimistic update
-        setOptimisticReadStates(prev => ({ ...prev, [messageId]: !currentStatus }));
+        const nextStatus = !currentStatus;
+        setOptimisticReadStates(prev => ({ ...prev, [messageId]: nextStatus }));
         
         try {
-            if (!currentStatus) {
-                // Se non è letto, marcalo come letto
-                await markStaffMessageAsRead(messageId, onLogout);
-            }
-            // Ricarica i messaggi per aggiornare lo stato
-            loadInbox();
+            await markStaffMessageAsRead(messageId, onLogout, nextStatus);
+            await loadInbox();
+            setOptimisticReadStates(prev => {
+                const next = { ...prev };
+                delete next[messageId];
+                return next;
+            });
         } catch (err) {
             console.error("Errore marcatura messaggio:", err);
             alert('Errore nel marcare il messaggio: ' + err.message);
@@ -372,10 +373,12 @@ const AdminMessageTab = ({ onLogout }) => {
                             </div>
                         ) : (
                             inboxMessages.map(msg => {
-                                // Usa lo stato ottimistico se presente, altrimenti lo stato dal server
-                                const isRead = optimisticReadStates[msg.id] !== undefined 
-                                    ? optimisticReadStates[msg.id] 
-                                    : msg.letto_staff;
+                                const serverRead = typeof msg.letto_staff === 'boolean'
+                                    ? msg.letto_staff
+                                    : Boolean(msg.letto);
+                                const isRead = optimisticReadStates[msg.id] !== undefined
+                                    ? optimisticReadStates[msg.id]
+                                    : serverRead;
                                 
                                 return (
                                 <div key={msg.id} className={`rounded-lg p-4 shadow-md transition-all hover:bg-gray-750 border-l-4 ${isRead ? 'bg-gray-850 opacity-75 border-gray-600' : 'bg-gray-800 border-green-500'}`}>
@@ -416,7 +419,7 @@ const AdminMessageTab = ({ onLogout }) => {
                                             <button
                                                 onClick={() => handleToggleRead(msg.id, isRead)}
                                                 className={`p-1.5 rounded transition-colors ${isRead ? 'bg-gray-700 hover:bg-gray-600 text-gray-400' : 'bg-green-900/50 hover:bg-green-800 text-green-300'}`}
-                                                title={isRead ? 'Già letto' : 'Segna come letto'}
+                                                title={isRead ? 'Segna come non letto' : 'Segna come letto'}
                                             >
                                                 {isRead ? <EyeOff size={14} /> : <Eye size={14} />}
                                             </button>

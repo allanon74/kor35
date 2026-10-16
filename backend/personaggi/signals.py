@@ -103,7 +103,13 @@ def invia_notifica_messaggio(sender, instance, created, **kwargs):
             ids.append(instance.mittente_personaggio.proprietario_id)
         _ws_notify_users(ids, data)
     elif instance.tipo_messaggio == Messaggio.TIPO_GRUPPO and instance.destinatario_gruppo:
-        member_ids = instance.destinatario_gruppo.membri.values_list("proprietario_id", flat=True)
+        member_ids = list(instance.destinatario_gruppo.membri.values_list("proprietario_id", flat=True))
+        mittente_user_id = None
+        if instance.mittente_personaggio_id:
+            mittente_user_id = instance.mittente_personaggio.proprietario_id
+        elif instance.mittente_id:
+            mittente_user_id = instance.mittente_id
+        member_ids = [uid for uid in member_ids if uid and uid != mittente_user_id]
         _ws_notify_users(member_ids, data)
     elif instance.tipo_messaggio == Messaggio.TIPO_STAFF or instance.is_staff_message:
         staff_ids = _campaign_staff_user_ids(instance.campagna)
@@ -125,10 +131,15 @@ def invia_notifica_messaggio(sender, instance, created, **kwargs):
                 notify_user(user, category="messaggi", head=head, body=body, url=url)
 
         elif instance.tipo_messaggio == Messaggio.TIPO_GRUPPO and instance.destinatario_gruppo:
+            mittente_user_id = None
+            if instance.mittente_personaggio_id:
+                mittente_user_id = instance.mittente_personaggio.proprietario_id
+            elif instance.mittente_id:
+                mittente_user_id = instance.mittente_id
             users = [
                 pg.proprietario
                 for pg in instance.destinatario_gruppo.membri.select_related("proprietario").all()
-                if pg.proprietario
+                if pg.proprietario and pg.proprietario_id != mittente_user_id
             ]
             notify_users(users, category="messaggi", head=head, body=body, url=url)
 

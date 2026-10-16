@@ -475,7 +475,20 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       byCampaign.get(key).rows.push(char);
     });
 
+    const pref = String(preferredCharacterId || '');
+    byCampaign.forEach((group) => {
+      group.rows.sort((a, b) => {
+        const ap = pref && String(a?.id) === pref ? 0 : 1;
+        const bp = pref && String(b?.id) === pref ? 0 : 1;
+        if (ap !== bp) return ap - bp;
+        return String(a?.nome || '').localeCompare(String(b?.nome || ''), 'it', { sensitivity: 'base' });
+      });
+    });
+
     return Array.from(byCampaign.values()).sort((a, b) => {
+      const aHasPreferred = pref && a.rows.some((row) => String(row.id) === pref);
+      const bHasPreferred = pref && b.rows.some((row) => String(row.id) === pref);
+      if (aHasPreferred !== bHasPreferred) return aHasPreferred ? -1 : 1;
       const aSlug = (campaigns.find((c) => String(c.id) === String(a.campaignId))?.slug || '').toLowerCase();
       const bSlug = (campaigns.find((c) => String(c.id) === String(b.campaignId))?.slug || '').toLowerCase();
       const aIsBase = aSlug === 'kor35' || String(a.campaignName || '').toLowerCase() === 'kor35';
@@ -483,7 +496,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       if (aIsBase !== bIsBase) return aIsBase ? -1 : 1;
       return String(a.campaignName || '').localeCompare(String(b.campaignName || ''));
     });
-  }, [characters, campaigns, activeCampaign]);
+  }, [characters, campaigns, activeCampaign, preferredCharacterId]);
 
   const manageableCampaigns = useMemo(
     () =>

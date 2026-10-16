@@ -5485,9 +5485,18 @@ class AcquisisciSerializer(serializers.Serializer):
 
 
 class GruppoSerializer(serializers.ModelSerializer):
+    nome = serializers.SerializerMethodField()
+
     class Meta:
         model = Gruppo
-        fields = ('id', 'nome')
+        fields = ('id', 'nome', 'chat_permanente')
+
+    def get_nome(self, obj):
+        if getattr(obj, "chat_permanente", False) and getattr(obj, "carriera_id", None):
+            carriera = getattr(obj, "carriera", None)
+            if carriera is not None and getattr(carriera, "nome", None):
+                return carriera.nome
+        return obj.nome
 
 
 class MessaggioSerializer(serializers.ModelSerializer):
@@ -5513,7 +5522,7 @@ class MessaggioSerializer(serializers.ModelSerializer):
             'mittente_proprietario_nome', 'mostra_proprietario_giocatore',
             'mittente_is_staff', 'tipo_messaggio', 'titolo', 'testo', 
             'data_invio', 'data_creazione', 'destinatario_personaggio', 'destinatario_personaggio_id',
-            'destinatario_gruppo', 'salva_in_cronologia', 'letto', 'is_staff_message',
+            'destinatario_gruppo', 'salva_in_cronologia', 'letto', 'letto_staff', 'is_staff_message',
             'crediti_allegati', 'conto_crediti_allegati',
             'crediti_corrente_allegati', 'crediti_deposito_allegati',
             'oggetti_allegati_snapshot',
@@ -5522,19 +5531,33 @@ class MessaggioSerializer(serializers.ModelSerializer):
         read_only_fields = ('mittente', 'data_invio', 'tipo_messaggio')
     
     def get_letto(self, obj):
-        # Per messaggi staff, usa il campo letto_staff
-        if obj.is_staff_message:
-            return obj.letto_staff
-        # Annotazione da MessaggioListView
-        if hasattr(obj, 'is_letto_db'):
-            return bool(obj.is_letto_db)
-        # Fallback (es. ConversazioniView): lookup LetturaMessaggio per PG nel context
+        """Lettura per il personaggio nel context; in inbox staff vale letto_staff.
+
+        I messaggi allo staff (is_staff_message) non devono usare letto_staff quando
+        li sta guardando un personaggio: quel flag è dell'inbox staff, la lettura
+        del giocatore sta su LetturaMessaggio.
+        """
         personaggio = self.context.get('personaggio')
-        if personaggio:
+        if personaggio is not None:
+            if (
+                obj.mittente_personaggio_id
+                and obj.mittente_personaggio_id == personaggio.id
+                and (
+                    obj.tipo_messaggio in (Messaggio.TIPO_GRUPPO, Messaggio.TIPO_STAFF)
+                    or obj.is_staff_message
+                )
+            ):
+                return True
+            if hasattr(obj, 'is_letto_db'):
+                return bool(obj.is_letto_db)
             from personaggi.models import LetturaMessaggio
             return LetturaMessaggio.objects.filter(
                 messaggio=obj, personaggio=personaggio, letto=True
             ).exists()
+        if obj.is_staff_message or obj.tipo_messaggio == Messaggio.TIPO_STAFF:
+            return bool(obj.letto_staff)
+        if hasattr(obj, 'is_letto_db'):
+            return bool(obj.is_letto_db)
         return False
     
     def get_destinatario_personaggio_id(self, obj):

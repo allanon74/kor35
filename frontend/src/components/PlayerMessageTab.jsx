@@ -1,13 +1,13 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useCharacter } from './CharacterContext';
-import { Trash2, Mail, Eye, EyeOff, MessageCircle, Megaphone, Shield, ChevronRight, Coins, Package, Bell } from 'lucide-react';
+import { Trash2, Mail, Eye, EyeOff, MessageCircle, Megaphone, Shield, ChevronRight, Coins, Package, Bell, Users } from 'lucide-react';
 import ComposeMessageModal from './ComposeMessageModal';
 import ConversazioneView from './ConversazioneView';
 import RichTextDisplay from './RichTextDisplay';
 import MessageAttachmentsLine from './MessageAttachmentsLine';
 import { getMessageAttachmentsSummary } from './messageAttachments';
 import { importiDaMessaggio } from '../utils/creditiCessione';
-import { getConversazioni, rispondiMessaggio, markMessageAsRead } from '../api';
+import { getConversazioni, rispondiMessaggio, markMessageAsRead, markConversazioneLetta, sendGruppoMessage } from '../api';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { OfflineConsultBanner } from './OfflineConsultBanner';
 import ChiamateLogPanel from './ChiamateLogPanel';
@@ -64,9 +64,11 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
     msg.mittente_personaggio_nome || msg.mittente_nome || (msg.mittente_is_staff ? 'Staff' : 'Sistema');
 
   const systemMessages = useMemo(() => {
-    return (userMessages || []).filter(
-      (m) => m.tipo_messaggio === 'BROAD' || m.tipo_messaggio === 'GROUP'
-    );
+    return (userMessages || []).filter((m) => {
+      if (m.tipo_messaggio === 'BROAD') return true;
+      if (m.tipo_messaggio === 'GROUP') return !m.destinatario_gruppo?.chat_permanente;
+      return false;
+    });
   }, [userMessages]);
 
   const firstUnreadId = useMemo(() => {
@@ -110,16 +112,19 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
         list.map((c) => (c.conversazione_id === conv.conversazione_id ? markedConv : c))
       );
 
-      // Persistenza con endpoint "leggi" (affidabile, non toggle)
-      await Promise.all(
-        incomingUnread.map(async (m) => {
-          try {
-            await markMessageAsRead(m.id, selectedCharacterId, onLogout);
-          } catch {
-            /* ignore singolo */
-          }
-        })
-      );
+      try {
+        await markConversazioneLetta(selectedCharacterId, conv.conversazione_id, onLogout);
+      } catch {
+        await Promise.all(
+          incomingUnread.map(async (m) => {
+            try {
+              await markMessageAsRead(m.id, selectedCharacterId, onLogout);
+            } catch {
+              /* ignore singolo */
+            }
+          })
+        );
+      }
 
       try {
         await fetchUserMessages(selectedCharacterId);
@@ -196,7 +201,17 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
   };
 
   const handleRispondiThread = async (messaggioId, testo) => {
-    await rispondiMessaggio(messaggioId, selectedCharacterId, testo, '', onLogout);
+    if (activeConversazione?.tipo === 'gruppo' && activeConversazione.gruppo_id) {
+      await sendGruppoMessage(
+        selectedCharacterId,
+        activeConversazione.gruppo_id,
+        testo,
+        '',
+        onLogout
+      );
+    } else {
+      await rispondiMessaggio(messaggioId, selectedCharacterId, testo, '', onLogout);
+    }
     await fetchUserMessages(selectedCharacterId);
     const list = await refreshConversazioni();
     const key = activeConversazione?.conversazione_id;
@@ -295,7 +310,8 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
           ) : (
             conversazioni.map((conv) => {
               const unread = Number(conv.non_letti || 0);
-              const isStaffThread = conv.conversazione_id === 'staff' || conv.titolo === 'Staff';
+              const isGroupThread = conv.tipo === 'gruppo' || String(conv.conversazione_id || '').startsWith('gruppo_');
+              const isStaffThread = !isGroupThread && (conv.conversazione_id === 'staff' || conv.titolo === 'Staff');
               const lastMsg = (conv.messaggi || [])[(conv.messaggi || []).length - 1];
               const allegatiSummary = getMessageAttachmentsSummary(lastMsg);
               return (
@@ -311,10 +327,14 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
                 >
                   <div
                     className={`rounded-full p-2.5 shrink-0 ${
-                      isStaffThread ? 'bg-red-900/50 text-red-300' : 'bg-indigo-900/50 text-indigo-300'
+                      isStaffThread
+                        ? 'bg-red-900/50 text-red-300'
+                        : isGroupThread
+                          ? 'bg-emerald-900/50 text-emerald-300'
+                          : 'bg-indigo-900/50 text-indigo-300'
                     }`}
                   >
-                    {isStaffThread ? <Shield size={18} /> : <MessageCircle size={18} />}
+                    {isStaffThread ? <Shield size={18} /> : isGroupThread ? <Users size={18} /> : <MessageCircle size={18} />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
@@ -323,6 +343,11 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
                         {formatTime(conv.ultimo_messaggio)}
                       </span>
                     </div>
+                    {conv.sottotitolo ? (
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-300/90 truncate">
+                        {conv.sottotitolo}
+                      </p>
+                    ) : null}
                     <p className="text-sm text-gray-400 truncate mt-0.5">{conv.anteprima || '—'}</p>
                     {allegatiSummary ? (
                       <p className="mt-1 text-[11px] text-amber-200/90 truncate inline-flex items-center gap-1 max-w-full">

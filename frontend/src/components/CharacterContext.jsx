@@ -85,6 +85,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
   // --- STATI GLOBALI UI ---
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => localStorage.getItem('kor35_last_char_id') || '');
   const [preferredCharacterId, setPreferredCharacterId] = useState(() => localStorage.getItem('kor35_preferred_char_id') || '');
+  const [preferredResolved, setPreferredResolved] = useState(false);
   /**
    * Solo superuser Django: bypass globale (es. notifiche sistema, vedi tutti i PG).
    * I permessi di gioco usano i ruoli di campagna (HEAD_MASTER, MASTER, …), non is_staff.
@@ -414,48 +415,85 @@ export const CharacterProvider = ({ children, onLogout }) => {
       refetch: refetchCerimoniali 
   } = useAcquirableCerimoniali(selectedCharacterId, onLogout);
 
-  // --- LOGICA SELEZIONE AUTOMATICA PG ---
-  useEffect(() => {
-    if (!selectedCharacterId && personaggiList.length > 0) {
-        const preferredId = preferredCharacterId || localStorage.getItem('kor35_preferred_char_id');
-        const lastId = localStorage.getItem('kor35_last_char_id');
-        const targetId = (preferredId && personaggiList.some(p => p.id.toString() === preferredId))
-                         ? preferredId
-                         : ((lastId && personaggiList.some(p => p.id.toString() === lastId))
-                           ? lastId
-                           : personaggiList[0].id);
-        setSelectedCharacterId(targetId);
-    }
-  }, [personaggiList, selectedCharacterId, preferredCharacterId]);
-
-  useEffect(() => {
-    if (!preferredCharacterId) return;
-    const exists = personaggiList.some((p) => p.id.toString() === preferredCharacterId.toString());
-    if (!exists) {
-      setPreferredCharacterId('');
-      localStorage.removeItem('kor35_preferred_char_id');
-    }
+  const personaggiListOrdinata = useMemo(() => {
+    const list = Array.isArray(personaggiList) ? [...personaggiList] : [];
+    const pref = String(preferredCharacterId || '');
+    list.sort((a, b) => {
+      const ap = pref && String(a?.id) === pref ? 0 : 1;
+      const bp = pref && String(b?.id) === pref ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      return String(a?.nome || '').localeCompare(String(b?.nome || ''), 'it', { sensitivity: 'base' });
+    });
+    return list;
   }, [personaggiList, preferredCharacterId]);
+
+  // --- LOGICA SELEZIONE AUTOMATICA PG ---
+  // Il preferito è il default solo dopo la risposta del server: altrimenti la lista
+  // vuota (o il primo PG) vincerebbe la corsa e il preferito non verrebbe riaperto.
+  useEffect(() => {
+    if (!preferredResolved) return;
+    if (selectedCharacterId) return;
+    if (!personaggiListOrdinata.length) return;
+    const preferredId = preferredCharacterId || localStorage.getItem('kor35_preferred_char_id');
+    const lastId = localStorage.getItem('kor35_last_char_id');
+    const targetId = (preferredId && personaggiListOrdinata.some(p => p.id.toString() === String(preferredId)))
+                     ? preferredId
+                     : ((lastId && personaggiListOrdinata.some(p => p.id.toString() === String(lastId)))
+                       ? lastId
+                       : personaggiListOrdinata[0].id);
+    setSelectedCharacterId(String(targetId));
+  }, [personaggiListOrdinata, selectedCharacterId, preferredCharacterId, preferredResolved]);
 
   useEffect(() => {
     let mounted = true;
     const loadPreferredFromServer = async () => {
       try {
         const data = await getPreferredPersonaggio(onLogout);
+        if (!mounted) return;
         const serverPreferred = data?.preferred_personaggio_id;
-        if (!mounted || !serverPreferred) return;
-        const normalized = String(serverPreferred);
-        setPreferredCharacterId(normalized);
-        localStorage.setItem('kor35_preferred_char_id', normalized);
+        if (serverPreferred) {
+          const normalized = String(serverPreferred);
+          setPreferredCharacterId(normalized);
+          localStorage.setItem('kor35_preferred_char_id', normalized);
+          const slug = data?.campagna_slug;
+          const aperturaEsplicita = localStorage.getItem('kor35_last_char_id');
+          if (
+            !aperturaEsplicita &&
+            slug &&
+            normCampaignSlug(slug) !== normCampaignSlug(getActiveCampaignSlug())
+          ) {
+            try {
+              const valid = await validateActiveCampaign(slug, onLogout);
+              if (!mounted) return;
+              const campagna = setActiveCampaignSlug(valid?.slug || slug);
+              setActiveCampaign(campagna);
+              await queryClient.invalidateQueries({ queryKey: ['personaggi_list'] });
+            } catch {
+              /* la campagna del preferito non è accessibile: resta quella corrente */
+            }
+          }
+          return;
+        }
+        const localPreferred = localStorage.getItem('kor35_preferred_char_id');
+        if (localPreferred) {
+          setPreferredCharacterId(String(localPreferred));
+          try {
+            await setPreferredPersonaggio(Number(localPreferred), onLogout);
+          } catch {
+            /* il server non ha ancora la preferenza: resta sul dispositivo */
+          }
+        }
       } catch (err) {
         // fallback locale: nessun blocco UI
+      } finally {
+        if (mounted) setPreferredResolved(true);
       }
     };
     loadPreferredFromServer();
     return () => {
       mounted = false;
     };
-  }, [onLogout]);
+  }, [onLogout, queryClient]);
 
   // --- AZIONI CONTEXT ---
   const handleSelectCharacter = useCallback(async (id) => {
@@ -523,9 +561,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
     await validateActiveCampaign(normalized, onLogout);
     setActiveCampaign(normalized);
     setSelectedCharacterId('');
-    setPreferredCharacterId('');
     localStorage.removeItem('kor35_last_char_id');
-    localStorage.removeItem('kor35_preferred_char_id');
     await queryClient.invalidateQueries();
   }, [onLogout, queryClient]);
 
@@ -907,7 +943,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
   // --- VALUE DEL CONTEXT ---
   const value = useMemo(() => ({
     onLogout,
-    personaggiList,
+    personaggiList: personaggiListOrdinata,
     punteggiList,
     statisticaContainers,
     selectedCharacterId,
@@ -982,7 +1018,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
     allibratoreCodiciAbilitati: !!giocoEventoStato.allibratore_codici_abilitati,
   }), [
     onLogout,
-    personaggiList,
+    personaggiListOrdinata,
     punteggiList,
     statisticaContainers,
     selectedCharacterId,

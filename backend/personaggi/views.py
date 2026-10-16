@@ -2238,28 +2238,42 @@ class PersonaggioListView(APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+def _preferred_personaggio_payload(pref):
+    personaggio = pref.preferred_personaggio if pref else None
+    slug = None
+    if personaggio is not None and personaggio.campagna_id:
+        slug = personaggio.campagna.slug
+    return {
+        "preferred_personaggio_id": personaggio.id if personaggio is not None else None,
+        "campagna_slug": slug,
+    }
+
+
 class PreferredPersonaggioView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        pref = UserSocialPreference.objects.filter(user=request.user).first()
-        return Response(
-            {"preferred_personaggio_id": pref.preferred_personaggio_id if pref else None},
-            status=status.HTTP_200_OK,
+        pref = (
+            UserSocialPreference.objects.filter(user=request.user)
+            .select_related("preferred_personaggio__campagna")
+            .first()
         )
+        return Response(_preferred_personaggio_payload(pref), status=status.HTTP_200_OK)
 
     def post(self, request):
         preferred_id = request.data.get("preferred_personaggio_id")
         preferred = None
         if preferred_id not in (None, "", "null"):
-            preferred = get_object_or_404(Personaggio, id=preferred_id, proprietario=request.user)
+            preferred = get_object_or_404(
+                Personaggio.objects.select_related("campagna"),
+                id=preferred_id,
+                proprietario=request.user,
+            )
         pref, _ = UserSocialPreference.objects.get_or_create(user=request.user)
         pref.preferred_personaggio = preferred
         pref.save(update_fields=["preferred_personaggio", "updated_at"])
-        return Response(
-            {"preferred_personaggio_id": pref.preferred_personaggio_id},
-            status=status.HTTP_200_OK,
-        )
+        pref.preferred_personaggio = preferred
+        return Response(_preferred_personaggio_payload(pref), status=status.HTTP_200_OK)
     
 class PersonaggioDetailView(APIView):
     permission_classes = [IsAuthenticated]
@@ -2616,6 +2630,9 @@ class MessaggioListView(generics.ListAPIView):
         try:
             target_pg = Personaggio.objects.get(id=personaggio_id)
         except Personaggio.DoesNotExist: return Messaggio.objects.none()
+        from personaggi.chat_carriera import gruppi_chat_attivi_personaggio
+
+        gruppi_chat_attivi_personaggio(target_pg)
         if target_pg.proprietario != user and not (
             user.is_superuser or _can_operate_in_campaign(user, target_pg.campagna, needs_master=True)
         ):
@@ -2633,6 +2650,8 @@ class MessaggioListView(generics.ListAPIView):
                 "mittente_personaggio__proprietario",
                 "destinatario_personaggio",
                 "destinatario_personaggio__social_profile",
+                "destinatario_gruppo",
+                "destinatario_gruppo__carriera",
             )
             .order_by("-data_invio")
         )
@@ -2719,6 +2738,8 @@ class MessaggiUnreadCountsView(APIView):
             .in_bulk(pg_ids)
         )
 
+        from personaggi.chat_carriera import gruppi_chat_attivi_personaggio
+
         for pg_id in pg_ids:
             target_pg = membership.get(pg_id)
             if not target_pg:
@@ -2731,7 +2752,10 @@ class MessaggiUnreadCountsView(APIView):
                 & Q(destinatario_personaggio=target_pg)
                 & Q(campagna=active_campaign)
             )
-            gruppi_id = [g.id for g in target_pg.gruppi_appartenenza.all()]
+            gruppi_chat_attivi_personaggio(target_pg)
+            gruppi_id = list(
+                Gruppo.objects.filter(membri=target_pg).values_list("id", flat=True)
+            )
             q_gruppo = (
                 Q(tipo_messaggio=Messaggio.TIPO_GRUPPO)
                 & Q(destinatario_gruppo__id__in=gruppi_id)
@@ -2840,6 +2864,10 @@ class ConversazioniView(APIView):
 
         active_campaign = _get_active_campaign(request)
         from social.display_names import social_display_name
+        from personaggi.chat_carriera import etichetta_chat_carriera, gruppi_chat_attivi_personaggio
+
+        gruppi_chat = gruppi_chat_attivi_personaggio(personaggio)
+        gruppo_by_id = {g.id: g for g in gruppi_chat}
 
         q_recv = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(
             destinatario_personaggio=personaggio
@@ -2853,9 +2881,20 @@ class ConversazioniView(APIView):
         q_staff_in = Q(tipo_messaggio=Messaggio.TIPO_STAFF) & Q(
             destinatario_personaggio=personaggio
         )
+        if gruppo_by_id:
+            q_group = Q(tipo_messaggio=Messaggio.TIPO_GRUPPO) & Q(
+                destinatario_gruppo_id__in=list(gruppo_by_id)
+            )
+        else:
+            q_group = Q(pk__in=[])
+
+        lettura_stato = LetturaMessaggio.objects.filter(
+            messaggio=OuterRef("pk"),
+            personaggio=personaggio,
+        ).values("letto")[:1]
 
         messaggi = (
-            Messaggio.objects.filter(q_recv | q_sent | q_staff_out | q_staff_in)
+            Messaggio.objects.filter(q_recv | q_sent | q_staff_out | q_staff_in | q_group)
             .filter(campagna=active_campaign)
             .select_related(
                 "mittente",
@@ -2865,8 +2904,12 @@ class ConversazioniView(APIView):
                 "destinatario_personaggio",
                 "destinatario_personaggio__social_profile",
                 "destinatario_personaggio__tipologia",
+                "destinatario_gruppo",
+                "destinatario_gruppo__carriera",
+                "destinatario_gruppo__carriera__tipo_carriera",
                 "in_risposta_a",
             )
+            .annotate(is_letto_db=Coalesce(Subquery(lettura_stato), Value(False)))
         )
 
         ids_cancellati = LetturaMessaggio.objects.filter(
@@ -2875,8 +2918,28 @@ class ConversazioniView(APIView):
         ).values_list("messaggio_id", flat=True)
         messaggi = messaggi.exclude(id__in=ids_cancellati)
 
+        def _shell_gruppo(gruppo):
+            carriera = gruppo.carriera
+            etichetta = etichetta_chat_carriera(carriera) if carriera is not None else "Gruppo"
+            n_membri = gruppo.membri.count()
+            membro = "membro" if n_membri == 1 else "membri"
+            return {
+                "conversazione_id": f"gruppo_{gruppo.id}",
+                "tipo": "gruppo",
+                "gruppo_id": gruppo.id,
+                "permanente": True,
+                "titolo": carriera.nome if carriera is not None else gruppo.nome,
+                "sottotitolo": f"{etichetta} · {n_membri} {membro}",
+                "messaggi": [],
+                "partecipanti": [{"tipo": "gruppo", "id": gruppo.id, "nome": etichetta}],
+                "ultimo_messaggio": None,
+                "non_letti": 0,
+            }
+
         def _thread_key(msg):
-            # Chat-style: una conversazione per controparte (PG) o Staff
+            # Chat-style: gruppo permanente, controparte (PG) o Staff.
+            if msg.tipo_messaggio == Messaggio.TIPO_GRUPPO and msg.destinatario_gruppo_id in gruppo_by_id:
+                return f"gruppo_{msg.destinatario_gruppo_id}", None
             if msg.tipo_messaggio == Messaggio.TIPO_STAFF or msg.is_staff_message:
                 return "staff", None
             if msg.mittente_personaggio_id == personaggio.id:
@@ -2890,12 +2953,17 @@ class ConversazioniView(APIView):
             return f"msg_{msg.id}", None
 
         conversazioni = {}
+        for gruppo in gruppi_chat:
+            shell = _shell_gruppo(gruppo)
+            conversazioni[shell["conversazione_id"]] = shell
+
         for msg in messaggi:
             key, counterpart = _thread_key(msg)
             if key not in conversazioni:
                 if key == "staff":
                     partecipanti = [{"tipo": "staff", "id": 0, "nome": "Staff"}]
                     titolo = "Staff"
+                    extra = {"tipo": "staff", "permanente": False}
                 elif counterpart is not None:
                     from personaggi.png_presenza_social import (
                         CAMPO_CHIAMATA,
@@ -2911,9 +2979,11 @@ class ConversazioniView(APIView):
                         }
                     ]
                     titolo = social_display_name(counterpart)
+                    extra = {"tipo": "pg", "permanente": False}
                 else:
                     partecipanti = []
                     titolo = msg.titolo or "Conversazione"
+                    extra = {"tipo": "pg", "permanente": False}
                 conversazioni[key] = {
                     "conversazione_id": key,
                     "titolo": titolo,
@@ -2921,18 +2991,17 @@ class ConversazioniView(APIView):
                     "partecipanti": partecipanti,
                     "ultimo_messaggio": msg.data_invio,
                     "non_letti": 0,
+                    **extra,
                 }
 
             conversazioni[key]["messaggi"].append(msg)
-            if msg.data_invio > conversazioni[key]["ultimo_messaggio"]:
+            precedente = conversazioni[key]["ultimo_messaggio"]
+            if precedente is None or msg.data_invio > precedente:
                 conversazioni[key]["ultimo_messaggio"] = msg.data_invio
 
             is_incoming = msg.mittente_personaggio_id != personaggio.id
-            if is_incoming:
-                if not LetturaMessaggio.objects.filter(
-                    messaggio=msg, personaggio=personaggio, letto=True
-                ).exists():
-                    conversazioni[key]["non_letti"] += 1
+            if is_incoming and not bool(getattr(msg, "is_letto_db", False)):
+                conversazioni[key]["non_letti"] += 1
 
         risultato = []
         for conv_data in conversazioni.values():
@@ -2962,11 +3031,122 @@ class ConversazioniView(APIView):
             if allegati_bits:
                 prefix = "Allegati: " + " · ".join(allegati_bits)
                 anteprima = f"{prefix} — {anteprima}" if anteprima else prefix
+            if not anteprima and conv_data.get("tipo") == "gruppo":
+                anteprima = "Chat di gruppo. Scrivi ai membri."
             conv_data["anteprima"] = anteprima
             risultato.append(conv_data)
 
-        risultato.sort(key=lambda x: x["ultimo_messaggio"], reverse=True)
+        def _ordina_conversazione(conv):
+            ts = conv.get("ultimo_messaggio")
+            ts_value = ts.timestamp() if ts is not None else 0
+            return (0 if conv.get("permanente") else 1, -ts_value, str(conv.get("titolo") or ""))
+
+        risultato.sort(key=_ordina_conversazione)
         return Response(risultato)
+
+
+class ConversazioneLeggiView(APIView):
+    """Segna come letti i messaggi in arrivo di una conversazione (anche chat di gruppo)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        personaggio_id = request.data.get("personaggio_id")
+        conversazione_id = str(request.data.get("conversazione_id") or "").strip()
+        if not personaggio_id or not conversazione_id:
+            return Response(
+                {"error": "personaggio_id e conversazione_id sono obbligatori"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Personaggio non trovato"}, status=status.HTTP_404_NOT_FOUND)
+
+        active_campaign = _get_active_campaign(request)
+        from personaggi.chat_carriera import gruppi_chat_attivi_personaggio, segna_messaggi_letti
+
+        qs = Messaggio.objects.filter(campagna=active_campaign)
+        if conversazione_id == "staff":
+            qs = qs.filter(
+                Q(tipo_messaggio=Messaggio.TIPO_STAFF) | Q(is_staff_message=True)
+            ).filter(
+                Q(mittente_personaggio=personaggio) | Q(destinatario_personaggio=personaggio)
+            )
+        elif conversazione_id.startswith("gruppo_"):
+            try:
+                gruppo_id = int(conversazione_id.split("_", 1)[1])
+            except (TypeError, ValueError):
+                return Response({"error": "conversazione_id non valido"}, status=status.HTTP_400_BAD_REQUEST)
+            gruppi_ids = {g.id for g in gruppi_chat_attivi_personaggio(personaggio)}
+            if gruppo_id not in gruppi_ids:
+                return Response({"error": "Chat non disponibile"}, status=status.HTTP_403_FORBIDDEN)
+            qs = qs.filter(tipo_messaggio=Messaggio.TIPO_GRUPPO, destinatario_gruppo_id=gruppo_id)
+        elif conversazione_id.startswith("pg_"):
+            try:
+                other_id = int(conversazione_id.split("_", 1)[1])
+            except (TypeError, ValueError):
+                return Response({"error": "conversazione_id non valido"}, status=status.HTTP_400_BAD_REQUEST)
+            qs = qs.filter(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE).filter(
+                (Q(mittente_personaggio=personaggio) & Q(destinatario_personaggio_id=other_id))
+                | (Q(destinatario_personaggio=personaggio) & Q(mittente_personaggio_id=other_id))
+            )
+        else:
+            return Response({"error": "conversazione_id non valido"}, status=status.HTTP_400_BAD_REQUEST)
+
+        ids_cancellati = LetturaMessaggio.objects.filter(
+            personaggio=personaggio,
+            cancellato=True,
+        ).values_list("messaggio_id", flat=True)
+        ids = list(
+            qs.exclude(id__in=ids_cancellati)
+            .exclude(mittente_personaggio=personaggio)
+            .values_list("id", flat=True)
+        )
+        segna_messaggi_letti(personaggio, ids)
+        return Response({"status": "letto", "conversazione_id": conversazione_id, "non_letti": 0})
+
+
+class MessaggioGruppoCreateView(APIView):
+    """Scrive nella chat permanente di una Korp o di un Dipartimento."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        personaggio_id = request.data.get("personaggio_id")
+        gruppo_id = request.data.get("gruppo_id")
+        testo = request.data.get("testo")
+        titolo = request.data.get("titolo") or ""
+        if not personaggio_id or not gruppo_id or not str(testo or "").strip():
+            return Response(
+                {"error": "personaggio_id, gruppo_id e testo sono obbligatori"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
+            gruppo = Gruppo.objects.select_related("carriera", "carriera__tipo_carriera").get(pk=gruppo_id)
+        except (Personaggio.DoesNotExist, Gruppo.DoesNotExist):
+            return Response({"error": "Dati non validi"}, status=status.HTTP_404_NOT_FOUND)
+
+        from personaggi.chat_carriera import crea_messaggio_gruppo, personaggio_puo_scrivere_in_gruppo
+
+        if not personaggio_puo_scrivere_in_gruppo(personaggio, gruppo):
+            return Response(
+                {"error": "Non fai parte di questa chat."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        with transaction.atomic():
+            messaggio = crea_messaggio_gruppo(
+                personaggio=personaggio,
+                gruppo=gruppo,
+                testo=testo,
+                titolo=titolo,
+                campagna=personaggio.campagna or _get_active_campaign(request),
+            )
+        serializer = MessaggioSerializer(
+            messaggio, context={"request": request, "personaggio": personaggio}
+        )
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class RispondiMessaggioView(APIView):
@@ -2988,10 +3168,38 @@ class RispondiMessaggioView(APIView):
         try:
             personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
             messaggio_originale = Messaggio.objects.select_related(
-                "mittente", "mittente_personaggio", "destinatario_personaggio"
+                "mittente",
+                "mittente_personaggio",
+                "destinatario_personaggio",
+                "destinatario_gruppo",
+                "destinatario_gruppo__carriera",
             ).get(pk=messaggio_id)
         except (Personaggio.DoesNotExist, Messaggio.DoesNotExist):
             return Response({"error": "Dati non validi"}, status=status.HTTP_404_NOT_FOUND)
+
+        if (
+            messaggio_originale.tipo_messaggio == Messaggio.TIPO_GRUPPO
+            and messaggio_originale.destinatario_gruppo_id
+        ):
+            from personaggi.chat_carriera import crea_messaggio_gruppo, personaggio_puo_scrivere_in_gruppo
+
+            gruppo = messaggio_originale.destinatario_gruppo
+            if not personaggio_puo_scrivere_in_gruppo(personaggio, gruppo):
+                return Response(
+                    {"error": "Non fai parte di questa chat."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            risposta = crea_messaggio_gruppo(
+                personaggio=personaggio,
+                gruppo=gruppo,
+                testo=testo,
+                titolo=titolo or f"Re: {messaggio_originale.titolo}",
+                campagna=personaggio.campagna,
+            )
+            serializer = MessaggioSerializer(
+                risposta, context={"request": request, "personaggio": personaggio}
+            )
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         to_staff = (
             messaggio_originale.tipo_messaggio == Messaggio.TIPO_STAFF
@@ -5725,13 +5933,22 @@ class StaffMessageMarkReadView(APIView):
 
     def post(self, request, message_id):
         active_campaign = _get_active_campaign(request)
+        letto = request.data.get("letto", True)
+        if isinstance(letto, str):
+            letto = letto.strip().lower() not in {"0", "false", "no", "off"}
+        else:
+            letto = bool(letto)
         try:
             messaggio = Messaggio.objects.get(
                 pk=message_id, is_staff_message=True, campagna=active_campaign
             )
-            messaggio.letto_staff = True
+            messaggio.letto_staff = letto
             messaggio.save(update_fields=["letto_staff", "updated_at"])
-            return Response({"message": "Messaggio marcato come letto"})
+            return Response({
+                "message": "Messaggio marcato come letto" if letto else "Messaggio marcato come non letto",
+                "letto": letto,
+                "letto_staff": letto,
+            })
         except Messaggio.DoesNotExist:
             return Response({"error": "Messaggio non trovato"}, status=status.HTTP_404_NOT_FOUND)
 

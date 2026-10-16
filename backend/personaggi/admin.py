@@ -1431,8 +1431,14 @@ class PersonaggioCarrieraMembershipAdmin(admin.ModelAdmin):
 
 @admin.register(Gruppo)
 class GruppoAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'conteggio_membri'); search_fields = ('nome',); filter_horizontal = ('membri',)
-    def conteggio_membri(self, obj): return obj.membri.count()
+    list_display = ('nome', 'chat_permanente', 'carriera', 'conteggio_membri')
+    search_fields = ('nome', 'carriera__nome')
+    list_filter = ('chat_permanente',)
+    filter_horizontal = ('membri',)
+    autocomplete_fields = ('carriera',)
+
+    def conteggio_membri(self, obj):
+        return obj.membri.count()
 
 
 @admin.register(UserSocialPreference)

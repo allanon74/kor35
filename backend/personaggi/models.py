@@ -2249,15 +2249,22 @@ class PersonaggioCarrieraMembership(A_modello):
             self.tipo_carriera_id = self.carriera.tipo_carriera_id
         super().save(*args, **kwargs)
         from personaggi.carriere_abilita_default import sync_abilita_default_carriere_for_personaggio
+        from personaggi.chat_carriera import sync_chat_gruppo_carriera
 
         sync_abilita_default_carriere_for_personaggio(self.personaggio_id)
+        if self.carriera_id:
+            sync_chat_gruppo_carriera(self.carriera)
 
     def delete(self, *args, **kwargs):
         personaggio_id = self.personaggio_id
+        carriera = self.carriera if self.carriera_id else None
         super().delete(*args, **kwargs)
         from personaggi.carriere_abilita_default import sync_abilita_default_carriere_for_personaggio
+        from personaggi.chat_carriera import sync_chat_gruppo_carriera
 
         sync_abilita_default_carriere_for_personaggio(personaggio_id)
+        if carriera is not None:
+            sync_chat_gruppo_carriera(carriera)
 
     def __str__(self):
         return f"{self.personaggio.nome} -> {self.carriera.nome}"
@@ -9825,8 +9832,23 @@ class RegolaTransazioneCategoria(SyncableModel, models.Model):
 
 
 class Gruppo(SyncableModel, models.Model):
-    nome = models.CharField(max_length=100, unique=True); membri = models.ManyToManyField('Personaggio', related_name="gruppi_appartenenza", blank=True)
-    def __str__(self): return self.nome
+    nome = models.CharField(max_length=100, unique=True)
+    membri = models.ManyToManyField('Personaggio', related_name="gruppi_appartenenza", blank=True)
+    carriera = models.OneToOneField(
+        "Carriera",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="chat_gruppo",
+        help_text="Se valorizzata, la chat di gruppo è quella permanente della Korp o del Dipartimento.",
+    )
+    chat_permanente = models.BooleanField(
+        default=False,
+        help_text="Chat di Korp o Dipartimento: visibile a tutti i membri attivi, con storico condiviso.",
+    )
+
+    def __str__(self):
+        return self.nome
     
 class Messaggio(SyncableModel, models.Model):
     TIPO_BROADCAST='BROAD' 
