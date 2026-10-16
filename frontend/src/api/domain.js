@@ -1584,6 +1584,13 @@ export const getMissioniEventoTasks = (eventoId, onLogout) =>
     { method: 'GET' },
     onLogout,
   );
+/** PG iscritti a un evento (anche chiuso), per accreditare una task a mano. */
+export const getMissioniEventoPartecipanti = (eventoId, onLogout) =>
+  fetchAuthenticated(
+    `/api/plot/api/missioni/evento-partecipanti/?evento=${encodeURIComponent(eventoId)}`,
+    { method: 'GET' },
+    onLogout,
+  );
 export const setMissioneAttivaEvento = (missioneId, eventoId, attiva, onLogout) =>
   fetchAuthenticated(`/api/plot/api/missioni/${missioneId}/set-attiva-evento/`, {
     method: 'POST',

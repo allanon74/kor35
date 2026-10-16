@@ -17,9 +17,17 @@ import {
   StaffSection,
   staffInputClass,
 } from '../../staff/StaffCrudUi';
-import { StaffToolShell } from '../../staff/StaffToolShell';
+import { StaffToolBody, StaffToolPageTitle, StaffToolShell, StaffToolSubnav } from '../../staff/StaffToolShell';
 import SearchableSelect from './SearchableSelect';
 import MasterGenericList from './MasterGenericList';
+import MissioneSoluzioneManuale from './MissioneSoluzioneManuale';
+
+const SCHEDE = [
+  { id: 'tasks', label: 'Tasks' },
+  { id: 'soluzioni', label: 'Soluzioni' },
+  { id: 'stato', label: 'Stato task evento' },
+  { id: 'manuale', label: 'Soluzione manuale' },
+];
 
 const TIPO_OPTS = [
   { value: 'TECNICA', label: 'Tecnica' },
@@ -96,6 +104,7 @@ export default function MissioniManager({ onLogout }) {
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [scheda, setScheda] = useState('tasks');
 
   /** Solo lista snella — non blocca su eventi/carriere. */
   const loadList = useCallback(async () => {
@@ -356,28 +365,41 @@ export default function MissioniManager({ onLogout }) {
 
   return (
     <StaffToolShell fill>
-      {error ? <p className="mb-3 px-4 pt-3 text-sm text-red-400">{error}</p> : null}
-      <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
-        <EventoTasksLivePanel onLogout={onLogout} className="shrink-0" />
-        <MissioniPropostePanel onLogout={onLogout} className="shrink-0" />
-        <div className="min-h-[28rem] flex-1">
-          <MasterGenericList
-          title="Tasks (missioni)"
-          items={items}
-          columns={missioneColumns}
-          filterConfig={missioneFilterConfig}
-          loading={loading}
-          persistKey="staff-tasks-missioni"
-          addLabel="Nuova"
-          emptyMessage="Nessuna task definita."
-          searchPlaceholder="Cerca titolo, KORP…"
-          getSearchText={(row) => [row.titolo, row.korp_nome, row.tipo_risoluzione, row.allineamento].filter(Boolean).join(' ')}
-          getItemLabel={(row) => row.titolo || `Task #${row.id}`}
-          onAdd={openCreate}
-          onEdit={openEdit}
-          onDelete={remove}
-        />
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="shrink-0 border-b border-gray-800 px-4 pt-4">
+          <StaffToolPageTitle
+            title="Tasks"
+            description="Catalogo, soluzioni dei giocatori, stato nell'evento in corso e accredito manuale."
+          />
+          <StaffToolSubnav className="mb-3 mt-3" tabs={SCHEDE} active={scheda} onChange={setScheda} />
         </div>
+        {error && scheda === 'tasks' ? <p className="px-4 pt-3 text-sm text-red-400">{error}</p> : null}
+        <StaffToolBody className={scheda === 'tasks' ? 'flex min-h-0 flex-col !overflow-hidden' : ''}>
+          {scheda === 'tasks' ? (
+            <div className="flex min-h-[28rem] min-w-0 flex-1 flex-col">
+              <MasterGenericList
+                title="Catalogo task"
+                items={items}
+                columns={missioneColumns}
+                filterConfig={missioneFilterConfig}
+                loading={loading}
+                persistKey="staff-tasks-missioni"
+                pinnedToolbar
+                addLabel="Nuova"
+                emptyMessage="Nessuna task definita."
+                searchPlaceholder="Cerca titolo, KORP…"
+                getSearchText={(row) => [row.titolo, row.korp_nome, row.tipo_risoluzione, row.allineamento].filter(Boolean).join(' ')}
+                getItemLabel={(row) => row.titolo || `Task #${row.id}`}
+                onAdd={openCreate}
+                onEdit={openEdit}
+                onDelete={remove}
+              />
+            </div>
+          ) : null}
+          {scheda === 'soluzioni' ? <MissioniPropostePanel onLogout={onLogout} /> : null}
+          {scheda === 'stato' ? <EventoTasksLivePanel onLogout={onLogout} mostraVuoto /> : null}
+          {scheda === 'manuale' ? <MissioneSoluzioneManuale onLogout={onLogout} /> : null}
+        </StaffToolBody>
       </div>
 
       <StaffModal open={modalOpen} title={form.id ? 'Modifica task' : 'Nuova task'} onClose={() => setModalOpen(false)} onSave={save} saving={saving} wide>
@@ -449,7 +471,7 @@ export default function MissioniManager({ onLogout }) {
 
         <StaffSection
           title="Eventi collegati"
-          hint="Per ogni evento puoi decidere se la task parte attiva (default: sì). Durante l'evento lo staff può accenderla o spegnerla dal pannello in alto."
+          hint="Per ogni evento puoi decidere se la task parte attiva (default: sì). Durante l'evento lo staff la accende o la spegne dalla scheda Stato task evento."
         >
           <div className="max-h-56 space-y-1 overflow-y-auto rounded border border-gray-800 p-2">
             {eventi.length === 0 ? (

@@ -10,11 +10,12 @@ export default function EventoTasksLivePanel({
   onLogout,
   eventoId: eventoIdProp,
   compact = false,
+  mostraVuoto = false,
   className = '',
 }) {
   const [evento, setEvento] = useState(null);
   const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(!!eventoIdProp);
+  const [loading, setLoading] = useState(!!eventoIdProp || !!mostraVuoto);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
 
@@ -67,8 +68,21 @@ export default function EventoTasksLivePanel({
     }
   };
 
-  // Senza eventoId: mostra solo se c'è un evento in corso (niente flash a vuoto).
-  if (!eventoIdProp && !evento && !error) return null;
+  // Senza eventoId: nel plot non lasciare un riquadro vuoto se non c'è un evento in corso.
+  if (!eventoIdProp && !evento && !error && !mostraVuoto) return null;
+
+  if (mostraVuoto && !eventoIdProp && !evento && !error) {
+    return (
+      <section className={`rounded-xl border border-lime-800/60 bg-lime-950/30 p-4 ${className}`.trim()}>
+        <h3 className="text-xs font-black uppercase tracking-wide text-lime-200">Stato task evento</h3>
+        <p className="mt-2 text-sm text-gray-400">
+          {loading
+            ? 'Caricamento…'
+            : 'Nessun evento in corso. Avvia un evento per attivare o disattivare le task.'}
+        </p>
+      </section>
+    );
+  }
 
   const shell = compact
     ? 'rounded-lg border border-lime-900/50 bg-lime-950/20 p-3'
@@ -95,7 +109,7 @@ export default function EventoTasksLivePanel({
           type="button"
           onClick={load}
           disabled={loading}
-          className="shrink-0 rounded border border-gray-700 px-2 py-1 text-[10px] font-bold uppercase text-gray-300 hover:border-lime-700 disabled:opacity-40"
+          className="min-h-11 shrink-0 rounded border border-gray-700 px-3 text-[10px] font-bold uppercase text-gray-300 hover:border-lime-700 disabled:opacity-40"
         >
           {loading ? '…' : 'Aggiorna'}
         </button>
@@ -106,7 +120,7 @@ export default function EventoTasksLivePanel({
       ) : rows.length === 0 ? (
         <p className="text-xs text-gray-500">Nessuna task collegata a questo evento.</p>
       ) : (
-        <ul className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+        <ul className={`${mostraVuoto ? '' : 'max-h-64'} space-y-1.5 overflow-y-auto pr-1`}>
           {rows.map((row) => {
             const liveOn = !!row.attiva;
             const catalogOff = row.attiva_catalogo === false;
@@ -138,7 +152,7 @@ export default function EventoTasksLivePanel({
                   type="button"
                   disabled={busy}
                   onClick={() => toggle(row, !liveOn)}
-                  className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase transition-colors disabled:opacity-40 ${
+                  className={`inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-[10px] font-black uppercase transition-colors disabled:opacity-40 ${
                     liveOn
                       ? 'bg-lime-700 text-white hover:bg-lime-600'
                       : 'bg-gray-800 text-gray-300 hover:bg-gray-700'

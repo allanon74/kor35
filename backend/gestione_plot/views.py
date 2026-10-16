@@ -242,7 +242,15 @@ class EventoViewSet(BloccaPlotArchiviatoMixin, viewsets.ModelViewSet):
         qs = Evento.objects.filter(archiviato_at__isnull=True).order_by("-data_inizio")
         if not request.user.is_superuser:
             qs = qs.filter(staff_assegnato=request.user)
-        return Response(list(qs.values("id", "titolo")))
+        rows = []
+        for row in qs.values("id", "titolo", "started_at", "ended_at"):
+            rows.append({
+                "id": row["id"],
+                "titolo": row["titolo"],
+                "in_corso": bool(row["started_at"]) and row["ended_at"] is None,
+                "chiuso": row["ended_at"] is not None,
+            })
+        return Response(rows)
 
     @action(detail=False, methods=["get"], url_path="geocode")
     def geocode(self, request):

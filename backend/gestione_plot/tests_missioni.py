@@ -500,6 +500,67 @@ class MissioniVisibilitaApiTests(APITestCase):
         self.assertEqual(len(eventi), 1)
         self.assertFalse(eventi[0]["attiva"])
 
+    def test_evento_partecipanti_solo_iscritti_vivi(self):
+        self._avvia_e_iscrivi(self.pg)
+        self.pg_other.eliminato_at = timezone.now()
+        self.pg_other.save(update_fields=["eliminato_at", "updated_at"])
+        self.evento.partecipanti.add(self.pg_other)
+        resp = self._get(
+            self.staffer,
+            f"/api/plot/api/missioni/evento-partecipanti/?evento={self.evento.id}",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
+        self.assertEqual(data["evento_id"], self.evento.id)
+        self.assertTrue(data["in_corso"])
+        self.assertFalse(data["chiuso"])
+        self.assertEqual(data["partecipanti"], [{"id": self.pg.id, "nome": self.pg.nome}])
+
+    def test_player_non_vede_partecipanti_evento(self):
+        resp = self._get(
+            self.player,
+            f"/api/plot/api/missioni/evento-partecipanti/?evento={self.evento.id}",
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_partecipanti_richiede_evento(self):
+        resp = self._get(self.staffer, "/api/plot/api/missioni/evento-partecipanti/")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_opzioni_evento_espone_in_corso_e_chiuso(self):
+        self.evento.staff_assegnato.add(self.master)
+        now = timezone.now()
+        self.evento.started_at = now - timedelta(hours=3)
+        self.evento.ended_at = now
+        self.evento.save(update_fields=["started_at", "ended_at", "updated_at"])
+        resp = self._get(self.master, "/api/plot/api/eventi/opzioni/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        row = next(item for item in resp.json() if item["id"] == self.evento.id)
+        self.assertEqual(row["titolo"], self.evento.titolo)
+        self.assertFalse(row["in_corso"])
+        self.assertTrue(row["chiuso"])
+
+    def test_assegna_su_evento_chiuso(self):
+        now = timezone.now()
+        self.evento.started_at = now - timedelta(hours=2)
+        self.evento.ended_at = now
+        self.evento.save(update_fields=["started_at", "ended_at", "updated_at"])
+        self.evento.partecipanti.add(self.pg)
+        resp = self._post(
+            self.staffer,
+            "/api/plot/api/missioni/assegna-risoluzione/",
+            {
+                "missione_id": str(self.missione.id),
+                "evento_id": self.evento.id,
+                "personaggio_id": self.pg.id,
+                "note": "Segnata a mano a evento chiuso.",
+            },
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        body = resp.json()
+        self.assertTrue(body["ricompensa_reclamata"])
+        self.assertEqual(body["note"], "Segnata a mano a evento chiuso.")
+
     def test_evento_tasks_staff(self):
         resp = self._get(
             self.staffer,

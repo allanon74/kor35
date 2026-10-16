@@ -287,8 +287,9 @@ class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
         if self.action in ("mie", "evento_attivo", "proponi_soluzione"):
             return [permissions.IsAuthenticated()]
         if self.action in (
-            "assegna", "set_attiva_evento", "evento_tasks", "list", "retrieve",
-            "riepilogo_evento", "proposte", "accetta_proposta_action", "rifiuta_proposta_action",
+            "assegna", "set_attiva_evento", "evento_tasks", "evento_partecipanti",
+            "list", "retrieve", "riepilogo_evento", "proposte",
+            "accetta_proposta_action", "rifiuta_proposta_action",
         ):
             return [permissions.IsAuthenticated(), IsCampaignStaffPlus()]
         # CRUD definizione: Master (IsMasterOrReadOnly già richiede staff+ e write=master)
@@ -410,6 +411,29 @@ class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
             "in_corso": in_corso,
             "started_at": evento.started_at,
             "tasks": rows,
+        })
+
+    @action(detail=False, methods=["get"], url_path="evento-partecipanti")
+    def evento_partecipanti(self, request):
+        """PG iscritti a un evento, per l'accredito manuale di una task.
+
+        Il manager di default esclude i personaggi eliminati. L'evento può
+        essere ancora in corso oppure già chiuso.
+        """
+        evento_id = request.query_params.get("evento")
+        if not evento_id:
+            return Response({"detail": "Parametro evento obbligatorio."}, status=400)
+        evento = get_object_or_404(Evento, pk=evento_id)
+        partecipanti = [
+            {"id": row["id"], "nome": row["nome"]}
+            for row in evento.partecipanti.order_by("nome").values("id", "nome")
+        ]
+        return Response({
+            "evento_id": evento.id,
+            "evento_titolo": evento.titolo,
+            "in_corso": bool(evento.started_at) and evento.ended_at is None,
+            "chiuso": evento.ended_at is not None,
+            "partecipanti": partecipanti,
         })
 
     @action(detail=True, methods=["post"], url_path="set-attiva-evento")
