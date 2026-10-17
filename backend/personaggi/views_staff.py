@@ -483,7 +483,11 @@ class InfusioneMasterViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             qs = (
                 Infusione.objects
-                .select_related('aura_richiesta')
+                .select_related('aura_richiesta', 'aura_infusione')
+                .prefetch_related(
+                    'componenti__caratteristica',
+                    'aura_richiesta__aure_infusione_consentite',
+                )
                 .annotate(livello_calc=Sum('componenti__valore'))
                 .only(
                     'id',
@@ -495,6 +499,11 @@ class InfusioneMasterViewSet(viewsets.ModelViewSet):
                     'aura_richiesta__icona',
                     'aura_richiesta__icona_nome_originale',
                     'aura_richiesta__ordine',
+                    'aura_infusione_id',
+                    'componenti__valore',
+                    'componenti__caratteristica__id',
+                    'componenti__caratteristica__nome',
+                    'componenti__caratteristica__sigla',
                     'non_acquistabile',
                     'tipo_risultato',
                     'slot_corpo_permessi',

@@ -13,6 +13,7 @@ import {
 import { confirmCloseIfDirty } from '../hooks/useDirtyModalClose';
 import IconaPunteggio from './IconaPunteggio';
 import { caratteristichePersonaggio } from '../lib/caratteristicheScheda';
+import { auraDelegaMattoni, etichettaMattone, paletteAuraId } from '../lib/paletteMattoni';
 
 // Costanti Slot Corporei (Invariate)
 const BODY_SLOTS = [
@@ -94,11 +95,18 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
     const isInfusion = type === 'Infusione';
     const isCerimoniale = type === 'Cerimoniale';
 
-    // Determina l'Aura da cui pescare i nomi dei mattoni
-    const auraIdForBricks = useMemo(() => {
-        if (isInfusion) return selectedInfusionAuraId || selectedAuraId;
-        return selectedAuraId;
-    }, [isInfusion, selectedAuraId, selectedInfusionAuraId]);
+    const primariaSelezionata = useMemo(
+        () => allPunteggiCache.find((p) => String(p.id) === String(selectedAuraId)) || null,
+        [allPunteggiCache, selectedAuraId],
+    );
+
+    // Tecnologica/Innata: mattoni dell'aura primaria.
+    // Trasmutatore: mattoni dell'aura di infusione (magica, sacra, arcana, psionica).
+    const auraIdForBricks = useMemo(() => paletteAuraId({
+        isInfusion,
+        primaria: primariaSelezionata,
+        secondariaId: selectedInfusionAuraId || null,
+    }), [isInfusion, primariaSelezionata, selectedInfusionAuraId]);
 
     // Init Slot se edit
     useEffect(() => {
@@ -178,6 +186,16 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
             setAvailableInfusionAuras(allPunteggiCache.filter(p => allowedIds.includes(p.id)));
         }
     }, [selectedAuraId, allPunteggiCache, isInfusion, selectedItemType]);
+
+    // Se l'aura primaria delega, la select deve avere un'aura secondaria vera
+    // altrimenti la griglia cadrebbe sui mattoni (sbagliati) della primaria.
+    useEffect(() => {
+        if (!isInfusion || !auraDelegaMattoni(primariaSelezionata)) return;
+        const consentite = (primariaSelezionata.aure_infusione_consentite || []).map(String);
+        if (selectedInfusionAuraId && consentite.includes(String(selectedInfusionAuraId))) return;
+        const first = availableInfusionAuras[0];
+        if (first) setSelectedInfusionAuraId(String(first.id));
+    }, [isInfusion, primariaSelezionata, selectedInfusionAuraId, availableInfusionAuras]);
 
     // --- CALCOLI LIMITI ---
     const currentTotalCount = Object.values(componentsMap).reduce((a, b) => a + b, 0);
@@ -390,9 +408,12 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
     if (!char) return null;
 
     // DETERMINA COSA MOSTRARE NELLA GRIGLIA
-    const displayItems = availableBricks.length > 0 
-        ? availableBricks 
-        : availableCharacteristics.filter(c => isCerimoniale || (char.punteggi_base[c.nome] > 0));
+    const attendeAuraInfusione = isInfusion && auraDelegaMattoni(primariaSelezionata) && !auraIdForBricks;
+    const displayItems = availableBricks.length > 0
+        ? availableBricks
+        : attendeAuraInfusione
+            ? []
+            : availableCharacteristics.filter(c => isCerimoniale || (char.punteggi_base[c.nome] > 0));
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200" onClick={requestClose}>
@@ -635,7 +656,11 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                             <div className="flex justify-between items-end px-1">
                                 <div>
                                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">
-                                        {availableBricks.length > 0 ? `Mattoni dell'Aura Selezionata` : 'Caratteristiche Base'}
+                                        {availableBricks.length > 0
+                                            ? (isInfusion && auraDelegaMattoni(primariaSelezionata)
+                                                ? 'Mattoni dell\'aura di infusione'
+                                                : 'Mattoni dell\'aura')
+                                            : 'Caratteristiche Base'}
                                     </label>
                                     <p className="text-[10px] text-gray-600 mt-0.5">Componi la struttura del potere selezionando i componenti.</p>
                                 </div>
@@ -679,7 +704,9 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                     const charId = characteristic.id;
                                     const charSigla = characteristic.sigla; // Sigla Caratteristica (es: MIR, FOR)
                                     const charName = characteristic.nome;
-                                    const brickName = item.nome; // Nome Mattone (es: "Dardo")
+                                    const brickName = item.caratteristica_associata
+                                        ? etichettaMattone(item.nome, charSigla)
+                                        : item.nome;
 
                                     const count = componentsMap[charId] || 0;
                                     const isCompatible = isCharCompatible(charId);
@@ -695,7 +722,9 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                                     <span className="text-[11px] font-bold truncate text-gray-200" title={brickName}>{brickName}</span>
                                                     {/* SIGLA CARATTERISTICA ASSOCIATA SOTTO */}
                                                     <div className="flex items-center gap-1 flex-wrap">
-                                                        <span className="text-[8px] uppercase text-gray-500 font-black tracking-tighter">{charSigla}</span>
+                                                        {!item.caratteristica_associata && (
+                                                            <span className="text-[8px] uppercase text-gray-500 font-black tracking-tighter">{charSigla}</span>
+                                                        )}
                                                         {!isCerimoniale && <span className="text-[8px] text-gray-600 font-bold">• Max {pgMaxScore}</span>}
                                                         {isMandatoryBrick && (
                                                             <span className="text-[7px] uppercase font-black text-rose-400 tracking-tighter">Obbligo modello</span>

@@ -1480,23 +1480,20 @@ class ComponenteTecnicaSerializer(serializers.Serializer):
 
 def _serialize_componenti_con_nome_mattone(tecnica_obj):
     """
-    Restituisce i componenti con il nome mattone "umano" (se risolvibile da aura+caratteristica).
-    Fallback: nome caratteristica.
+    Componenti con il nome mattone dell'aura palette (primaria, oppure secondaria
+    se l'aura richiesta delega). Fallback: nome caratteristica.
     """
+    from .models import aura_fonte_mattoni_per_tecnica, nomi_mattone_per_caratteristica
+
     rows = list(tecnica_obj.componenti.select_related('caratteristica').all())
     if not rows:
         return []
 
-    by_char = {}
-    aura_id = getattr(tecnica_obj, 'aura_richiesta_id', None)
     char_ids = [r.caratteristica_id for r in rows if r.caratteristica_id]
-    if aura_id and char_ids:
-        for mattone in (
-            Mattone.objects
-            .filter(aura_id=aura_id, caratteristica_associata_id__in=char_ids)
-            .order_by('ordine', 'nome', 'id')
-        ):
-            by_char.setdefault(mattone.caratteristica_associata_id, mattone.nome)
+    by_char = nomi_mattone_per_caratteristica(
+        aura_fonte_mattoni_per_tecnica(tecnica_obj),
+        char_ids,
+    )
 
     out = []
     for row in rows:
@@ -2436,18 +2433,30 @@ def _qr_fields_for_avista(instance):
 class InfusioneStaffListSerializer(serializers.ModelSerializer):
     """
     Payload leggero per lista staff infusioni.
+    I mattoni sono solo etichette: in DB restano le caratteristiche.
     """
     aura_richiesta = PunteggioSmallSerializer(read_only=True)
     has_qrcode = serializers.BooleanField(read_only=True)
     qrcode_id = serializers.CharField(read_only=True, allow_null=True)
     livello = serializers.IntegerField(source='livello_calc', read_only=True)
+    componenti = serializers.SerializerMethodField()
 
     class Meta:
         model = Infusione
         fields = (
-            'id', 'nome', 'livello', 'aura_richiesta', 'has_qrcode', 'qrcode_id',
+            'id', 'nome', 'livello', 'aura_richiesta', 'componenti', 'has_qrcode', 'qrcode_id',
             'non_acquistabile', 'tipo_risultato', 'slot_corpo_permessi',
         )
+
+    def get_componenti(self, obj):
+        return [
+            {
+                'id': row.get('caratteristica', {}).get('id') if row.get('caratteristica') else None,
+                'nome': row.get('mattone_nome') or '',
+                'valore': row.get('valore'),
+            }
+            for row in _serialize_componenti_con_nome_mattone(obj)
+        ]
 
 
 class TessituraStaffListSerializer(serializers.ModelSerializer):
@@ -2734,9 +2743,26 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
         return full or user.username or ''
 
     def to_representation(self, instance):
+        from .models import aura_fonte_mattoni_per_proposta, nomi_mattone_per_caratteristica
+
         rep = super().to_representation(instance)
         rep['totale_mattoni_minimi'] = instance.totale_mattoni_minimi()
         rep['livello_suggerito'] = instance.livello_suggerito
+        componenti = rep.get('componenti') or []
+        char_ids = []
+        for row in componenti:
+            caratteristica = row.get('caratteristica') if isinstance(row, dict) else None
+            if isinstance(caratteristica, dict) and caratteristica.get('id'):
+                char_ids.append(caratteristica['id'])
+        nomi = nomi_mattone_per_caratteristica(
+            aura_fonte_mattoni_per_proposta(instance),
+            char_ids,
+        )
+        for row in componenti:
+            caratteristica = row.get('caratteristica') if isinstance(row, dict) else None
+            cid = caratteristica.get('id') if isinstance(caratteristica, dict) else None
+            if cid and cid in nomi:
+                row['mattone_nome'] = nomi[cid]
         return rep
 
     def create(self, validated_data):
