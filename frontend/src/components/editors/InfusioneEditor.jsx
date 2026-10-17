@@ -14,7 +14,8 @@ import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import ActivationCostInline from './inlines/ActivationCostInline';
 import SezioniCondizionaliEditor from './inlines/SezioniCondizionaliEditor';
 import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
-import { caratteristichePersonaggio } from '../../lib/caratteristicheScheda';
+import { getMattoniAura } from '../../api';
+import { etichettaMattone, paletteAuraId } from '../../lib/paletteMattoni';
 
 const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -45,6 +46,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState({ type: 'success', message: '' });
   const [isFormulaBuilderOpen, setIsFormulaBuilderOpen] = useState(false);
+  const [mattoneOptions, setMattoneOptions] = useState([]);
 
   // Alias per chiusura
   const handleClose = onCancel || onBack;
@@ -60,6 +62,58 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
   useEffect(() => {
     getStatisticheList(onLogout).then(setStatsOptions);
   }, [onLogout]);
+
+  const auraRichiestaId = formData.aura_richiesta?.id || formData.aura_richiesta || null;
+  const auraInfusioneId = formData.aura_infusione?.id || formData.aura_infusione || null;
+  const primaria = (punteggiList || []).find((p) => String(p.id) === String(auraRichiestaId)) || null;
+  const paletteId = paletteAuraId({
+    isInfusion: true,
+    primaria,
+    secondariaId: auraInfusioneId,
+  });
+
+  useEffect(() => {
+    if (!paletteId) {
+      setMattoneOptions([]);
+      return undefined;
+    }
+    let attivo = true;
+    getMattoniAura(paletteId)
+      .then(({ mattoni }) => {
+        if (!attivo) return;
+        setMattoneOptions((mattoni || []).map((mattone) => {
+          const caratteristica = mattone.caratteristica_associata || {};
+          return {
+            id: caratteristica.id,
+            nome: etichettaMattone(mattone.nome, caratteristica.sigla),
+            sigla: caratteristica.sigla,
+            tipo: 'CA',
+          };
+        }).filter((opt) => opt.id));
+      })
+      .catch(() => {
+        if (attivo) setMattoneOptions([]);
+      });
+    return () => {
+      attivo = false;
+    };
+  }, [paletteId]);
+
+  const opzioniComponenti = (() => {
+    const byId = new Map((mattoneOptions || []).filter((opt) => opt.id).map((opt) => [String(opt.id), opt]));
+    (formData.componenti || []).forEach((row) => {
+      const id = row?.caratteristica?.id || row?.caratteristica;
+      if (!id || byId.has(String(id))) return;
+      const nota = (punteggiList || []).find((p) => String(p.id) === String(id));
+      byId.set(String(id), {
+        id,
+        nome: nota ? etichettaMattone(nota.nome, nota.sigla) : `Caratteristica ${id}`,
+        sigla: nota?.sigla,
+        tipo: 'CA',
+      });
+    });
+    return [...byId.values()];
+  })();
 
   const updateInline = (key, index, field, value) => {
     const newList = [...(formData[key] || [])];
@@ -330,10 +384,15 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         )}
       </div>
 
-      {/* 6. COMPONENTI CARATTERISTICHE */}
+      {/* 6. COMPONENTI: in DB la caratteristica, a video il mattone dell'aura palette */}
+      {!paletteId && primaria ? (
+        <p className="text-[11px] text-amber-300/90">
+          Scegli l&apos;aura di infusione per vedere i mattoni (magica, sacra, arcana, psionica).
+        </p>
+      ) : null}
       <CharacteristicInline 
         items={formData.componenti || []} 
-        options={caratteristichePersonaggio(punteggiList)}
+        options={opzioniComponenti}
         onAdd={() => setFormData({...formData, componenti: [...(formData.componenti || []), {caratteristica:'', valore:1}]})}
         onChange={(i, f, v) => updateInline('componenti', i, f, v)}
         onRemove={(i) => setFormData({...formData, componenti: formData.componenti.filter((_, idx) => idx !== i)})}

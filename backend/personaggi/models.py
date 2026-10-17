@@ -6719,11 +6719,73 @@ class OggettoSezioneStatistica(SyncableModel, models.Model):
         return f"{self.statistica}: {self.valore}"
 
 
+def aura_delega_mattoni_a_secondaria(aura):
+    """
+    True se i mattoni dell'infusione non stanno sull'aura primaria.
+
+    Tecnologica e Innata consentono solo se stesse: la palette è la primaria.
+    Trasmutatore e Alchimia consentono aure diverse (magica, sacra, …):
+    la palette è l'aura di infusione scelta.
+    """
+    if aura is None or not getattr(aura, "pk", None):
+        return False
+    cached = getattr(aura, "_delega_mattoni_cache", None)
+    if cached is not None:
+        return cached
+    prefetched = getattr(aura, "_prefetched_objects_cache", {}).get("aure_infusione_consentite")
+    if prefetched is not None:
+        delega = any(other.pk != aura.pk for other in prefetched)
+    else:
+        delega = aura.aure_infusione_consentite.exclude(pk=aura.pk).exists()
+    try:
+        aura._delega_mattoni_cache = delega
+    except Exception:
+        pass
+    return delega
+
+
+def aura_palette_mattoni(primaria, secondaria):
+    """Aura i cui Mattone danno il nome da mostrare. Il DB resta sulle caratteristiche."""
+    if aura_delega_mattoni_a_secondaria(primaria):
+        return secondaria
+    return primaria
+
+
+def etichetta_mattone(mattone):
+    """Nome visibile: «Fuoco (DEX)». Senza sigla resta il solo nome del mattone."""
+    nome = (getattr(mattone, "nome", None) or "").strip()
+    caratteristica = getattr(mattone, "caratteristica_associata", None)
+    sigla = ((getattr(caratteristica, "sigla", None) or "") if caratteristica is not None else "").strip()
+    if nome and sigla:
+        return f"{nome} ({sigla})"
+    return nome or sigla
+
+
+def nomi_mattone_per_caratteristica(aura, caratteristica_ids):
+    """Mappa caratteristica_id → etichetta del mattone di quell'aura."""
+    ids = [cid for cid in (caratteristica_ids or []) if cid]
+    if aura is None or not ids:
+        return {}
+    out = {}
+    for mattone in (
+        Mattone.objects.filter(
+            aura=aura,
+            caratteristica_associata_id__in=ids,
+            indice_componente__isnull=True,
+        )
+        .select_related("caratteristica_associata")
+        .order_by("ordine", "nome", "id")
+    ):
+        out.setdefault(mattone.caratteristica_associata_id, etichetta_mattone(mattone))
+    return out
+
+
 def aura_fonte_mattoni_per_infusione(infusione):
     """Punteggio-aura la cui palette di Mattone definisce i componenti dell'infusione."""
-    if getattr(infusione, "aura_infusione_id", None):
-        return infusione.aura_infusione
-    return infusione.aura_richiesta
+    return aura_palette_mattoni(
+        getattr(infusione, "aura_richiesta", None),
+        getattr(infusione, "aura_infusione", None),
+    )
 
 
 def aura_fonte_mattoni_per_proposta(proposta):
@@ -6734,7 +6796,7 @@ def aura_fonte_mattoni_per_proposta(proposta):
     if proposta.tipo == TIPO_PROPOSTA_CERIMONIALE:
         return None
     if proposta.tipo == TIPO_PROPOSTA_INFUSIONE:
-        return proposta.aura_infusione or proposta.aura
+        return aura_palette_mattoni(proposta.aura, proposta.aura_infusione)
     return proposta.aura
 
 

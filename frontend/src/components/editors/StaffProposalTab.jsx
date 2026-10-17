@@ -178,6 +178,7 @@ const StaffProposalTab = ({ onLogout }) => {
     };
 
     const getCharName = (componente) => {
+        if (componente.mattone_nome) return componente.mattone_nome;
         if (componente.caratteristica_nome) return componente.caratteristica_nome;
         if (componente.caratteristica && typeof componente.caratteristica === 'object') {
             return componente.caratteristica.nome || componente.caratteristica.sigla || "Caratteristica";
