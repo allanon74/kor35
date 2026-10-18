@@ -35,6 +35,7 @@ import { ensureAppServiceWorker } from '../lib/appServiceWorker';
 import { canAccessModuloMode, getModuloAccesso } from '../lib/campagnaModuli';
 import { htmlToPlainText } from '../utils/htmlSanitizer';
 import { mergeActiveTimers, normalizeTimerRow, timerStateKey } from '../utils/activeTimers';
+import { GIOCO_EVENTO_STATO_VUOTO, mergeGiocoEventoStato } from '../utils/giocoEventoStato';
 
 import { 
   usePunteggi, 
@@ -142,15 +143,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
   );
 
   const [viewAll, setViewAll] = useState(false);
-  const [giocoEventoStato, setGiocoEventoStato] = useState({
-    evento_aperto: false,
-    evento_titolo: null,
-    azioni_live_abilitate: false,
-    bypass_evento_gate: false,
-    transazioni_giocatore_abilitate: false,
-    nodo_scan_abilitato: false,
-    allibratore_codici_abilitati: false,
-  });
+  const [giocoEventoStato, setGiocoEventoStato] = useState(() => ({ ...GIOCO_EVENTO_STATO_VUOTO }));
   
   // --- NUOVO STATO PER I TIMER (GESTIONE GLOBALE) ---
   const [activeTimers, setActiveTimers] = useState({});
@@ -251,15 +244,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
       try {
         const data = await getGiocoEventoStato(onLogout);
         if (!cancelled && data && typeof data === 'object') {
-          setGiocoEventoStato({
-            evento_aperto: !!data.evento_aperto,
-            evento_titolo: data.evento_titolo || null,
-            azioni_live_abilitate: !!data.azioni_live_abilitate,
-            bypass_evento_gate: !!data.bypass_evento_gate,
-            transazioni_giocatore_abilitate: !!data.transazioni_giocatore_abilitate,
-            nodo_scan_abilitato: !!data.nodo_scan_abilitato,
-            allibratore_codici_abilitati: !!data.allibratore_codici_abilitati,
-          });
+          setGiocoEventoStato((prev) => mergeGiocoEventoStato(prev, data));
         }
       } catch {
         /* rete: mantieni ultimo stato noto */
@@ -369,15 +354,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
           try {
             const stato = await getGiocoEventoStato(onLogout);
             if (stato && typeof stato === 'object') {
-              setGiocoEventoStato({
-                evento_aperto: !!stato.evento_aperto,
-                evento_titolo: stato.evento_titolo || null,
-                azioni_live_abilitate: !!stato.azioni_live_abilitate,
-                bypass_evento_gate: !!stato.bypass_evento_gate,
-                transazioni_giocatore_abilitate: !!stato.transazioni_giocatore_abilitate,
-                nodo_scan_abilitato: !!stato.nodo_scan_abilitato,
-                allibratore_codici_abilitati: !!stato.allibratore_codici_abilitati,
-              });
+              setGiocoEventoStato((prev) => mergeGiocoEventoStato(prev, stato));
             }
           } catch {
             /* noop */

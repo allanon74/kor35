@@ -1,4 +1,4 @@
-import React, { useContext, useLayoutEffect, useRef } from 'react';
+import React, { useCallback, useContext, useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createRoot } from 'react-dom/client';
 import { ensureDetailsClosed } from '../utils/htmlSanitizer';
@@ -72,6 +72,17 @@ function getFinalHtml(content) {
   return ensureDetailsClosed(htmlWithSlots);
 }
 
+/** Firma stabile: un array nuovo con gli stessi termini non ricostruisce la pagina. */
+function glossarySignature(entries) {
+  if (!entries || entries.length === 0) return '';
+  return entries.map((entry) => [
+    entry?.sync_id ?? '',
+    entry?.nome ?? '',
+    entry?.dichiarazione ?? '',
+    entry?.descrizione ?? '',
+  ].join('\u0001')).join('\u0002');
+}
+
 export default function WikiRenderer({ content, glossaryEntries = EMPTY_GLOSSARY }) {
   ensureRichTextStyles();
 
@@ -79,24 +90,45 @@ export default function WikiRenderer({ content, glossaryEntries = EMPTY_GLOSSARY
   const rootsRef = useRef([]);
   const characterValue = useContext(CharacterContext);
   const navigate = useNavigate();
+  const characterValueRef = useRef(characterValue);
+  const navigateRef = useRef(navigate);
+  const glossaryRef = useRef(glossaryEntries);
+  characterValueRef.current = characterValue;
+  navigateRef.current = navigate;
+  glossaryRef.current = glossaryEntries;
 
   // Render container whenever we have content (string); empty string still gets a div so effect can run
   const contentStr = content != null ? String(content) : '';
+  const glossaryKey = useMemo(
+    () => glossarySignature(glossaryEntries),
+    [glossaryEntries],
+  );
 
+  const paintWidgets = useCallback(() => {
+    const value = characterValueRef.current;
+    const nav = navigateRef.current;
+    rootsRef.current.forEach(({ root, type, id }) => {
+      root.render(renderWidgetByType(type, id, value, nav));
+    });
+  }, []);
+
+  // Il contesto personaggio (poll stato evento ~60s, messaggi, timer) NON deve
+  // riscrivere l'HTML. innerHTML azzera i widget: la pagina Professioni si accorcia,
+  // lo scroll del <main> torna in cima e i tier vengono richiesti da capo.
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    // Unmount previous widgets before replacing HTML
-    rootsRef.current.forEach((r) => r.unmount());
+    rootsRef.current.forEach(({ root }) => root.unmount());
     rootsRef.current = [];
 
     // Set HTML imperatively so React never overwrites it on re-render (fix: widgets no longer disappear)
     const finalHtml = getFinalHtml(contentStr);
     container.innerHTML = finalHtml;
 
-    if (glossaryEntries && glossaryEntries.length > 0) {
-      applyWikiGlossaryToContainer(container, glossaryEntries);
+    const entries = glossaryRef.current;
+    if (entries && entries.length > 0) {
+      applyWikiGlossaryToContainer(container, entries);
     }
 
     const openGlossaryTarget = (e) => {
@@ -118,16 +150,23 @@ export default function WikiRenderer({ content, glossaryEntries = EMPTY_GLOSSARY
       const type = slot.getAttribute('data-widget-type');
       const id = slot.getAttribute('data-widget-id');
       const root = createRoot(slot);
-      root.render(renderWidgetByType(type, id, characterValue, navigate));
-      rootsRef.current.push(root);
+      rootsRef.current.push({ root, type, id });
     });
+    paintWidgets();
 
     return () => {
       container.removeEventListener('click', openGlossaryTarget);
-      rootsRef.current.forEach((r) => r.unmount());
+      rootsRef.current.forEach(({ root }) => root.unmount());
       rootsRef.current = [];
     };
-  }, [contentStr, characterValue, navigate, glossaryEntries]);
+  }, [contentStr, glossaryKey, paintWidgets]);
+
+  // Aggiorna il Provider dei widget già montati (es. costi in PunteggioDisplay)
+  // senza smontarli: lo stato locale (filtri, sezioni aperte) resta.
+  useLayoutEffect(() => {
+    if (rootsRef.current.length === 0) return;
+    paintWidgets();
+  }, [characterValue, navigate, paintWidgets]);
 
   // Senza contenuto non si monta il contenitore: l'effect sopra si limita a non fare nulla
   // (l'uscita anticipata prima degli hook violava le regole dei hook di React).
