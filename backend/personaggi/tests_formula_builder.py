@@ -427,6 +427,45 @@ class FormulaBuilderLogicTests(TestCase):
         self.assertIn("fuoco", rendered)
         self.assertIn("/", rendered)
 
+    def test_source_element_id_risolve_dichiarazione_senza_elemento_principale(self):
+        """Infusioni: l'override del costruttore non ha un FK elemento_principale."""
+        aura = Punteggio.objects.create(
+            nome="Aura Magica Override",
+            sigla="AMO",
+            tipo=AURA,
+            colore="#333333",
+        )
+        caratt = Punteggio.objects.create(
+            nome="Mente Override",
+            sigla="MEO",
+            tipo=CARATTERISTICA,
+            colore="#111111",
+        )
+        mattone = Mattone.objects.create(
+            nome="Marchio lungo",
+            sigla="AKD",
+            tipo="MA",
+            colore="#ff3300",
+            aura=aura,
+            caratteristica_associata=caratt,
+            dichiarazione="Aker'Atlan",
+        )
+        rendered = formatta_testo_generico(
+            "",
+            formula="{formula_source}",
+            context={
+                "formula_kind": "ATT",
+                "formula_builder_selezioni": {
+                    "formula_type": "attack",
+                    "formula_source": ["elemento_principale"],
+                    "source_element_id": str(mattone.id),
+                },
+            },
+            solo_formula=True,
+        )
+        self.assertIn("Aker'Atlan", rendered)
+        self.assertNotIn("Elemento", rendered)
+
     def test_source_append_shows_chop_and_fuoco(self):
         user_model = get_user_model()
         user = user_model.objects.create_user(username="formula_source_append", password="x")

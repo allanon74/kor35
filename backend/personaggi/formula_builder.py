@@ -158,6 +158,30 @@ def _capacity_header_text(selections):
     return "Capacità {entity_name}: "
 
 
+def resolve_elemento_override(selections):
+    """
+    Mattone (o punteggio) scelto nel costruttore come sorgente elemento.
+
+    Le infusioni non hanno «elemento principale»: l'override vive solo in
+    ``source_element_id`` dentro ``formula_builder_selezioni``. Si preferisce
+    il modello concreto Mattone, così la dichiarazione (es. «Fuoco») arriva
+    in formula e non resta il nome generico «Elemento».
+    """
+    if not isinstance(selections, dict):
+        return None
+    if not any(sid in ("elemento", "elemento_principale") for sid in _source_selection_ids(selections)):
+        return None
+    element_id = selections.get("source_element_id")
+    if element_id in (None, ""):
+        return None
+    from .models import Mattone, Punteggio
+
+    mattone = Mattone.objects.filter(pk=element_id).first()
+    if mattone is not None:
+        return mattone
+    return Punteggio.objects.filter(pk=element_id).first()
+
+
 def _source_selection_ids(selections):
     if not isinstance(selections, dict):
         return []

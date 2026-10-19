@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { staffGetFormulaBuilderSchema, staffPreviewFormulaBuilder } from '../../api';
+import { staffGetFormulaBuilderSchema, staffGetFormulaSemanticOptions, staffPreviewFormulaBuilder } from '../../api';
 
 const FormulaBuilderModal = ({
   open,
@@ -17,6 +17,7 @@ const FormulaBuilderModal = ({
   savedFormulaType = null,
 }) => {
   const [schema, setSchema] = useState(null);
+  const [catalogoElementi, setCatalogoElementi] = useState([]);
   const [formulaType, setFormulaType] = useState(defaultFormulaType);
   const [selections, setSelections] = useState({});
   const [sourceElementId, setSourceElementId] = useState('');
@@ -45,6 +46,7 @@ const FormulaBuilderModal = ({
   const [effectDescription, setEffectDescription] = useState('');
   const [omitFormulaSource, setOmitFormulaSource] = useState(false);
   const wasOpenRef = useRef(false);
+  const catalogoGenRef = useRef(0);
 
   const restoreFromSavedSelections = (sel) => {
     const data = sel && typeof sel === 'object' ? sel : {};
@@ -73,13 +75,22 @@ const FormulaBuilderModal = ({
     setOmitFormulaSource(!!data.omit_formula_source);
   };
 
-  const normalizedElementoOptions = useMemo(
-    () => (elementoOptions || []).map((el) => ({
-      id: String(el.id),
-      label: el.label || el.dichiarazione || el.nome || `Elemento ${el.id}`,
-    })),
-    [elementoOptions]
-  );
+  const normalizedElementoOptions = useMemo(() => {
+    const byId = new Map();
+    const push = (el) => {
+      if (el == null || el.id == null || el.id === '') return;
+      const id = String(el.id);
+      if (byId.has(id)) return;
+      byId.set(id, {
+        id,
+        label: el.label || el.dichiarazione || el.nome || `Elemento ${el.id}`,
+      });
+    };
+    // Le opzioni del chiamante (elemento già in scheda) vincono sull'etichetta.
+    (elementoOptions || []).forEach(push);
+    (catalogoElementi || []).forEach(push);
+    return [...byId.values()];
+  }, [elementoOptions, catalogoElementi]);
 
   const templateBlocks = useMemo(() => {
     const blocks = schema?.type_templates?.[formulaType] || schema?.type_templates?.attack || [];
@@ -172,9 +183,12 @@ const FormulaBuilderModal = ({
     source_element_id: wantsElementSource && effectiveSourceElementId ? effectiveSourceElementId : null,
   });
 
+  const parentHasElementi = Array.isArray(elementoOptions) && elementoOptions.length > 0;
+
   useEffect(() => {
     if (!open) {
       wasOpenRef.current = false;
+      catalogoGenRef.current += 1;
       return;
     }
     if (wasOpenRef.current) {
@@ -206,7 +220,22 @@ const FormulaBuilderModal = ({
     staffGetFormulaBuilderSchema(onLogout)
       .then((data) => setSchema(data || null))
       .catch((err) => console.error('Errore schema formula builder:', err));
-  }, [open, onLogout, defaultFormulaType, elementoPrincipaleId, formulaValue, savedSelections, savedFormulaType]);
+
+    // Infusioni e oggetti non passano elementoOptions: senza questo fetch la
+    // tendina «sovrascrivi elemento» resta vuota.
+    if (parentHasElementi) {
+      setCatalogoElementi([]);
+    } else {
+      const gen = ++catalogoGenRef.current;
+      staffGetFormulaSemanticOptions(onLogout)
+        .then((data) => {
+          if (catalogoGenRef.current !== gen) return;
+          const rows = data?.elementi_mattoni;
+          setCatalogoElementi(Array.isArray(rows) ? rows : []);
+        })
+        .catch((err) => console.error('Errore catalogo elementi formula:', err));
+    }
+  }, [open, onLogout, defaultFormulaType, elementoPrincipaleId, formulaValue, savedSelections, savedFormulaType, parentHasElementi]);
 
   useEffect(() => {
     if (!open || !schema) {
@@ -441,12 +470,11 @@ const FormulaBuilderModal = ({
                   <div className="mt-3 space-y-2">
                     {tessituraElementoId ? (
                       <p className="text-sm text-emerald-300">
-                        Elemento dalla tessitura: <strong>{tessituraElementoLabel}</strong>
+                        Elemento dalla scheda: <strong>{tessituraElementoLabel}</strong>
                       </p>
                     ) : (
                       <p className="text-sm text-amber-300">
-                        Nessun elemento principale impostato nel form tessitura: scegline uno sotto o impostalo nel
-                        campo «Elemento Principale» prima di applicare.
+                        Nessun elemento già impostato sulla scheda: scegline uno qui sotto.
                       </p>
                     )}
                     <label className="text-xs text-gray-400 uppercase tracking-widest block mb-1">
@@ -469,8 +497,9 @@ const FormulaBuilderModal = ({
                       ))}
                     </select>
                     <p className="text-[11px] text-gray-500">
-                      Se scegli un elemento qui, alla pressione di «Applica» aggiorna anche il campo Elemento
-                      Principale nel form tessitura.
+                      {tessituraElementoId
+                        ? 'Se scegli un elemento qui, «Applica» aggiorna anche il campo Elemento Principale.'
+                        : 'L\'elemento scelto viene salvato con la formula e usato come sorgente.'}
                     </p>
                   </div>
                 )}

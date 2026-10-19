@@ -1172,6 +1172,14 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
             )
 
     # 3. Preparazione Contesto Oggetti (per |NAME)
+    # Infusioni e oggetti generati non hanno elemento_principale: l'override
+    # del costruttore formula è source_element_id nelle selezioni salvate.
+    if context and not context.get("elemento"):
+        from .formula_builder import resolve_elemento_override
+        elemento_override = resolve_elemento_override(context.get("formula_builder_selezioni"))
+        if elemento_override is not None:
+            context["elemento"] = elemento_override
+
     object_context = {}
     if context:
         for k, v in context.items():
