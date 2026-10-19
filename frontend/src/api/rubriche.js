@@ -62,6 +62,7 @@ export const getArticoli = (personaggioId, onLogout, options = {}) =>
     `/api/social/rubriche-articoli/${conPersonaggio(personaggioId, {
       rubrica: options.rubricaId,
       stato: options.stato,
+      hashtag: options.hashtag,
       page: options.page,
       page_size: options.pageSize,
     })}`,

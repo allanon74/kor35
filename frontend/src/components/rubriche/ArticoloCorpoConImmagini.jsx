@@ -31,6 +31,7 @@ export default function ArticoloCorpoConImmagini({
   immagini = [],
   titolo = '',
   className = '',
+  onClick,
 }) {
   const byId = useMemo(() => {
     const map = new Map();
@@ -81,7 +82,7 @@ export default function ArticoloCorpoConImmagini({
   }
 
   return (
-    <div className={`rubrica-corpo-con-immagini ${className}`}>
+    <div className={`rubrica-corpo-con-immagini ${className}`} onClick={onClick}>
       <style>{`
         .rubrica-corpo-con-immagini .rubrica-img--wide {
           width: 100vw;
@@ -121,6 +122,14 @@ export default function ArticoloCorpoConImmagini({
             max-width: 100%;
             margin: 1rem 0;
           }
+        }
+        .rubrica-corpo-con-immagini .kor-instafame-hashtag {
+          color: #f0abfc;
+          text-decoration: underline dotted;
+        }
+        .rubrica-corpo-con-immagini .kor-instafame-mention {
+          color: #fcd34d;
+          text-decoration: underline dotted;
         }
         .rubrica-corpo-con-immagini::after {
           content: '';

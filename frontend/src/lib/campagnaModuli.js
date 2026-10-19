@@ -38,6 +38,7 @@ export const STAFF_TOOL_TO_MODULO = {
   'negozi-mercante': 'negozi',
   'creazione-guidata': 'creazione_guidata',
   'social-report': 'social',
+  'instafame-post': 'social',
   'economia-crediti': 'conto_deposito',
   rubriche: 'rubriche',
   chiamate: 'chiamate',

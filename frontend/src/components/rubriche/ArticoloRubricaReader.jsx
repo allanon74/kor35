@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Clock, Heart, MessageCircle, Send, Trash2 } from 'lucide-react';
+import { ArrowLeft, Clock, Heart, MessageCircle, Pencil, Send, Trash2 } from 'lucide-react';
 import ArticoloCorpoConImmagini from './ArticoloCorpoConImmagini';
 import InstafameAuthorSignature from '../InstafameAuthorSignature';
+import InstafameMentionField from '../InstafameMentionField';
+import InstafameRichText, { decoraTokenInstafameHtml, gestisciClickTokenInstafame } from '../InstafameRichText';
 import { formatCount } from '../../utils/formatCount';
 import {
+  aggiornaCommentoArticolo,
   creaCommentoArticolo,
   eliminaCommentoArticolo,
   getArticolo,
@@ -29,6 +32,8 @@ export default function ArticoloRubricaReader({
   onLogout,
   onChiudi,
   onModifica,
+  onHashtag,
+  commentoIniziale = null,
 }) {
   const [articolo, setArticolo] = useState(null);
   const [caricamento, setCaricamento] = useState(true);
@@ -36,6 +41,7 @@ export default function ArticoloRubricaReader({
   const [commenti, setCommenti] = useState([]);
   const [nuovoCommento, setNuovoCommento] = useState('');
   const [inviando, setInviando] = useState(false);
+  const [commentoInModifica, setCommentoInModifica] = useState(null);
 
   const caricaArticolo = useCallback(async () => {
     if (!articoloId) return;
@@ -66,6 +72,17 @@ export default function ArticoloRubricaReader({
     caricaCommenti();
   }, [caricaArticolo, caricaCommenti]);
 
+  useEffect(() => {
+    if (!commentoIniziale || commenti.length === 0) return undefined;
+    const timer = window.setTimeout(() => {
+      document.querySelector(`[data-commento-id="${commentoIniziale}"]`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [commentoIniziale, commenti]);
+
   const gestisciLike = async () => {
     if (!articolo) return;
     try {
@@ -95,6 +112,22 @@ export default function ArticoloRubricaReader({
       setArticolo((prec) => ({ ...prec, comments_count: Number(prec.comments_count || 0) + 1 }));
     } catch (e) {
       setErrore(e?.message || 'Commento non inviato.');
+    } finally {
+      setInviando(false);
+    }
+  };
+
+  const salvaModificaCommento = async (evento) => {
+    evento.preventDefault();
+    const testo = (commentoInModifica?.testo || '').trim();
+    if (!testo || !articolo || !commentoInModifica?.id) return;
+    setInviando(true);
+    try {
+      await aggiornaCommentoArticolo(articolo.id, commentoInModifica.id, testo, personaggioId, onLogout);
+      setCommentoInModifica(null);
+      await caricaCommenti();
+    } catch (e) {
+      setErrore(e?.message || 'Modifica commento non riuscita.');
     } finally {
       setInviando(false);
     }
@@ -205,15 +238,35 @@ export default function ArticoloRubricaReader({
             className="text-sm md:text-base text-amber-50/90 font-medium leading-relaxed pl-3 mb-4"
             style={{ borderLeft: `3px solid ${colore}` }}
           >
-            {articolo.sommario_effettivo || articolo.sommario}
+            <InstafameRichText
+              text={articolo.sommario || articolo.sommario_effettivo}
+              tags={articolo.tags}
+              onHashtag={onHashtag}
+            />
           </p>
+        )}
+
+        {Array.isArray(articolo.hashtags) && articolo.hashtags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {articolo.hashtags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => onHashtag?.(tag)}
+                className="text-xs px-2 py-1 rounded-full bg-fuchsia-900/40 border border-fuchsia-400/30 text-fuchsia-100"
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
         )}
 
         {articolo.corpo || (Array.isArray(articolo.immagini) && articolo.immagini.length > 0) ? (
           <ArticoloCorpoConImmagini
-            corpo={articolo.corpo}
+            corpo={decoraTokenInstafameHtml(articolo.corpo, articolo.tags)}
             immagini={articolo.immagini}
             titolo={articolo.titolo}
+            onClick={(event) => gestisciClickTokenInstafame(event, { onHashtag })}
           />
         ) : null}
 
@@ -247,17 +300,21 @@ export default function ArticoloRubricaReader({
       <section className="px-4 md:px-8 pb-6 max-w-3xl mx-auto w-full space-y-3">
         {errore && <p className="text-xs text-red-300">{errore}</p>}
 
-        <form onSubmit={inviaCommento} className="flex gap-2">
-          <input
+        <form onSubmit={inviaCommento} className="flex flex-col sm:flex-row gap-2 sm:items-end">
+          <InstafameMentionField
             value={nuovoCommento}
-            onChange={(e) => setNuovoCommento(e.target.value)}
-            placeholder="Scrivi un commento…"
-            className="flex-1 bg-gray-900/80 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+            onChange={setNuovoCommento}
+            personaggioId={personaggioId}
+            placeholder="Scrivi un commento… usa @ per citare e # per gli hashtag"
+            rows={2}
+            compact
+            showHashtags
+            className="flex-1"
           />
           <button
             type="submit"
             disabled={inviando || !nuovoCommento.trim()}
-            className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-fuchsia-700 hover:bg-fuchsia-600 disabled:opacity-50 text-sm font-semibold"
+            className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-fuchsia-700 hover:bg-fuchsia-600 disabled:opacity-50 text-sm font-semibold shrink-0"
           >
             <Send size={15} /> Invia
           </button>
@@ -265,7 +322,15 @@ export default function ArticoloRubricaReader({
 
         {commenti.length === 0 && <p className="text-xs text-gray-500">Nessun commento.</p>}
         {commenti.map((commento) => (
-          <div key={commento.id} className="rounded-xl border border-white/10 bg-black/25 p-2.5">
+          <div
+            key={commento.id}
+            data-commento-id={commento.id}
+            className={`rounded-xl border bg-black/25 p-2.5 ${
+              String(commentoIniziale) === String(commento.id)
+                ? 'border-fuchsia-300/70'
+                : 'border-white/10'
+            }`}
+          >
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 {commento.autore_avatar && (
@@ -288,6 +353,18 @@ export default function ArticoloRubricaReader({
                 {commento.can_delete && (
                   <button
                     type="button"
+                    onClick={() =>
+                      setCommentoInModifica({ id: commento.id, testo: commento.testo || '' })
+                    }
+                    className="text-[11px] px-2 py-1 rounded-full bg-[#1f253d] border border-sky-300/25 text-sky-200"
+                    title="Modifica commento"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                )}
+                {commento.can_delete && (
+                  <button
+                    type="button"
                     onClick={() => rimuoviCommento(commento.id)}
                     className="text-[11px] px-2 py-1 rounded-full bg-[#3b1a1f] border border-red-300/25 text-red-200"
                     title="Elimina commento"
@@ -297,7 +374,52 @@ export default function ArticoloRubricaReader({
                 )}
               </div>
             </div>
-            <p className="text-sm text-gray-200 mt-1 whitespace-pre-wrap">{commento.testo}</p>
+            {commentoInModifica?.id === commento.id ? (
+              <form onSubmit={salvaModificaCommento} className="mt-2 space-y-2">
+                <InstafameMentionField
+                  value={commentoInModifica.testo}
+                  onChange={(testo) => setCommentoInModifica((prec) => ({ ...prec, testo }))}
+                  personaggioId={personaggioId}
+                  rows={2}
+                  compact
+                  showHashtags
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={inviando || !commentoInModifica.testo.trim()}
+                    className="text-xs px-2.5 py-1.5 rounded-lg bg-fuchsia-700 font-semibold disabled:opacity-50"
+                  >
+                    Salva
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCommentoInModifica(null)}
+                    className="text-xs px-2.5 py-1.5 rounded-lg bg-gray-800 border border-gray-700"
+                  >
+                    Annulla
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <p className="text-sm text-gray-200 mt-1">
+                <InstafameRichText text={commento.testo} tags={commento.tags} onHashtag={onHashtag} />
+              </p>
+            )}
+            {Array.isArray(commento.hashtags) && commento.hashtags.length > 0 && commentoInModifica?.id !== commento.id && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {commento.hashtags.map((tag) => (
+                  <button
+                    key={`${commento.id}-${tag}`}
+                    type="button"
+                    onClick={() => onHashtag?.(tag)}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-fuchsia-900/30 border border-fuchsia-400/20 text-fuchsia-100"
+                  >
+                    #{tag}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </section>

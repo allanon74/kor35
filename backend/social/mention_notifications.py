@@ -15,7 +15,19 @@ _SOURCE_LABELS = {
     "post": "un post",
     "comment": "un commento",
     "story": "una story",
+    "articolo": "un articolo",
+    "commento_rubrica": "un commento di rubrica",
 }
+
+
+def rubrica_deep_link_path(*, articolo_id=None, comment_id=None) -> str:
+    """Path relativo verso un articolo di rubrica (e, se serve, un commento)."""
+    params = []
+    if articolo_id:
+        params.append(f"articolo={articolo_id}")
+    if comment_id:
+        params.append(f"commento={comment_id}")
+    return f"/app/social?{'&'.join(params)}" if params else "/app/social?vista=rubriche"
 
 
 def instafame_deep_link_path(*, post_id=None, comment_id=None, story_id=None) -> str:
@@ -35,7 +47,17 @@ def format_mention_message(citer_name: str, cited_name: str, source_kind: str) -
     return f"{citer_name} ha citato {cited_name} in {where} di InstaFame."
 
 
-def notify_instafame_mentions(citer, mentioned_ids, source_kind, *, post=None, comment=None, story=None):
+def notify_instafame_mentions(
+    citer,
+    mentioned_ids,
+    source_kind,
+    *,
+    post=None,
+    comment=None,
+    story=None,
+    articolo=None,
+    commento_rubrica=None,
+):
     """
     Invia web push al proprietario di ogni personaggio citato (escluso auto-citazione).
     """
@@ -58,10 +80,17 @@ def notify_instafame_mentions(citer, mentioned_ids, source_kind, *, post=None, c
         return
 
     citer_name = social_display_name(citer)
-    post_id = getattr(post, "id", None) or (getattr(comment, "post_id", None) if comment else None)
-    comment_id = getattr(comment, "id", None)
-    story_id = getattr(story, "id", None)
-    push_url = instafame_deep_link_path(post_id=post_id, comment_id=comment_id, story_id=story_id)
+    if articolo is not None or commento_rubrica is not None:
+        articolo_ref = articolo or getattr(commento_rubrica, "articolo", None)
+        push_url = rubrica_deep_link_path(
+            articolo_id=getattr(articolo_ref, "id", None),
+            comment_id=getattr(commento_rubrica, "id", None),
+        )
+    else:
+        post_id = getattr(post, "id", None) or (getattr(comment, "post_id", None) if comment else None)
+        comment_id = getattr(comment, "id", None)
+        story_id = getattr(story, "id", None)
+        push_url = instafame_deep_link_path(post_id=post_id, comment_id=comment_id, story_id=story_id)
 
     targets = (
         Personaggio.objects.filter(id__in=unique_ids)
@@ -92,6 +121,65 @@ def notify_instafame_mentions(citer, mentioned_ids, source_kind, *, post=None, c
                 target.id,
                 source_kind,
             )
+
+
+def notify_rubrica_comment_author(commento) -> None:
+    """Push allo scrittore dell'articolo quando arriva un commento di un altro giocatore."""
+    from .mention_tags import mention_notify_suppressed
+
+    if mention_notify_suppressed() or not commento:
+        return
+
+    from .models_rubriche import RubricaArticoloComment
+
+    commento = (
+        RubricaArticoloComment.objects.select_related(
+            "autore",
+            "autore__social_profile",
+            "autore__proprietario",
+            "articolo",
+            "articolo__autore_personaggio",
+            "articolo__autore_personaggio__proprietario",
+            "articolo__autore_personaggio__social_profile",
+        )
+        .filter(pk=commento.pk)
+        .first()
+    )
+    if not commento or not commento.articolo_id:
+        return
+    autore = commento.articolo.autore_personaggio
+    if not autore or autore.id == commento.autore_id:
+        return
+    if autore.proprietario_id and autore.proprietario_id == commento.autore.proprietario_id:
+        return
+    user = getattr(autore, "proprietario", None)
+    if not user:
+        return
+
+    citer_name = social_display_name(commento.autore)
+    titolo = commento.articolo.titolo or "un articolo"
+    estratto = (commento.testo or "").strip().replace("\n", " ")
+    if len(estratto) > 140:
+        estratto = estratto[:137] + "…"
+    body = f"{citer_name} ha commentato il tuo articolo «{titolo}»."
+    if estratto:
+        body = f"{body} {estratto}"
+    try:
+        from personaggi.notify import notify_user
+
+        notify_user(
+            user,
+            category="social",
+            head="Commento InstaFame",
+            body=body,
+            url=rubrica_deep_link_path(articolo_id=commento.articolo_id, comment_id=commento.id),
+        )
+    except Exception:
+        logger.exception(
+            "Notifica commento rubrica fallita (commento=%s autore=%s)",
+            commento.id,
+            autore.id,
+        )
 
 
 def personaggi_ids_for_mention_tokens(tokens):

@@ -138,6 +138,15 @@ class StaffDashboardLayoutTests(SimpleTestCase):
         self.assertIn("chiamate", comm_tools)
         validate_staff_dashboard_layout(layout)
 
+    def test_instafame_post_tool_nel_default(self):
+        from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
+
+        self.assertIn("instafame-post", KNOWN_STAFF_TOOL_IDS)
+        layout = default_staff_dashboard_layout()
+        comunicazione_tools = layout["groups"][3]["tool_ids"]
+        self.assertIn("instafame-post", comunicazione_tools)
+        validate_staff_dashboard_layout(layout)
+
     def test_rubriche_tool_nel_default(self):
         from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
 

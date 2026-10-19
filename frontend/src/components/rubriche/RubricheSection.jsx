@@ -9,7 +9,12 @@ import { getArticoli, getRubriche } from '../../api/rubriche';
  * Sezione «Rubriche» di InstaFame: elenco testate, articoli e lettore giornalistico.
  * La scrittura è riservata ai personaggi autorizzati dallo staff sulla singola rubrica.
  */
-export default function RubricheSection({ personaggio, onLogout, articoloIniziale = null }) {
+export default function RubricheSection({
+  personaggio,
+  onLogout,
+  articoloIniziale = null,
+  commentoIniziale = null,
+}) {
   const personaggioId = personaggio?.id || null;
 
   const [rubriche, setRubriche] = useState([]);
@@ -20,6 +25,7 @@ export default function RubricheSection({ personaggio, onLogout, articoloInizial
   const [composerAperto, setComposerAperto] = useState(false);
   const [caricamento, setCaricamento] = useState(true);
   const [errore, setErrore] = useState('');
+  const [hashtagFiltro, setHashtagFiltro] = useState('');
 
   const caricaRubriche = useCallback(async () => {
     setCaricamento(true);
@@ -36,9 +42,13 @@ export default function RubricheSection({ personaggio, onLogout, articoloInizial
   }, [personaggioId, onLogout]);
 
   const caricaArticoli = useCallback(
-    async (rubricaId) => {
+    async (rubricaId, hashtag) => {
       try {
-        const risposta = await getArticoli(personaggioId, onLogout, { rubricaId, pageSize: 30 });
+        const risposta = await getArticoli(personaggioId, onLogout, {
+          rubricaId,
+          pageSize: 30,
+          hashtag: hashtag || undefined,
+        });
         setArticoli(Array.isArray(risposta?.results) ? risposta.results : risposta || []);
       } catch (e) {
         setErrore(e?.message || 'Impossibile caricare gli articoli.');
@@ -57,8 +67,16 @@ export default function RubricheSection({ personaggio, onLogout, articoloInizial
   }, [articoloIniziale]);
 
   useEffect(() => {
-    if (rubricaSelezionata?.id) caricaArticoli(rubricaSelezionata.id);
-  }, [rubricaSelezionata, caricaArticoli]);
+    if (rubricaSelezionata?.id || hashtagFiltro) {
+      caricaArticoli(rubricaSelezionata?.id, hashtagFiltro);
+    }
+  }, [rubricaSelezionata, caricaArticoli, hashtagFiltro]);
+
+  const applicaHashtag = (tag) => {
+    setHashtagFiltro(tag || '');
+    setArticoloAperto(null);
+    setComposerAperto(false);
+  };
 
   const rubricheScrivibili = useMemo(() => rubriche.filter((r) => r.can_write), [rubriche]);
 
@@ -87,6 +105,8 @@ export default function RubricheSection({ personaggio, onLogout, articoloInizial
         personaggioId={personaggioId}
         onLogout={onLogout}
         onChiudi={() => setArticoloAperto(null)}
+        onHashtag={applicaHashtag}
+        commentoIniziale={commentoIniziale}
         onModifica={(articolo) => {
           setArticoloInModifica(articolo);
           setComposerAperto(true);
@@ -125,6 +145,38 @@ export default function RubricheSection({ personaggio, onLogout, articoloInizial
         </div>
       </div>
 
+      <form
+        className="flex flex-col sm:flex-row gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const campo = event.currentTarget.elements.namedItem('hashtag');
+          applicaHashtag(String(campo?.value || '').replace(/^#/, '').trim().toLowerCase());
+        }}
+      >
+        <input
+          name="hashtag"
+          defaultValue={hashtagFiltro}
+          key={hashtagFiltro}
+          placeholder="Filtra per #hashtag"
+          className="flex-1 min-w-0 bg-gray-900/80 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+        />
+        <button
+          type="submit"
+          className="text-xs px-3 py-2 rounded-xl bg-fuchsia-900/70 border border-fuchsia-400/30 font-semibold"
+        >
+          Cerca
+        </button>
+        {hashtagFiltro && (
+          <button
+            type="button"
+            onClick={() => applicaHashtag('')}
+            className="text-xs px-3 py-2 rounded-xl bg-gray-800 border border-gray-700"
+          >
+            #{hashtagFiltro} ×
+          </button>
+        )}
+      </form>
+
       {errore && (
         <p className="text-xs text-red-200 bg-red-950/40 border border-red-500/40 rounded-lg px-3 py-2">{errore}</p>
       )}
@@ -150,7 +202,22 @@ export default function RubricheSection({ personaggio, onLogout, articoloInizial
         <p className="text-sm text-gray-400">Nessuna rubrica pubblicata al momento.</p>
       )}
 
-      {!rubricaSelezionata && (
+      {hashtagFiltro && !rubricaSelezionata && (
+        <div className="space-y-3">
+          {articoli.length === 0 && (
+            <p className="text-sm text-gray-400">Nessun articolo con #{hashtagFiltro}.</p>
+          )}
+          {articoli.map((articolo) => (
+            <ArticoloRubricaCard
+              key={articolo.id}
+              articolo={articolo}
+              onOpen={(a) => setArticoloAperto(a.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {!rubricaSelezionata && !hashtagFiltro && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {rubriche.map((rubrica) => (
             <button

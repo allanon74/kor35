@@ -91,6 +91,20 @@ def testo_semplice_da_html(html: str) -> str:
     return re.sub(r"\s+", " ", senza_entita).strip()
 
 
+def testo_indicizzabile_articolo(articolo) -> str:
+    """Titolo, sommario e corpo in chiaro: base per @mention e #hashtag."""
+    if not articolo:
+        return ""
+    parti = [
+        getattr(articolo, "occhiello", "") or "",
+        getattr(articolo, "titolo", "") or "",
+        getattr(articolo, "sottotitolo", "") or "",
+        getattr(articolo, "sommario", "") or "",
+        testo_semplice_da_html(getattr(articolo, "corpo", "") or ""),
+    ]
+    return "\n".join(parte for parte in parti if parte).strip()
+
+
 def calcola_tempo_lettura(html: str) -> int:
     parole = len(testo_semplice_da_html(html).split())
     if not parole:
@@ -431,3 +445,41 @@ class RubricaArticoloCommentLike(SyncableModel, models.Model):
         verbose_name_plural = "Like commenti articoli rubrica"
         unique_together = ("comment", "autore")
         ordering = ["-created_at", "-id"]
+
+
+class RubricaArticoloTag(SyncableModel, models.Model):
+    """Personaggio citato con @ nel testo di un articolo."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    articolo = models.ForeignKey(RubricaArticolo, on_delete=models.CASCADE, related_name="tags")
+    personaggio = models.ForeignKey(
+        "personaggi.Personaggio",
+        on_delete=models.CASCADE,
+        related_name="tagged_in_rubrica_articoli",
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Tag articolo rubrica"
+        verbose_name_plural = "Tag articoli rubrica"
+        unique_together = ("articolo", "personaggio")
+
+
+class RubricaArticoloCommentTag(SyncableModel, models.Model):
+    """Personaggio citato con @ in un commento di rubrica."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    comment = models.ForeignKey(
+        RubricaArticoloComment, on_delete=models.CASCADE, related_name="tags"
+    )
+    personaggio = models.ForeignKey(
+        "personaggi.Personaggio",
+        on_delete=models.CASCADE,
+        related_name="tagged_in_rubrica_commenti",
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Tag commento articolo rubrica"
+        verbose_name_plural = "Tag commenti articoli rubrica"
+        unique_together = ("comment", "personaggio")

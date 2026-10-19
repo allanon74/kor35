@@ -156,6 +156,35 @@ export const socialGetStaffEventReport = (eventoId, onLogout) => {
   return fetchAuthenticated(`/api/social/staff/event-report/${qp}`, { method: 'GET' }, onLogout);
 };
 
+const queryContenuti = (params = {}) => {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([chiave, valore]) => {
+    if (valore != null && valore !== '') qs.set(chiave, String(valore));
+  });
+  const testo = qs.toString();
+  return testo ? `?${testo}` : '';
+};
+
+export const staffListContenutiInstafame = (params, onLogout) =>
+  fetchAuthenticated(`/api/social/staff/contenuti/${queryContenuti(params)}`, { method: 'GET' }, onLogout);
+
+export const staffGetContenutoInstafame = (tipo, id, onLogout) =>
+  fetchAuthenticated(`/api/social/staff/contenuti/${tipo}/${id}/`, { method: 'GET' }, onLogout);
+
+export const staffPatchContenutoInstafame = (tipo, id, payload, onLogout) =>
+  fetchAuthenticated(
+    `/api/social/staff/contenuti/${tipo}/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(payload) },
+    onLogout
+  );
+
+export const staffSpostaPostInRubrica = (postId, payload, onLogout) =>
+  fetchAuthenticated(
+    `/api/social/staff/contenuti/post/${postId}/sposta-in-rubrica/`,
+    { method: 'POST', body: JSON.stringify(payload) },
+    onLogout
+  );
+
 export const socialGetNotifications = (personaggioId, onLogout, options = {}) => {
   const params = new URLSearchParams();
   if (personaggioId) params.set('personaggio_id', String(personaggioId));

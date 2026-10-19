@@ -35,6 +35,7 @@ KNOWN_STAFF_TOOL_IDS = frozenset({
     "app-links",
     "effetti-casuali",
     "social-report",
+    "instafame-post",
     "risorse-pool",
     "ere-prefetture",
     "carriere-korps",
@@ -152,7 +153,7 @@ DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
             "palette": "emerald",
             "order": 3,
             "collapsed_default": False,
-            "tool_ids": ["messaggi", "chiamate", "social-report", "rubriche", "pool-pg"],
+            "tool_ids": ["messaggi", "chiamate", "social-report", "instafame-post", "rubriche", "pool-pg"],
         },
         {
             "id": "sistema",

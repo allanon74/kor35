@@ -17,7 +17,8 @@ from personaggi.models import Messaggio, Personaggio, get_active_korp_ids, Perso
 
 from .post_media import apply_post_media_from_request
 from .display_names import social_display_name
-from .mention_notifications import format_mention_message, instafame_deep_link_path
+from .mention_notifications import format_mention_message, instafame_deep_link_path, rubrica_deep_link_path
+from .models_rubriche import RubricaArticoloComment, RubricaArticoloCommentTag, RubricaArticoloTag
 from .models import (
     SOCIAL_GROUP_ROLE_ADMIN,
     SOCIAL_GROUP_ROLE_MEMBER,
@@ -1245,6 +1246,34 @@ class SocialNotificationsView(APIView):
                 "personaggio__social_profile",
             )
         )
+        rubrica_comments_qs = (
+            RubricaArticoloComment.objects.filter(articolo__autore_personaggio=personaggio)
+            .exclude(autore=personaggio)
+            .select_related("autore", "autore__social_profile", "articolo")
+        )
+        rubrica_comment_mentions_qs = (
+            RubricaArticoloCommentTag.objects.filter(personaggio=personaggio)
+            .exclude(comment__autore=personaggio)
+            .select_related(
+                "comment",
+                "comment__autore",
+                "comment__autore__social_profile",
+                "comment__articolo",
+                "personaggio",
+                "personaggio__social_profile",
+            )
+        )
+        articolo_mentions_qs = (
+            RubricaArticoloTag.objects.filter(personaggio=personaggio)
+            .exclude(articolo__autore_personaggio=personaggio)
+            .select_related(
+                "articolo",
+                "articolo__autore_personaggio",
+                "articolo__autore_personaggio__social_profile",
+                "personaggio",
+                "personaggio__social_profile",
+            )
+        )
 
         def _mention_event(kind, created_at, actor, target_pg, source_kind, post_id=None, post_title="", text="", comment_id=None, story_id=None):
             actor_name = social_display_name(actor) if actor else ""
@@ -1328,6 +1357,70 @@ class SocialNotificationsView(APIView):
                     text=tag.story.testo if tag.story else "",
                     story_id=tag.story_id,
                 )
+            )
+        for comment in rubrica_comments_qs[:limit]:
+            articolo = comment.articolo
+            events.append(
+                {
+                    "kind": "comment_rubrica",
+                    "created_at": comment.created_at,
+                    "articolo_id": str(comment.articolo_id),
+                    "commento_id": str(comment.id),
+                    "post_title": articolo.titolo if articolo else "",
+                    "actor_id": comment.autore_id,
+                    "actor_name": social_display_name(comment.autore),
+                    "text": comment.testo or "",
+                    "message": (
+                        f"{social_display_name(comment.autore)} ha commentato il tuo articolo "
+                        f"«{articolo.titolo}»."
+                        if articolo
+                        else ""
+                    ),
+                    "link": rubrica_deep_link_path(
+                        articolo_id=comment.articolo_id, comment_id=comment.id
+                    ),
+                }
+            )
+        for tag in rubrica_comment_mentions_qs[:limit]:
+            commento = tag.comment
+            articolo = commento.articolo if commento else None
+            actor = commento.autore if commento else None
+            events.append(
+                {
+                    **_mention_event(
+                        "mention_comment_rubrica",
+                        tag.updated_at,
+                        actor,
+                        personaggio,
+                        "commento_rubrica",
+                        post_title=articolo.titolo if articolo else "",
+                        text=commento.testo if commento else "",
+                    ),
+                    "articolo_id": str(commento.articolo_id) if commento else None,
+                    "commento_id": str(commento.id) if commento else None,
+                    "link": rubrica_deep_link_path(
+                        articolo_id=commento.articolo_id if commento else None,
+                        comment_id=commento.id if commento else None,
+                    ),
+                }
+            )
+        for tag in articolo_mentions_qs[:limit]:
+            articolo = tag.articolo
+            actor = articolo.autore_personaggio if articolo else None
+            events.append(
+                {
+                    **_mention_event(
+                        "mention_articolo",
+                        tag.updated_at,
+                        actor,
+                        personaggio,
+                        "articolo",
+                        post_title=articolo.titolo if articolo else "",
+                        text=articolo.sommario if articolo else "",
+                    ),
+                    "articolo_id": str(articolo.id) if articolo else None,
+                    "link": rubrica_deep_link_path(articolo_id=articolo.id if articolo else None),
+                }
             )
 
         events.sort(key=lambda e: e["created_at"], reverse=True)

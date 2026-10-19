@@ -2,9 +2,20 @@ from django.db import transaction
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from .mention_tags import sync_comment_tags, sync_post_tags, sync_story_tags
+from .mention_tags import (
+    sync_articolo_comment_tags,
+    sync_articolo_tags,
+    sync_comment_tags,
+    sync_post_tags,
+    sync_story_tags,
+)
 from .models import SocialComment, SocialPost, SocialStory
-from .models_rubriche import Rubrica, RubricaArticolo, RubricaArticoloImmagine
+from .models_rubriche import (
+    Rubrica,
+    RubricaArticolo,
+    RubricaArticoloComment,
+    RubricaArticoloImmagine,
+)
 from .rubriche_wiki import rimuovi_pagine_wiki_rubrica, sync_rubrica_to_wiki_safe
 
 
@@ -21,6 +32,16 @@ def social_comment_sync_mention_tags(sender, instance: SocialComment, **kwargs):
 @receiver(post_save, sender=SocialStory)
 def social_story_sync_mention_tags(sender, instance: SocialStory, **kwargs):
     sync_story_tags(instance)
+
+
+@receiver(post_save, sender=RubricaArticolo)
+def articolo_sync_mention_tags(sender, instance: RubricaArticolo, **kwargs):
+    sync_articolo_tags(instance)
+
+
+@receiver(post_save, sender=RubricaArticoloComment)
+def articolo_commento_sync_mention_tags(sender, instance: RubricaArticoloComment, **kwargs):
+    sync_articolo_comment_tags(instance)
 
 
 def _rigenera_wiki(rubrica):

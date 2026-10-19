@@ -20,7 +20,8 @@ from personaggi.campagna_moduli import (
 from personaggi.models import Korp, Personaggio, PersonaggioCarrieraMembership
 
 from .influencer import compute_like_peso, random_likes_base
-from .models import SOCIAL_VISIBILITY_KORP, SOCIAL_VISIBILITY_PUBLIC, SocialPost, SocialPostImage
+from .mention_notifications import notify_rubrica_comment_author
+from .models import SOCIAL_VISIBILITY_KORP, SOCIAL_VISIBILITY_PUBLIC, SocialPost, SocialPostImage, extract_hashtags
 from .models_rubriche import (
     RUBRICA_ARTICOLO_PUBBLICATO,
     Rubrica,
@@ -209,6 +210,21 @@ class RubricaArticoloViewSet(RubricheContextMixin, viewsets.ModelViewSet):
         stato = self.request.query_params.get("stato")
         if stato:
             qs = qs.filter(stato=stato)
+        hashtag = (self.request.query_params.get("hashtag") or "").strip().lstrip("#")
+        if hashtag:
+            riconosciuti = extract_hashtags(f"#{hashtag}")
+            if not riconosciuti:
+                qs = qs.none()
+            else:
+                token = f"#{riconosciuti[0]}"
+                qs = qs.filter(
+                    Q(occhiello__icontains=token)
+                    | Q(titolo__icontains=token)
+                    | Q(sottotitolo__icontains=token)
+                    | Q(sommario__icontains=token)
+                    | Q(corpo__icontains=token)
+                    | Q(comments__testo__icontains=token)
+                ).distinct()
         # Ordinamento esplicito: la paginazione DRF non si fida del Meta.ordering
         # quando il queryset è annotato.
         return qs.order_by("-data_pubblicazione", "-created_at", "-id")
@@ -374,7 +390,9 @@ class RubricaArticoloViewSet(RubricheContextMixin, viewsets.ModelViewSet):
         articolo = self.get_object()
         personaggio = self.get_personaggio()
         if request.method.lower() == "get":
-            qs = articolo.comments.select_related("autore", "autore__social_profile").all()
+            qs = articolo.comments.select_related("autore", "autore__social_profile").prefetch_related(
+                "tags__personaggio", "tags__personaggio__social_profile"
+            )
             paginator = SocialCommentPagination()
             page = paginator.paginate_queryset(qs, request, view=self)
             serializer = RubricaArticoloCommentSerializer(
@@ -392,6 +410,7 @@ class RubricaArticoloViewSet(RubricheContextMixin, viewsets.ModelViewSet):
             evento=get_evento_in_corso(),
             likes_base=random_likes_base(personaggio),
         )
+        notify_rubrica_comment_author(commento)
         return Response(
             RubricaArticoloCommentSerializer(commento, context=self.get_serializer_context()).data,
             status=status.HTTP_201_CREATED,

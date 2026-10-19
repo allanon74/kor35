@@ -16,6 +16,13 @@ from .models import (
     SocialStoryTag,
     extract_mentioned_personaggi_ids,
 )
+from .models_rubriche import (
+    RubricaArticolo,
+    RubricaArticoloComment,
+    RubricaArticoloCommentTag,
+    RubricaArticoloTag,
+    testo_indicizzabile_articolo,
+)
 
 MENTION_IN_TEXT_REGEX = re.compile(r"@([A-Za-z0-9_]+)")
 
@@ -77,6 +84,57 @@ def sync_comment_tags(comment: SocialComment, *, notify: bool | None = None) -> 
 
         notify_instafame_mentions(
             comment.autore, new_ids, "comment", comment=comment, post=comment.post
+        )
+    return new_ids
+
+
+def sync_articolo_tags(articolo: RubricaArticolo, *, notify: bool | None = None) -> list[int]:
+    """Allinea i tag @mention di un articolo e avvisa i personaggi appena citati."""
+    ids = extract_mentioned_personaggi_ids(testo_indicizzabile_articolo(articolo))
+    existing = set(
+        RubricaArticoloTag.objects.filter(articolo=articolo).values_list("personaggio_id", flat=True)
+    )
+    new_ids = [pid for pid in ids if pid not in existing]
+    RubricaArticoloTag.objects.filter(articolo=articolo).exclude(personaggio_id__in=ids).delete()
+    if new_ids:
+        RubricaArticoloTag.objects.bulk_create(
+            [RubricaArticoloTag(articolo=articolo, personaggio_id=pid) for pid in new_ids]
+        )
+    if new_ids and _should_notify(notify):
+        from .mention_notifications import notify_instafame_mentions
+
+        notify_instafame_mentions(
+            articolo.autore_personaggio,
+            new_ids,
+            "articolo",
+            articolo=articolo,
+        )
+    return new_ids
+
+
+def sync_articolo_comment_tags(
+    comment: RubricaArticoloComment, *, notify: bool | None = None
+) -> list[int]:
+    """Allinea i tag @mention di un commento rubrica e avvisa i citati."""
+    ids = extract_mentioned_personaggi_ids(comment.testo)
+    existing = set(
+        RubricaArticoloCommentTag.objects.filter(comment=comment).values_list("personaggio_id", flat=True)
+    )
+    new_ids = [pid for pid in ids if pid not in existing]
+    RubricaArticoloCommentTag.objects.filter(comment=comment).exclude(personaggio_id__in=ids).delete()
+    if new_ids:
+        RubricaArticoloCommentTag.objects.bulk_create(
+            [RubricaArticoloCommentTag(comment=comment, personaggio_id=pid) for pid in new_ids]
+        )
+    if new_ids and _should_notify(notify):
+        from .mention_notifications import notify_instafame_mentions
+
+        notify_instafame_mentions(
+            comment.autore,
+            new_ids,
+            "commento_rubrica",
+            articolo=comment.articolo,
+            commento_rubrica=comment,
         )
     return new_ids
 

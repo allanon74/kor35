@@ -267,6 +267,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const [likedFxByComment, setLikedFxByComment] = useState({});
   const [socialViewMode, setSocialViewMode] = useState('FEED');
   const [articoloRubricaAperto, setArticoloRubricaAperto] = useState(null);
+  const [commentoRubricaAperto, setCommentoRubricaAperto] = useState(null);
   const [groups, setGroups] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [groupPosts, setGroupPosts] = useState([]);
@@ -1339,6 +1340,14 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   };
 
   const openPostFromNotification = async (notification) => {
+    if (notification?.articolo_id) {
+      setSocialViewMode('RUBRICHE');
+      setArticoloRubricaAperto(notification.articolo_id);
+      setCommentoRubricaAperto(notification.commento_id || null);
+      await markNotificationsAsRead();
+      setShowActivityModal(false);
+      return;
+    }
     if (notification?.story_id) {
       const idx = stories.findIndex((s) => Number(s.id) === Number(notification.story_id));
       if (idx >= 0) {
@@ -1365,8 +1374,10 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     const postId = searchParams.get('post');
     const commentId = searchParams.get('comment');
     const storyId = searchParams.get('story');
-    if (!postId && !storyId) return;
-    if (loading) return;
+    const articoloId = searchParams.get('articolo');
+    const commentoId = searchParams.get('commento');
+    if (!postId && !storyId && !articoloId) return;
+    if (loading && !articoloId) return;
 
     let cancelled = false;
     (async () => {
@@ -1376,6 +1387,11 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           setStoryViewerIndex(idx);
           setStoryViewerOpen(true);
         }
+      }
+      if (articoloId) {
+        setSocialViewMode('RUBRICHE');
+        setArticoloRubricaAperto(articoloId);
+        setCommentoRubricaAperto(commentoId || null);
       }
       if (postId) {
         setSocialViewMode('FEED');
@@ -2780,6 +2796,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           personaggio={personaggiList?.find((p) => Number(p.id) === Number(selectedCharacterId)) || { id: selectedCharacterId }}
           onLogout={onLogout}
           articoloIniziale={articoloRubricaAperto}
+          commentoIniziale={commentoRubricaAperto}
         />
       )}
       {socialViewMode === 'GROUPS' && (
@@ -3416,6 +3433,13 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                       <>
                         {n.kind === 'like' && <span><b>{n.actor_name}</b> ha messo like al tuo post.</span>}
                         {n.kind === 'comment' && <span><b>{n.actor_name}</b> ha commentato il tuo post.</span>}
+                        {n.kind === 'comment_rubrica' && <span><b>{n.actor_name}</b> ha commentato il tuo articolo.</span>}
+                        {n.kind === 'mention_articolo' && (
+                          <span><b>{n.actor_name}</b> ha citato <b>{n.target_name || 'te'}</b> in un articolo.</span>
+                        )}
+                        {n.kind === 'mention_comment_rubrica' && (
+                          <span><b>{n.actor_name}</b> ha citato <b>{n.target_name || 'te'}</b> in un commento di rubrica.</span>
+                        )}
                         {n.kind === 'mention_post' && (
                           <span><b>{n.actor_name}</b> ha citato <b>{n.target_name || 'te'}</b> in un post di InstaFame.</span>
                         )}

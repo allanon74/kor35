@@ -52,6 +52,7 @@ STAFF_TOOL_TO_MODULO = {
     "negozi-mercante": MODULO_NEGOZI,
     "creazione-guidata": MODULO_CREAZIONE_GUIDATA,
     "social-report": MODULO_SOCIAL,
+    "instafame-post": MODULO_SOCIAL,
     "economia-crediti": MODULO_CONTO_DEPOSITO,
     "rubriche": MODULO_RUBRICHE,
     "chiamate": MODULO_CHIAMATE,

@@ -7,6 +7,7 @@ from personaggi.serializers import _personaggio_avatar_url
 from .author_display import get_personaggio_badge_instafame, social_firma_for_personaggio
 from .display_names import social_display_name
 from .influencer import total_likes_contenuto
+from .models import extract_hashtags
 from .models_rubriche import (
     RUBRICA_ARTICOLO_PUBBLICATO,
     Rubrica,
@@ -15,8 +16,21 @@ from .models_rubriche import (
     RubricaArticoloCommentLike,
     RubricaArticoloLike,
     RubricaPermessoScrittura,
+    testo_indicizzabile_articolo,
     testo_semplice_da_html,
 )
+
+
+def _righe_tag(tag_manager):
+    righe = []
+    for tag in tag_manager.select_related("personaggio", "personaggio__social_profile").all():
+        righe.append(
+            {
+                "personaggio_id": tag.personaggio_id,
+                "personaggio__nome": social_display_name(tag.personaggio),
+            }
+        )
+    return righe
 
 
 def _file_url(field_file, request=None):
@@ -94,6 +108,8 @@ class RubricaArticoloCommentSerializer(serializers.ModelSerializer):
     likes_count = serializers.SerializerMethodField()
     liked_by_me = serializers.SerializerMethodField()
     can_delete = serializers.SerializerMethodField()
+    tags = serializers.SerializerMethodField()
+    hashtags = serializers.SerializerMethodField()
 
     class Meta:
         model = RubricaArticoloComment
@@ -108,6 +124,8 @@ class RubricaArticoloCommentSerializer(serializers.ModelSerializer):
             "likes_count",
             "liked_by_me",
             "can_delete",
+            "tags",
+            "hashtags",
         )
         read_only_fields = (
             "articolo",
@@ -139,6 +157,12 @@ class RubricaArticoloCommentSerializer(serializers.ModelSerializer):
         personaggio = self.context.get("personaggio")
         return bool(personaggio and obj.autore_id == personaggio.id)
 
+    def get_tags(self, obj):
+        return _righe_tag(obj.tags)
+
+    def get_hashtags(self, obj):
+        return extract_hashtags(obj.testo or "")
+
 
 class RubricaArticoloListSerializer(serializers.ModelSerializer):
     rubrica_nome = serializers.CharField(source="rubrica.nome", read_only=True)
@@ -155,6 +179,7 @@ class RubricaArticoloListSerializer(serializers.ModelSerializer):
     comments_count = serializers.SerializerMethodField()
     liked_by_me = serializers.SerializerMethodField()
     can_edit = serializers.SerializerMethodField()
+    hashtags = serializers.SerializerMethodField()
 
     class Meta:
         model = RubricaArticolo
@@ -187,6 +212,7 @@ class RubricaArticoloListSerializer(serializers.ModelSerializer):
             "comments_count",
             "liked_by_me",
             "can_edit",
+            "hashtags",
             "post_annuncio",
         )
         read_only_fields = fields
@@ -231,6 +257,9 @@ class RubricaArticoloListSerializer(serializers.ModelSerializer):
             return False
         return RubricaArticoloLike.objects.filter(articolo=obj, autore=personaggio).exists()
 
+    def get_hashtags(self, obj):
+        return extract_hashtags(testo_indicizzabile_articolo(obj))
+
     def get_can_edit(self, obj):
         if self.context.get("is_staff_rubriche"):
             return True
@@ -246,6 +275,7 @@ class RubricaArticoloListSerializer(serializers.ModelSerializer):
 class RubricaArticoloDetailSerializer(RubricaArticoloListSerializer):
     immagini = serializers.SerializerMethodField()
     video_url = serializers.SerializerMethodField()
+    tags = serializers.SerializerMethodField()
 
     class Meta(RubricaArticoloListSerializer.Meta):
         fields = RubricaArticoloListSerializer.Meta.fields + (
@@ -255,6 +285,7 @@ class RubricaArticoloDetailSerializer(RubricaArticoloListSerializer):
             "video_url",
             "ordine",
             "evento",
+            "tags",
         )
         read_only_fields = fields
 
@@ -278,6 +309,9 @@ class RubricaArticoloDetailSerializer(RubricaArticoloListSerializer):
 
     def get_video_url(self, obj):
         return _file_url(obj.video, self.context.get("request"))
+
+    def get_tags(self, obj):
+        return _righe_tag(obj.tags)
 
 
 class RubricaArticoloWriteSerializer(serializers.ModelSerializer):
