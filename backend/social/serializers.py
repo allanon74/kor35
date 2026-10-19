@@ -1,4 +1,4 @@
-from django.db.models import Count, F, Q, Sum, Value
+from django.db.models import Count, F, Prefetch, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from rest_framework import serializers
 
@@ -305,6 +305,7 @@ class SocialPostSerializer(serializers.ModelSerializer):
     hashtags = serializers.SerializerMethodField()
     immagini = serializers.SerializerMethodField()
     articolo_preview = serializers.SerializerMethodField()
+    task_risolte = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialPost
@@ -334,6 +335,7 @@ class SocialPostSerializer(serializers.ModelSerializer):
             "public_url",
             "articolo_collegato",
             "articolo_preview",
+            "task_risolte",
         )
         read_only_fields = (
             "autore",
@@ -398,6 +400,30 @@ class SocialPostSerializer(serializers.ModelSerializer):
     def get_hashtags(self, obj):
         text = f"{obj.titolo or ''} {obj.testo or ''}".strip()
         return extract_hashtags(text)
+
+    def get_task_risolte(self, obj):
+        """Task segnate risolte su questo post: solo proprietario del post e staff."""
+        if not _utente_vede_risoluzioni_task_post(
+            obj, self.context.get("request"), self.context.get("personaggio")
+        ):
+            return []
+        cache = getattr(obj, "_prefetched_objects_cache", None) or {}
+        if "missioni_risolte" in cache:
+            righe = list(cache["missioni_risolte"])
+        else:
+            righe = list(
+                obj.missioni_risolte.select_related("missione", "evento").order_by("resolved_at", "id")
+            )
+        righe.sort(key=lambda riga: (riga.resolved_at or riga.created_at, str(riga.id)))
+        return [
+            {
+                "id": str(riga.id),
+                "missione_titolo": riga.missione.titolo if riga.missione_id else "",
+                "evento_titolo": riga.evento.titolo if riga.evento_id else "",
+            }
+            for riga in righe
+            if riga.missione_id
+        ]
 
     def get_articolo_preview(self, obj):
         if not obj.articolo_collegato_id:
@@ -809,7 +835,26 @@ def resolve_active_personaggio(user, explicit_personaggio_id=None, request=None)
     return owned_personaggi_queryset_for_user(user, request).first()
 
 
+def _utente_vede_risoluzioni_task_post(post, request, personaggio) -> bool:
+    """Il proprietario del personaggio autore, oppure lo staff di campagna."""
+    user = getattr(request, "user", None) if request else None
+    if not (user and getattr(user, "is_authenticated", False)):
+        return False
+    if user.is_superuser or user.is_staff:
+        return True
+    from gestione_plot.views import _is_campaign_staff_plus
+
+    if _is_campaign_staff_plus(request):
+        return True
+    autore = getattr(post, "autore", None)
+    if autore is not None and autore.proprietario_id and autore.proprietario_id == user.id:
+        return True
+    return bool(personaggio and post.autore_id == personaggio.id and getattr(personaggio, "proprietario_id", None) == user.id)
+
+
 def visible_posts_queryset_for_personaggio(personaggio, request=None):
+    from gestione_plot.models import MissioneRisoluzione
+
     base = SocialPost.objects.select_related(
         "autore",
         "autore__social_profile",
@@ -819,6 +864,12 @@ def visible_posts_queryset_for_personaggio(personaggio, request=None):
         "articolo_collegato__rubrica",
     ).prefetch_related(
         "post_images",
+        Prefetch(
+            "missioni_risolte",
+            queryset=MissioneRisoluzione.objects.select_related("missione", "evento").order_by(
+                "resolved_at", "id"
+            ),
+        ),
     ).annotate(
         _likes_user_sum=Coalesce(Sum("likes__peso_like"), Value(0)),
         likes_total=F("likes_base") + F("_likes_user_sum"),

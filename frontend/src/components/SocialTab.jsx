@@ -1681,6 +1681,26 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     );
   };
 
+  const registraTaskRisoltaSulPost = (postId, ris) => {
+    if (!ris?.id) return;
+    setPosts((prev) => prev.map((p) => {
+      if (Number(p.id) !== Number(postId)) return p;
+      const gia = (p.task_risolte || []).some((riga) => String(riga.id) === String(ris.id));
+      if (gia) return p;
+      return {
+        ...p,
+        task_risolte: [
+          ...(p.task_risolte || []),
+          {
+            id: ris.id,
+            missione_titolo: ris.missione_titolo || '',
+            evento_titolo: ris.evento_titolo || '',
+          },
+        ],
+      };
+    }));
+  };
+
   const filteredPosts = useMemo(() => {
     let list = posts;
     if (feedFilter === 'PUB') list = posts.filter((p) => p.visibilita === 'PUB');
@@ -2591,16 +2611,24 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                 </>
               )}
             </div>
-            {isAdmin && (post.evento || post.evento_id) ? (
-              <div className="mt-2">
-                <MissioneResolvePicker
-                  onLogout={onLogout}
-                  tipoRisoluzione="POST_SOCIAL"
-                  eventoId={post.evento?.id || post.evento || post.evento_id}
-                  personaggioId={post.autore?.id || post.autore}
-                  socialPostId={post.id}
-                  label="Questo post risolve task"
-                />
+            {((Array.isArray(post.task_risolte) && post.task_risolte.length > 0) || (staffVeNotaPg && (post.evento || post.evento_id))) ? (
+              <div className="mt-2 space-y-1.5">
+                {(post.task_risolte || []).map((riga) => (
+                  <p key={riga.id} className="text-[11px] leading-tight text-gray-400 break-words">
+                    risolta: {riga.missione_titolo}{riga.evento_titolo ? ` - ${riga.evento_titolo}` : ''}
+                  </p>
+                ))}
+                {staffVeNotaPg && (post.evento || post.evento_id) ? (
+                  <MissioneResolvePicker
+                    onLogout={onLogout}
+                    tipoRisoluzione="POST_SOCIAL"
+                    eventoId={post.evento?.id || post.evento || post.evento_id}
+                    personaggioId={post.autore?.id || post.autore}
+                    socialPostId={post.id}
+                    label="Questo post risolve task"
+                    onAssigned={(ris) => registraTaskRisoltaSulPost(post.id, ris)}
+                  />
+                ) : null}
               </div>
             ) : null}
 

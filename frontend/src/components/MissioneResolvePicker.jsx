@@ -50,7 +50,7 @@ export default function MissioneResolvePicker({
     setBusy(true);
     setMsg('');
     try {
-      await assegnaMissioneRisoluzione({
+      const esito = await assegnaMissioneRisoluzione({
         missione_id: selected,
         evento_id: Number(eventoId),
         personaggio_id: Number(personaggioId),
@@ -61,7 +61,7 @@ export default function MissioneResolvePicker({
       }, onLogout);
       setMsg('Task assegnata — ricompensa accreditata');
       setSelected(null);
-      onAssigned?.();
+      onAssigned?.(esito);
       await load();
     } catch (err) {
       setMsg(err?.message || 'Assegnazione fallita');
