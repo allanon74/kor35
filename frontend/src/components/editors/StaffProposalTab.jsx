@@ -497,7 +497,7 @@ const StaffProposalTab = ({ onLogout }) => {
             <ConfirmDialog
                 open={confirmRejectOpen}
                 title="Confermi il rifiuto?"
-                message="La proposta tornera in bozza al giocatore."
+                message="La proposta esce dalla valutazione e torna in bozza al giocatore, con le note scritte sopra. Potrà modificarla e ripresentarla."
                 confirmLabel="Rifiuta"
                 onCancel={() => setConfirmRejectOpen(false)}
                 onConfirm={handleRifiuta}

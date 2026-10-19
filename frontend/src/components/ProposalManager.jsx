@@ -3,7 +3,33 @@ import { useCharacter } from './CharacterContext';
 import { getProposte } from '../api';
 import { FileEdit, Loader2, Plus } from 'lucide-react';
 import ProposalEditorModal from './ProposalEditorModal';
+import RichHtml from './RichHtml';
 import { getAuraName } from '../utils/auraDisplay';
+import { etichettaStatoProposta, propostaDaRivedere, sezioneProposta } from '../lib/propostaTecnicaStato';
+
+const SEZIONI = [
+    {
+        id: 'bozze',
+        titolo: 'Bozze',
+        descrizione: 'Modificabili. Se lo staff rimanda indietro una proposta, torna qui con le note.',
+    },
+    {
+        id: 'valutazione',
+        titolo: 'In valutazione',
+        descrizione: 'In attesa dello staff. Un rifiuto le toglie da questo elenco e le riporta in bozza.',
+    },
+    {
+        id: 'approvate',
+        titolo: 'Approvate',
+        descrizione: 'Create e inserite tra le tecniche apprese.',
+    },
+];
+
+function righeProposte(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.results)) return payload.results;
+    return [];
+}
 
 const ProposalManager = ({ type, onClose }) => { // type = 'Infusione' | 'Tessitura'
     const { selectedCharacterId } = useCharacter();
@@ -17,7 +43,7 @@ const ProposalManager = ({ type, onClose }) => { // type = 'Infusione' | 'Tessit
     const fetchProposals = async () => {
         setIsLoading(true);
         try {
-            const all = await getProposte(selectedCharacterId);
+            const all = righeProposte(await getProposte(selectedCharacterId));
             setProposals(all.filter(p => p.tipo === filterType));
         } catch (e) {
             console.error(e);
@@ -50,7 +76,7 @@ const ProposalManager = ({ type, onClose }) => { // type = 'Infusione' | 'Tessit
                 <div className="p-4 sm:p-6 pr-14 border-b border-gray-700 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                     <div>
                         <h2 className="text-xl sm:text-2xl font-bold text-white">Le tue proposte di {type}</h2>
-                        <p className="text-gray-400 text-sm mt-1">Gestisci le tue creazioni. Inviare costa 10 CR per livello.</p>
+                        <p className="text-gray-400 text-sm mt-1">Le bozze si modificano e si ripresentano. L&apos;invio costa crediti (10 CR per livello, salvo l&apos;aura).</p>
                     </div>
                     <button 
                         onClick={handleCreateNew}
@@ -60,47 +86,70 @@ const ProposalManager = ({ type, onClose }) => { // type = 'Infusione' | 'Tessit
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                     {isLoading ? (
                         <div className="flex justify-center p-10"><Loader2 className="animate-spin text-indigo-500"/></div>
+                    ) : proposals.length === 0 ? (
+                        <div className="text-center py-10 text-gray-500 border-2 border-dashed border-gray-700 rounded-xl">
+                            Nessuna proposta trovata. Creane una nuova!
+                        </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {proposals.map(p => (
-                                <div 
-                                    key={p.id} 
-                                    onClick={() => handleEdit(p)}
-                                    className="bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-indigo-500 cursor-pointer transition-all hover:bg-gray-750 group"
-                                >
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div className={`text-xs font-bold px-2 py-1 rounded uppercase ${
-                                            p.stato === 'BOZZA' ? 'bg-gray-600 text-gray-300' :
-                                            p.stato === 'VALUTAZIONE' ? 'bg-yellow-600/20 text-yellow-500 border border-yellow-600/50' :
-                                            p.stato === 'APPROVATA' ? 'bg-green-600/20 text-green-500 border border-green-600/50' :
-                                            'bg-red-600/20 text-red-500 border border-red-600/50'
-                                        }`}>
-                                            {p.stato}
-                                        </div>
-                                        {p.stato === 'BOZZA' && <FileEdit size={16} className="text-gray-500 group-hover:text-indigo-400"/>}
-                                    </div>
-                                    <h3 className="font-bold text-lg text-white mb-1 truncate">{p.personaggio_nome}</h3>
-                                    <div className="text-sm text-gray-400 mb-3 flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full" style={{backgroundColor: p.aura_details?.colore || '#ccc'}}></div>
-                                        {getAuraName(p)}
-                                        <span className="ml-auto text-xs bg-gray-900 px-2 py-0.5 rounded">Lv. {p.livello}</span>
-                                    </div>
-                                    {p.note_staff && (
-                                        <div className="mt-2 p-2 bg-gray-900/50 rounded text-xs text-gray-300 border-l-2 border-indigo-500">
-                                            <span className="font-bold text-indigo-400 block">Staff:</span>
-                                            {p.note_staff}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                            {proposals.length === 0 && (
-                                <div className="col-span-full text-center py-10 text-gray-500 border-2 border-dashed border-gray-700 rounded-xl">
-                                    Nessuna proposta trovata. Creane una nuova!
-                                </div>
-                            )}
+                        <div className="space-y-8">
+                            {SEZIONI.map((sezione) => {
+                                const rows = proposals.filter((p) => sezioneProposta(p) === sezione.id);
+                                if (rows.length === 0 && sezione.id !== 'bozze') return null;
+                                return (
+                                    <section key={sezione.id} aria-label={sezione.titolo}>
+                                        <h3 className="text-sm font-black uppercase tracking-widest text-gray-300">{sezione.titolo}</h3>
+                                        <p className="text-xs text-gray-500 mt-1 mb-3">{sezione.descrizione}</p>
+                                        {rows.length === 0 ? (
+                                            <div className="text-sm text-gray-500 border border-dashed border-gray-700 rounded-xl px-4 py-6 text-center">
+                                                Nessuna bozza. Una proposta rifiutata ricompare qui.
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {rows.map((p) => {
+                                                    const daRivedere = propostaDaRivedere(p);
+                                                    return (
+                                                        <div
+                                                            key={p.id}
+                                                            onClick={() => handleEdit(p)}
+                                                            className={`bg-gray-800 p-4 rounded-lg border cursor-pointer transition-all group min-w-0 ${
+                                                                daRivedere
+                                                                    ? 'border-amber-600/70 hover:border-amber-400'
+                                                                    : 'border-gray-700 hover:border-indigo-500'
+                                                            }`}
+                                                        >
+                                                            <div className="flex justify-between items-start mb-2 gap-2">
+                                                                <div className={`text-xs font-bold px-2 py-1 rounded ${
+                                                                    sezione.id === 'bozze' ? (daRivedere ? 'bg-amber-600/20 text-amber-200 border border-amber-600/50' : 'bg-gray-600 text-gray-300') :
+                                                                    sezione.id === 'valutazione' ? 'bg-yellow-600/20 text-yellow-500 border border-yellow-600/50' :
+                                                                    'bg-green-600/20 text-green-500 border border-green-600/50'
+                                                                }`}>
+                                                                    {etichettaStatoProposta(p)}
+                                                                </div>
+                                                                {sezione.id === 'bozze' && <FileEdit size={16} className="text-gray-500 group-hover:text-indigo-400 shrink-0"/>}
+                                                            </div>
+                                                            <h3 className="font-bold text-lg text-white mb-1 break-words">{p.nome || 'Senza nome'}</h3>
+                                                            <div className="text-sm text-gray-400 mb-3 flex items-center gap-2 min-w-0">
+                                                                <div className="w-2 h-2 rounded-full shrink-0" style={{backgroundColor: p.aura_details?.colore || '#ccc'}}></div>
+                                                                <span className="truncate">{getAuraName(p)}</span>
+                                                                <span className="ml-auto text-xs bg-gray-900 px-2 py-0.5 rounded shrink-0">Lv. {p.livello}</span>
+                                                            </div>
+                                                            {p.note_staff && (
+                                                                <div className="mt-2 p-2 bg-gray-900/50 rounded text-xs text-gray-300 border-l-2 border-amber-500 min-w-0">
+                                                                    <span className="font-bold text-amber-300 block">Note dello staff</span>
+                                                                    <RichHtml content={p.note_staff} className="text-xs text-gray-200 break-words line-clamp-4" />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </section>
+                                );
+                            })}
                         </div>
                     )}
                 </div>

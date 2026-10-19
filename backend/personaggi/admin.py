@@ -561,18 +561,30 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
         return filtered_instances
     
     def save_model(self, request, obj, form, change):
+        # Anche dall'admin il rifiuto non è terminale: RIFIUTATA torna bozza modificabile.
+        riportata_in_bozza = (
+            change
+            and 'stato' in form.changed_data
+            and obj.stato in (STATO_PROPOSTA_RIFIUTATA, STATO_PROPOSTA_BOZZA)
+        )
+        if obj.stato == STATO_PROPOSTA_RIFIUTATA:
+            obj.stato = STATO_PROPOSTA_BOZZA
         super().save_model(request, obj, form, change)
-        if change and 'stato' in form.changed_data and obj.stato in (STATO_PROPOSTA_RIFIUTATA, STATO_PROPOSTA_BOZZA):
+        if riportata_in_bozza:
             motivo = obj.note_staff if obj.note_staff else "Nessuna motivazione specifica fornita."
             Messaggio.objects.create(
                 mittente=request.user,
                 destinatario_personaggio=obj.personaggio,
                 tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
-                titolo=f"Esito Proposta: {obj.nome}",
-                testo=f"La tua proposta '{obj.nome}' è stata valutata e RIFIUTATA.\n\nMOTIVAZIONE STAFF:\n{motivo}",
+                titolo=f"Proposta da rivedere: {obj.nome}",
+                testo=(
+                    f"La tua proposta '{obj.nome}' è stata rimandata in bozza.\n"
+                    f"Puoi modificarla e ripresentarla.\n\n"
+                    f"NOTE STAFF:\n{motivo}"
+                ),
                 salva_in_cronologia=True
             )
-            obj.personaggio.aggiungi_log(f"Proposta '{obj.nome}' rifiutata dallo staff.")
+            obj.personaggio.aggiungi_log(f"Proposta '{obj.nome}' rimandata in bozza dallo staff.")
     
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)

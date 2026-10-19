@@ -94,6 +94,9 @@ STATO_PROPOSTA_CHOICES = [
     (STATO_PROPOSTA_APPROVATA, 'Approvata'),
     (STATO_PROPOSTA_RIFIUTATA, 'Rifiutata'),
 ]
+# Bozza nuova oppure rifiuto legacy (admin): il giocatore può modificare e ripresentare.
+# RIFIUTATA non è uno stato terminale del flusso staff: il rifiuto dalla dashboard torna in BOZZA.
+STATI_PROPOSTA_MODIFICABILI = (STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_RIFIUTATA)
 
 TIPO_PROPOSTA_INFUSIONE = 'INF'
 TIPO_PROPOSTA_TESSITURA = 'TES'

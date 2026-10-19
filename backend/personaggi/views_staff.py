@@ -639,27 +639,47 @@ class ClasseOggettoViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsStaffOrMaster]
     
 class RifiutaPropostaView(APIView):
+    """Rimanda una proposta in valutazione allo stato BOZZA del personaggio.
+
+    Non cancella la riga e non crea la tecnica. La proposta esce dalla coda
+    staff (solo stato VALUTAZIONE), conserva le note e resta modificabile:
+    il giocatore può integrarle e ripresentarla.
+    """
     permission_classes = [IsStaffOrMaster]
 
     def post(self, request, pk):
         proposta = get_object_or_404(PropostaTecnica, pk=pk)
+        if proposta.stato != STATO_PROPOSTA_IN_VALUTAZIONE:
+            return Response(
+                {"error": "Solo una proposta in valutazione può essere rimandata in bozza."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         note_staff = request.data.get('note_staff', '')
-        
+        if note_staff is None:
+            note_staff = ''
+        note_staff = str(note_staff)
+
         with transaction.atomic():
             proposta.stato = STATO_PROPOSTA_BOZZA
             proposta.note_staff = note_staff
             proposta.save()
-            
-            # Invia messaggio solo al personaggio che ha proposto la tecnica
+
             Messaggio.objects.create(
                 mittente=request.user,
                 tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                 destinatario_personaggio=proposta.personaggio,
-                titolo=f"Proposta Rifiutata: {proposta.nome}",
-                testo=f"La tua proposta per '{proposta.nome}' è stata rifiutata e riportata in bozza.\n\nNote Staff:\n{note_staff}"
+                titolo=f"Proposta da rivedere: {proposta.nome}",
+                testo=(
+                    f"La tua proposta per '{proposta.nome}' è stata rimandata in bozza.\n"
+                    f"Non è più in valutazione: puoi modificarla e ripresentarla.\n\n"
+                    f"Note Staff:\n{note_staff}"
+                ),
             )
-            
-        return Response({'status': 'success', 'message': 'Proposta rifiutata'}, status=status.HTTP_200_OK)
+
+        return Response(
+            {'status': 'success', 'message': 'Proposta rimandata in bozza', 'stato': proposta.stato},
+            status=status.HTTP_200_OK,
+        )
     
 class ProposteValutazioneList(generics.ListAPIView):
     permission_classes = [IsStaffOrMaster]
