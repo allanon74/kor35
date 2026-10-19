@@ -14,6 +14,8 @@ import { confirmCloseIfDirty } from '../hooks/useDirtyModalClose';
 import IconaPunteggio from './IconaPunteggio';
 import { caratteristichePersonaggio } from '../lib/caratteristicheScheda';
 import { auraDelegaMattoni, etichettaMattone, paletteAuraId } from '../lib/paletteMattoni';
+import { propostaModificabile } from '../lib/propostaTecnicaStato';
+import RichHtml from './RichHtml';
 
 // Costanti Slot Corporei (Invariate)
 const BODY_SLOTS = [
@@ -90,7 +92,8 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState('');
 
-    const isDraft = !proposal || proposal.stato === 'BOZZA';
+    const isDraft = propostaModificabile(proposal?.stato);
+    const noteStaff = String(proposal?.note_staff || '').trim();
     const isEditing = !!proposal;
     const isInfusion = type === 'Infusione';
     const isCerimoniale = type === 'Cerimoniale';
@@ -360,7 +363,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
 
         setIsSaving(true);
         try {
-            if (send && !window.confirm("Attenzione: l'invio alla valutazione dello staff è definitivo. Confermi?")) {
+            if (send && !window.confirm("Confermi l'invio in valutazione? Lo staff può approvarla oppure rimandarla in bozza con delle note.")) {
                 setIsSaving(false); return;
             }
             let targetId = proposal?.id;
@@ -432,7 +435,9 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                 {isEditing ? `Modifica ${type}` : `Crea Nuova Proposta ${type}`}
                             </h2>
                             <p className="text-[10px] text-gray-500 uppercase font-black">
-                                {isEditing ? `ID: ${proposal.id} • ${proposal.stato}` : 'Creazione Bozza Personale'}
+                                {isEditing
+                                    ? (noteStaff ? 'Bozza da rivedere — integra le note e ripresenta' : `ID: ${proposal.id} • ${proposal.stato}`)
+                                    : 'Creazione Bozza Personale'}
                             </p>
                         </div>
                     </div>
@@ -441,6 +446,14 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
 
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-thin scrollbar-thumb-gray-700">
+                    {noteStaff && (
+                        <div className="p-3 bg-amber-950/40 text-amber-50 rounded-lg border border-amber-700/60 text-sm">
+                            <span className="font-black uppercase tracking-widest text-[10px] text-amber-300 block mb-2">
+                                Note dello staff — da integrare prima di ripresentare
+                            </span>
+                            <RichHtml content={noteStaff} className="text-sm text-amber-50 break-words" />
+                        </div>
+                    )}
                     {error && <div className="p-3 bg-red-900/30 text-red-200 rounded-lg border border-red-800 flex items-center gap-2 animate-pulse"><AlertTriangle size={16}/> {error}</div>}
                     {needsAuraModelSelection && (
                         <div className="p-3 bg-amber-900/25 text-amber-100 rounded-lg border border-amber-700/50 flex items-center gap-2 text-sm">

@@ -32,7 +32,8 @@ from .models import (
     # NUOVI MODELLI INTERMEDI
     PropostaTecnicaCaratteristica, InfusioneCaratteristica, TessituraCaratteristica,
     PersonaggioTessitura, PersonaggioAbilita,
-    STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, LetturaMessaggio, PersonaggioLog,
+    STATO_PROPOSTA_IN_VALUTAZIONE, STATI_PROPOSTA_MODIFICABILI,
+    LetturaMessaggio, PersonaggioLog,
     STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES,
     PropostaTransazione,
     Gruppo, Messaggio, Tabella, Mattone,
@@ -3375,7 +3376,8 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
         return context
 
     def perform_destroy(self, instance):
-        if instance.stato != STATO_PROPOSTA_BOZZA: raise serializers.ValidationError("Non puoi cancellare una proposta già inviata.")
+        if instance.stato not in STATI_PROPOSTA_MODIFICABILI:
+            raise serializers.ValidationError("Non puoi cancellare una proposta già inviata.")
         instance.delete()
 
     @transaction.atomic
@@ -3384,7 +3386,8 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
         # LOGICA AGGIORNATA PER USARE COMPONENTI INVECE DI MATTONI
         proposta = self.get_object()
         personaggio = proposta.personaggio
-        if proposta.stato != STATO_PROPOSTA_BOZZA: return Response({"error": "La proposta non è in stato di bozza."}, status=status.HTTP_400_BAD_REQUEST)
+        if proposta.stato not in STATI_PROPOSTA_MODIFICABILI:
+            return Response({"error": "La proposta non è in stato di bozza."}, status=status.HTTP_400_BAD_REQUEST)
         
         # Livello: tessiture/infusioni = somma mattoni; cerimoniali = livello proposto (manuale)
         livello = proposta.livello

@@ -102,7 +102,8 @@ from .models import (
     Gruppo, Messaggio,
     ModelloAuraRequisitoCaratt, ModelloAuraRequisitoMattone,
     PropostaTecnica, 
-    STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, 
+    STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_RIFIUTATA,
+    STATI_PROPOSTA_MODIFICABILI, 
     STATO_TRANSAZIONE_IN_ATTESA,
     LetturaMessaggio, Oggetto, ClasseOggetto,
     RichiestaAssemblaggio, OggettoCaratteristica, 
@@ -2783,13 +2784,17 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
         return proposta
 
     def update(self, instance, validated_data):
-        if instance.stato != STATO_PROPOSTA_BOZZA:
+        if instance.stato not in STATI_PROPOSTA_MODIFICABILI:
             raise serializers.ValidationError("Non puoi modificare una proposta già inviata.")
 
+        # I rifiuti storici salvati come RIFIUTATA tornano bozza al primo salvataggio.
+        era_rifiutata = instance.stato == STATO_PROPOSTA_RIFIUTATA
         comp_data = validated_data.pop('componenti_data', None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        if era_rifiutata:
+            instance.stato = STATO_PROPOSTA_BOZZA
         instance.save()
 
         if comp_data is not None:
