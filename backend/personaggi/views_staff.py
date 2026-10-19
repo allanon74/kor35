@@ -55,6 +55,7 @@ from .formula_builder import (
     build_formula_template,
     build_stats_by_selection,
     render_formula_preview,
+    resolve_elemento_override,
 )
 
 from .serializers import (
@@ -2267,7 +2268,7 @@ class FormulaBuilderPreviewView(APIView):
 
     @staticmethod
     def _build_preview_context(payload):
-        from .models import FORMULA_SCOPE_ATTACK, FORMULA_SCOPE_WEAVE, Punteggio
+        from .models import FORMULA_SCOPE_ATTACK, FORMULA_SCOPE_WEAVE
 
         context = dict(payload.get("context") or {})
         selections = payload.get("selections") or {}
@@ -2290,10 +2291,9 @@ class FormulaBuilderPreviewView(APIView):
             str(sid).strip().lower() in ("elemento", "elemento_principale")
             for sid in source_ids
         )
-        element_id = selections.get("source_element_id")
-        if wants_element and element_id and not context.get("elemento"):
-            elemento = Punteggio.objects.filter(pk=element_id).first()
-            if elemento:
+        if wants_element and not context.get("elemento"):
+            elemento = resolve_elemento_override(selections)
+            if elemento is not None:
                 context["elemento"] = elemento
         entity_name = (selections.get("entity_name") or context.get("entity_name") or "").strip()
         if entity_name:
