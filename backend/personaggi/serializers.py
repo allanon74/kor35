@@ -5309,12 +5309,33 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
     impostazioni_ui = serializers.JSONField(required=False, allow_null=True)
 
     def get_oggetti_inventario(self, obj):
+        from personaggi.models import SLOT_CORPO_CHOICES, Oggetto
+
+        etichette_slot = dict(SLOT_CORPO_CHOICES)
+        oggetti = list(obj.get_oggetti().order_by('nome')[:80])
+        ids = [oggetto.id for oggetto in oggetti]
+        potenziamenti = (
+            Oggetto.objects.filter(ospitato_su_id__in=ids).order_by('nome')
+            if ids else Oggetto.objects.none()
+        )
+        per_host = {}
+        for pot in potenziamenti:
+            per_host.setdefault(pot.ospitato_su_id, []).append({
+                'id': pot.id,
+                'nome': pot.nome,
+                'tipo_oggetto': pot.tipo_oggetto,
+            })
         rows = []
-        for oggetto in obj.get_oggetti().order_by('nome')[:80]:
+        for oggetto in oggetti:
+            slot = oggetto.slot_corpo or ''
             rows.append({
                 'id': oggetto.id,
                 'nome': oggetto.nome,
                 'tipo_oggetto': oggetto.tipo_oggetto,
+                'slot_corpo': slot,
+                'slot_corpo_label': etichette_slot.get(slot, ''),
+                'is_equipaggiato': bool(oggetto.is_equipaggiato),
+                'potenziamenti': per_host.get(oggetto.id, []),
             })
         return rows
 

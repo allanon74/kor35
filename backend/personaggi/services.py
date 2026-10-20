@@ -630,7 +630,9 @@ class GestioneOggettiService:
             ).first()
             valore_base = stat_base_link.valore_base if stat_base_link else infusione.statistica_cariche.valore_base_predefinito
             chiave = statistica_chiave_modificatore(infusione.statistica_cariche)
-            mods = proprietario.modificatori_calcolati.get(chiave, {'add': 0.0, 'mol': 1.0}) if chiave else {'add': 0.0, 'mol': 1.0}
+            mods = {'add': 0.0, 'mol': 1.0}
+            if proprietario is not None and chiave:
+                mods = proprietario.modificatori_calcolati.get(chiave, mods)
             cariche_iniziali = int(round((valore_base + mods['add']) * mods['mol']))
             cariche_iniziali = max(0, cariche_iniziali)
 
@@ -714,7 +716,8 @@ class GestioneOggettiService:
                         obj_stat.limit_a_aure.set(eff.limit_a_aure.all())
                         obj_stat.limit_a_elementi.set(eff.limit_a_elementi.all())
         
-        nuovo_oggetto.sposta_in_inventario(proprietario)
+        if proprietario is not None:
+            nuovo_oggetto.sposta_in_inventario(proprietario)
         return nuovo_oggetto
     
 

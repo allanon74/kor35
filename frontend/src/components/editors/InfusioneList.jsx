@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { PackagePlus } from 'lucide-react';
 import { staffGetInfusioni, staffDeleteInfusione } from '../../api';
 import MasterTechniqueList from './MasterTechniqueList';
 
-const InfusioneList = ({ onSelect, onNew, onScanQr, onMinigioco, onLogout, listVersion = 0 }) => {
+const InfusioneList = ({ onSelect, onNew, onScanQr, onMinigioco, onCreateInstance, onLogout, listVersion = 0 }) => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -55,6 +56,17 @@ const InfusioneList = ({ onSelect, onNew, onScanQr, onMinigioco, onLogout, listV
       onScanQr={onScanQr}
       onMinigioco={onMinigioco}
       onDelete={handleDelete}
+      extraRowActions={onCreateInstance ? (item) => (
+        <button
+          type="button"
+          onClick={() => onCreateInstance(item)}
+          className="min-h-11 min-w-11 inline-flex items-center justify-center p-2.5 lg:p-2 bg-purple-600/20 text-purple-300 hover:bg-purple-600 hover:text-white rounded-lg transition-all"
+          title="Crea istanza"
+          aria-label={`Crea istanza di ${item.nome}`}
+        >
+          <PackagePlus size={16} />
+        </button>
+      ) : null}
     />
   );
 };

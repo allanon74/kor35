@@ -128,6 +128,21 @@ def _get_default_campaign():
     return Campagna.objects.filter(slug="kor35").first() or Campagna.objects.filter(is_default=True).first()
 
 
+def _esegui_azione_oggetti_staff(fn):
+    """Esegue un'azione staff e traduce ValidationError Django in 400."""
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    from personaggi.staff_oggetti_ufficio import messaggio_validazione
+
+    try:
+        return fn()
+    except DjangoValidationError as exc:
+        return Response(
+            {"detail": messaggio_validazione(exc)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
 def _get_active_campaign(request):
     slug = (request.headers.get("X-Campagna") or request.query_params.get("campagna") or "kor35").strip().lower()
     campagna = Campagna.objects.filter(slug=slug, attiva=True).first()
@@ -518,6 +533,35 @@ class InfusioneMasterViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(campagna=_get_active_campaign(self.request))
+
+    @action(detail=True, methods=["post"], url_path="crea-istanza")
+    def crea_istanza(self, request, pk=None):
+        """Crea un'istanza Oggetto dall'infusione e, se indicato, la assegna a un personaggio."""
+        from personaggi.staff_oggetti_ufficio import crea_istanza_da_infusione_staff
+
+        infusione = self.get_object()
+        personaggio = None
+        personaggio_id = request.data.get("personaggio_id")
+        if personaggio_id not in (None, "", 0, "0"):
+            personaggio = Personaggio.objects.filter(pk=personaggio_id).first()
+            if personaggio is None:
+                return Response(
+                    {"detail": "Personaggio non trovato."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        risultato = _esegui_azione_oggetti_staff(
+            lambda: crea_istanza_da_infusione_staff(
+                infusione,
+                personaggio=personaggio,
+                nome=request.data.get("nome"),
+                slot_corpo=request.data.get("slot_corpo"),
+                oggetto_ospite_id=request.data.get("oggetto_ospite_id"),
+                motivo=request.data.get("motivo") or "",
+            )
+        )
+        if isinstance(risultato, Response):
+            return risultato
+        return Response(risultato, status=status.HTTP_201_CREATED)
 
 class TessituraMasterViewSet(viewsets.ModelViewSet):
     """
@@ -3409,6 +3453,74 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
             oggetto.delete()
             personaggio.aggiungi_log(f"Oggetto «{nome}» distrutto ({motivo}).")
         return Response({'detail': f'«{nome}» eliminato definitivamente.'})
+
+    @action(detail=True, methods=['post'], url_path='crea-oggetto-da-infusione')
+    def crea_oggetto_da_infusione(self, request, pk=None):
+        """Crea un'istanza da Infusione nell'inventario del personaggio."""
+        from personaggi.staff_oggetti_ufficio import crea_istanza_da_infusione_staff
+
+        personaggio = self.get_object()
+        infusione_id = request.data.get('infusione_id')
+        if not infusione_id:
+            return Response({'detail': 'infusione_id obbligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        infusione = Infusione.objects.filter(pk=infusione_id).first()
+        if infusione is None:
+            return Response({'detail': 'Infusione non trovata.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _campaign_feature_filter(
+            request, Infusione.objects.filter(pk=infusione.pk), FEATURE_INFUSIONI
+        ).exists():
+            return Response(
+                {'detail': 'Infusione non disponibile per la campagna attiva.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        risultato = _esegui_azione_oggetti_staff(
+            lambda: crea_istanza_da_infusione_staff(
+                infusione,
+                personaggio=personaggio,
+                nome=request.data.get('nome'),
+                slot_corpo=request.data.get('slot_corpo'),
+                oggetto_ospite_id=request.data.get('oggetto_ospite_id'),
+                motivo=request.data.get('motivo') or '',
+            )
+        )
+        if isinstance(risultato, Response):
+            return risultato
+        return Response(risultato, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='monta-potenziamento')
+    def monta_potenziamento(self, request, pk=None):
+        """Monta d'ufficio una materia o mod su un oggetto fisico dello stesso personaggio."""
+        from personaggi.staff_oggetti_ufficio import monta_potenziamento_staff
+
+        personaggio = self.get_object()
+        risultato = _esegui_azione_oggetti_staff(
+            lambda: monta_potenziamento_staff(
+                personaggio,
+                request.data.get('componente_id'),
+                request.data.get('oggetto_ospite_id'),
+                motivo=request.data.get('motivo') or '',
+            )
+        )
+        if isinstance(risultato, Response):
+            return risultato
+        return Response(risultato)
+
+    @action(detail=True, methods=['post'], url_path='smonta-potenziamento')
+    def smonta_potenziamento(self, request, pk=None):
+        """Smonta d'ufficio una materia o mod e la rimette nell'inventario."""
+        from personaggi.staff_oggetti_ufficio import smonta_potenziamento_staff
+
+        personaggio = self.get_object()
+        risultato = _esegui_azione_oggetti_staff(
+            lambda: smonta_potenziamento_staff(
+                personaggio,
+                request.data.get('componente_id'),
+                motivo=request.data.get('motivo') or '',
+            )
+        )
+        if isinstance(risultato, Response):
+            return risultato
+        return Response(risultato)
 
     @action(detail=True, methods=['get'], url_path='logs')
     def logs(self, request, pk=None):
