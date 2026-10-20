@@ -13,7 +13,7 @@ FORMULA_BUILDER_SCHEMA = {
     "type_templates": {
         "attack": ["rango", "molt", "formula_prefix", "formula_target", "formula_source", "formula_damage_mode", "formula_cura", "formula_status"],
         "weave": ["formula_type", "rango", "molt", "formula_prefix", "formula_target", "formula_source", "formula_damage_mode", "formula_cura", "formula_status"],
-        "capacity": ["capacity_header", "formula_prefix", "formula_source", "formula_status"],
+        "capacity": ["capacity_header", "formula_prefix", "formula_source", "formula_damage_mode", "formula_status"],
     },
     "sections": [
         {

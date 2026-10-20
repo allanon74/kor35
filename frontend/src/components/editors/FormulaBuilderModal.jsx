@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { staffGetFormulaBuilderSchema, staffGetFormulaSemanticOptions, staffPreviewFormulaBuilder } from '../../api';
+
+/** Sopra la barra Salva mobile (portal su body, z-[130]) e lo shell editor (z-[110]). */
+export const FORMULA_BUILDER_OVERLAY_Z_CLASS = 'z-[250]';
 
 const FormulaBuilderModal = ({
   open,
@@ -359,14 +363,17 @@ const FormulaBuilderModal = ({
 
   const formulaTypeLabel = (schema?.types || []).find((t) => t.id === formulaType)?.label || formulaType;
 
-  return (
-    <div className="fixed inset-0 z-[10000] bg-black/70 flex items-end sm:items-center justify-center p-2 sm:p-4">
-      <div className="w-full max-w-5xl max-h-[92vh] overflow-y-auto bg-gray-900 border border-gray-700 rounded-t-xl sm:rounded-xl shadow-2xl min-w-0">
-        <div className="p-3 sm:p-4 border-b border-gray-700 flex justify-between items-center gap-2 min-w-0">
+  const dialog = (
+    <div
+      data-testid="formula-builder-modal"
+      className={`fixed inset-0 ${FORMULA_BUILDER_OVERLAY_Z_CLASS} bg-black/70 flex items-end sm:items-center justify-center p-2 sm:p-4`}
+    >
+      <div className="flex w-full max-w-5xl max-h-[92vh] min-h-0 flex-col overflow-hidden bg-gray-900 border border-gray-700 rounded-t-xl sm:rounded-xl shadow-2xl min-w-0">
+        <div className="shrink-0 p-3 sm:p-4 border-b border-gray-700 flex justify-between items-center gap-2 min-w-0">
           <h3 className="text-lg font-bold text-white min-w-0 break-words">Costruisci formula</h3>
           <button onClick={onClose} className="px-3 py-2 min-h-11 rounded bg-gray-700 text-white text-sm shrink-0">Chiudi</button>
         </div>
-        <div className="p-4 space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
           <div className="border border-gray-700 rounded-lg p-3">
             <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Tipo formula</div>
             <select
@@ -604,17 +611,20 @@ const FormulaBuilderModal = ({
             </div>
           </div>
         </div>
-        <div className="p-4 border-t border-gray-700 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-700 rounded text-white text-sm">
+        <div className="shrink-0 border-t border-gray-700 flex flex-col gap-2 p-3 sm:flex-row sm:justify-end pb-[max(0.75rem,var(--kor-safe-bottom))]">
+          <button type="button" onClick={onClose} className="min-h-11 w-full sm:w-auto px-4 py-2 bg-gray-700 rounded text-white text-sm">
             Annulla
           </button>
-          <button type="button" onClick={handleApply} className="px-4 py-2 bg-indigo-600 rounded text-white text-sm font-bold">
+          <button type="button" onClick={handleApply} className="min-h-11 w-full sm:w-auto px-4 py-2 bg-indigo-600 rounded text-white text-sm font-bold">
             Applica
           </button>
         </div>
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') return dialog;
+  return createPortal(dialog, document.body);
 };
 
 function getControlledParams(schema) {
