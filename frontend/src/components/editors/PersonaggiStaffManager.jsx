@@ -9,6 +9,8 @@ import RichTextEditor from '../RichTextEditor';
 import StaffCostumePhotosSection from '../StaffCostumePhotosSection';
 import StaffQrTab from '../StaffQrTab';
 import SearchableSelect from './SearchableSelect';
+import StaffInventarioInfusionePanel, { PotenziamentiMontati } from './StaffInventarioInfusionePanel';
+import { TIPO_OGGETTO_LABEL, etichettaSlot } from '../../lib/slotCorpoStaff';
 import InstafameNicknameInput from '../InstafameNicknameInput';
 import PngPresenzaSocialFields, { presenzaSocialToPayload } from '../PngPresenzaSocialFields';
 import ProfileImageField from '../ProfileImageField';
@@ -37,6 +39,7 @@ import {
   staffPersonaggioAggiungiOggetto,
   staffPersonaggioRimuoviOggetto,
   staffPersonaggioDistruggiOggetto,
+  staffPersonaggioSmontaPotenziamento,
   staffGetOggettiSenzaPosizione,
   staffGetOggettoStaff,
   staffGetOggettiBase,
@@ -1347,6 +1350,14 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                           Aggiorna elenco senza posizione
                         </button>
                       </div>
+                      <StaffInventarioInfusionePanel
+                        personaggioId={detail.id}
+                        oggetti={detail.oggetti_inventario || []}
+                        motivo={inventarioMotivo}
+                        onLogout={onLogout}
+                        onMessage={setMessage}
+                        onReload={() => reloadDetail(detail.id)}
+                      />
                       <p className="text-xs text-gray-500">
                         Inventario ({detail.oggetti_inventario?.length || 0} oggetti, max 80).
                       </p>
@@ -1358,10 +1369,14 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                       />
                       <ul className="space-y-1 max-h-[50vh] overflow-y-auto text-sm">
                         {(detail.oggetti_inventario || []).map((o) => (
-                          <li key={o.id} className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 flex flex-wrap items-center justify-between gap-2">
-                            <span>
+                          <li key={o.id} className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 flex flex-col gap-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="min-w-0 break-words">
                               {o.nome}
-                              <span className="text-gray-500 font-mono text-xs ml-2">#{o.id} · {o.tipo_oggetto}</span>
+                              <span className="text-gray-500 font-mono text-xs ml-2">
+                                #{o.id} · {TIPO_OGGETTO_LABEL[o.tipo_oggetto] || o.tipo_oggetto}
+                                {o.slot_corpo ? ` · ${etichettaSlot(o.slot_corpo)}` : ''}
+                              </span>
                             </span>
                             <span className="flex flex-wrap gap-1">
                               <button
@@ -1403,6 +1418,22 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                                 Distruggi
                               </button>
                             </span>
+                            </div>
+                            <PotenziamentiMontati
+                              potenziamenti={o.potenziamenti}
+                              onSmonta={async (p) => {
+                                if (!window.confirm(`Smontare d'ufficio «${p.nome}» da «${o.nome}»? Torna nell'inventario.`)) return;
+                                try {
+                                  const res = await staffPersonaggioSmontaPotenziamento(
+                                    detail.id, p.id, inventarioMotivo, onLogout,
+                                  );
+                                  setMessage(res.detail || 'Componente smontato.');
+                                  await reloadDetail(detail.id);
+                                } catch (e) {
+                                  setMessage(e.message || 'Errore smontaggio');
+                                }
+                              }}
+                            />
                           </li>
                         ))}
                         {!detail.oggetti_inventario?.length && (

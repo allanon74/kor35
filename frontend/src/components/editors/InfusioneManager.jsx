@@ -2,6 +2,7 @@ import React, { useState, useCallback, memo } from 'react';
 import { StaffToolShell, StaffFullscreenEditor, scrollStaffMainToTop } from '../../staff/StaffToolShell';
 import InfusioneList from './InfusioneList';
 import InfusioneEditor from './InfusioneEditor';
+import CreaIstanzaInfusioneModal from './CreaIstanzaInfusioneModal';
 import StaffQrTab from '../StaffQrTab';
 import { associaQrDiretto, staffGetInfusioneDetail } from '../../api';
 import ConfirmDialog from './ConfirmDialog';
@@ -19,6 +20,7 @@ const InfusioneManager = ({ onBack, onLogout }) => {
   const [qrStatus, setQrStatus] = useState({ type: '', message: '' });
   const [listVersion, setListVersion] = useState(0);
   const [isLoadingEditorData, setIsLoadingEditorData] = useState(false);
+  const [istanzaTarget, setIstanzaTarget] = useState(null);
 
   const handleEdit = useCallback(async (item) => {
     try {
@@ -70,6 +72,7 @@ const InfusioneManager = ({ onBack, onLogout }) => {
             onNew={handleNew}
             onScanQr={handleScanQr}
             onMinigioco={(item) => openMinigioco(item.qrcode_id, item.nome)}
+            onCreateInstance={setIstanzaTarget}
             onLogout={onLogout}
             listVersion={listVersion}
           />
@@ -128,6 +131,16 @@ const InfusioneManager = ({ onBack, onLogout }) => {
           </div>
         </div>
       ) : null}
+      <CreaIstanzaInfusioneModal
+        open={Boolean(istanzaTarget)}
+        infusione={istanzaTarget}
+        onClose={() => setIstanzaTarget(null)}
+        onLogout={onLogout}
+        onCreated={(msg) => {
+          setIstanzaTarget(null);
+          setQrStatus({ type: 'success', message: msg || 'Istanza creata.' });
+        }}
+      />
       <ConfirmDialog
         open={Boolean(pendingQrConflict)}
         title="QR già associato"

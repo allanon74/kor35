@@ -1928,6 +1928,13 @@ export const staffGetInfusioneDetail = (id, onLogout) =>
 export const staffDeleteInfusione = (id, onLogout) => 
   fetchAuthenticated(`/api/personaggi/api/staff/infusioni/${id}/`, { method: 'DELETE' }, onLogout);
 
+/** Staff: crea un'istanza dall'infusione. personaggio_id è opzionale. */
+export const staffCreaIstanzaDaInfusione = (infusioneId, payload, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/infusioni/${infusioneId}/crea-istanza/`, {
+    method: 'POST',
+    body: JSON.stringify(payload || {}),
+  }, onLogout);
+
 // --- TESSITURE ---
 export const staffGetTessiture = (onLogout, params = {}) => {
   // Costruiamo la query string (es: ?page=1&search=pippo)
@@ -3269,6 +3276,37 @@ export const staffPersonaggioDistruggiOggetto = (personaggioId, oggettoId, motiv
   fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/distruggi-oggetto/`, {
     method: 'POST',
     body: JSON.stringify({ oggetto_id: oggettoId, motivo }),
+  }, onLogout);
+
+/** Staff: istanza da infusione nell'inventario del personaggio. */
+export const staffPersonaggioCreaOggettoDaInfusione = (personaggioId, payload, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/crea-oggetto-da-infusione/`, {
+    method: 'POST',
+    body: JSON.stringify(payload || {}),
+  }, onLogout);
+
+/** Staff: monta d'ufficio materia o mod su un oggetto fisico dello stesso PG. */
+export const staffPersonaggioMontaPotenziamento = (
+  personaggioId,
+  componenteId,
+  oggettoOspiteId,
+  motivo,
+  onLogout,
+) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/monta-potenziamento/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      componente_id: componenteId,
+      oggetto_ospite_id: oggettoOspiteId,
+      motivo: motivo || '',
+    }),
+  }, onLogout);
+
+/** Staff: smonta d'ufficio materia o mod e la rimette in inventario. */
+export const staffPersonaggioSmontaPotenziamento = (personaggioId, componenteId, motivo, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/smonta-potenziamento/`, {
+    method: 'POST',
+    body: JSON.stringify({ componente_id: componenteId, motivo: motivo || '' }),
   }, onLogout);
 
 export const staffGetOggettoStaff = (id, onLogout) =>
