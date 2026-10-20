@@ -284,6 +284,36 @@ class FormulaBuilderLogicTests(TestCase):
         self.assertIn("Capacità ScanLink:", rendered)
         self.assertIn("Mental", rendered)
 
+    def test_capacity_include_danno_mischia_o_distanza_solo_se_scelto(self):
+        mischia = build_formula_template(
+            "capacity",
+            {
+                "entity_name": "ScanLink",
+                "formula_source": ["mental"],
+                "formula_damage_mode": "mischia",
+            },
+        )
+        self.assertTrue(mischia.startswith("Capacità ScanLink: "))
+        self.assertIn("{danni_mischia}", mischia)
+        self.assertNotIn("{danni_distanza}", mischia)
+
+        distanza = build_formula_template(
+            "capacity",
+            {
+                "entity_name": "ScanLink",
+                "formula_damage_mode": "distanza",
+            },
+        )
+        self.assertIn("{danni_distanza}", distanza)
+        self.assertNotIn("{danni_mischia}", distanza)
+
+        senza = build_formula_template(
+            "capacity",
+            {"entity_name": "ScanLink", "formula_source": ["mental"]},
+        )
+        self.assertNotIn("{danni_mischia}", senza)
+        self.assertNotIn("{danni_distanza}", senza)
+
     def test_pierce_source_with_distanza_damage_shows_pierce_not_chop(self):
         stats = build_stats_by_selection(
             {"dannidis": 1, "dannigen": 0},
@@ -655,6 +685,8 @@ class FormulaBuilderApiTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn("sections", res.data)
         self.assertTrue(any(section.get("id") == "formula_status" for section in res.data["sections"]))
+        capacity_blocks = (res.data.get("type_templates") or {}).get("capacity") or []
+        self.assertIn("formula_damage_mode", capacity_blocks)
 
     def test_preview_endpoint_renders_status_with_duration(self):
         payload = {
