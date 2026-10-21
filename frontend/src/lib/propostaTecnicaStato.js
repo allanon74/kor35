@@ -20,13 +20,25 @@ export function sezioneProposta(proposta) {
   return 'bozze';
 }
 
+function testoNota(value) {
+  return String(value || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
+}
+
+/** Nota scritta dallo staff, nel campo legacy oppure nello storico datato. */
+export function haNoteStaff(proposta) {
+  if (testoNota(proposta?.note_staff)) return true;
+  return (proposta?.note_log || []).some(
+    (nota) => nota?.origine === 'STAFF' && testoNota(nota?.testo),
+  );
+}
+
 export function etichettaStatoProposta(proposta) {
   if (proposta?.stato === STATO_PROPOSTA_VALUTAZIONE) return 'In valutazione';
   if (proposta?.stato === STATO_PROPOSTA_APPROVATA) return 'Approvata';
-  if (proposta?.note_staff || proposta?.stato === STATO_PROPOSTA_RIFIUTATA) return 'Bozza da rivedere';
+  if (haNoteStaff(proposta) || proposta?.stato === STATO_PROPOSTA_RIFIUTATA) return 'Bozza da rivedere';
   return 'Bozza';
 }
 
 export function propostaDaRivedere(proposta) {
-  return sezioneProposta(proposta) === 'bozze' && Boolean(proposta?.note_staff || proposta?.stato === STATO_PROPOSTA_RIFIUTATA);
+  return sezioneProposta(proposta) === 'bozze' && (haNoteStaff(proposta) || proposta?.stato === STATO_PROPOSTA_RIFIUTATA);
 }

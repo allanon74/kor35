@@ -714,14 +714,17 @@ class RifiutaPropostaView(APIView):
                 {"error": "Solo una proposta in valutazione può essere rimandata in bozza."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        from .models import ORIGINE_NOTA_STAFF
+        from .proposte_note import formato_note_messaggio, registra_nota_proposta
+
         note_staff = request.data.get('note_staff', '')
         if note_staff is None:
             note_staff = ''
         note_staff = str(note_staff)
 
         with transaction.atomic():
+            registra_nota_proposta(proposta, note_staff, origine=ORIGINE_NOTA_STAFF)
             proposta.stato = STATO_PROPOSTA_BOZZA
-            proposta.note_staff = note_staff
             proposta.save()
 
             Messaggio.objects.create(
@@ -732,7 +735,7 @@ class RifiutaPropostaView(APIView):
                 testo=(
                     f"La tua proposta per '{proposta.nome}' è stata rimandata in bozza.\n"
                     f"Non è più in valutazione: puoi modificarla e ripresentarla.\n\n"
-                    f"Note Staff:\n{note_staff}"
+                    f"Note Staff:\n{formato_note_messaggio(proposta)}"
                 ),
             )
 
@@ -741,6 +744,38 @@ class RifiutaPropostaView(APIView):
             status=status.HTTP_200_OK,
         )
     
+class RegistraNotaPropostaView(APIView):
+    """Accoda una nota master datata. Il client svuota il campo di scrittura."""
+
+    permission_classes = [IsStaffOrMaster]
+
+    def post(self, request, pk):
+        from .models import ORIGINE_NOTA_STAFF
+        from .proposte_note import registra_nota_proposta
+        from .serializers import PropostaTecnicaSerializer
+
+        proposta = get_object_or_404(
+            PropostaTecnica.objects.select_related('personaggio', 'aura', 'aura_infusione'),
+            pk=pk,
+        )
+        if proposta.stato != STATO_PROPOSTA_IN_VALUTAZIONE:
+            return Response(
+                {"error": "Puoi registrare note solo su una proposta in valutazione."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        testo = request.data.get('testo', request.data.get('note_staff', ''))
+        nota = registra_nota_proposta(proposta, testo, origine=ORIGINE_NOTA_STAFF)
+        if nota is None:
+            return Response(
+                {"error": "Scrivi una nota prima di registrarla."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        proposta = PropostaTecnica.objects.select_related(
+            'personaggio__proprietario', 'aura', 'aura_infusione',
+        ).prefetch_related('note_log', 'componenti__caratteristica').get(pk=proposta.pk)
+        return Response(PropostaTecnicaSerializer(proposta).data, status=status.HTTP_201_CREATED)
+
+
 class ProposteValutazioneList(generics.ListAPIView):
     permission_classes = [IsStaffOrMaster]
     serializer_class = PropostaTecnicaSerializer
@@ -753,8 +788,10 @@ class ProposteValutazioneList(generics.ListAPIView):
         ).select_related(
             'personaggio__proprietario',
             'aura',
+            'aura_infusione',
         ).prefetch_related(
             'componenti__caratteristica',
+            'note_log',
         ).order_by('data_invio')
 
 class ApprovaPropostaView(APIView):
@@ -890,9 +927,16 @@ class ApprovaPropostaView(APIView):
                 if costo_pagato > 0:
                     personaggio.modifica_crediti(-costo_pagato, f"Creazione {proposta.get_tipo_display()}: {nuova_tecnica.nome}")
 
-                # E. Aggiorna Proposta
+                # E. Aggiorna Proposta. Una nota nuova si accoda; il testo vuoto non cancella lo storico.
+                from .models import ORIGINE_NOTA_STAFF
+                from .proposte_note import formato_note_messaggio, registra_nota_proposta
+
+                registra_nota_proposta(
+                    proposta,
+                    data.get('note_staff', ''),
+                    origine=ORIGINE_NOTA_STAFF,
+                )
                 proposta.stato = STATO_PROPOSTA_APPROVATA
-                proposta.note_staff = data.get('note_staff', proposta.note_staff)
                 proposta.save()
 
                 # F. Invia messaggio solo al personaggio che ha proposto la tecnica
@@ -904,7 +948,7 @@ class ApprovaPropostaView(APIView):
                     testo=(
                         f"La tua tecnica '{nuova_tecnica.nome}' è stata approvata e creata.\n"
                         f"Costo sostenuto: {costo_pagato} crediti.\n\n"
-                        f"NOTE STAFF:\n{proposta.note_staff}"
+                        f"NOTE STAFF:\n{formato_note_messaggio(proposta)}"
                     )
                 )
 

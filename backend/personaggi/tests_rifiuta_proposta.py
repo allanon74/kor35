@@ -18,15 +18,19 @@ from personaggi.admin import PropostaTecnicaAdmin
 from personaggi.models import (
     AURA,
     CARATTERISTICA,
+    MATTONE,
     Campagna,
+    Mattone,
     Messaggio,
     Personaggio,
     PropostaTecnica,
     PropostaTecnicaCaratteristica,
+    PropostaTecnicaNota,
     Punteggio,
     STATO_PROPOSTA_BOZZA,
     STATO_PROPOSTA_IN_VALUTAZIONE,
     STATO_PROPOSTA_RIFIUTATA,
+    TESTO_NOTA_INVIO_PROPOSTA,
     TIPO_PROPOSTA_TESSITURA,
     TipologiaPersonaggio,
 )
@@ -217,3 +221,103 @@ class RifiutaPropostaStaffTests(TestCase):
         self.assertIn('bozza', msg.testo.lower())
         self.assertIn('Sistema il testo', msg.testo)
         self.assertEqual(self.proposta.note_staff, 'Sistema il testo.')
+
+    def _invia_bozza(self):
+        self.proposta.stato = STATO_PROPOSTA_BOZZA
+        self.proposta.note_staff = ''
+        self.proposta.save(update_fields=['stato', 'note_staff', 'updated_at'])
+        self.client.force_login(self.giocatore)
+        with patch.object(Personaggio, 'get_valore_aura_effettivo', return_value=5), \
+             patch.object(Personaggio, 'max_livello_creazione', return_value=5), \
+             patch.object(
+                 Personaggio,
+                 'caratteristiche_base',
+                 new_callable=PropertyMock,
+                 return_value={self.caratteristica.nome: 5},
+             ), \
+             patch.object(
+                 Personaggio,
+                 'crediti',
+                 new_callable=PropertyMock,
+                 return_value=Decimal('500'),
+             ):
+            invio = self.client.post(
+                f'/api/personaggi/api/proposte/{self.proposta.pk}/invia_proposta/',
+                content_type='application/json',
+            )
+        self.assertEqual(invio.status_code, 200, invio.content)
+        return invio.json()
+
+    def test_invio_registra_nota_datata_e_lo_staff_accoda_senza_cancellare(self):
+        payload = self._invia_bozza()
+        self.assertEqual(payload['note_log'][-1]['testo'], TESTO_NOTA_INVIO_PROPOSTA)
+        self.assertEqual(payload['note_log'][-1]['origine'], 'INVIO')
+        self.assertTrue(payload['note_log'][-1]['creata_il'])
+
+        self.client.force_login(self.staff)
+        url = f'/api/personaggi/api/staff/proposta/{self.proposta.pk}/nota/'
+        prima = self.client.post(
+            url,
+            {'testo': '<p>Manca il ragionamento sui mattoni.</p>'},
+            content_type='application/json',
+        )
+        self.assertEqual(prima.status_code, 201, prima.content)
+        log = prima.json()['note_log']
+        self.assertEqual([nota['origine'] for nota in log], ['INVIO', 'STAFF'])
+        self.assertEqual(log[0]['testo'], TESTO_NOTA_INVIO_PROPOSTA)
+        self.assertIn('mattoni', log[1]['testo'])
+        self.assertTrue(log[0]['creata_il'])
+
+        seconda = self.client.post(
+            url,
+            {'testo': '<p>Secondo passaggio.</p>'},
+            content_type='application/json',
+        )
+        self.assertEqual(seconda.status_code, 201, seconda.content)
+        log = seconda.json()['note_log']
+        self.assertEqual(len(log), 3)
+        self.assertIn('mattoni', log[1]['testo'])
+        self.assertIn('Secondo', log[2]['testo'])
+        self.proposta.refresh_from_db()
+        self.assertIn('Secondo', self.proposta.note_staff)
+        self.assertEqual(PropostaTecnicaNota.objects.filter(proposta=self.proposta).count(), 3)
+
+        vuota = self.client.post(url, {'testo': '<p><br></p>'}, content_type='application/json')
+        self.assertEqual(vuota.status_code, 400, vuota.content)
+        self.assertEqual(PropostaTecnicaNota.objects.filter(proposta=self.proposta).count(), 3)
+
+    def test_rifiuto_accoda_la_nota_e_conserva_l_invio(self):
+        self._invia_bozza()
+        self.client.force_login(self.staff)
+        resp = self.client.post(
+            f'/api/personaggi/api/staff/proposta/{self.proposta.pk}/rifiuta/',
+            {'note_staff': 'Manca il ragionamento sui mattoni.'},
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        note = list(
+            PropostaTecnicaNota.objects.filter(proposta=self.proposta).order_by('creata_il', 'created_at')
+        )
+        self.assertEqual([nota.origine for nota in note], ['INVIO', 'STAFF'])
+        self.assertEqual(note[0].testo, TESTO_NOTA_INVIO_PROPOSTA)
+        self.assertIn('mattoni', note[1].testo)
+        msg = Messaggio.objects.filter(destinatario_personaggio=self.pg).latest('data_invio')
+        self.assertIn(TESTO_NOTA_INVIO_PROPOSTA, msg.testo)
+        self.assertIn('mattoni', msg.testo)
+
+    def test_valutazione_include_la_scheda_wiki_del_mattone_selezionato(self):
+        Mattone.objects.create(
+            nome='Soffio caldo',
+            sigla='QZ7',
+            tipo=MATTONE,
+            aura=self.aura,
+            caratteristica_associata=self.caratteristica,
+            descrizione_mattone='<p>Scalda il metallo senza fiamma.</p>',
+            colore='#fa0000',
+        )
+        righe = self._righe_valutazione()
+        propria = next(row for row in righe if row['id'] == self.proposta.pk)
+        scheda = propria['componenti'][0]['mattone']
+        self.assertEqual(scheda['nome'], 'Soffio caldo')
+        self.assertIn('Scalda il metallo', scheda['descrizione_mattone'])
+        self.assertEqual(scheda['caratteristica_associata']['id'], self.caratteristica.pk)

@@ -3,7 +3,7 @@ import { useCharacter } from './CharacterContext';
 import { getProposte } from '../api';
 import { FileEdit, Loader2, Plus } from 'lucide-react';
 import ProposalEditorModal from './ProposalEditorModal';
-import RichHtml from './RichHtml';
+import NotePropostaElenco from './NotePropostaElenco';
 import { getAuraName } from '../utils/auraDisplay';
 import { etichettaStatoProposta, propostaDaRivedere, sezioneProposta } from '../lib/propostaTecnicaStato';
 
@@ -136,12 +136,7 @@ const ProposalManager = ({ type, onClose }) => { // type = 'Infusione' | 'Tessit
                                                                 <span className="truncate">{getAuraName(p)}</span>
                                                                 <span className="ml-auto text-xs bg-gray-900 px-2 py-0.5 rounded shrink-0">Lv. {p.livello}</span>
                                                             </div>
-                                                            {p.note_staff && (
-                                                                <div className="mt-2 p-2 bg-gray-900/50 rounded text-xs text-gray-300 border-l-2 border-amber-500 min-w-0">
-                                                                    <span className="font-bold text-amber-300 block">Note dello staff</span>
-                                                                    <RichHtml content={p.note_staff} className="text-xs text-gray-200 break-words line-clamp-4" />
-                                                                </div>
-                                                            )}
+                                                            <NotePropostaElenco proposta={p} className="mt-2" />
                                                         </div>
                                                     );
                                                 })}

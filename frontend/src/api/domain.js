@@ -3375,6 +3375,17 @@ export const staffGetProposteInValutazione = (onLogout) => {
 /**
  * Rifiuta una proposta tecnica, riportandola in BOZZA e inviando un messaggio.
  */
+export const staffRegistraNotaProposta = (propostaId, testo, onLogout) => {
+  return fetchAuthenticated(
+    `/api/personaggi/api/staff/proposta/${propostaId}/nota/`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ testo }),
+    },
+    onLogout
+  );
+};
+
 export const staffRifiutaProposta = (propostaId, noteStaff, onLogout) => {
   return fetchAuthenticated(
     `/api/personaggi/api/staff/proposta/${propostaId}/rifiuta/`,

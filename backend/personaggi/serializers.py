@@ -101,7 +101,7 @@ from .models import (
     CreditoMovimento, PersonaggioLog, TransazioneSospesa, PropostaTransazione,
     Gruppo, Messaggio,
     ModelloAuraRequisitoCaratt, ModelloAuraRequisitoMattone,
-    PropostaTecnica, 
+    PropostaTecnica, PropostaTecnicaNota, 
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_RIFIUTATA,
     STATI_PROPOSTA_MODIFICABILI, 
     STATO_TRANSAZIONE_IN_ATTESA,
@@ -2791,6 +2791,13 @@ class PropostaTecnicaCaratteristicaSerializer(serializers.ModelSerializer):
         fields = ('id', 'caratteristica', 'caratteristica_id', 'valore')
 
 
+class PropostaTecnicaNotaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PropostaTecnicaNota
+        fields = ("id", "testo", "origine", "creata_il")
+        read_only_fields = fields
+
+
 class PropostaTecnicaSerializer(serializers.ModelSerializer):
     # Output: lista dettagliata delle caratteristiche
     componenti = PropostaTecnicaCaratteristicaSerializer(many=True, read_only=True)
@@ -2806,6 +2813,7 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
     personaggio_nome = serializers.CharField(source='personaggio.nome', read_only=True)
     autore_nome = serializers.CharField(source='staff_creatore.username', read_only=True)
     giocatore_nome = serializers.SerializerMethodField()
+    note_log = PropostaTecnicaNotaSerializer(many=True, read_only=True)
 
     class Meta:
         model = PropostaTecnica
@@ -2815,12 +2823,12 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
             'componenti', 'componenti_data',
             'livello', 'livello_proposto', 'livello_suggerito',
             'mattoni_generici', 'totale_mattoni_minimi',
-            'costo_invio_pagato', 'note_staff', 'data_creazione',
+            'costo_invio_pagato', 'note_staff', 'note_log', 'data_creazione', 'data_invio',
             'slot_corpo_permessi', 'tipo_risultato_atteso', 
             'prerequisiti', 'svolgimento', 'effetto', 'spiegazione_teorie', 'permetti_vendita',
             'personaggio_nome', 'giocatore_nome', 'autore_nome',
         )
-        read_only_fields = ('stato', 'costo_invio_pagato', 'note_staff', 'data_creazione', 'livello', 'livello_suggerito', 'totale_mattoni_minimi')
+        read_only_fields = ('stato', 'costo_invio_pagato', 'note_staff', 'note_log', 'data_creazione', 'data_invio', 'livello', 'livello_suggerito', 'totale_mattoni_minimi')
         extra_kwargs = {
             'tipo_risultato_atteso': {'required': False, 'allow_null': True}
         }
@@ -2833,7 +2841,11 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
         return full or user.username or ''
 
     def to_representation(self, instance):
-        from .models import aura_fonte_mattoni_per_proposta, nomi_mattone_per_caratteristica
+        from .models import (
+            aura_fonte_mattoni_per_proposta,
+            nomi_mattone_per_caratteristica,
+            schede_mattone_per_caratteristica,
+        )
 
         rep = super().to_representation(instance)
         rep['totale_mattoni_minimi'] = instance.totale_mattoni_minimi()
@@ -2844,15 +2856,19 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
             caratteristica = row.get('caratteristica') if isinstance(row, dict) else None
             if isinstance(caratteristica, dict) and caratteristica.get('id'):
                 char_ids.append(caratteristica['id'])
-        nomi = nomi_mattone_per_caratteristica(
-            aura_fonte_mattoni_per_proposta(instance),
-            char_ids,
-        )
+        # Cerimoniali non hanno una palette dedicata: la scheda usa l'aura della proposta.
+        aura_mattoni = aura_fonte_mattoni_per_proposta(instance) or instance.aura
+        nomi = nomi_mattone_per_caratteristica(aura_mattoni, char_ids)
+        schede = schede_mattone_per_caratteristica(aura_mattoni, char_ids)
+        note = rep.get('note_log') or []
+        rep['note_log'] = sorted(note, key=lambda row: (row.get('creata_il') or '', str(row.get('id') or '')))
         for row in componenti:
             caratteristica = row.get('caratteristica') if isinstance(row, dict) else None
             cid = caratteristica.get('id') if isinstance(caratteristica, dict) else None
             if cid and cid in nomi:
                 row['mattone_nome'] = nomi[cid]
+            if cid and cid in schede:
+                row['mattone'] = schede[cid]
         return rep
 
     def create(self, validated_data):

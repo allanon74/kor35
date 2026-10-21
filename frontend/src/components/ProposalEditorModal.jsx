@@ -16,7 +16,9 @@ import { caratteristichePersonaggio } from '../lib/caratteristicheScheda';
 import { auraDelegaMattoni, etichettaMattone, paletteAuraId } from '../lib/paletteMattoni';
 import { propostaModificabile } from '../lib/propostaTecnicaStato';
 import { sommaBonus } from '../lib/bonusContesto';
-import RichHtml from './RichHtml';
+import NotePropostaElenco from './NotePropostaElenco';
+import { MattoneInfoButton } from './MattoneDescrizioneModal';
+import { haNoteStaff } from '../lib/propostaTecnicaStato';
 
 // Costanti Slot Corporei (Invariate)
 const BODY_SLOTS = [
@@ -94,7 +96,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
     const [error, setError] = useState('');
 
     const isDraft = propostaModificabile(proposal?.stato);
-    const noteStaff = String(proposal?.note_staff || '').trim();
+    const daRivedere = haNoteStaff(proposal);
     const isEditing = !!proposal;
     const isInfusion = type === 'Infusione';
     const isCerimoniale = type === 'Cerimoniale';
@@ -428,8 +430,8 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
             : availableCharacteristics.filter(c => isCerimoniale || tettoCaratteristica(c.nome) > 0);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200" onClick={requestClose}>
-            <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl animate-fadeIn overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto" onClick={requestClose}>
+            <div className="bg-gray-900 border border-gray-700 rounded-t-2xl sm:rounded-xl w-full max-w-5xl max-h-[100dvh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden min-w-0" onClick={(e) => e.stopPropagation()}>
                 
                 {/* Header */}
                 <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800 rounded-t-xl shrink-0">
@@ -445,7 +447,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                             </h2>
                             <p className="text-[10px] text-gray-500 uppercase font-black">
                                 {isEditing
-                                    ? (noteStaff ? 'Bozza da rivedere — integra le note e ripresenta' : `ID: ${proposal.id} • ${proposal.stato}`)
+                                    ? (daRivedere ? 'Bozza da rivedere — integra le note e ripresenta' : `ID: ${proposal.id} • ${proposal.stato}`)
                                     : 'Creazione Bozza Personale'}
                             </p>
                         </div>
@@ -455,14 +457,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
 
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-thin scrollbar-thumb-gray-700">
-                    {noteStaff && (
-                        <div className="p-3 bg-amber-950/40 text-amber-50 rounded-lg border border-amber-700/60 text-sm">
-                            <span className="font-black uppercase tracking-widest text-[10px] text-amber-300 block mb-2">
-                                Note dello staff — da integrare prima di ripresentare
-                            </span>
-                            <RichHtml content={noteStaff} className="text-sm text-amber-50 break-words" />
-                        </div>
-                    )}
+                    <NotePropostaElenco proposta={proposal} />
                     {error && <div className="p-3 bg-red-900/30 text-red-200 rounded-lg border border-red-800 flex items-center gap-2 animate-pulse"><AlertTriangle size={16}/> {error}</div>}
                     {needsAuraModelSelection && (
                         <div className="p-3 bg-amber-900/25 text-amber-100 rounded-lg border border-amber-700/50 flex items-center gap-2 text-sm">
@@ -738,8 +733,8 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                     const isMandatoryBrick = obbligatorieCaratteristicaIds.includes(charId);
 
                                     return (
-                                        <div key={item.id} className={`flex items-center justify-between bg-gray-900 p-3 rounded-xl border transition-all duration-300 ${count > 0 ? 'border-indigo-500/60 bg-indigo-500/5 shadow-lg shadow-indigo-900/10' : 'border-gray-700'} ${!isCompatible ? 'opacity-20 pointer-events-none grayscale' : ''}`}>
-                                            <div className="flex items-center gap-3 overflow-hidden">
+                                        <div key={item.id} className={`flex flex-wrap items-center justify-between gap-2 bg-gray-900 p-3 rounded-xl border transition-all duration-300 min-w-0 ${count > 0 ? 'border-indigo-500/60 bg-indigo-500/5 shadow-lg shadow-indigo-900/10' : 'border-gray-700'}`}>
+                                            <div className={`flex items-center gap-3 overflow-hidden min-w-0 flex-1 ${!isCompatible ? 'opacity-30 grayscale' : ''}`}>
                                                 <IconaPunteggio punteggio={characteristic} size="32px" />
                                                 <div className="flex flex-col overflow-hidden">
                                                     {/* NOME MATTONE IN EVIDENZA */}
@@ -761,12 +756,17 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                                 </div>
                                             </div>
                                             
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                            {item.caratteristica_associata && (
+                                                <MattoneInfoButton mattone={item} />
+                                            )}
                                             {isDraft && (
-                                                <div className="flex items-center gap-1.5 bg-gray-800 p-1 rounded-lg border border-gray-700 shadow-inner">
+                                                <div className={`flex items-center gap-1.5 bg-gray-800 p-1 rounded-lg border border-gray-700 shadow-inner ${!isCompatible ? 'pointer-events-none opacity-30' : ''}`}>
                                                     {count > 0 && (
                                                         <button 
                                                             onClick={() => handleDecrement(charId)} 
-                                                            className="w-7 h-7 flex items-center justify-center bg-gray-700 hover:bg-red-900/40 rounded-md text-red-400 transition-colors"
+                                                            className="min-h-11 min-w-11 flex items-center justify-center bg-gray-700 hover:bg-red-900/40 rounded-md text-red-400 transition-colors"
+                                                            aria-label={`Diminuisci ${brickName}`}
                                                         >
                                                             <Minus size={14}/>
                                                         </button>
@@ -775,12 +775,14 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                                     <button 
                                                         onClick={() => handleIncrement(charId, charName)} 
                                                         disabled={!isCerimoniale && (count >= pgMaxScore || currentTotalCount >= auraLimit)}
-                                                        className="w-7 h-7 flex items-center justify-center bg-gray-700 hover:bg-green-900/40 disabled:bg-gray-800 disabled:text-gray-600 rounded-md text-green-400 transition-colors"
+                                                        className="min-h-11 min-w-11 flex items-center justify-center bg-gray-700 hover:bg-green-900/40 disabled:bg-gray-800 disabled:text-gray-600 rounded-md text-green-400 transition-colors"
+                                                        aria-label={`Aumenta ${brickName}`}
                                                     >
                                                         <Plus size={14}/>
                                                     </button>
                                                 </div>
                                             )}
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -790,22 +792,22 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                 </div>
 
                 {/* Footer Chiamate API */}
-                <div className="p-4 border-t border-gray-700 bg-gray-800 rounded-b-xl flex justify-between items-center shrink-0">
+                <div className="p-4 border-t border-gray-700 bg-gray-800 rounded-b-xl flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-3 shrink-0 pb-[max(1rem,var(--kor-safe-bottom))] sm:pb-4">
                     <div className="flex items-center gap-4">
                         {isDraft && isEditing ? (
-                            <button onClick={handleDelete} className="text-red-400 text-xs font-bold flex items-center gap-1.5 hover:text-red-300 px-3 py-2 rounded-lg hover:bg-red-900/10"><Trash2 size={15}/> Elimina Bozza</button>
+                            <button onClick={handleDelete} className="min-h-11 text-red-400 text-xs font-bold flex items-center gap-1.5 hover:text-red-300 px-3 py-2 rounded-lg hover:bg-red-900/10"><Trash2 size={15}/> Elimina Bozza</button>
                         ) : <div/>}
                     </div>
 
-                    <div className="flex gap-3">
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
                         {isDraft && (
                             <>
-                                <button onClick={() => handleSaveAction(false)} disabled={isSaving} className="px-5 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-xl text-xs font-black uppercase flex gap-2 items-center transition-all disabled:opacity-50">{isSaving ? <Loader2 className="animate-spin" size={14}/> : <Save size={15}/>} Salva Bozza</button>
-                                <button onClick={() => handleSaveAction(true)} disabled={isSaving || needsAuraModelSelection || (currentTotalCount === 0 && !isCerimoniale)} className="px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-xl text-xs font-black uppercase flex gap-2 items-center shadow-lg shadow-green-900/30 transform hover:scale-105">{isSaving ? <Loader2 className="animate-spin" size={14}/> : <Send size={15}/>} Invia allo Staff</button>
+                                <button onClick={() => handleSaveAction(false)} disabled={isSaving} className="min-h-11 w-full sm:w-auto justify-center px-5 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-xl text-xs font-black uppercase flex gap-2 items-center transition-all disabled:opacity-50">{isSaving ? <Loader2 className="animate-spin" size={14}/> : <Save size={15}/>} Salva Bozza</button>
+                                <button onClick={() => handleSaveAction(true)} disabled={isSaving || needsAuraModelSelection || (currentTotalCount === 0 && !isCerimoniale)} className="min-h-11 w-full sm:w-auto justify-center px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-xl text-xs font-black uppercase flex gap-2 items-center shadow-lg shadow-green-900/30">{isSaving ? <Loader2 className="animate-spin" size={14}/> : <Send size={15}/>} Invia allo Staff</button>
                             </>
                         )}
                         {!isDraft && (
-                            <button type="button" onClick={requestClose} className="px-8 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-xl text-xs font-black uppercase">Chiudi</button>
+                            <button type="button" onClick={requestClose} className="min-h-11 w-full sm:w-auto px-8 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-xl text-xs font-black uppercase">Chiudi</button>
                         )}
                     </div>
                 </div>

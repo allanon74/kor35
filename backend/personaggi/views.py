@@ -38,6 +38,7 @@ from .models import (
     PropostaTransazione,
     Gruppo, Messaggio, Tabella, Mattone,
     aura_fonte_mattoni_per_proposta,
+    scheda_mattone,
     OggettoBase, ForgiaturaInCorso, 
     abilita_tier, abilita_requisito, abilita_sbloccata, 
     abilita_punteggio, abilita_prerequisito,
@@ -464,17 +465,8 @@ class PunteggioViewSet(viewsets.ModelViewSet):
                 pass
 
         data = []
-        for m in mattoni_qs.order_by('ordine', 'nome'):
-            data.append({
-                'id': m.id,
-                'nome': m.nome,
-                'sigla': m.sigla, # Sigla del mattone (es. DRD)
-                'caratteristica_associata': {
-                    'id': m.caratteristica_associata.id,
-                    'nome': m.caratteristica_associata.nome,
-                    'sigla': m.caratteristica_associata.sigla, # Sigla caratteristica (es. MIR)
-                }
-            })
+        for m in mattoni_qs.select_related('caratteristica_associata', 'aura').order_by('ordine', 'nome'):
+            data.append(scheda_mattone(m))
 
         if personaggio_id and user and user.is_authenticated:
             return Response({
@@ -3361,8 +3353,12 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         character_id = self.request.query_params.get('char_id')
         user = self.request.user
-        if character_id: return PropostaTecnica.objects.filter(personaggio_id=character_id, personaggio__proprietario=user)
-        return PropostaTecnica.objects.filter(personaggio__proprietario=user)
+        base = PropostaTecnica.objects.select_related(
+            'personaggio__proprietario', 'aura', 'aura_infusione',
+        ).prefetch_related('note_log', 'componenti__caratteristica')
+        if character_id:
+            return base.filter(personaggio_id=character_id, personaggio__proprietario=user)
+        return base.filter(personaggio__proprietario=user)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -3517,10 +3513,15 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
                             )
 
         personaggio.modifica_crediti(-costo_invio, f"Invio proposta {proposta.tipo}: {proposta.nome}")
+        inviata_il = timezone.now()
         proposta.costo_invio_pagato = costo_invio
         proposta.stato = STATO_PROPOSTA_IN_VALUTAZIONE
-        proposta.data_invio = timezone.now()
+        proposta.data_invio = inviata_il
         proposta.save()
+        from .proposte_note import registra_nota_invio
+        registra_nota_invio(proposta, quando=inviata_il)
+        # get_object() aveva già in cache note_log: ricarica dopo l'insert.
+        proposta = self.get_queryset().get(pk=proposta.pk)
         return Response(PropostaTecnicaSerializer(proposta).data, status=status.HTTP_200_OK)
     
 class AdminPendingProposalsView(APIView):

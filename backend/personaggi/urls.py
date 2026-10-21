@@ -16,7 +16,7 @@ from .views_negozio_mercante import (
     NegozioMercanteVoceStaffViewSet,
 )
 from .views_staff import (
-    QrInspectorView, ApprovaPropostaView, RifiutaPropostaView, ProposteValutazioneList,
+    QrInspectorView, ApprovaPropostaView, RifiutaPropostaView, RegistraNotaPropostaView, ProposteValutazioneList,
     TierStaffViewSet, InventarioStaffViewSet, OggettiSenzaPosizioneView,
     TipologiaEffettoViewSet, EffettoCasualeViewSet, SelezionaEffettoCasualeView,
     MattoniMagiciListView,
@@ -446,6 +446,7 @@ urlpatterns = [
     
     path('api/staff/proposte/valutazione/', ProposteValutazioneList.as_view(), name='staff-proposte-valutazione'),
     
+    path('api/staff/proposta/<int:pk>/nota/', RegistraNotaPropostaView.as_view(), name='staff-nota-proposta'),
     path('api/staff/proposta/<int:pk>/rifiuta/', RifiutaPropostaView.as_view(), name='staff-rifiuta-proposta'),
     # Alias: la lista è su `proposte/` (plurale); il client ha già chiamato questo path in produzione.
     path('api/staff/proposte/<int:pk>/rifiuta/', RifiutaPropostaView.as_view(), name='staff-rifiuta-proposta-alias'),

@@ -6943,6 +6943,69 @@ def etichetta_mattone(mattone):
     return nome or sigla
 
 
+def scheda_mattone(mattone):
+    """Scheda pubblica del mattone, stessi campi mostrati dal widget wiki."""
+    car = getattr(mattone, "caratteristica_associata", None)
+    aura = getattr(mattone, "aura", None)
+    mostra = getattr(mattone, "mostra_classi_arma", None) or "nessuno"
+    classi_materia = []
+    classi_mod = []
+    if car is not None and mostra == "materia":
+        classi_materia = list(
+            ClasseOggetto.objects.filter(mattoni_materia_permessi=car)
+            .order_by("nome")
+            .values("id", "nome")
+        )
+    elif car is not None and mostra == "mod":
+        classi_mod = [
+            {
+                "id": row.classe_oggetto_id,
+                "nome": row.classe_oggetto.nome,
+                "max_installabili": row.max_installabili,
+            }
+            for row in ClasseOggettoLimiteMod.objects.filter(caratteristica=car)
+            .select_related("classe_oggetto")
+            .order_by("classe_oggetto__nome")
+        ]
+    tipo_display = ""
+    if hasattr(mattone, "get_tipo_display"):
+        try:
+            tipo_display = mattone.get_tipo_display() or ""
+        except Exception:
+            tipo_display = ""
+    colore = getattr(mattone, "colore", "") or ""
+
+    def _breve(punteggio):
+        if punteggio is None:
+            return None
+        return {
+            "id": punteggio.id,
+            "nome": punteggio.nome,
+            "sigla": getattr(punteggio, "sigla", "") or "",
+            "colore": str(getattr(punteggio, "colore", "") or ""),
+            "icona_url": getattr(punteggio, "icona_url", None),
+        }
+
+    return {
+        "id": mattone.id,
+        "nome": mattone.nome,
+        "sigla": getattr(mattone, "sigla", "") or "",
+        "tipo": getattr(mattone, "tipo", "") or "",
+        "tipo_display": tipo_display,
+        "ordine": getattr(mattone, "ordine", 0) or 0,
+        "colore": str(colore) if colore else "",
+        "icona_url": getattr(mattone, "icona_url", None),
+        "descrizione": getattr(mattone, "descrizione", "") or "",
+        "descrizione_mattone": getattr(mattone, "descrizione_mattone", "") or "",
+        "descrizione_metatalento": getattr(mattone, "descrizione_metatalento", "") or "",
+        "mostra_classi_arma": mostra,
+        "classi_arma_materia": classi_materia,
+        "classi_arma_mod": classi_mod,
+        "aura": _breve(aura),
+        "caratteristica_associata": _breve(car),
+    }
+
+
 def nomi_mattone_per_caratteristica(aura, caratteristica_ids):
     """Mappa caratteristica_id → etichetta del mattone di quell'aura."""
     ids = [cid for cid in (caratteristica_ids or []) if cid]
@@ -6959,6 +7022,25 @@ def nomi_mattone_per_caratteristica(aura, caratteristica_ids):
         .order_by("ordine", "nome", "id")
     ):
         out.setdefault(mattone.caratteristica_associata_id, etichetta_mattone(mattone))
+    return out
+
+
+def schede_mattone_per_caratteristica(aura, caratteristica_ids):
+    """Mappa caratteristica_id → scheda wiki del mattone di quell'aura."""
+    ids = [cid for cid in (caratteristica_ids or []) if cid]
+    if aura is None or not ids:
+        return {}
+    out = {}
+    for mattone in (
+        Mattone.objects.filter(
+            aura=aura,
+            caratteristica_associata_id__in=ids,
+            indice_componente__isnull=True,
+        )
+        .select_related("caratteristica_associata", "aura")
+        .order_by("ordine", "nome", "id")
+    ):
+        out.setdefault(mattone.caratteristica_associata_id, scheda_mattone(mattone))
     return out
 
 
@@ -10832,7 +10914,43 @@ class PropostaTecnicaMattone(SyncableModel, models.Model):
     # LEGACY: Mantenuto per evitare errori di importazione se ci sono riferimenti, ma non usato
     proposta = models.ForeignKey(PropostaTecnica, on_delete=models.CASCADE)
     mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE)
-    ordine = models.IntegerField(default=0) 
+    ordine = models.IntegerField(default=0)
+
+
+ORIGINE_NOTA_INVIO = "INVIO"
+ORIGINE_NOTA_STAFF = "STAFF"
+ORIGINE_NOTA_PROPOSTA_CHOICES = (
+    (ORIGINE_NOTA_INVIO, "Invio giocatore"),
+    (ORIGINE_NOTA_STAFF, "Nota master"),
+)
+TESTO_NOTA_INVIO_PROPOSTA = "Inviata per approvazione"
+
+
+class PropostaTecnicaNota(SyncableModel, models.Model):
+    """Nota datata su una proposta tecnica. Il campo di scrittura non conserva il testo."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proposta = models.ForeignKey(
+        PropostaTecnica,
+        on_delete=models.CASCADE,
+        related_name="note_log",
+    )
+    testo = models.TextField()
+    origine = models.CharField(
+        max_length=8,
+        choices=ORIGINE_NOTA_PROPOSTA_CHOICES,
+        default=ORIGINE_NOTA_STAFF,
+    )
+    creata_il = models.DateTimeField(default=timezone.now, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["creata_il", "created_at"]
+        verbose_name = "Nota proposta tecnica"
+        verbose_name_plural = "Note proposte tecniche"
+
+    def __str__(self):
+        return f"{self.get_origine_display()} {self.creata_il:%d/%m/%Y %H:%M}" 
 
 class ForgiaturaInCorso(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='forgiature_attive')

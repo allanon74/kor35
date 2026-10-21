@@ -22,6 +22,16 @@ describe('propostaTecnicaStato', () => {
     expect(etichettaStatoProposta(inCoda)).toBe('In valutazione');
   });
 
+  it('una nota staff nello storico marca la bozza da rivedere anche senza il campo legacy', () => {
+    const daLog = {
+      stato: 'BOZZA',
+      note_staff: '',
+      note_log: [{ origine: 'STAFF', testo: '<p>Manca il mattone.</p>', creata_il: '2026-10-21T18:00:00Z' }],
+    };
+    expect(propostaDaRivedere(daLog)).toBe(true);
+    expect(etichettaStatoProposta(daLog)).toBe('Bozza da rivedere');
+  });
+
   it('un rifiuto legacy RIFIUTATA si tratta come bozza da rivedere', () => {
     const legacy = { stato: 'RIFIUTATA', note_staff: 'Rivedi.', nome: 'Soffio' };
     expect(sezioneProposta(legacy)).toBe('bozze');

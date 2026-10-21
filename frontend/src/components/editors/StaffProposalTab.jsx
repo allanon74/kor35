@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { staffGetProposteInValutazione, staffRifiutaProposta, staffApprovaProposta, getEventi } from '../../api';
+import { staffGetProposteInValutazione, staffRifiutaProposta, staffApprovaProposta, staffRegistraNotaProposta, getEventi } from '../../api';
 import { Eye, X, Check, ClipboardCheck, AlertCircle } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor';
 import RichHtml from '../RichHtml';
+import NotePropostaElenco from '../NotePropostaElenco';
+import { MattoneInfoButton } from '../MattoneDescrizioneModal';
+import { richTextHasContent } from '../../utils/htmlSanitizer';
 import ConfirmDialog from './ConfirmDialog';
 import { getAuraName } from '../../utils/auraDisplay';
 
@@ -107,11 +110,23 @@ const StaffProposalTab = ({ onLogout }) => {
 
     const handleOpenDetail = useCallback((prop) => {
         setSelectedProposal(prop);
-        setStaffNotes(prop.note_staff || "");
+        setStaffNotes("");
         setTaskEventoId(null);
         setViewMode('detail');
         scrollStaffMainToTop();
     }, []);
+
+    const handleRegistraNota = async () => {
+        if (!selectedProposal || !richTextHasContent(staffNotes)) return;
+        try {
+            const aggiornata = await staffRegistraNotaProposta(selectedProposal.id, staffNotes, onLogout);
+            setSelectedProposal(aggiornata);
+            setStaffNotes("");
+            setFeedback({ type: 'success', message: 'Nota registrata.' });
+        } catch (err) {
+            setFeedback({ type: 'error', message: `Errore: ${err.message}` });
+        }
+    };
 
     const handleBack = useCallback(() => {
         setSelectedProposal(null);
@@ -368,6 +383,16 @@ const StaffProposalTab = ({ onLogout }) => {
                 </div>
 
                 <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-6 min-h-0">
+                    {feedback.message && (
+                        <div className={`text-xs border rounded-md px-3 py-2 break-words ${
+                            feedback.type === 'error'
+                                ? 'text-red-200 bg-red-900/20 border-red-700/40'
+                                : 'text-emerald-300 bg-emerald-900/20 border-emerald-700/40'
+                        }`}
+                        >
+                            {feedback.message}
+                        </div>
+                    )}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
 
                         <div className="space-y-6 min-w-0">
@@ -389,11 +414,14 @@ const StaffProposalTab = ({ onLogout }) => {
                                     )}
                                     <div className="mt-3 bg-gray-900 p-3 rounded-lg">
                                         <strong className="text-gray-400 block mb-2 text-xs uppercase">Componenti / Mattoni:</strong>
-                                        <ul className="list-disc pl-5 text-gray-300 space-y-1">
+                                        <ul className="text-gray-300 space-y-2">
                                             {selectedProposal.componenti && selectedProposal.componenti.map((c, i) => (
-                                                <li key={i} className="break-words">
-                                                    <span className="text-cyan-400 font-bold">{getCharName(c)}</span>
-                                                    <span className="text-gray-500 text-xs ml-2">x{c.valore}</span>
+                                                <li key={i} className="break-words flex items-center justify-between gap-2 min-w-0">
+                                                    <span className="min-w-0">
+                                                        <span className="text-cyan-400 font-bold break-words">{getCharName(c)}</span>
+                                                        <span className="text-gray-500 text-xs ml-2">x{c.valore}</span>
+                                                    </span>
+                                                    {c.mattone ? <MattoneInfoButton mattone={c.mattone} /> : null}
                                                 </li>
                                             ))}
                                         </ul>
@@ -438,20 +466,31 @@ const StaffProposalTab = ({ onLogout }) => {
                             </div>
                         </div>
 
-                        <div className="flex flex-col min-h-[240px] bg-gray-800 p-1 rounded-xl border border-gray-700">
-                            <div className="bg-gray-900 rounded-t-lg p-3 border-b border-gray-700">
+                        <div className="flex flex-col gap-3 min-h-[240px] bg-gray-800 p-3 rounded-xl border border-gray-700 min-w-0">
+                            <div>
                                 <label className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                    <ClipboardCheck size={14}/> Note Staff (Visibili al giocatore)
+                                    <ClipboardCheck size={14}/> Note master
                                 </label>
+                                <p className="text-[11px] text-gray-500 mt-1 break-words">
+                                    L&apos;ultima nota resta in elenco. Il testo qui sotto si svuota dopo la registrazione.
+                                </p>
                             </div>
-                            <div className="flex-1 overflow-hidden relative min-h-[180px]">
-                                <RichTextEditor
-                                    value={staffNotes}
-                                    onChange={setStaffNotes}
-                                    placeholder="Scrivi qui le motivazioni del rifiuto o eventuali note di approvazione..."
-                                    className="h-full border-none rounded-none focus:ring-0"
-                                />
-                            </div>
+                            <NotePropostaElenco proposta={selectedProposal} />
+                            <RichTextEditor
+                                value={staffNotes}
+                                onChange={setStaffNotes}
+                                placeholder="Scrivi una nuova nota per il giocatore..."
+                                ariaLabel="Nuova nota master"
+                                minHeight={140}
+                            />
+                            <button
+                                type="button"
+                                onClick={handleRegistraNota}
+                                disabled={!richTextHasContent(staffNotes)}
+                                className="min-h-11 w-full sm:w-auto sm:self-end bg-orange-600 hover:bg-orange-500 disabled:bg-gray-700 disabled:text-gray-500 text-white px-4 rounded-lg text-xs font-bold uppercase"
+                            >
+                                Registra nota
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -497,7 +536,7 @@ const StaffProposalTab = ({ onLogout }) => {
             <ConfirmDialog
                 open={confirmRejectOpen}
                 title="Confermi il rifiuto?"
-                message="La proposta esce dalla valutazione e torna in bozza al giocatore, con le note scritte sopra. Potrà modificarla e ripresentarla."
+                message="La proposta esce dalla valutazione e torna in bozza al giocatore. Le note già registrate restano nello storico; il testo ancora nel campo viene aggiunto come nuova nota. Potrà modificarla e ripresentarla."
                 confirmLabel="Rifiuta"
                 onCancel={() => setConfirmRejectOpen(false)}
                 onConfirm={handleRifiuta}
