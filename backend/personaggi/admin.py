@@ -34,6 +34,7 @@ from .models import (
     PersonaggioPoolSorteggio, PersonaggioPoolSorteggioEsito,
     abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, 
     abilita_prerequisito, AbilitaStatistica, CaratteristicaModificatore,
+    BonusCaratteristicaContestuale, OggettoAbilitaConferita,
     TransazioneSospesa, STATO_TRANSAZIONE_CHOICES, STATO_TRANSAZIONE_IN_ATTESA, 
     STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA,
     ModelloAuraRequisitoDoppia, 
@@ -696,6 +697,82 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
                     
 # --- MODEL ADMINS ---
 
+class BonusCaratteristicaContestualeForm(forms.ModelForm):
+    class Meta:
+        model = BonusCaratteristicaContestuale
+        fields = "__all__"
+
+    def clean(self):
+        cleaned = super().clean()
+        if not (
+            cleaned.get("vale_tessiture")
+            or cleaned.get("vale_infusioni")
+            or cleaned.get("vale_cerimoniali")
+        ):
+            raise ValidationError(
+                "Seleziona almeno un ambito: tessiture, infusioni o cerimoniali."
+            )
+        valore = cleaned.get("valore") or 0
+        if valore < 1:
+            raise ValidationError("Il valore del bonus contestuale deve essere almeno 1.")
+        return cleaned
+
+
+class _BonusContestualeInlineBase(admin.StackedInline):
+    model = BonusCaratteristicaContestuale
+    form = BonusCaratteristicaContestualeForm
+    extra = 0
+    autocomplete_fields = ["caratteristica"]
+    filter_horizontal = ("aure",)
+    fields = (
+        "caratteristica",
+        "valore",
+        "vale_tessiture",
+        "vale_infusioni",
+        "vale_cerimoniali",
+        "aure",
+    )
+    verbose_name = "Bonus caratteristica contestuale"
+    verbose_name_plural = "Bonus caratteristiche contestuali (non entrano nei PV/chakra)"
+
+
+class BonusContestualeAbilitaInline(_BonusContestualeInlineBase):
+    fk_name = "abilita"
+
+
+class BonusContestualeInfusioneInline(_BonusContestualeInlineBase):
+    fk_name = "infusione"
+
+
+class BonusContestualeOggettoInline(_BonusContestualeInlineBase):
+    fk_name = "oggetto"
+
+
+class BonusContestualeOggettoBaseInline(_BonusContestualeInlineBase):
+    fk_name = "oggetto_base"
+
+
+class _AbilitaConferitaInlineBase(admin.TabularInline):
+    model = OggettoAbilitaConferita
+    extra = 0
+    autocomplete_fields = ["abilita"]
+    fields = ("abilita",)
+    verbose_name = "Abilità conferita"
+    verbose_name_plural = "Abilità conferite finché l'oggetto è attivo (non sono un possesso)"
+
+
+class AbilitaConferitaInfusioneInline(_AbilitaConferitaInlineBase):
+    fk_name = "infusione"
+
+
+class AbilitaConferitaOggettoInline(_AbilitaConferitaInlineBase):
+    fk_name = "oggetto"
+
+
+class AbilitaConferitaOggettoBaseInline(_AbilitaConferitaInlineBase):
+    fk_name = "oggetto_base"
+
+
 @admin.register(TipologiaPersonaggio)
 class TipologiaPersonaggioAdmin(admin.ModelAdmin):
     list_display = ('nome', 'crediti_iniziali', 'caratteristiche_iniziali', 'giocante')
@@ -707,7 +784,7 @@ class AbilitaAdmin(A_Admin):
     list_filter = ('caratteristica', 'caratteristica_2', 'caratteristica_3', 'is_tratto_aura',)
     summernote_fields = ['descrizione']
     search_fields = ['nome', 'descrizione']
-    inlines = (abilita_tier_inline, AbilitaStatisticaInline, abilita_punteggio_inline, abilita_requisito_inline, abilita_prerequisiti_inline)
+    inlines = (abilita_tier_inline, AbilitaStatisticaInline, abilita_punteggio_inline, abilita_requisito_inline, abilita_prerequisiti_inline, BonusContestualeAbilitaInline)
     save_as = True; exclude = ('statistiche',)
     
 @admin.register(ConfigurazioneLivelloAura)
@@ -1218,6 +1295,8 @@ class InfusioneAdmin(SModelAdmin):
         InfusioneStatisticaBaseInline,   # Statistiche Base (Danno, Peso)
         InfusioneStatisticaInline,       # Modificatori (Bonus/Malus)
         InfusioneSezioneCondizionaleInline,
+        BonusContestualeInfusioneInline,
+        AbilitaConferitaInfusioneInline,
     ]
     
     # Rimuovi 'statistiche' dagli esclusi per permettere la gestione inline corretta
@@ -1679,6 +1758,8 @@ class OggettoAdmin(SModelAdmin):
         OggettoStatisticaBaseInline, 
         OggettoStatisticaInline,
         OggettoSezioneCondizionaleInline,
+        BonusContestualeOggettoInline,
+        AbilitaConferitaOggettoInline,
         ]
     
     def get_inventario_attuale(self, obj):
@@ -1738,7 +1819,12 @@ class OggettoBaseAdmin(admin.ModelAdmin):
         }),
     )
     
-    inlines = [OggettoBaseStatisticaBaseInline, OggettoBaseModificatoreInline]
+    inlines = [
+        OggettoBaseStatisticaBaseInline,
+        OggettoBaseModificatoreInline,
+        BonusContestualeOggettoBaseInline,
+        AbilitaConferitaOggettoBaseInline,
+    ]
     
 @admin.register(RichiestaAssemblaggio)
 class RichiestaAssemblaggioAdmin(admin.ModelAdmin):

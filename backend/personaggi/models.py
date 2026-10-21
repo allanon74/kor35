@@ -1061,7 +1061,13 @@ def calcola_metatalenti(personaggio, context, mods_attivi):
         return ""
 
     testo_parts = []
-    caratteristiche_pg = personaggio.caratteristiche_base
+    tipo_contesto = (context or {}).get("tipo_tecnica")
+    if tipo_contesto:
+        caratteristiche_pg = personaggio.caratteristiche_per_contesto(
+            tipo_contesto, context.get("aura"), context.get("aura_secondaria")
+        )
+    else:
+        caratteristiche_pg = personaggio.caratteristiche_base
     for mattone in modello.mattoni_proibiti.all():
         funz = mattone.funzionamento_metatalento
         if funz == META_NESSUN_EFFETTO:
@@ -1198,6 +1204,9 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         # Helper legacy per le formule tessitura che usano "caratt"
         if 'caratteristica_associata_valore' in context:
              eval_context['caratt'] = context['caratteristica_associata_valore']
+        if personaggio and context.get("tipo_tecnica"):
+            from personaggi.bonus_contesto import applica_caratteristiche_contesto
+            applica_caratteristiche_contesto(personaggio, eval_context, context)
 
     allow_implicit_source = True
     if context:
@@ -3315,6 +3324,168 @@ class abilita_punteggio_dipendente(A_modello):
 
     class Meta:
         unique_together = [["abilita", "punteggio_target", "punteggio_sorgente"]]
+
+
+class BonusCaratteristicaContestuale(SyncableModel, models.Model):
+    """
+    Punto caratteristica valido solo per creazione e calcolo formule
+    di tessiture, infusioni o cerimoniali (e, se indicate, solo alcune aure).
+
+    Non entra in caratteristiche_base e non alimenta i derivati
+    (punti vita, chakra, abilità dipendenti).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    abilita = models.ForeignKey(
+        "Abilita",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="bonus_caratteristica_contestuali",
+    )
+    oggetto = models.ForeignKey(
+        "Oggetto",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="bonus_caratteristica_contestuali",
+    )
+    infusione = models.ForeignKey(
+        "Infusione",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="bonus_caratteristica_contestuali",
+    )
+    oggetto_base = models.ForeignKey(
+        "OggettoBase",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="bonus_caratteristica_contestuali",
+    )
+    caratteristica = models.ForeignKey(
+        Punteggio,
+        on_delete=models.CASCADE,
+        limit_choices_to={"tipo": CARATTERISTICA},
+        related_name="bonus_contestuali",
+        verbose_name="Caratteristica",
+    )
+    valore = models.PositiveSmallIntegerField(default=1)
+    vale_tessiture = models.BooleanField(default=False, verbose_name="Vale per le tessiture")
+    vale_infusioni = models.BooleanField(default=False, verbose_name="Vale per le infusioni")
+    vale_cerimoniali = models.BooleanField(default=False, verbose_name="Vale per i cerimoniali")
+    aure = models.ManyToManyField(
+        Punteggio,
+        blank=True,
+        limit_choices_to={"tipo": AURA},
+        related_name="bonus_ca_contestuali_limitati",
+        verbose_name="Aure",
+        help_text="Vuoto = tutte le aure degli ambiti selezionati.",
+    )
+
+    class Meta:
+        verbose_name = "Bonus caratteristica contestuale"
+        verbose_name_plural = "Bonus caratteristiche contestuali"
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    Q(abilita__isnull=False, oggetto__isnull=True, infusione__isnull=True, oggetto_base__isnull=True)
+                    | Q(abilita__isnull=True, oggetto__isnull=False, infusione__isnull=True, oggetto_base__isnull=True)
+                    | Q(abilita__isnull=True, oggetto__isnull=True, infusione__isnull=False, oggetto_base__isnull=True)
+                    | Q(abilita__isnull=True, oggetto__isnull=True, infusione__isnull=True, oggetto_base__isnull=False)
+                ),
+                name="bonus_ca_contestuale_un_proprietario",
+            ),
+            models.CheckConstraint(
+                check=Q(vale_tessiture=True) | Q(vale_infusioni=True) | Q(vale_cerimoniali=True),
+                name="bonus_ca_contestuale_almeno_un_ambito",
+            ),
+            models.CheckConstraint(
+                check=Q(valore__gte=1),
+                name="bonus_ca_contestuale_valore_positivo",
+            ),
+        ]
+
+    def __str__(self):
+        ambiti = []
+        if self.vale_tessiture:
+            ambiti.append("TES")
+        if self.vale_infusioni:
+            ambiti.append("INF")
+        if self.vale_cerimoniali:
+            ambiti.append("CER")
+        return f"+{self.valore} {self.caratteristica} ({', '.join(ambiti)})"
+
+
+class OggettoAbilitaConferita(SyncableModel, models.Model):
+    """
+    Abilità applicata finché l'oggetto (o la Mod/Materia/innesto generato) è attivo.
+    Non crea un PersonaggioAbilita: non conta come possesso per acquisti e prerequisiti.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    abilita = models.ForeignKey(
+        "Abilita",
+        on_delete=models.CASCADE,
+        related_name="conferimenti_da_oggetto",
+    )
+    oggetto = models.ForeignKey(
+        "Oggetto",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="abilita_conferite",
+    )
+    infusione = models.ForeignKey(
+        "Infusione",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="abilita_conferite",
+    )
+    oggetto_base = models.ForeignKey(
+        "OggettoBase",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="abilita_conferite",
+    )
+
+    class Meta:
+        verbose_name = "Abilità conferita da oggetto"
+        verbose_name_plural = "Abilità conferite da oggetto"
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    Q(oggetto__isnull=False, infusione__isnull=True, oggetto_base__isnull=True)
+                    | Q(oggetto__isnull=True, infusione__isnull=False, oggetto_base__isnull=True)
+                    | Q(oggetto__isnull=True, infusione__isnull=True, oggetto_base__isnull=False)
+                ),
+                name="abilita_conferita_un_proprietario",
+            ),
+            models.UniqueConstraint(
+                fields=["oggetto", "abilita"],
+                condition=Q(oggetto__isnull=False),
+                name="abilita_conferita_oggetto_unica",
+            ),
+            models.UniqueConstraint(
+                fields=["infusione", "abilita"],
+                condition=Q(infusione__isnull=False),
+                name="abilita_conferita_infusione_unica",
+            ),
+            models.UniqueConstraint(
+                fields=["oggetto_base", "abilita"],
+                condition=Q(oggetto_base__isnull=False),
+                name="abilita_conferita_oggetto_base_unica",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.abilita}"
+
 
 class Attivata(A_vista):
     elementi = models.ManyToManyField(Punteggio, blank=True, through='AttivataElemento')
@@ -7677,7 +7848,8 @@ class Personaggio(Inventario):
         if sigla_norm == 'CHK':
             sigla_norm = 'CHA'
         if delta < 0 and sigla_norm == 'CHA':
-            if self.abilita_possedute.filter(immunita_scarica_chakra_esterna=True).exists():
+            from personaggi.bonus_contesto import ha_flag_abilita
+            if ha_flag_abilita(self, immunita_scarica_chakra_esterna=True):
                 raise ValueError(
                     'I chakra di questo personaggio non possono essere scaricati da fonti esterne '
                     '(Chakra Avanzato Extra).'
@@ -7820,6 +7992,21 @@ class Personaggio(Inventario):
                 nome = row['punteggio__nome']
                 p[nome] = (p.get(nome, 0) or 0) + (row['valore_totale'] or 0)
 
+        # Abilità conferite da oggetti attivi: stessi punteggi globali finché l'oggetto è acceso.
+        # I bonus contestuali restano fuori da qui.
+        from personaggi.bonus_contesto import abilita_ids_conferite_attive
+        gia_contate = set(
+            PersonaggioAbilita.objects.filter(personaggio=self).values_list("abilita_id", flat=True)
+        )
+        if forma_oggi:
+            gia_contate.add(forma_oggi.id)
+        conferite = abilita_ids_conferite_attive(self) - gia_contate - exclude_abilita_ids
+        if conferite:
+            extra_links = abilita_punteggio.objects.filter(abilita_id__in=conferite).select_related("punteggio")
+            for row in extra_links.values("punteggio__nome").annotate(valore_totale=Sum("valore")):
+                nome = row["punteggio__nome"]
+                p[nome] = (p.get(nome, 0) or 0) + (row["valore_totale"] or 0)
+
         # Valori base da scheda (PersonaggioStatisticaBase / default statistica): senza questo,
         # punteggi_dipendenti usa solo abilita_punteggio e sorgenti come Chakra restano sempre 0.
         # Una query per tutti gli override, non una per statistica.
@@ -7850,6 +8037,10 @@ class Personaggio(Inventario):
             forma_oggi = self.get_forma_camaleonte_del_giorno()
             if forma_oggi:
                 acq_map.setdefault(forma_oggi.id, timezone.now())
+        from personaggi.bonus_contesto import abilita_ids_conferite_attive
+        adesso = timezone.now()
+        for abilita_id in abilita_ids_conferite_attive(self):
+            acq_map.setdefault(abilita_id, adesso)
         return acq_map
 
     def _collect_regole_punteggio_dipendente(self, exclude_abilita_ids=None):
@@ -8208,6 +8399,15 @@ class Personaggio(Inventario):
         if not hasattr(self, '_punteggi_base_partial_for_mods'):
             self._caratteristiche_base_cache = result
         return result
+
+    def caratteristiche_per_contesto(self, tipo, aura=None, aura_secondaria=None):
+        """Caratteristiche globali più i bonus limitati a tipo tecnica e aura."""
+        from personaggi.bonus_contesto import caratteristiche_per_contesto
+        return caratteristiche_per_contesto(self, tipo, aura, aura_secondaria)
+
+    def bonus_caratteristica_contestuali_visibili(self):
+        from personaggi.bonus_contesto import payload_bonus_personaggio
+        return payload_bonus_personaggio(self)
     
     def _nomi_punteggio(self, *, tipo, is_generica=None):
         """Nomi catalogo per tipo, in cache sull'istanza (niente EXISTS per chiave)."""
@@ -8300,8 +8500,9 @@ class Personaggio(Inventario):
             return 0
 
         bonus = 0
+        from personaggi.bonus_contesto import abilita_ids_conferite_attive
         qs = Abilita.objects.filter(
-            personaggioabilita__personaggio=self,
+            Q(personaggioabilita__personaggio=self) | Q(id__in=abilita_ids_conferite_attive(self)),
             sblocca_creazione_livello__isnull=False,
             ambito_creazione=ambito,
         )
@@ -8339,7 +8540,14 @@ class Personaggio(Inventario):
             return True, "OK"
 
         # 3. Tessiture / Infusioni: componenti vs caratteristiche del PG
-        base = self.caratteristiche_base
+        #    (base + bonus contestuale dell'ambito e dell'aura, senza i derivati)
+        if isinstance(t, Infusione):
+            tipo_contesto = "INF"
+            aura_secondaria = t.aura_infusione
+        else:
+            tipo_contesto = "TES"
+            aura_secondaria = None
+        base = self.caratteristiche_per_contesto(tipo_contesto, t.aura_richiesta, aura_secondaria)
         componenti = list(t.componenti.select_related('caratteristica').all())
         comp_vals = {c.caratteristica_id: c.valore for c in componenti}
         for comp in componenti:
@@ -8530,9 +8738,10 @@ class Personaggio(Inventario):
             elif _is_global(stat_link):
                 _add(statistica_chiave_modificatore(stat_link.statistica), stat_link.tipo_modificatore, stat_link.valore)
 
-        # 1. Abilità
+        # 1. Abilità possedute e abilità conferite da oggetti attivi
+        from personaggi.bonus_contesto import q_abilita_effettive
         for l in AbilitaStatistica.objects.filter(
-            abilita__personaggioabilita__personaggio=self
+            q_abilita_effettive(self)
         ).select_related('statistica').prefetch_related('classi_oggetto_conteggio'):
             _apply_abilita_stat_link(l)
 
@@ -8621,7 +8830,8 @@ class Personaggio(Inventario):
                         _apply_sezioni_oggetto(potenziamento)
 
         # Uso Armatura Avanzata Extra: raddoppia i +PA provenienti da equip attivo.
-        if equip_pa_add and self.abilita_possedute.filter(raddoppia_pa_da_equip=True).exists():
+        from personaggi.bonus_contesto import ha_flag_abilita
+        if equip_pa_add and ha_flag_abilita(self, raddoppia_pa_da_equip=True):
             _add("armat", MODIFICATORE_ADDITIVO, equip_pa_add)
 
         # 3. Caratteristiche Base
@@ -8795,9 +9005,10 @@ class Personaggio(Inventario):
             if stat_link_solo_oggetto_ospitante(stat_link): return False
             return True
         
-        # 1. Abilità
+        # 1. Abilità possedute e conferite da oggetti attivi
+        from personaggi.bonus_contesto import q_abilita_effettive
         for link in AbilitaStatistica.objects.filter(
-            abilita__personaggioabilita__personaggio=self
+            q_abilita_effettive(self)
         ).select_related('statistica', 'abilita'):
             if link.usa_bonus_slot_equip and _is_global(link):
                 bonus, detail = calcola_bonus_abilita_slot_equip(self, link)
@@ -8896,9 +9107,10 @@ class Personaggio(Inventario):
         cached = getattr(self, "_modificatori_contestuali_prefetch_cache", None)
         if cached is not None:
             return cached
+        from personaggi.bonus_contesto import q_abilita_effettive
         links_abilita = list(
             AbilitaStatistica.objects.filter(
-                abilita__personaggioabilita__personaggio=self
+                q_abilita_effettive(self)
             ).select_related("statistica").prefetch_related("limit_a_elementi", "limit_a_aure")
         )
         oggetti = list(
@@ -8923,9 +9135,10 @@ class Personaggio(Inventario):
         cached = getattr(self, "_formula_rules_cache", None)
         if cached is not None:
             return cached
+        from personaggi.bonus_contesto import q_abilita_effettive
         cached = list(
             AbilitaFormulaRule.objects.filter(
-                abilita__personaggioabilita__personaggio=self
+                q_abilita_effettive(self)
             ).select_related("from_punteggio", "to_punteggio", "from_mattone", "to_mattone")
         )
         self._formula_rules_cache = cached
@@ -9163,6 +9376,7 @@ class Personaggio(Inventario):
             stats = statistiche_base_per_item(item, self)
             item_mods = raccogli_modificatori_solo_oggetto(item, personaggio=self)
             formula_oggetto = item.formula_testo_effettiva
+            infusione_gen = item.infusione_generatrice
             ctx = {
                 'livello': item.livello,
                 'aura': item.aura,
@@ -9172,6 +9386,9 @@ class Personaggio(Inventario):
                 'classe_oggetto': item.classe_oggetto.nome if item.classe_oggetto else '',
                 'formula_builder_selezioni': item.selezioni_formula_effettive(),
             }
+            if infusione_gen:
+                ctx['tipo_tecnica'] = 'INF'
+                ctx['aura_secondaria'] = infusione_gen.aura_richiesta
             testo_finale = formatta_testo_generico(
                 item.testo,
                 formula=formula_oggetto,
@@ -9183,7 +9400,15 @@ class Personaggio(Inventario):
             
         elif isinstance(item, Infusione):
             stats = statistiche_base_per_item(item, self)
-            ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'formula_kind': FORMULA_SCOPE_ATTACK, 'formula_builder_selezioni': getattr(item, 'formula_builder_selezioni', None) or {}, 'attack_formula_template': item.formula_attacco}
+            ctx = {
+                'livello': item.livello,
+                'aura': item.aura_richiesta,
+                'aura_secondaria': item.aura_infusione,
+                'formula_kind': FORMULA_SCOPE_ATTACK,
+                'tipo_tecnica': 'INF',
+                'formula_builder_selezioni': getattr(item, 'formula_builder_selezioni', None) or {},
+                'attack_formula_template': item.formula_attacco,
+            }
             testo_finale = formatta_testo_generico(item.testo, statistiche_base=stats, personaggio=self, context=ctx, formula=item.formula_attacco)
             testo_finale += html_sezioni_append(item, self, context=ctx, statistiche_base=stats)
             
@@ -9265,7 +9490,10 @@ class Personaggio(Inventario):
                 formule_html = []
                 for elem in elementi_da_calcolare:
                     val_caratt = 0
-                    if elem.caratteristica_relativa: val_caratt = self.caratteristiche_base.get(elem.caratteristica_relativa.nome, 0)
+                    if elem.caratteristica_relativa:
+                        val_caratt = self.caratteristiche_per_contesto(
+                            "TES", item.aura_richiesta
+                        ).get(elem.caratteristica_relativa.nome, 0)
                     ctx_loop = contesto_formula_tessitura(
                         item, elemento=elem, caratteristica_associata_valore=val_caratt
                     )
@@ -9332,7 +9560,13 @@ class Personaggio(Inventario):
             stats = item.tessiturastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
             formula_text = consumabile.formula or ""
             if "{elem}" not in formula_text:
-                ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale, 'formula_kind': FORMULA_SCOPE_WEAVE}
+                ctx = {
+                    'livello': item.livello,
+                    'aura': item.aura_richiesta,
+                    'elemento': item.elemento_principale,
+                    'formula_kind': FORMULA_SCOPE_WEAVE,
+                    'tipo_tecnica': 'TES',
+                }
                 desc = formatta_testo_generico(consumabile.descrizione, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx)
                 formula_out = formatta_testo_generico(None, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx, solo_formula=True)
                 formula_out = formula_out.replace("<strong>Formula:</strong>", "").strip() if formula_out else ""
@@ -9366,17 +9600,40 @@ class Personaggio(Inventario):
                             elementi_map[el.id] = el
             elementi_da_calcolare = list(elementi_map.values())
             if not elementi_da_calcolare:
-                ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': None, 'formula_kind': FORMULA_SCOPE_WEAVE}
+                ctx = {
+                    'livello': item.livello,
+                    'aura': item.aura_richiesta,
+                    'elemento': None,
+                    'formula_kind': FORMULA_SCOPE_WEAVE,
+                    'tipo_tecnica': 'TES',
+                }
                 desc = formatta_testo_generico(consumabile.descrizione, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx)
                 formula_out = formatta_testo_generico(None, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx, solo_formula=True)
                 formula_out = formula_out.replace("<strong>Formula:</strong>", "").strip() if formula_out else ""
                 return desc, formula_out
-            ctx_base = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale, 'formula_kind': FORMULA_SCOPE_WEAVE}
+            ctx_base = {
+                'livello': item.livello,
+                'aura': item.aura_richiesta,
+                'elemento': item.elemento_principale,
+                'formula_kind': FORMULA_SCOPE_WEAVE,
+                'tipo_tecnica': 'TES',
+            }
             descrizione_html = formatta_testo_generico(consumabile.descrizione, formula=None, statistiche_base=stats, personaggio=self, context=ctx_base)
             formule_html = []
             for elem in elementi_da_calcolare:
-                val_caratt = self.caratteristiche_base.get(elem.caratteristica_relativa.nome, 0) if elem.caratteristica_relativa else 0
-                ctx_loop = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': elem, 'caratteristica_associata_valore': val_caratt, 'formula_kind': FORMULA_SCOPE_WEAVE}
+                val_caratt = 0
+                if elem.caratteristica_relativa:
+                    val_caratt = self.caratteristiche_per_contesto(
+                        "TES", item.aura_richiesta
+                    ).get(elem.caratteristica_relativa.nome, 0)
+                ctx_loop = {
+                    'livello': item.livello,
+                    'aura': item.aura_richiesta,
+                    'elemento': elem,
+                    'caratteristica_associata_valore': val_caratt,
+                    'formula_kind': FORMULA_SCOPE_WEAVE,
+                    'tipo_tecnica': 'TES',
+                }
                 risultato = formatta_testo_generico(None, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx_loop, solo_formula=True)
                 valore_pura = risultato.replace("<strong>Formula:</strong>", "").strip() if risultato else ""
                 if valore_pura:

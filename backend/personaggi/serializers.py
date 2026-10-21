@@ -1867,10 +1867,19 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
              except: pass
              
         if personaggio:
+            ctx_attacco = None
+            if obj.infusione_generatrice_id:
+                ctx_attacco = {
+                    "tipo_tecnica": "INF",
+                    "aura": obj.aura,
+                    "aura_secondaria": obj.infusione_generatrice.aura_richiesta,
+                    "formula_kind": "ATT",
+                }
             return formatta_testo_generico(
-                None, 
-                formula=formula, 
-                personaggio=personaggio, 
+                None,
+                formula=formula,
+                personaggio=personaggio,
+                context=ctx_attacco,
                 solo_formula=True
             ).replace("<strong>Formula:</strong>", "").strip()
         return formula
@@ -2537,6 +2546,80 @@ class TecnicaBaseMasterMixin:
                     if aure: new_mod.limit_a_aure.set(aure)
                     if elementi: new_mod.limit_a_elementi.set(elementi)
 
+# --- BONUS CONTESTUALI E ABILITÀ CONFERITE (staff) ---
+
+class IdOrObjectRelatedField(serializers.PrimaryKeyRelatedField):
+    """Accetta un pk oppure {id: pk}, così il payload di lettura si può risalvare."""
+
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            data = data.get("id")
+        return super().to_internal_value(data)
+
+
+def _lista_vuota():
+    return []
+
+
+class BonusCaratteristicaContestualeEditorSerializer(serializers.Serializer):
+    caratteristica = IdOrObjectRelatedField(queryset=Punteggio.objects.filter(tipo="CA"))
+    valore = serializers.IntegerField(min_value=1, default=1)
+    vale_tessiture = serializers.BooleanField(required=False, default=False)
+    vale_infusioni = serializers.BooleanField(required=False, default=False)
+    vale_cerimoniali = serializers.BooleanField(required=False, default=False)
+    aure = IdOrObjectRelatedField(
+        many=True,
+        queryset=Punteggio.objects.filter(tipo="AU"),
+        required=False,
+        default=_lista_vuota,
+    )
+
+    def to_representation(self, instance):
+        return {
+            "id": str(instance.id),
+            "caratteristica": instance.caratteristica_id,
+            "caratteristica_nome": instance.caratteristica.nome,
+            "valore": instance.valore,
+            "vale_tessiture": instance.vale_tessiture,
+            "vale_infusioni": instance.vale_infusioni,
+            "vale_cerimoniali": instance.vale_cerimoniali,
+            "aure": [
+                {"id": aura.id, "nome": aura.nome, "sigla": aura.sigla}
+                for aura in instance.aure.all()
+            ],
+        }
+
+
+class AbilitaConferitaEditorSerializer(serializers.Serializer):
+    abilita = IdOrObjectRelatedField(queryset=Abilita.objects.all())
+
+    def to_representation(self, instance):
+        return {
+            "id": str(instance.id),
+            "abilita": instance.abilita_id,
+            "abilita_nome": instance.abilita.nome,
+        }
+
+
+def _pop_effetti_contestuali(validated_data, *, con_abilita=False):
+    bonus = validated_data.pop("bonus_caratteristica_contestuali", None)
+    conferite = validated_data.pop("abilita_conferite", None) if con_abilita else None
+    return bonus, conferite
+
+
+def _apply_effetti_contestuali(instance, bonus, conferite, fk_name):
+    from django.core.exceptions import ValidationError as DjangoValidationError
+    from personaggi.bonus_contesto import sync_abilita_conferite, sync_bonus_contestuali
+
+    try:
+        sync_bonus_contestuali(instance, bonus, fk_name)
+        if fk_name != "abilita":
+            sync_abilita_conferite(instance, conferite, fk_name)
+    except DjangoValidationError as exc:
+        messages = getattr(exc, "messages", None) or [str(exc)]
+        raise serializers.ValidationError({"bonus_caratteristica_contestuali": messages})
+
+
 # --- SERIALIZZATORI COMPLETI PER MASTER ---
 
 class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMasterMixin):
@@ -2545,6 +2628,8 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
     modificatori = InfusioneStatisticaSerializer(many=True, required=False, source='infusionestatistica_set')
     costi_attivazione = InfusioneCostoAttivazioneSerializer(many=True, required=False)
     sezioni_condizionali = InfusioneSezioneCondizionaleSerializer(many=True, required=False)
+    bonus_caratteristica_contestuali = BonusCaratteristicaContestualeEditorSerializer(many=True, required=False)
+    abilita_conferite = AbilitaConferitaEditorSerializer(many=True, required=False)
     livello = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -2571,9 +2656,11 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         mods = validated_data.pop('infusionestatistica_set', [])
         costi = validated_data.pop('costi_attivazione', [])
         sezioni = validated_data.pop('sezioni_condizionali', [])
+        bonus, conferite = _pop_effetti_contestuali(validated_data, con_abilita=True)
         instance = Infusione.objects.create(**validated_data)
         self.handle_nested_data(instance, comp, s_base, mods, costi)
         self._sync_sezioni(instance, sezioni)
+        _apply_effetti_contestuali(instance, bonus, conferite, "infusione")
         return instance
     
     @transaction.atomic
@@ -2583,10 +2670,12 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         mods = validated_data.pop('infusionestatistica_set', None)
         costi = validated_data.pop('costi_attivazione', None)
         sezioni = validated_data.pop('sezioni_condizionali', None)
+        bonus, conferite = _pop_effetti_contestuali(validated_data, con_abilita=True)
         
         instance = super().update(instance, validated_data)
         self.handle_nested_data(instance, comp, s_base, mods, costi)
         self._sync_sezioni(instance, sezioni)
+        _apply_effetti_contestuali(instance, bonus, conferite, "infusione")
         return instance
 
     def _sync_sezioni(self, instance, sezioni):
@@ -3946,6 +4035,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     creazioni_consumabili_pronte = serializers.SerializerMethodField()
     valore_aura_alchimia = serializers.SerializerMethodField()
     max_livello_creazione = serializers.SerializerMethodField()
+    bonus_caratteristica_contestuali = serializers.SerializerMethodField()
 
     movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
     is_staff = serializers.BooleanField(source='proprietario.is_staff', read_only=True)
@@ -3985,6 +4075,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'cerimoniali_posseduti',
             'consumabili', 'creazioni_consumabili_in_corso', 'creazioni_consumabili_pronte', 'valore_aura_alchimia',
             'max_livello_creazione',
+            'bonus_caratteristica_contestuali',
             'movimenti_credito',
             'TestoFormattatoPersonale',
             'is_staff', 'modelli_aura',
@@ -4317,6 +4408,9 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             "mod": personaggio.max_livello_creazione(ambito=Abilita.AMBITO_CREAZIONE_MOD),
             "consumabile": personaggio.max_livello_creazione(ambito=Abilita.AMBITO_CREAZIONE_CONSUMABILE),
         }
+
+    def get_bonus_caratteristica_contestuali(self, personaggio):
+        return personaggio.bonus_caratteristica_contestuali_visibili()
 
     def get_consumabili(self, personaggio):
         from django.utils import timezone
@@ -5957,6 +6051,8 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
     statistiche_base = OggettoStatisticaBaseSerializer(many=True, required=False, source='oggettostatisticabase_set')
     statistiche = OggettoStatisticaSerializer(many=True, required=False, source='oggettostatistica_set')
     sezioni_condizionali = OggettoSezioneCondizionaleSerializer(many=True, required=False)
+    bonus_caratteristica_contestuali = BonusCaratteristicaContestualeEditorSerializer(many=True, required=False)
+    abilita_conferite = AbilitaConferitaEditorSerializer(many=True, required=False)
 
     class Meta:
         model = Oggetto
@@ -5982,10 +6078,12 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
         s_base = validated_data.pop('oggettostatisticabase_set', [])
         s_mod = validated_data.pop('oggettostatistica_set', [])
         sezioni = validated_data.pop('sezioni_condizionali', [])
+        bonus, conferite = _pop_effetti_contestuali(validated_data, con_abilita=True)
         
         instance = Oggetto.objects.create(**validated_data)
         self.handle_nested_data(instance, components=comp, stats_base=s_base, stats_mod=s_mod)
         self._sync_sezioni(instance, sezioni)
+        _apply_effetti_contestuali(instance, bonus, conferite, "oggetto")
         return instance
 
     @transaction.atomic
@@ -5994,10 +6092,12 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
         s_base = validated_data.pop('oggettostatisticabase_set', None)
         s_mod = validated_data.pop('oggettostatistica_set', None)
         sezioni = validated_data.pop('sezioni_condizionali', None)
+        bonus, conferite = _pop_effetti_contestuali(validated_data, con_abilita=True)
         
         instance = super().update(instance, validated_data)
         self.handle_nested_data(instance, components=comp, stats_base=s_base, stats_mod=s_mod)
         self._sync_sezioni(instance, sezioni)
+        _apply_effetti_contestuali(instance, bonus, conferite, "oggetto")
         return instance
 
     def _sync_sezioni(self, instance, sezioni):
@@ -6015,6 +6115,8 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
 class OggettoBaseFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixin):
     statistiche_base = OggettoBaseStatisticaBaseSerializer(many=True, required=False, source='oggettobasestatisticabase_set')
     statistiche_modificatori = OggettoBaseModificatoreSerializer(many=True, required=False, source='oggettobasemodificatore_set')
+    bonus_caratteristica_contestuali = BonusCaratteristicaContestualeEditorSerializer(many=True, required=False)
+    abilita_conferite = AbilitaConferitaEditorSerializer(many=True, required=False)
 
     class Meta:
         model = OggettoBase
@@ -6034,18 +6136,22 @@ class OggettoBaseFullEditorSerializer(serializers.ModelSerializer, MasterOggetto
     def create(self, validated_data):
         s_base = validated_data.pop('oggettobasestatisticabase_set', [])
         s_mod = validated_data.pop('oggettobasemodificatore_set', [])
+        bonus, conferite = _pop_effetti_contestuali(validated_data, con_abilita=True)
         
         instance = OggettoBase.objects.create(**validated_data)
         self.handle_nested_data(instance, stats_base=s_base, stats_mod=s_mod)
+        _apply_effetti_contestuali(instance, bonus, conferite, "oggetto_base")
         return instance
 
     @transaction.atomic
     def update(self, instance, validated_data):
         s_base = validated_data.pop('oggettobasestatisticabase_set', None)
         s_mod = validated_data.pop('oggettobasemodificatore_set', None)
+        bonus, conferite = _pop_effetti_contestuali(validated_data, con_abilita=True)
         
         instance = super().update(instance, validated_data)
         self.handle_nested_data(instance, stats_base=s_base, stats_mod=s_mod)
+        _apply_effetti_contestuali(instance, bonus, conferite, "oggetto_base")
         return instance
     
 # --- SERIALIZERS PER EDITOR STAFF ABILITÀ ---
@@ -6107,6 +6213,7 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
     prerequisiti = AbilitaPrerequisitoEditorSerializer(source='abilita_prerequisiti', many=True, required=False)
     statistiche = AbilitaStatisticaEditorSerializer(source='abilitastatistica_set', many=True, required=False)
     formula_rules = AbilitaFormulaRuleEditorSerializer(many=True, required=False)
+    bonus_caratteristica_contestuali = BonusCaratteristicaContestualeEditorSerializer(many=True, required=False)
 
     class Meta:
         model = Abilita
@@ -6127,9 +6234,11 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
         pre_data = validated_data.pop('abilita_prerequisiti', [])
         stat_data = validated_data.pop('abilitastatistica_set', [])
         formula_rules_data = validated_data.pop('formula_rules', [])
+        bonus, _conferite = _pop_effetti_contestuali(validated_data, con_abilita=False)
 
         abilita = Abilita.objects.create(**validated_data)
         self._save_inlines(abilita, tiers_data, req_data, punt_data, punt_dep_data, pre_data, stat_data, formula_rules_data)
+        _apply_effetti_contestuali(abilita, bonus, None, "abilita")
         return abilita
 
     @transaction.atomic
@@ -6141,12 +6250,14 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
         pre_data = validated_data.pop('abilita_prerequisiti', None)
         stat_data = validated_data.pop('abilitastatistica_set', None)
         formula_rules_data = validated_data.pop('formula_rules', None)
+        bonus, _conferite = _pop_effetti_contestuali(validated_data, con_abilita=False)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
         self._save_inlines(instance, tiers_data, req_data, punt_data, punt_dep_data, pre_data, stat_data, formula_rules_data)
+        _apply_effetti_contestuali(instance, bonus, None, "abilita")
         return instance
 
     def _save_inlines(self, instance, tiers, reqs, punts, punt_deps, pres, stats, formula_rules):

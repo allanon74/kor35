@@ -5,6 +5,7 @@ import {
   staffCreateOggettoBase,
   staffGetClassiOggetto,
   staffPropagaOggettoBaseIstanze,
+  staffGetAbilitaListAll,
 } from '../../api';
 import StatBaseInline from './inlines/StatBaseInline';
 import StatModInline from './inlines/StatModInline';
@@ -15,6 +16,15 @@ import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
 import SearchableSelect from './SearchableSelect';
+import { AbilitaConferiteEditor, BonusContestoEditor } from './inlines/BonusContestoEditor';
+import { caratteristichePersonaggio } from '../../lib/caratteristicheScheda';
+import {
+  bonusContestualiCompleti,
+  normalizzaAbilitaConferite,
+  normalizzaBonusContestuali,
+  serializeAbilitaConferite,
+  serializeBonusContestuali,
+} from '../../lib/bonusContesto';
 
 const TIPO_CHOICES = [
     {id:'FIS', nome:'Fisico'}, {id:'MAT', nome:'Materia'}, {id:'MOD', nome:'Mod'},
@@ -40,6 +50,7 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
   const [propagating, setPropagating] = useState(false);
   const [status, setStatus] = useState({ type: 'success', message: '' });
   const [isFormulaBuilderOpen, setIsFormulaBuilderOpen] = useState(false);
+  const [abilitaOptions, setAbilitaOptions] = useState([]);
   
   const [formData, setFormData] = useState(initialData || {
     nome: '', 
@@ -55,7 +66,9 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
     escluso_negozio_ufficiale: false,
     non_vendibile: false,
     statistiche_base: [], 
-    statistiche_modificatori: []
+    statistiche_modificatori: [],
+    bonus_caratteristica_contestuali: [],
+    abilita_conferite: [],
   });
 
   useEffect(() => {
@@ -64,10 +77,15 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
       ...prev,
       ...initialData,
       slot_fisici_possibili: parseSlots(initialData.slot_fisici_possibili),
+      bonus_caratteristica_contestuali: normalizzaBonusContestuali(initialData.bonus_caratteristica_contestuali),
+      abilita_conferite: normalizzaAbilitaConferite(initialData.abilita_conferite),
     }));
   }, [initialData]);
 
-  useEffect(() => { staffGetClassiOggetto(onLogout).then(setClassi); }, []);
+  useEffect(() => {
+    staffGetClassiOggetto(onLogout).then(setClassi);
+    staffGetAbilitaListAll(onLogout).then((rows) => setAbilitaOptions(rows || [])).catch(() => setAbilitaOptions([]));
+  }, [onLogout]);
 
   // Gestione aggiornamento liste (statistiche base e mod)
   const updateInline = (key, index, field, value) => {
@@ -95,6 +113,10 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
   const handleSave = async (mode = 'save_close') => {
     try {
         setSaving(true);
+        if (!bonusContestualiCompleti(formData.bonus_caratteristica_contestuali)) {
+            setStatus({ type: 'warning', message: 'Ogni bonus contestuale deve valere per almeno un ambito.' });
+            return;
+        }
         const getId = (item) => item?.id || item || null;
         
         // Funzione robusta per pulire le statistiche prima dell'invio
@@ -119,7 +141,9 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
             classe_oggetto: getId(formData.classe_oggetto),
             slot_fisici_possibili: (formData.slot_fisici_possibili || []).join(','),
             statistiche_base: prepareStats(formData.statistiche_base, false),
-            statistiche_modificatori: prepareStats(formData.statistiche_modificatori, true)
+            statistiche_modificatori: prepareStats(formData.statistiche_modificatori, true),
+            bonus_caratteristica_contestuali: serializeBonusContestuali(formData.bonus_caratteristica_contestuali),
+            abilita_conferite: serializeAbilitaConferite(formData.abilita_conferite),
         };
 
         const isSaveAsNew = mode === 'save_as_new';
@@ -137,6 +161,7 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
                 escluso_negozio_ufficiale: false, non_vendibile: false,
                 slot_fisici_possibili: [],
                 statistiche_base: [], statistiche_modificatori: [],
+                bonus_caratteristica_contestuali: [], abilita_conferite: [],
             });
             setStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
         }
@@ -171,7 +196,7 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
       }
       const ok = window.confirm(
         `Propagare il template "${formData.nome}" su ${count} istanz${count === 1 ? 'a' : 'e'}?\n\n`
-        + 'Verranno aggiornati nome, descrizione, tipo, classe, slot, flags, formula attacco e statistiche.\n'
+        + 'Verranno aggiornati nome, descrizione, tipo, classe, slot, flags, formula attacco, statistiche, bonus contestuali e abilità conferite.\n'
         + 'Non verranno modificati: costo acquisto, equipaggiamento, cariche, potenziamenti montati, inventario.'
       );
       if (!ok) return;
@@ -369,6 +394,18 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
           />
       </div>
 
+      <BonusContestoEditor
+        rows={formData.bonus_caratteristica_contestuali || []}
+        onChange={(bonus_caratteristica_contestuali) => setFormData({ ...formData, bonus_caratteristica_contestuali })}
+        caratteristiche={caratteristichePersonaggio(punteggiList)}
+        aure={(punteggiList || []).filter((p) => p.tipo === 'AU')}
+      />
+      <AbilitaConferiteEditor
+        rows={formData.abilita_conferite || []}
+        onChange={(abilita_conferite) => setFormData({ ...formData, abilita_conferite })}
+        abilitaOptions={abilitaOptions}
+      />
+
       {formData.id && (
         <div className="bg-amber-950/20 p-4 rounded-xl border border-amber-700/40 space-y-3">
           <h3 className="text-xs font-black uppercase text-amber-300 tracking-widest">
@@ -377,6 +414,7 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
           <p className="text-xs text-amber-100/80 leading-relaxed">
             Applica questo modello a tutti gli oggetti creati dal negozio con{' '}
             <code className="text-amber-200">oggetto_base_generatore</code> collegato a questo template.
+            Include anche i bonus contestuali e le abilità conferite.
             Utile dopo aver corretto formula, statistiche o descrizione nel listino.
           </p>
           <button

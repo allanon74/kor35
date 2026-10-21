@@ -15,6 +15,7 @@ import IconaPunteggio from './IconaPunteggio';
 import { caratteristichePersonaggio } from '../lib/caratteristicheScheda';
 import { auraDelegaMattoni, etichettaMattone, paletteAuraId } from '../lib/paletteMattoni';
 import { propostaModificabile } from '../lib/propostaTecnicaStato';
+import { sommaBonus } from '../lib/bonusContesto';
 import RichHtml from './RichHtml';
 
 // Costanti Slot Corporei (Invariate)
@@ -245,6 +246,14 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
             !char.modelli_aura.some((m) => Number(m.aura) === paletteAuraNumericId),
     );
 
+    const tipoTecnicaProposta = isInfusion ? 'INF' : isCerimoniale ? 'CER' : 'TES';
+    const auraIdsProposta = [selectedAuraId, isInfusion ? selectedInfusionAuraId : null].filter(Boolean);
+    const tettoCaratteristica = (charName) => {
+        const base = Number(char?.punteggi_base?.[charName] || 0);
+        if (isCerimoniale || !charName) return base;
+        return base + sommaBonus(char?.bonus_caratteristica_contestuali, charName, tipoTecnicaProposta, auraIdsProposta);
+    };
+
     // --- HANDLERS ---
     const handleIncrement = (charId, charName) => {
         if (!isDraft) return;
@@ -252,7 +261,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
 
         if (!isCerimoniale) {
             // Vincolo 1: Non superare il punteggio del PG nella Caratteristica
-            const pgCharScore = char.punteggi_base[charName] || 0;
+            const pgCharScore = tettoCaratteristica(charName);
             if (currentVal + 1 > pgCharScore) return;
 
             // Vincolo 2: Non superare il totale permesso dall'Aura
@@ -416,7 +425,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
         ? availableBricks
         : attendeAuraInfusione
             ? []
-            : availableCharacteristics.filter(c => isCerimoniale || (char.punteggi_base[c.nome] > 0));
+            : availableCharacteristics.filter(c => isCerimoniale || tettoCaratteristica(c.nome) > 0);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200" onClick={requestClose}>
@@ -723,7 +732,9 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
 
                                     const count = componentsMap[charId] || 0;
                                     const isCompatible = isCharCompatible(charId);
-                                    const pgMaxScore = char.punteggi_base[charName] || 0;
+                                    const pgBaseScore = char.punteggi_base[charName] || 0;
+                                    const pgBonusScore = isCerimoniale ? 0 : Math.max(0, tettoCaratteristica(charName) - pgBaseScore);
+                                    const pgMaxScore = isCerimoniale ? pgBaseScore : pgBaseScore + pgBonusScore;
                                     const isMandatoryBrick = obbligatorieCaratteristicaIds.includes(charId);
 
                                     return (
@@ -738,7 +749,11 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                                         {!item.caratteristica_associata && (
                                                             <span className="text-[8px] uppercase text-gray-500 font-black tracking-tighter">{charSigla}</span>
                                                         )}
-                                                        {!isCerimoniale && <span className="text-[8px] text-gray-600 font-bold">• Max {pgMaxScore}</span>}
+                                                        {!isCerimoniale && (
+                                                            <span className="text-[8px] text-gray-600 font-bold">
+                                                                • Max {pgMaxScore}{pgBonusScore > 0 ? ` (${pgBaseScore}+${pgBonusScore})` : ''}
+                                                            </span>
+                                                        )}
                                                         {isMandatoryBrick && (
                                                             <span className="text-[7px] uppercase font-black text-rose-400 tracking-tighter">Obbligo modello</span>
                                                         )}

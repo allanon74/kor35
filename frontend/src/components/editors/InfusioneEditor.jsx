@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useCharacter } from '../CharacterContext';
-import { getStatisticheList, staffCreateInfusione, staffUpdateInfusione, getBodySlots } from '../../api';
+import { getStatisticheList, staffCreateInfusione, staffUpdateInfusione, getBodySlots, getMattoniAura, staffGetAbilitaListAll } from '../../api';
 import CharacteristicInline from './inlines/CharacteristicInline';
 import StatBaseInline from './inlines/StatBaseInline';
 import StatModInline from './inlines/StatModInline';
@@ -14,8 +14,16 @@ import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import ActivationCostInline from './inlines/ActivationCostInline';
 import SezioniCondizionaliEditor from './inlines/SezioniCondizionaliEditor';
 import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
-import { getMattoniAura } from '../../api';
 import { etichettaMattone, paletteAuraId } from '../../lib/paletteMattoni';
+import { AbilitaConferiteEditor, BonusContestoEditor } from './inlines/BonusContestoEditor';
+import {
+  bonusContestualiCompleti,
+  normalizzaAbilitaConferite,
+  normalizzaBonusContestuali,
+  serializeAbilitaConferite,
+  serializeBonusContestuali,
+} from '../../lib/bonusContesto';
+import { caratteristichePersonaggio } from '../../lib/caratteristicheScheda';
 
 const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -36,17 +44,22 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     modificatori: [],
     costi_attivazione: [],
     sezioni_condizionali: [],
+    bonus_caratteristica_contestuali: [],
+    abilita_conferite: [],
   };
 
   const [formData, setFormData] = useState({
     ...defaultData,
     ...initialData,
     sezioni_condizionali: initialData?.sezioni_condizionali || [],
+    bonus_caratteristica_contestuali: normalizzaBonusContestuali(initialData?.bonus_caratteristica_contestuali),
+    abilita_conferite: normalizzaAbilitaConferite(initialData?.abilita_conferite),
   });
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState({ type: 'success', message: '' });
   const [isFormulaBuilderOpen, setIsFormulaBuilderOpen] = useState(false);
   const [mattoneOptions, setMattoneOptions] = useState([]);
+  const [abilitaOptions, setAbilitaOptions] = useState([]);
 
   // Alias per chiusura
   const handleClose = onCancel || onBack;
@@ -61,6 +74,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
 
   useEffect(() => {
     getStatisticheList(onLogout).then(setStatsOptions);
+    staffGetAbilitaListAll(onLogout).then((rows) => setAbilitaOptions(rows || [])).catch(() => setAbilitaOptions([]));
   }, [onLogout]);
 
   const auraRichiestaId = formData.aura_richiesta?.id || formData.aura_richiesta || null;
@@ -129,6 +143,10 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
   const handleSave = async (mode = 'save_close') => {
     try {
       setSaving(true);
+      if (!bonusContestualiCompleti(formData.bonus_caratteristica_contestuali)) {
+        setStatus({ type: 'warning', message: 'Ogni bonus contestuale deve valere per almeno un ambito.' });
+        return;
+      }
       // 1. DEDUPLICAZIONE MODIFICATORI
       const modsMap = new Map();
       (formData.modificatori || []).forEach(mod => {
@@ -199,6 +217,8 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         statistiche_base: Array.from(baseMap.values()),
         costi_attivazione: Array.from(costiMap.values()),
         sezioni_condizionali: sezioni,
+        bonus_caratteristica_contestuali: serializeBonusContestuali(formData.bonus_caratteristica_contestuali),
+        abilita_conferite: serializeAbilitaConferite(formData.abilita_conferite),
       };
       
       if (onSave) {
@@ -422,6 +442,18 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         statsOptions={statsOptions}
         onLogout={onLogout}
         onChange={(sezioni_condizionali) => setFormData({ ...formData, sezioni_condizionali })}
+      />
+
+      <BonusContestoEditor
+        rows={formData.bonus_caratteristica_contestuali || []}
+        onChange={(bonus_caratteristica_contestuali) => setFormData({ ...formData, bonus_caratteristica_contestuali })}
+        caratteristiche={caratteristichePersonaggio(punteggiList)}
+        aure={(punteggiList || []).filter((p) => p.tipo === 'AU')}
+      />
+      <AbilitaConferiteEditor
+        rows={formData.abilita_conferite || []}
+        onChange={(abilita_conferite) => setFormData({ ...formData, abilita_conferite })}
+        abilitaOptions={abilitaOptions}
       />
 
       <StaffMinigiocoQrSection qrcodeId={formData.qrcode_id} onLogout={onLogout} />

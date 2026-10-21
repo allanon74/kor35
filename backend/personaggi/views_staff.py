@@ -528,7 +528,15 @@ class InfusioneMasterViewSet(viewsets.ModelViewSet):
             qs = _campaign_feature_filter(self.request, qs, FEATURE_INFUSIONI)
             return annotate_staff_avista_qr(qs)
 
-        qs = _campaign_feature_filter(self.request, Infusione.objects.all(), FEATURE_INFUSIONI)
+        qs = _campaign_feature_filter(
+            self.request,
+            Infusione.objects.all().prefetch_related(
+                "bonus_caratteristica_contestuali__caratteristica",
+                "bonus_caratteristica_contestuali__aure",
+                "abilita_conferite__abilita",
+            ),
+            FEATURE_INFUSIONI,
+        )
         return annotate_staff_avista_qr(qs)
 
     def perform_create(self, serializer):
@@ -653,7 +661,11 @@ class OggettoStaffViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return annotate_staff_avista_qr(
-            Oggetto.objects.all().select_related("aura", "classe_oggetto")
+            Oggetto.objects.all().select_related("aura", "classe_oggetto").prefetch_related(
+                "bonus_caratteristica_contestuali__caratteristica",
+                "bonus_caratteristica_contestuali__aure",
+                "abilita_conferite__abilita",
+            )
         )
 
 class OggettoBaseStaffViewSet(viewsets.ModelViewSet):
@@ -662,7 +674,11 @@ class OggettoBaseStaffViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaffOrMaster]
 
     def get_queryset(self):
-        qs = OggettoBase.objects.all().select_related('classe_oggetto')
+        qs = OggettoBase.objects.all().select_related('classe_oggetto').prefetch_related(
+            "bonus_caratteristica_contestuali__caratteristica",
+            "bonus_caratteristica_contestuali__aure",
+            "abilita_conferite__abilita",
+        )
         qs = _campaign_feature_filter(self.request, qs, FEATURE_OGGETTI_BASE)
         return annotate_staff_avista_qr(qs)
 
@@ -954,6 +970,9 @@ class AbilitaStaffViewSet(viewsets.ModelViewSet):
             'caratteristica_2',
             'caratteristica_3',
             'aura_riferimento',
+        ).prefetch_related(
+            'bonus_caratteristica_contestuali__caratteristica',
+            'bonus_caratteristica_contestuali__aure',
         ), FEATURE_ABILITA)
 
 

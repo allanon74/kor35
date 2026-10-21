@@ -8,6 +8,8 @@ import EditorSaveActions from './EditorSaveActions';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
 import { caratteristichePersonaggio } from '../../lib/caratteristicheScheda';
+import { BonusContestoEditor } from './inlines/BonusContestoEditor';
+import { bonusContestualiCompleti, normalizzaBonusContestuali, serializeBonusContestuali } from '../../lib/bonusContesto';
 
 const DURATA_OPTIONS = ['O1H', 'DAY', 'EVT'];
 const TIPO_MOD_OPTIONS = ['ADD', 'MOL'];
@@ -41,6 +43,7 @@ const EMPTY_ABILITA_FORM = {
     prerequisiti: [],
     statistiche: [],
     formula_rules: [],
+    bonus_caratteristica_contestuali: [],
     effetto_uso_risorsa_str: '',
     recupero_risorsa_str: '',
 };
@@ -89,6 +92,7 @@ function mergeAbilitaFormState(initialData) {
             }))
             : [],
         formula_rules: Array.isArray(initialData.formula_rules) ? initialData.formula_rules : [],
+        bonus_caratteristica_contestuali: normalizzaBonusContestuali(initialData.bonus_caratteristica_contestuali),
         effetto_uso_risorsa_str:
             initialData.effetto_uso_risorsa != null
                 ? JSON.stringify(initialData.effetto_uso_risorsa, null, 2)
@@ -184,6 +188,10 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
             const punteggiDipendenti = formData.punteggi_dipendenti || [];
             const prerequisiti = formData.prerequisiti || [];
             const formulaRules = formData.formula_rules || [];
+            if (!bonusContestualiCompleti(formData.bonus_caratteristica_contestuali)) {
+                setStatus({ type: 'warning', message: 'Ogni bonus contestuale deve valere per almeno un ambito.' });
+                return;
+            }
 
             const {
                 effetto_uso_risorsa_str: _s1,
@@ -234,6 +242,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                     statistica: s.statistica ? parseInt(s.statistica, 10) : null,
                     valore: Number.parseFloat(s.valore) || 0,
                 })),
+                bonus_caratteristica_contestuali: serializeBonusContestuali(formData.bonus_caratteristica_contestuali),
             };
 
             const isSaveAsNew = mode === 'save_as_new';
@@ -883,6 +892,15 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                     valueKey="valore"
                     onChange={list => setFormData({...formData, punteggi_assegnati: list})}
                 />
+
+                <div className="md:col-span-2 lg:col-span-3">
+                    <BonusContestoEditor
+                        rows={formData.bonus_caratteristica_contestuali || []}
+                        onChange={(list) => setFormData({ ...formData, bonus_caratteristica_contestuali: list })}
+                        caratteristiche={caratteristichePersonaggio(punteggi)}
+                        aure={auraOptions}
+                    />
+                </div>
 
                 {/* 5. Punteggi Dipendenti */}
                 <div className="md:col-span-2 lg:col-span-3 bg-gray-900/50 p-5 rounded-lg border border-cyan-800/50 space-y-4">
