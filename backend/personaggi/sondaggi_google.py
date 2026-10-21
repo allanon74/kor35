@@ -391,6 +391,19 @@ def scarica_html_modulo(url: str) -> str:
     raise ErroreModuloGoogle("Troppi reindirizzamenti sul link del modulo.")
 
 
+def _cronologia_pagine(domande) -> str:
+    """
+    Pagine del modulo, da 0 fino all'ultima sezione.
+    Google registra solo le risposte delle pagine elencate in pageHistory:
+    con il solo «0» tiene la prima schermata e scarta il resto.
+    """
+    pagina = 0
+    for domanda in domande or []:
+        if domanda.get("tipo") == "sezione":
+            pagina += 1
+    return ",".join(str(indice) for indice in range(pagina + 1))
+
+
 def costruisci_corpo_invio(domande, risposte, email: str = "") -> list[tuple[str, str]]:
     coppie: list[tuple[str, str]] = []
     for domanda in domande or []:
@@ -426,7 +439,7 @@ def costruisci_corpo_invio(domande, risposte, email: str = "") -> list[tuple[str
     coppie.extend([
         ("fvv", "1"),
         ("draftResponse", "[]"),
-        ("pageHistory", "0"),
+        ("pageHistory", _cronologia_pagine(domande)),
         ("fbzx", "0"),
     ])
     return coppie
