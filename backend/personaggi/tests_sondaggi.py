@@ -172,6 +172,26 @@ class ParserSondaggioTests(SimpleTestCase):
         self.assertIn(("entry.5001", "Combattuto"), coppie)
         self.assertIn(("entry.5001", "Esplorato"), coppie)
         self.assertIn(("emailAddress", "ada@example.com"), coppie)
+        self.assertIn(("pageHistory", "0,1"), coppie)
+
+    def test_cronologia_pagine_include_le_sezioni_successive(self):
+        domande = [
+            {"id": "entry.1", "tipo": "testo_breve", "supportata": True},
+            {"id": "sezione-1", "tipo": "sezione", "supportata": True},
+            {"id": "entry.2", "tipo": "scelta_singola", "supportata": True},
+            {"id": "sezione-2", "tipo": "sezione", "supportata": True},
+            {"id": "entry.3", "tipo": "testo_lungo", "supportata": True},
+            {"id": "entry.4", "tipo": "scala", "supportata": True},
+        ]
+        coppie = costruisci_corpo_invio(
+            domande,
+            {"entry.1": "Ada", "entry.2": "Sì", "entry.3": "Un momento lungo", "entry.4": "4"},
+        )
+        self.assertIn(("entry.1", "Ada"), coppie)
+        self.assertIn(("entry.2", "Sì"), coppie)
+        self.assertIn(("entry.3", "Un momento lungo"), coppie)
+        self.assertIn(("entry.4", "4"), coppie)
+        self.assertIn(("pageHistory", "0,1,2"), coppie)
 
 
 class ApiSondaggioTests(APITestCase):
