@@ -3585,6 +3585,80 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
             return risultato
         return Response(risultato)
 
+    def _consumabili_staff_response(self, request, messaggio, http_status=status.HTTP_200_OK):
+        fresco = self.get_object()
+        data = self._serialize_detail(fresco, request)
+        data['messaggio'] = messaggio
+        return Response(data, status=http_status)
+
+    def _errore_consumabile_staff(self, exc):
+        from personaggi.staff_consumabili import messaggio_validazione
+
+        return Response({'detail': messaggio_validazione(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['get'], url_path='catalogo-tessiture')
+    def catalogo_tessiture(self, request, pk=None):
+        """Tessiture della campagna, per creare consumabili d'ufficio."""
+        from personaggi.staff_consumabili import catalogo_tessiture_per_consumabili
+
+        self.get_object()
+        return Response(catalogo_tessiture_per_consumabili(request))
+
+    @action(detail=True, methods=['post'], url_path='aggiungi-consumabile')
+    def aggiungi_consumabile(self, request, pk=None):
+        """Crea uno o più consumabili, anche copiandoli da una tessitura."""
+        from django.core.exceptions import ValidationError as ErroreConsumabile
+
+        from personaggi.staff_consumabili import crea_consumabili_staff
+
+        personaggio = self.get_object()
+        tessitura_id = request.data.get('tessitura_id')
+        if tessitura_id not in (None, ''):
+            if not _campaign_feature_filter(
+                request, Tessitura.objects.filter(pk=tessitura_id), FEATURE_TESSITURE
+            ).exists():
+                return Response(
+                    {'detail': 'Tessitura non disponibile per la campagna attiva.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        try:
+            creati = crea_consumabili_staff(personaggio, request.data)
+        except ErroreConsumabile as exc:
+            return self._errore_consumabile_staff(exc)
+        n = len(creati)
+        msg = f'Creati {n} consumabili.' if n != 1 else f'Creato consumabile «{creati[0].nome}».'
+        return self._consumabili_staff_response(request, msg, status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='aggiorna-consumabile')
+    def aggiorna_consumabile(self, request, pk=None):
+        from django.core.exceptions import ValidationError as ErroreConsumabile
+
+        from personaggi.staff_consumabili import aggiorna_consumabile_staff
+
+        personaggio = self.get_object()
+        try:
+            row = aggiorna_consumabile_staff(personaggio, request.data)
+        except ErroreConsumabile as exc:
+            return self._errore_consumabile_staff(exc)
+        return self._consumabili_staff_response(request, f'Consumabile «{row.nome}» aggiornato.')
+
+    @action(detail=True, methods=['post'], url_path='rimuovi-consumabile')
+    def rimuovi_consumabile_personaggio(self, request, pk=None):
+        from django.core.exceptions import ValidationError as ErroreConsumabile
+
+        from personaggi.staff_consumabili import rimuovi_consumabile_staff
+
+        personaggio = self.get_object()
+        try:
+            nome = rimuovi_consumabile_staff(
+                personaggio,
+                request.data.get('consumabile_id'),
+                motivo=request.data.get('motivo') or '',
+            )
+        except ErroreConsumabile as exc:
+            return self._errore_consumabile_staff(exc)
+        return self._consumabili_staff_response(request, f'Consumabile «{nome}» rimosso.')
+
     @action(detail=True, methods=['get'], url_path='logs')
     def logs(self, request, pk=None):
         personaggio = self.get_object()

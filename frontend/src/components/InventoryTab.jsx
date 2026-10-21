@@ -3,12 +3,13 @@ import { useCharacter } from './CharacterContext';
 import { 
     ShoppingBag, Box, Shield, Zap, Loader2, Wrench, 
     Info, ChevronUp, ChevronDown, Activity, Power, Battery, 
-    Clock, RefreshCw, Sparkles, Swords, Lock, User, Backpack, Weight, X, Trash2, Layers
+    Clock, RefreshCw, Sparkles, Swords, Lock, User, Backpack, Weight, X, Trash2, Layers, Package
 } from 'lucide-react';
 import ShopModal from './ShopModal';
 import ItemAssemblyModal from './ItemAssemblyModal';
 import ModuloDetailModal from './ModuloDetailModal';
 import SerieInventarioPanel from './SerieInventarioPanel';
+import ConsumabiliTab from './ConsumabiliTab';
 import PunteggioDisplay from './PunteggioDisplay';
 import RichHtml from './RichHtml';
 import { useOptimisticEquip, useOptimisticRecharge, useOptimisticDamage, useOptimisticRepair, useOptimisticDiscard } from '../hooks/useGameData';
@@ -721,7 +722,7 @@ const CapacityDashboard = ({ capacityUsed, capacityMax, capacityConsumers, heavy
 };
 
 // --- MAIN INVENTORY TAB ---
-const InventoryTab = ({ onLogout }) => {
+const InventoryTab = ({ onLogout, vista = 'physical', onVistaChange }) => {
   const { selectedCharacterData: characterData, isLoading: isContextLoading } = useCharacter();
   
   const [items, setItems] = useState([]);
@@ -730,7 +731,12 @@ const InventoryTab = ({ onLogout }) => {
   const [showAssembly, setShowAssembly] = useState(false);
   const [assemblyHost, setAssemblyHost] = useState(null);
   const [selectedBodyItem, setSelectedBodyItem] = useState(null);
-  const [bodyViewTab, setBodyViewTab] = useState('physical');
+  const [fallbackVista, setFallbackVista] = useState(vista || 'physical');
+  const bodyViewTab = typeof onVistaChange === 'function' ? (vista || 'physical') : fallbackVista;
+  const selectVista = (next) => {
+    if (typeof onVistaChange === 'function') onVistaChange(next);
+    else setFallbackVista(next);
+  };
   const [selectedPhysicalSlot, setSelectedPhysicalSlot] = useState(null);
   const [draggingItemId, setDraggingItemId] = useState(null);
   const [dragHintBySlot, setDragHintBySlot] = useState({});
@@ -1132,30 +1138,45 @@ const InventoryTab = ({ onLogout }) => {
       />
 
       <section>
-        <h3 className="text-sm font-bold text-indigo-300 mb-3 flex items-center gap-2 uppercase tracking-wider pl-1"><Activity size={16} /> Diagnostica Corporea</h3>
+        <h3 className="text-sm font-bold text-indigo-300 mb-3 flex items-center gap-2 uppercase tracking-wider pl-1">
+            {bodyViewTab === 'consumabili' ? <Package size={16} /> : <Activity size={16} />}
+            {bodyViewTab === 'consumabili' ? 'Consumabili' : 'Diagnostica Corporea'}
+        </h3>
         <div className="flex flex-wrap gap-2 mb-3">
             <button
                 type="button"
-                onClick={() => setBodyViewTab('physical')}
-                className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${bodyViewTab === 'physical' ? 'bg-indigo-700 border-indigo-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'}`}
+                onClick={() => selectVista('physical')}
+                className={`min-h-11 px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${bodyViewTab === 'physical' ? 'bg-indigo-700 border-indigo-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'}`}
             >
                 Slot Oggetti Fisici
             </button>
             <button
                 type="button"
-                onClick={() => setBodyViewTab('grafts')}
-                className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${bodyViewTab === 'grafts' ? 'bg-indigo-700 border-indigo-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'}`}
+                onClick={() => selectVista('grafts')}
+                className={`min-h-11 px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${bodyViewTab === 'grafts' ? 'bg-indigo-700 border-indigo-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'}`}
             >
                 Innesti e Mutazioni
             </button>
             <button
                 type="button"
-                onClick={() => setBodyViewTab('serie')}
-                className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors inline-flex items-center gap-1.5 ${bodyViewTab === 'serie' ? 'bg-violet-700 border-violet-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'}`}
+                onClick={() => selectVista('serie')}
+                className={`min-h-11 px-3 py-2 rounded-lg text-xs font-bold border transition-colors inline-flex items-center gap-1.5 ${bodyViewTab === 'serie' ? 'bg-violet-700 border-violet-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'}`}
             >
                 <Layers size={14} /> Serie e testi
             </button>
+            <button
+                type="button"
+                onClick={() => selectVista('consumabili')}
+                className={`min-h-11 px-3 py-2 rounded-lg text-xs font-bold border transition-colors inline-flex items-center gap-1.5 ${bodyViewTab === 'consumabili' ? 'bg-amber-700 border-amber-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'}`}
+            >
+                <Package size={14} /> Consumabili
+            </button>
         </div>
+        {bodyViewTab === 'consumabili' ? (
+            <div className="bg-gray-900/50 p-3 sm:p-4 rounded-xl border border-amber-900/40 mb-6">
+                <ConsumabiliTab onLogout={onLogout} embedded />
+            </div>
+        ) : null}
         {bodyViewTab === 'serie' ? (
             <div className="bg-gray-900/50 p-3 sm:p-4 rounded-xl border border-violet-900/40 mb-6">
                 <SerieInventarioPanel onLogout={onLogout} />

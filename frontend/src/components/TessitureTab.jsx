@@ -45,6 +45,9 @@ const TessitureTab = ({ onLogout }) => {
   const creazioniInCorso = useMemo(() => char?.creazioni_consumabili_in_corso || [], [char?.creazioni_consumabili_in_corso]);
   const creazioniPronte = useMemo(() => char?.creazioni_consumabili_pronte || [], [char?.creazioni_consumabili_pronte]);
   const valoreAlchimia = char?.valore_aura_alchimia ?? 0;
+  const puoCreareAlchimia = !!char?.puo_creare_consumabili_alchimia;
+  const bloccoAlchimia = char?.alchimia_consumabili_blocco
+    || 'Puoi creare consumabili con l\'alchimia solo durante un evento aperto a cui questo personaggio è iscritto.';
   const creazioniInCorsoKey = useMemo(
     () => creazioniInCorso.map((c) => `${c.id}:${c.secondi_rimanenti}`).sort().join(','),
     [creazioniInCorso]
@@ -249,7 +252,7 @@ const TessitureTab = ({ onLogout }) => {
                 {secondi > 0 ? fmtTime(secondi) : '...'}
               </span>
             )}
-            {!creazionePronta && !creazioneInCorso && canShowCrea && (
+            {!creazionePronta && !creazioneInCorso && canShowCrea && puoCreareAlchimia && (
               <button
                 onClick={(e) => handleCreaConsumabile(item, e)}
                 disabled={!!isCreatingConsumable}
@@ -473,6 +476,12 @@ const TessitureTab = ({ onLogout }) => {
     <>
       <PlayerTabShell width="wide">
         {/* Riepilogo Valute */}
+        {!puoCreareAlchimia && valoreAlchimia > 0 && (
+          <p className="mb-4 rounded-lg border border-amber-700/50 bg-amber-950/40 px-3 py-2 text-xs text-amber-200 break-words">
+            {bloccoAlchimia}
+          </p>
+        )}
+
         <PlayerResourceStrip className="mb-4">
             <div className="text-sm text-gray-400">Disponibilità:</div>
             <div className="flex gap-4">

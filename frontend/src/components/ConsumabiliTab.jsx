@@ -6,7 +6,7 @@ import RichHtml from './RichHtml';
 import { consumaConsumabile, completaCreazioneConsumabile } from '../api';
 import { PlayerTabHeader, PlayerTabShell } from './personaggi/layout/PlayerTabShell';
 
-const ConsumabiliTab = ({ onLogout }) => {
+const ConsumabiliTab = ({ onLogout, embedded = false }) => {
   const { selectedCharacterData: char, selectedCharacterId, refreshCharacterData } = useCharacter();
   const [modalConsumabile, setModalConsumabile] = useState(null);
   const [modalAttivazione, setModalAttivazione] = useState(null);
@@ -108,13 +108,20 @@ const ConsumabiliTab = ({ onLogout }) => {
     );
   }
 
-  return (
-    <PlayerTabShell width="wide" className="space-y-6">
-      <PlayerTabHeader
-        icon={<Zap className="w-6 h-6 text-amber-400" />}
-        title="Consumabili"
-        subtitle="Occupano 1 slot COG se ne hai almeno uno"
-      />
+  const corpo = (
+    <>
+      {embedded ? (
+        <p className="text-xs text-gray-400 break-words">
+          Occupano 1 slot COG se ne hai almeno uno. Con l&apos;alchimia si creano dalle tessiture,
+          solo durante un evento aperto a cui questo personaggio è iscritto.
+        </p>
+      ) : (
+        <PlayerTabHeader
+          icon={<Zap className="w-6 h-6 text-amber-400" />}
+          title="Consumabili"
+          subtitle="Occupano 1 slot COG se ne hai almeno uno"
+        />
+      )}
 
       {/* Creazioni in corso: timer e pronte da aggiungere */}
       {(creazioniInCorso.length > 0 || creazioniPronte.length > 0) && (
@@ -125,13 +132,13 @@ const ConsumabiliTab = ({ onLogout }) => {
           </h3>
           <ul className="space-y-2">
             {creazioniPronte.map((c) => (
-              <li key={`pronta-${c.id}`} className="flex items-center justify-between py-2 px-3 rounded bg-green-900/30 border border-green-700/50">
-                <span className="text-gray-200 font-medium">{c.tessitura_nome}</span>
+              <li key={`pronta-${c.id}`} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between py-2 px-3 rounded bg-green-900/30 border border-green-700/50">
+                <span className="text-gray-200 font-medium break-words">{c.tessitura_nome}</span>
                 <button
                   type="button"
                   onClick={(e) => handleCompletaCreazione(c.id, e)}
                   disabled={isCompletingConsumable === c.id}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm font-bold disabled:opacity-50"
+                  className="flex min-h-11 w-full sm:w-auto items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm font-bold disabled:opacity-50"
                 >
                   {isCompletingConsumable === c.id ? <Loader2 className="animate-spin" size={16} /> : <PackageCheck size={16} />}
                   Aggiungi a inventario
@@ -141,8 +148,8 @@ const ConsumabiliTab = ({ onLogout }) => {
             {creazioniInCorso.map((c) => {
               const secondi = countdowns[c.id] ?? c.secondi_rimanenti ?? 0;
               return (
-                <li key={`corso-${c.id}`} className="flex items-center justify-between py-2 px-3 rounded bg-amber-900/20 border border-amber-700/50">
-                  <span className="text-gray-200 font-medium">{c.tessitura_nome}</span>
+                <li key={`corso-${c.id}`} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between py-2 px-3 rounded bg-amber-900/20 border border-amber-700/50">
+                  <span className="text-gray-200 font-medium break-words">{c.tessitura_nome}</span>
                   <span className="flex items-center gap-2 text-amber-400 font-mono text-sm">
                     <Timer size={16} />
                     {secondi > 0 ? fmtTime(secondi) : '...'}
@@ -276,6 +283,16 @@ const ConsumabiliTab = ({ onLogout }) => {
           </div>
         </div>
       )}
+    </>
+  );
+
+  if (embedded) {
+    return <div className="space-y-4">{corpo}</div>;
+  }
+
+  return (
+    <PlayerTabShell width="wide" className="space-y-6">
+      {corpo}
     </PlayerTabShell>
   );
 };

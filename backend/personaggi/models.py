@@ -11205,7 +11205,7 @@ class ConsumabilePersonaggio(SyncableModel, models.Model):
 class CreazioneConsumabileInCorso(SyncableModel, models.Model):
     """
     Timer di creazione consumabile da tessitura: al termine di data_fine_creazione
-    il personaggio può completare e ottenere il consumabile in tab Consumabili.
+    il personaggio può completare e ottenere il consumabile nella tab Consumabili dell'inventario.
     """
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='creazioni_consumabili_in_corso')
     tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE, related_name='creazioni_consumabili_in_corso')

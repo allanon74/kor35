@@ -3309,6 +3309,39 @@ export const staffPersonaggioSmontaPotenziamento = (personaggioId, componenteId,
     body: JSON.stringify({ componente_id: componenteId, motivo: motivo || '' }),
   }, onLogout);
 
+/** Tessiture della campagna, per generare consumabili d'ufficio. */
+export const staffPersonaggioCatalogoTessiture = (personaggioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/personaggi/${personaggioId}/catalogo-tessiture/`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+/** Crea uno o più consumabili sul personaggio (a mano o da tessitura). */
+export const staffPersonaggioAggiungiConsumabile = (personaggioId, payload, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/personaggi/${personaggioId}/aggiungi-consumabile/`,
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+    onLogout,
+  );
+
+export const staffPersonaggioAggiornaConsumabile = (personaggioId, payload, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/personaggi/${personaggioId}/aggiorna-consumabile/`,
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+    onLogout,
+  );
+
+export const staffPersonaggioRimuoviConsumabile = (personaggioId, consumabileId, motivo, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/personaggi/${personaggioId}/rimuovi-consumabile/`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ consumabile_id: consumabileId, motivo: motivo || '' }),
+    },
+    onLogout,
+  );
+
 export const staffGetOggettoStaff = (id, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/oggetti/${id}/`, { method: 'GET' }, onLogout);
 

@@ -19,7 +19,7 @@ import {
 Home, QrCode, Zap, TestTube2, Scroll, LogOut, Mail, Backpack, 
     Menu, X, UserCog, RefreshCw, Filter, DownloadCloud, ScrollText, 
     ArrowRightLeft, Gamepad2, Loader2, ExternalLink, Tag, Users, Sparkles,
-    Pin, PinOff, Briefcase, ClipboardCheck, Globe, ChevronRight, Package, Star,
+    Pin, PinOff, Briefcase, ClipboardCheck, Globe, ChevronRight, Star,
     Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard, ListTodo, Wallet, FileSignature,
     Dices
 } from 'lucide-react';
@@ -53,7 +53,6 @@ const TAB_LOADERS = {
   tessiture: () => import('./TessitureTab.jsx'),
   infusioni: () => import('./InfusioniTab.jsx'),
   cerimoniali: () => import('./CerimonialiTab.jsx'),
-  consumabili: () => import('./ConsumabiliTab.jsx'),
   negozi: () => import('./NegoziMercanteTab.jsx'),
   'stiva-nave': () => import('./StivaNaveTab.jsx'),
   qr: () => import('./QrTab.jsx'),
@@ -104,7 +103,6 @@ const AVAILABLE_TABS = [
     { id: 'tessiture', label: 'Tessiture', icon: Scroll, component: lazyTab('tessiture') },
     { id: 'infusioni', label: 'Infusioni', icon: TestTube2, component: lazyTab('infusioni') },
     { id: 'cerimoniali', label: 'Cerimoniali', icon: Users, component: lazyTab('cerimoniali') },
-    { id: 'consumabili', label: 'Consumabili', icon: Package, component: lazyTab('consumabili') },
     { id: 'negozi', label: 'Negozi', icon: Store, component: lazyTab('negozi'), requiresModulo: 'negozi' },
     { id: 'stiva-nave', label: 'Stiva nave', icon: Ship, component: lazyTab('stiva-nave'), requiresStivaAccess: true, requiresModulo: 'pilotaggio' },
     { id: 'qr', label: 'Scanner', icon: QrCode, component: lazyTab('qr') },
@@ -140,9 +138,45 @@ function isValidMainTabId(tabId) {
     if (!tabId) return false;
     // legacy: tab=notifiche ora vive come subtab di messaggi
     if (tabId === 'notifiche') return true;
+    // legacy: tab=consumabili ora è una vista dell'inventario
+    if (tabId === 'consumabili') return true;
     if (tabId === 'game' || tabId === 'home' || tabId === 'admin_msg' || tabId === 'watch') return true;
     if (isPoolPlayerTabId(tabId)) return true;
     return AVAILABLE_TABS.some((t) => t.id === tabId);
+}
+
+function normalizeMainTabId(tabId) {
+    if (tabId === 'notifiche') return 'messaggi';
+    if (tabId === 'consumabili') return 'inventario';
+    return tabId;
+}
+
+const INVENTARIO_VISTE = {
+    physical: '',
+    grafts: 'innesti',
+    serie: 'serie',
+    consumabili: 'consumabili',
+};
+
+function vistaInventarioDaSub(sub) {
+    if (sub === 'innesti') return 'grafts';
+    if (sub === 'serie') return 'serie';
+    if (sub === 'consumabili') return 'consumabili';
+    return 'physical';
+}
+
+function readInventarioVista() {
+    if (typeof window === 'undefined') return 'physical';
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const urlTab = params.get('tab');
+        if (urlTab === 'consumabili') return 'consumabili';
+        if (urlTab === 'inventario') return vistaInventarioDaSub(params.get('sub'));
+        if (sessionStorage.getItem(MAIN_TAB_STORAGE_KEY) === 'consumabili') return 'consumabili';
+    } catch (e) {
+        /* noop */
+    }
+    return 'physical';
 }
 
 function readStoredMainTab() {
@@ -150,9 +184,9 @@ function readStoredMainTab() {
     try {
         const params = new URLSearchParams(window.location.search);
         const urlTab = params.get('tab');
-        if (isValidMainTabId(urlTab)) return urlTab;
+        if (isValidMainTabId(urlTab)) return normalizeMainTabId(urlTab);
         const stored = sessionStorage.getItem(MAIN_TAB_STORAGE_KEY);
-        if (isValidMainTabId(stored)) return stored;
+        if (isValidMainTabId(stored)) return normalizeMainTabId(stored);
     } catch (e) {
         /* noop */
     }
@@ -185,6 +219,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(readStoredMainTab);
+  const [inventarioVista, setInventarioVista] = useState(readInventarioVista);
   const [messaggiViewMode, setMessaggiViewMode] = useState('chat');
   const [qrResultData, setQrResultData] = useState(null);
   const [minigiocoPayload, setMinigiocoPayload] = useState(null);
@@ -577,13 +612,21 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     const params = new URLSearchParams(location.search);
     const urlTab = params.get('tab');
     const urlSub = params.get('sub');
+    if (urlTab === 'consumabili') {
+      setActiveTab('inventario');
+      setInventarioVista('consumabili');
+      return;
+    }
     if (urlTab === 'notifiche') {
       setActiveTab('messaggi');
       setMessaggiViewMode('notifiche');
       return;
     }
     if (isValidMainTabId(urlTab)) {
-      setActiveTab(urlTab);
+      setActiveTab(normalizeMainTabId(urlTab));
+    }
+    if (urlTab === 'inventario') {
+      setInventarioVista(vistaInventarioDaSub(urlSub));
     }
     if (urlTab === 'messaggi' && ['chat', 'annunci', 'notifiche'].includes(urlSub)) {
       setMessaggiViewMode(urlSub);
@@ -641,8 +684,12 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     if (!isValidMainTabId(activeTab) && activeTab !== 'notifiche') return;
     try {
       const params = new URLSearchParams(location.search);
-      const tabForUrl = activeTab === 'notifiche' ? 'messaggi' : activeTab;
-      const desiredSub = tabForUrl === 'messaggi' ? messaggiViewMode : '';
+      const tabForUrl = activeTab === 'notifiche' ? 'messaggi' : normalizeMainTabId(activeTab);
+      const desiredSub = tabForUrl === 'messaggi'
+        ? messaggiViewMode
+        : tabForUrl === 'inventario'
+          ? (INVENTARIO_VISTE[inventarioVista] || '')
+          : '';
       let changed = false;
       if (params.get('tab') !== tabForUrl) {
         params.set('tab', tabForUrl);
@@ -663,7 +710,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     } catch (e) {
       /* noop */
     }
-  }, [activeTab, messaggiViewMode, navigate, location.pathname, location.search]);
+  }, [activeTab, inventarioVista, messaggiViewMode, navigate, location.pathname, location.search]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -757,7 +804,10 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   useEffect(() => {
       if (selectedCharacterData) {
           if (selectedCharacterData.impostazioni_ui?.shortcuts) {
-              setUserShortcuts(selectedCharacterData.impostazioni_ui.shortcuts);
+              const mapped = selectedCharacterData.impostazioni_ui.shortcuts.map((id) => (
+                id === 'consumabili' ? 'inventario' : id
+              ));
+              setUserShortcuts(mapped.filter((id, index) => mapped.indexOf(id) === index));
           } else {
               setUserShortcuts(DEFAULT_SHORTCUTS);
           }
@@ -994,12 +1044,14 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
 
   // --- [MODIFICA] Funzione per aprire il modal di aiuto ---
   const openWikiHelp = useCallback(() => {
-    const wikiSlug = TAB_TO_WIKI_SLUG[activeTab];
+    const wikiSlug = activeTab === 'inventario' && inventarioVista === 'consumabili'
+      ? 'consumabili'
+      : TAB_TO_WIKI_SLUG[activeTab];
     if (wikiSlug) {
       setCurrentWikiSlug(wikiSlug);
       setIsWikiHelpOpen(true);
     }
-  }, [activeTab]);
+  }, [activeTab, inventarioVista]);
 
   const closeWikiHelp = useCallback(() => {
     setIsWikiHelpOpen(false);
@@ -1217,6 +1269,14 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                   <div className="h-full overflow-y-auto">
                       <Component onLogout={onLogout} personaggioId={selectedCharacterId} />
                   </div>
+              );
+          } else if (tabDef.id === 'inventario') {
+              content = (
+                  <Component
+                      onLogout={onLogout}
+                      vista={inventarioVista}
+                      onVistaChange={setInventarioVista}
+                  />
               );
           } else {
               content = <Component onLogout={onLogout} />;

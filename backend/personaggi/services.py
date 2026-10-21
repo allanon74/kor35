@@ -1510,8 +1510,15 @@ class CreazioneConsumabileService:
         Avvia la creazione di un consumabile da tessitura.
         Requisiti: livello tessitura <= valore Aura Mondana Alchimia (ALC); nessuna creazione già in corso.
         Ritorna (success, data_dict|error_message).
+        La creazione parte solo con un evento aperto e il personaggio iscritto.
         """
         from django.db import transaction as db_transaction
+
+        from personaggi.consumabili_evento import esito_creazione_consumabile_alchimia
+
+        ok_evento, msg_evento = esito_creazione_consumabile_alchimia(personaggio)
+        if not ok_evento:
+            return False, msg_evento
 
         aura_alc = Punteggio.objects.filter(tipo=AURA, sigla=cls.SIGLA_AURA_ALCHIMIA).first()
         if not aura_alc:

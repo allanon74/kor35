@@ -33,6 +33,13 @@ describe('PersonaggiStaffChrome', () => {
     document.body.querySelectorAll('[data-testid="personaggi-staff-tabs"]').forEach((el) => el.remove());
   });
 
+  it('include il tab consumabili del personaggio', () => {
+    const tab = PERSONAGGI_STAFF_TABS.find((t) => t.id === 'consumabili');
+    expect(tab).toBeTruthy();
+    expect(tab.label).toBe('Consumabili');
+    expect(tab.short.length).toBeLessThanOrEqual(8);
+  });
+
   it('include il tab tecniche possedute', () => {
     const tab = PERSONAGGI_STAFF_TABS.find((t) => t.id === 'tecniche');
     expect(tab).toBeTruthy();

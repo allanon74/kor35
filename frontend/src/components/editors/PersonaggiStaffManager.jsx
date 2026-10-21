@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import StaffRazzaAuraTab from './StaffRazzaAuraTab';
 import StaffTecnicheTab from './StaffTecnicheTab';
+import StaffConsumabiliPersonaggioTab from './StaffConsumabiliPersonaggioTab';
 import StaffEconomiaTab from './StaffEconomiaTab';
 import RichTextEditor from '../RichTextEditor';
 import StaffCostumePhotosSection from '../StaffCostumePhotosSection';
@@ -1231,6 +1232,18 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                         setMessage('Economia aggiornata.');
                         staffGetPersonaggioDetail(detail.id, onLogout).then(setDetail).catch(() => {});
                       }}
+                    />
+                  )}
+
+                  {modalTab === 'consumabili' && detail && (
+                    <StaffConsumabiliPersonaggioTab
+                      detail={detail}
+                      onLogout={onLogout}
+                      onUpdated={(updated, msg) => {
+                        if (updated) setDetail(updated);
+                        if (msg) setMessage(msg);
+                      }}
+                      onError={(msg) => setMessage(msg || 'Operazione consumabili fallita')}
                     />
                   )}
 

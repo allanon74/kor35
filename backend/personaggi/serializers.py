@@ -4050,6 +4050,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     creazioni_consumabili_in_corso = serializers.SerializerMethodField()
     creazioni_consumabili_pronte = serializers.SerializerMethodField()
     valore_aura_alchimia = serializers.SerializerMethodField()
+    puo_creare_consumabili_alchimia = serializers.SerializerMethodField()
+    alchimia_consumabili_blocco = serializers.SerializerMethodField()
     max_livello_creazione = serializers.SerializerMethodField()
     bonus_caratteristica_contestuali = serializers.SerializerMethodField()
 
@@ -4090,6 +4092,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'attivate_possedute', 'infusioni_possedute', 'tessiture_possedute',
             'cerimoniali_posseduti',
             'consumabili', 'creazioni_consumabili_in_corso', 'creazioni_consumabili_pronte', 'valore_aura_alchimia',
+            'puo_creare_consumabili_alchimia', 'alchimia_consumabili_blocco',
             'max_livello_creazione',
             'bonus_caratteristica_contestuali',
             'movimenti_credito',
@@ -4408,6 +4411,22 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         from .models import Abilita
         return personaggio.max_livello_creazione(ambito=Abilita.AMBITO_CREAZIONE_CONSUMABILE)
 
+    def _gate_alchimia_consumabili(self, personaggio):
+        cached = getattr(self, "_gate_alchimia_cache", None)
+        if cached is None or cached[0] != personaggio.pk:
+            from personaggi.consumabili_evento import esito_creazione_consumabile_alchimia
+
+            ok, msg = esito_creazione_consumabile_alchimia(personaggio)
+            cached = (personaggio.pk, ok, msg)
+            self._gate_alchimia_cache = cached
+        return cached[1], cached[2]
+
+    def get_puo_creare_consumabili_alchimia(self, personaggio):
+        return self._gate_alchimia_consumabili(personaggio)[0]
+
+    def get_alchimia_consumabili_blocco(self, personaggio):
+        return self._gate_alchimia_consumabili(personaggio)[1]
+
     def get_max_livello_creazione(self, personaggio):
         """Limiti creazione per UI (proposte / craft): max(aura, sblocchi abilità T3)."""
         from .models import Abilita, Punteggio, AURA
@@ -4583,6 +4602,9 @@ OFFLINE_GAME_STATE_KEYS = (
     "consumabili",
     "creazioni_consumabili_in_corso",
     "creazioni_consumabili_pronte",
+    "valore_aura_alchimia",
+    "puo_creare_consumabili_alchimia",
+    "alchimia_consumabili_blocco",
     "lavori_pendenti_count",
     "impostazioni_ui",
     "slot_capacities",
@@ -5249,7 +5271,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'razza_abilita',
             'scheda_modifica_libera', 'punteggi_base', 'modelli_aura', 'can_edit_razza',
             'movimenti_credito', 'movimenti_pc',
-            'oggetti_inventario', 'eventi_partecipati', 'watch_binding', 'impostazioni_ui',
+            'oggetti_inventario', 'consumabili', 'eventi_partecipati', 'watch_binding', 'impostazioni_ui',
             'foto_trucco_url', 'foto_outfit_url', 'foto_trucco', 'foto_outfit',
             'social_profile',
             'png_tag_instafame', 'png_chiamabile',
@@ -5414,6 +5436,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
         return detail.get_risorse_pool_ui(obj)
 
     oggetti_inventario = serializers.SerializerMethodField()
+    consumabili = serializers.SerializerMethodField()
     eventi_partecipati = serializers.SerializerMethodField()
     watch_binding = serializers.SerializerMethodField()
     impostazioni_ui = serializers.JSONField(required=False, allow_null=True)
@@ -5448,6 +5471,11 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
                 'potenziamenti': per_host.get(oggetto.id, []),
             })
         return rows
+
+    def get_consumabili(self, obj):
+        from personaggi.staff_consumabili import serializza_consumabili_staff
+
+        return serializza_consumabili_staff(obj)
 
     def get_eventi_partecipati(self, obj):
         eventi = obj.eventi_partecipati.all().order_by('-data_inizio')[:30]
