@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useCharacter } from '../CharacterContext';
-import { staffUpdateOggetto, staffCreateOggetto, staffGetClassiOggetto, getPersonaggiList } from '../../api';
+import { staffUpdateOggetto, staffCreateOggetto, staffGetClassiOggetto, getPersonaggiList, staffGetAbilitaListAll } from '../../api';
 import CharacteristicInline from './inlines/CharacteristicInline';
 import StatBaseInline from './inlines/StatBaseInline';
 import StatModInline from './inlines/StatModInline';
@@ -12,6 +12,14 @@ import SearchableSelect from './SearchableSelect';
 import SezioniCondizionaliEditor from './inlines/SezioniCondizionaliEditor';
 import { caratteristichePersonaggio } from '../../lib/caratteristicheScheda';
 import { staffEditorShellClass, StaffEditorHeader } from '../../staff/StaffToolShell';
+import { AbilitaConferiteEditor, BonusContestoEditor } from './inlines/BonusContestoEditor';
+import {
+  bonusContestualiCompleti,
+  normalizzaAbilitaConferite,
+  normalizzaBonusContestuali,
+  serializeAbilitaConferite,
+  serializeBonusContestuali,
+} from '../../lib/bonusContesto';
 
 const TIPO_CHOICES = [
     {id:'FIS', nome:'Fisico'}, {id:'MAT', nome:'Materia'}, {id:'MOD', nome:'Mod'},
@@ -37,12 +45,14 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState({ type: 'success', message: '' });
   const [isFormulaBuilderOpen, setIsFormulaBuilderOpen] = useState(false);
+  const [abilitaOptions, setAbilitaOptions] = useState([]);
 
   const [formData, setFormData] = useState(initialData || {
     nome: '', testo: '', tipo_oggetto: 'FIS', aura: null, classe_oggetto: null,
     is_tecnologico: false, is_equipaggiato: false, is_pesante: false,
     inventario_corrente: null,
-    attacco_base: '', slot_fisici_possibili: [], componenti: [], statistiche_base: [], statistiche: [], sezioni_condizionali: []
+    attacco_base: '', slot_fisici_possibili: [], componenti: [], statistiche_base: [], statistiche: [], sezioni_condizionali: [],
+    bonus_caratteristica_contestuali: [], abilita_conferite: [],
   });
 
   useEffect(() => {
@@ -52,6 +62,8 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
       ...initialData,
       slot_fisici_possibili: parseSlots(initialData.slot_fisici_possibili),
       sezioni_condizionali: initialData.sezioni_condizionali || [],
+      bonus_caratteristica_contestuali: normalizzaBonusContestuali(initialData.bonus_caratteristica_contestuali),
+      abilita_conferite: normalizzaAbilitaConferite(initialData.abilita_conferite),
     }));
   }, [initialData]);
 
@@ -64,6 +76,8 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
             ]);
             setClassi(classiData || []);
             setPersonaggi(pgsData || []);
+            const abilita = await staffGetAbilitaListAll(onLogout);
+            setAbilitaOptions(abilita || []);
         } catch (error) {
             console.error("Errore caricamento dati editor:", error);
         }
@@ -94,6 +108,10 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
   const handleSave = async (mode = 'save_close') => {
     try {
       setSaving(true);
+      if (!bonusContestualiCompleti(formData.bonus_caratteristica_contestuali)) {
+        setStatus({ type: 'warning', message: 'Ogni bonus contestuale deve valere per almeno un ambito.' });
+        return;
+      }
       const getId = (item) => item?.id || item || null;
       
       const cleanAndDeduplicate = (list, keyField, options = {}) => {
@@ -148,6 +166,8 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
               })
               .filter(Boolean),
           })),
+          bonus_caratteristica_contestuali: serializeBonusContestuali(formData.bonus_caratteristica_contestuali),
+          abilita_conferite: serializeAbilitaConferite(formData.abilita_conferite),
       };
 
       const isSaveAsNew = mode === 'save_as_new';
@@ -163,6 +183,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
           nome: '', testo: '', tipo_oggetto: 'FIS', aura: null, classe_oggetto: null,
           is_tecnologico: false, is_equipaggiato: false, is_pesante: false,
           inventario_corrente: null, attacco_base: '', slot_fisici_possibili: [], componenti: [], statistiche_base: [], statistiche: [], sezioni_condizionali: [],
+          bonus_caratteristica_contestuali: [], abilita_conferite: [],
         });
         setStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
       }
@@ -326,6 +347,18 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
         statsOptions={punteggiList.filter(p => p.tipo === 'ST')}
         onLogout={onLogout}
         onChange={(sezioni_condizionali) => setFormData({ ...formData, sezioni_condizionali })}
+      />
+
+      <BonusContestoEditor
+        rows={formData.bonus_caratteristica_contestuali || []}
+        onChange={(bonus_caratteristica_contestuali) => setFormData({ ...formData, bonus_caratteristica_contestuali })}
+        caratteristiche={caratteristichePersonaggio(punteggiList)}
+        aure={(punteggiList || []).filter((p) => p.tipo === 'AU')}
+      />
+      <AbilitaConferiteEditor
+        rows={formData.abilita_conferite || []}
+        onChange={(abilita_conferite) => setFormData({ ...formData, abilita_conferite })}
+        abilitaOptions={abilitaOptions}
       />
 
       <CharacteristicInline items={formData.componenti} options={caratteristichePersonaggio(punteggiList)} onAdd={() => setFormData({...formData, componenti: [...formData.componenti, {caratteristica:'', valore:1}]})} onChange={(i,f,v) => {const n=[...formData.componenti]; n[i][f]=v; setFormData({...formData, componenti:n});}} onRemove={i => setFormData({...formData, componenti: formData.componenti.filter((_,idx)=>idx!==i)})} />

@@ -371,7 +371,8 @@ class GestioneOggettiService:
     def _pg_ha_mix_materia_mod(personaggio) -> bool:
         if not personaggio:
             return False
-        return personaggio.abilita_possedute.filter(permette_mix_materia_mod=True).exists()
+        from personaggi.bonus_contesto import ha_flag_abilita
+        return ha_flag_abilita(personaggio, permette_mix_materia_mod=True)
 
     @staticmethod
     def verifica_compatibilita_hardware(host: Oggetto, componente: Oggetto, personaggio=None):
@@ -716,6 +717,9 @@ class GestioneOggettiService:
                         obj_stat.limit_a_aure.set(eff.limit_a_aure.all())
                         obj_stat.limit_a_elementi.set(eff.limit_a_elementi.all())
         
+        from personaggi.bonus_contesto import copia_effetti_su_oggetto
+        copia_effetti_su_oggetto(infusione, nuovo_oggetto)
+
         if proprietario is not None:
             nuovo_oggetto.sposta_in_inventario(proprietario)
         return nuovo_oggetto
@@ -1182,7 +1186,10 @@ class GestioneCraftingService:
                 return False, f"Aura secondaria insufficiente: {aura_secondaria.nome} ({val_secondaria}/{livello})."
 
         # Verifica caratteristiche richieste dai componenti/mattoni formula.
-        stats_forgiatore = forgiatore.caratteristiche_base
+        # Il bonus contestuale delle infusioni conta; i derivati (PV, chakra) no.
+        stats_forgiatore = forgiatore.caratteristiche_per_contesto(
+            "INF", infusione.aura_richiesta, infusione.aura_infusione
+        )
         for comp in infusione.componenti.select_related('caratteristica').all():
             nome_stat = comp.caratteristica.nome
             val_richiesto = comp.valore
@@ -1365,6 +1372,9 @@ class GestioneCraftingService:
                     mod_obj.tipo_modificatore = mod_link.tipo_modificatore
                 mod_obj.save(update_fields=['valore', 'tipo_modificatore'])
 
+        from personaggi.bonus_contesto import copia_effetti_su_oggetto
+        copia_effetti_su_oggetto(template, nuovo_oggetto)
+
         nuovo_oggetto.sposta_in_inventario(personaggio)
         return nuovo_oggetto
 
@@ -1400,10 +1410,14 @@ class GestioneCraftingService:
                 solo_oggetto_ospitante=mod_link.solo_oggetto_ospitante,
             )
 
+        from personaggi.bonus_contesto import copia_effetti_su_oggetto
+        copia_effetti_su_oggetto(template, oggetto)
+
     @staticmethod
     def applica_template_a_istanze(template, *, dry_run=False):
         """
         Propaga il modello OggettoBase a tutte le istanze collegate (oggetto_base_generatore).
+        Aggiorna anche bonus caratteristica contestuali e abilità conferite del template.
         Non tocca stato runtime: equipaggiamento, cariche, costo_acquisto, potenziamenti montati, inventario.
         """
         qs = Oggetto.objects.filter(oggetto_base_generatore=template)

@@ -21,6 +21,7 @@ import { OfflineConsultBanner } from './OfflineConsultBanner';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import StaffCompitiWidget from './StaffCompitiWidget';
 import ContrattiSchedaPresenza from './ContrattiSchedaPresenza';
+import { didascalieBonus } from '../lib/bonusContesto';
 
 // --- Componenti Helper ---
 
@@ -133,6 +134,7 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
     punti_caratteristica,
     prestigio,
     punteggi_base,
+    bonus_caratteristica_contestuali,
     statistiche_base_dict,
     modificatori_calcolati, 
     abilita_possedute, 
@@ -644,16 +646,25 @@ const CharacterSheet = memo(({ data, onLogout, offlineBanner = null }) => {
         <div className="mb-6">
           <h3 className="text-2xl font-semibold mb-3 text-gray-200 border-b border-gray-700 pb-2">Caratteristiche</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {caratteristiche.map(({ punteggio, valore }) => (
+            {caratteristiche.map(({ punteggio, valore }) => {
+                const note = didascalieBonus(bonus_caratteristica_contestuali).get(punteggio.nome) || [];
+                return (
+                <div key={punteggio.id} className="min-w-0">
                 <PunteggioDisplay
-                  key={punteggio.id} 
                   punteggio={punteggio} 
                   value={valore}         
                   displayText="name"   
                   iconType="inv_circle"
                   size="m"
                 />
-            ))}
+                {note.length > 0 && (
+                  <p className="mt-1 text-[11px] leading-snug text-amber-200/90">
+                    {note.join(' · ')}
+                  </p>
+                )}
+                </div>
+                );
+            })}
           </div>
         </div>
       )}

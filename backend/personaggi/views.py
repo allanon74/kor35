@@ -3460,7 +3460,9 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
 
         # CHECK CARATTERISTICHE (tessiture / infusioni; mai per cerimoniali)
         if proposta.tipo in ('TES', 'INF'):
-            punteggi_pg = personaggio.caratteristiche_base
+            punteggi_pg = personaggio.caratteristiche_per_contesto(
+                proposta.tipo, proposta.aura, proposta.aura_infusione
+            )
             for comp in componenti:
                 caratt = comp.caratteristica
                 val_richiesto = comp.valore

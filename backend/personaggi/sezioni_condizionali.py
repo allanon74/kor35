@@ -149,6 +149,7 @@ def contesto_formula_tessitura(item, **extra):
         "aura": getattr(item, "aura_richiesta", None),
         "elemento": extra.pop("elemento", getattr(item, "elemento_principale", None)),
         "formula_kind": FORMULA_SCOPE_WEAVE,
+        "tipo_tecnica": "TES",
         "allow_implicit_formula_source": False,
         "formula_builder_selezioni": getattr(item, "formula_builder_selezioni", None) or {},
         "attack_formula_template": getattr(item, "formula", None),
