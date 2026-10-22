@@ -189,7 +189,8 @@ Apri in Studio **`C:\dev\kor35-app\android`** (non `C:\dev\kor35-android` né `\
 
 | Comando | Descrizione |
 |---------|-------------|
-| `make backup-db ENV=prod` | Dump DB + rotazione |
+| `make backup-db ENV=prod` | Dump DB + rotazione (ultimi 10 dump) |
+| `sudo make install-prod-db-backup ENV=prod` | Su prod: abilita timer systemd backup DB alle 06:00 (`RUN_NOW=1` per test immediato) |
 | `make prod-turn-prepare` | Secret HMAC + ufw TURN sul droplet (chiamate vocali fallback) |
 | `make wiki-staff-sync ENV=dev-home` | Aggiorna pagine Wiki staff da `docs/wiki/staff/` |
 | `make wiki-staff-sync ENV=dev-home WIKI_STAFF_FORCE=1` | Sovrascrive contenuto Wiki staff da repo |
