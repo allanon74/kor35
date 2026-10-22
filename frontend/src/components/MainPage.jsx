@@ -1292,6 +1292,10 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     );
   }, [
     activeTab,
+    // Senza questa dipendenza il click su Slot/Innesti/Serie/Consumabili
+    // aggiorna solo l'URL: il contenuto resta fermo finché non cambia un'altra
+    // dipendenza (es. il poll Tasks, ogni 15s, o mai se il modulo è spento).
+    inventarioVista,
     selectedCharacterId,
     isStealingOnCooldown,
     cooldownTimer,
