@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { costoInvioStimato } from './costoProposta';
+import { costoInvioStimato, dettaglioCostoInvio, messaggioConfermaInvio } from './costoProposta';
 
 const auraCerimoniale = {
   costi_stat_meta: {
@@ -33,5 +33,19 @@ describe('costoInvioStimato', () => {
       char: { punteggi_base: {}, modificatori_calcolati: {} },
       quantita: 5,
     })).toBe(500);
+  });
+
+  it('legge la scheda anche da statistiche_base_dict e scala solo il delta già versato', () => {
+    const dettaglio = dettaglioCostoInvio({
+      tipo: 'CER',
+      aura: auraCerimoniale,
+      char: { statistiche_base_dict: { invio_cer: 2 }, modificatori_calcolati: {} },
+      quantita: 5,
+      giaPagato: 4,
+    });
+    expect(dettaglio.totale).toBe(10);
+    expect(dettaglio.daAddebitare).toBe(6);
+    expect(messaggioConfermaInvio(dettaglio)).toContain('all\'invio 6 CR');
+    expect(messaggioConfermaInvio(dettaglio)).not.toContain('500');
   });
 });

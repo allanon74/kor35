@@ -75,6 +75,10 @@ async function flush() {
 describe('ProposalEditorModal', () => {
   afterEach(() => {
     document.body.innerHTML = '';
+    personaggio.punteggi_base = { Fuoco: 3, Destrezza: 4 };
+    delete personaggio.modificatori_calcolati;
+    delete personaggio.statistiche_primarie;
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -122,6 +126,77 @@ describe('ProposalEditorModal', () => {
       document.body.querySelector('[aria-label="Chiudi Soffio"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(document.body.textContent).not.toContain('Scalda il metallo del giocatore.');
+    view.unmount();
+  });
+
+  it('anteprima cerimoniale: statistica di scheda per mattone, non 100 fissi', async () => {
+    personaggio.punteggi_base = {
+      Arcana: 3,
+      Destrezza: 4,
+      Forza: 4,
+      'costo invio cerimoniale': 2,
+    };
+    personaggio.modificatori_calcolati = {};
+    personaggio.statistiche_primarie = [{ sigla: 'CCO', valore_corrente: 5 }];
+
+    api.getAllPunteggi.mockResolvedValue([
+      {
+        id: 20,
+        tipo: 'AU',
+        nome: 'Arcana',
+        sigla: 'AAR',
+        permette_cerimoniali: true,
+        costi_stat_meta: {
+          stat_costo_invio_proposta_cerimoniale: {
+            nome: 'costo invio cerimoniale',
+            sigla: 'CIC',
+            parametro: 'invio_cer',
+            valore_base_predefinito: 100,
+          },
+        },
+      },
+      { id: 3, tipo: 'CA', nome: 'Destrezza', sigla: 'DES' },
+      { id: 5, tipo: 'CA', nome: 'Forza', sigla: 'FOR' },
+    ]);
+    api.getMattoniAura.mockResolvedValue({ mattoni: [], obbligatorie_caratteristica_ids: [] });
+
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const view = mount(createElement(ProposalEditorModal, {
+      type: 'Cerimoniale',
+      onClose: () => {},
+      onRefresh: () => {},
+      proposal: {
+        id: 204,
+        stato: 'BOZZA',
+        nome: 'Marchio di guerra',
+        aura: 20,
+        livello_proposto: 2,
+        mattoni_generici: 3,
+        costo_invio_pagato: 4,
+        prerequisiti: 'Un segno',
+        svolgimento: 'Il rito',
+        effetto: 'Il marchio',
+        componenti: [
+          { caratteristica: { id: 3 }, valore: 1 },
+          { caratteristica: { id: 5 }, valore: 1 },
+        ],
+      },
+    }));
+    await flush();
+
+    expect(document.body.textContent).toContain('Costo Invio: 10 CR');
+    expect(document.body.textContent).toContain('2 CR × 5 mattoni');
+    expect(document.body.textContent).toContain("all'invio 6 CR");
+    expect(document.body.textContent).not.toContain('500');
+
+    const invia = [...document.body.querySelectorAll('button')].find((btn) => btn.textContent.includes('Invia allo Staff'));
+    expect(invia).toBeTruthy();
+    act(() => {
+      invia.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("all'invio 6 CR"));
+    expect(api.sendProposta).not.toHaveBeenCalled();
+
     view.unmount();
   });
 });

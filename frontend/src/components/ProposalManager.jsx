@@ -76,7 +76,7 @@ const ProposalManager = ({ type, onClose }) => { // type = 'Infusione' | 'Tessit
                 <div className="p-4 sm:p-6 pr-14 border-b border-gray-700 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                     <div>
                         <h2 className="text-xl sm:text-2xl font-bold text-white">Le tue proposte di {type}</h2>
-                        <p className="text-gray-400 text-sm mt-1">Le bozze si modificano e si ripresentano. L&apos;invio costa crediti (10 CR per livello, salvo l&apos;aura).</p>
+                        <p className="text-gray-400 text-sm mt-1">Le bozze si modificano e si ripresentano. L&apos;invio costa i crediti della statistica indicata sull&apos;aura.</p>
                     </div>
                     <button 
                         onClick={handleCreateNew}

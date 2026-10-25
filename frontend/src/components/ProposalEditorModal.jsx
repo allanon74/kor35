@@ -16,7 +16,7 @@ import { caratteristichePersonaggio } from '../lib/caratteristicheScheda';
 import { auraDelegaMattoni, etichettaMattone, paletteAuraId } from '../lib/paletteMattoni';
 import { propostaModificabile } from '../lib/propostaTecnicaStato';
 import { sommaBonus } from '../lib/bonusContesto';
-import { costoInvioStimato } from '../lib/costoProposta';
+import { dettaglioCostoInvio, etichettaDeltaInvio, messaggioConfermaInvio } from '../lib/costoProposta';
 import NotePropostaElenco from './NotePropostaElenco';
 import { MattoneInfoButton } from './MattoneDescrizioneModal';
 import { haNoteStaff } from '../lib/propostaTecnicaStato';
@@ -233,12 +233,14 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
         return Math.min(auraLimit, ccoVal);
     }, [isCerimoniale, auraLimit, char]);
 
-    const estimatedCost = costoInvioStimato({
+    const costoInvio = dettaglioCostoInvio({
         tipo: isCerimoniale ? 'CER' : isInfusion ? 'INF' : 'TES',
         aura: primariaSelezionata,
         char,
         quantita: isCerimoniale ? totaleMattoniMinimi : currentTotalCount,
+        giaPagato: proposal?.costo_invio_pagato || 0,
     });
+    const estimatedCost = costoInvio.totale;
 
     const paletteAuraNumericId = auraIdForBricks ? Number(auraIdForBricks) : null;
     const paletteAuraMeta =
@@ -378,7 +380,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
 
         setIsSaving(true);
         try {
-            if (send && !window.confirm("Confermi l'invio in valutazione? Lo staff può approvarla oppure rimandarla in bozza con delle note.")) {
+            if (send && !window.confirm(messaggioConfermaInvio(costoInvio))) {
                 setIsSaving(false); return;
             }
             let targetId = proposal?.id;
@@ -674,7 +676,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                     {/* SEZIONE MATTONI / CARATTERISTICHE (COMUNE) */}
                     {selectedAuraId && (
                         <div className="space-y-4 pt-4 border-t border-gray-800">
-                            <div className="flex justify-between items-end px-1">
+                            <div className="flex flex-wrap justify-between items-end gap-2 px-1">
                                 <div>
                                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">
                                         {availableBricks.length > 0
@@ -685,7 +687,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                     </label>
                                     <p className="text-[10px] text-gray-600 mt-0.5">Componi la struttura del potere selezionando i componenti.</p>
                                 </div>
-                                <div className="text-right">
+                                <div className="text-right min-w-0 max-w-full">
                                     {isCerimoniale ? (
                                         <span className="text-[10px] font-bold block uppercase mb-1 text-gray-400">
                                             Totale minimi: {totaleMattoniMinimi} · suggerito L{livelloSuggerito}
@@ -696,6 +698,15 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                         </span>
                                     )}
                                     <span className="text-sm font-black text-yellow-500 font-mono tracking-tighter italic">Costo Invio: {estimatedCost} CR</span>
+                                    <span className="block text-[10px] font-bold text-gray-500 not-italic normal-case tracking-normal break-words">
+                                        {costoInvio.unita} CR × {costoInvio.quantita} {isCerimoniale ? 'mattoni' : 'liv.'}
+                                        {costoInvio.giaPagato > 0 && (
+                                            <>
+                                                {' '}· già versati {costoInvio.giaPagato}
+                                                {' '}· {etichettaDeltaInvio(costoInvio.daAddebitare)}
+                                            </>
+                                        )}
+                                    </span>
                                 </div>
                             </div>
 
