@@ -26,11 +26,75 @@ def applica_sconto_rct_tecnica(personaggio, costo_base: int) -> int:
     return costo_base
 
 
+def costo_unitario_stat_personaggio(personaggio, statistica, *, fallback: int = 0) -> int:
+    """
+    Crediti per unità letti dalla statistica agganciata all'aura.
+
+    Vince il valore di scheda del personaggio. Se è zero, si usa
+    ``valore_base_predefinito`` della statistica e solo dopo il fallback.
+    Non usare una costante fissa (es. 100) al posto della statistica configurata.
+    """
+    if statistica is None:
+        return int(fallback or 0)
+    valore = int(personaggio.get_valore_statistica(statistica.sigla) or 0)
+    if valore > 0:
+        return valore
+    catalogo = int(getattr(statistica, "valore_base_predefinito", 0) or 0)
+    if catalogo > 0:
+        return catalogo
+    return int(fallback or 0)
+
+
+def _stat_e_quantita_proposta(proposta, livello_finale, campi_stat):
+    """Statistica aura e moltiplicatore (mattoni minimi per i cerimoniali, livello altrimenti)."""
+    from .models import TIPO_PROPOSTA_CERIMONIALE
+
+    aura = proposta.aura
+    stat_costo = getattr(aura, campi_stat.get(proposta.tipo, ""), None)
+    if proposta.tipo == TIPO_PROPOSTA_CERIMONIALE:
+        quantita = int(proposta.totale_mattoni_minimi() or 0)
+    else:
+        if livello_finale is None:
+            livello_finale = proposta.livello
+        quantita = int(livello_finale or 0)
+    return stat_costo, quantita
+
+
+def calcola_costo_invio_proposta(personaggio, proposta) -> int:
+    """
+    Costo invio proposta: quantità × statistica indicata sull'aura.
+
+    - Cerimoniale: ``stat_costo_invio_proposta_cerimoniale`` × mattoni minimi.
+    - Infusione / tessitura: la statistica di invio dell'aura × livello.
+    """
+    from .models import (
+        COSTO_DEFAULT_INVIO_PROPOSTA,
+        TIPO_PROPOSTA_CERIMONIALE,
+        TIPO_PROPOSTA_INFUSIONE,
+        TIPO_PROPOSTA_TESSITURA,
+    )
+
+    stat_costo, quantita = _stat_e_quantita_proposta(
+        proposta,
+        None,
+        {
+            TIPO_PROPOSTA_INFUSIONE: "stat_costo_invio_proposta_infusione",
+            TIPO_PROPOSTA_TESSITURA: "stat_costo_invio_proposta_tessitura",
+            TIPO_PROPOSTA_CERIMONIALE: "stat_costo_invio_proposta_cerimoniale",
+        },
+    )
+    unita = costo_unitario_stat_personaggio(
+        personaggio, stat_costo, fallback=COSTO_DEFAULT_INVIO_PROPOSTA
+    )
+    return int(unita) * int(quantita)
+
+
 def calcola_costo_creazione_proposta(personaggio, proposta, livello_finale=None) -> Tuple[int, int]:
     """
-    Costo creazione da proposta approvata: (pieno, effettivo con sconto RCT).
+    Costo creazione (forgiatura della tecnica) da proposta approvata: (pieno, effettivo con sconto RCT).
+
     - Infusioni/tessiture: moltiplicatore = livello (somma mattoni) o override `livello_finale`.
-    - Cerimoniali: moltiplicatore = totale mattoni minimi (specifici + generici).
+    - Cerimoniali: ``stat_costo_creazione_cerimoniale`` × totale mattoni minimi.
     """
     from .models import (
         TIPO_PROPOSTA_CERIMONIALE,
@@ -38,27 +102,17 @@ def calcola_costo_creazione_proposta(personaggio, proposta, livello_finale=None)
         TIPO_PROPOSTA_TESSITURA,
     )
 
-    aura = proposta.aura
-    stat_costo = None
-    if proposta.tipo == TIPO_PROPOSTA_INFUSIONE:
-        stat_costo = aura.stat_costo_creazione_infusione
-    elif proposta.tipo == TIPO_PROPOSTA_TESSITURA:
-        stat_costo = aura.stat_costo_creazione_tessitura
-    elif proposta.tipo == TIPO_PROPOSTA_CERIMONIALE:
-        stat_costo = aura.stat_costo_creazione_cerimoniale
-
-    if proposta.tipo == TIPO_PROPOSTA_CERIMONIALE:
-        quantita = int(proposta.totale_mattoni_minimi() or 0)
-    else:
-        if livello_finale is None:
-            livello_finale = proposta.livello
-        quantita = int(livello_finale or 0)
-
-    costo_unitario = 0
-    if stat_costo:
-        costo_unitario = personaggio.get_valore_statistica(stat_costo.sigla)
-
-    costo_pieno = int(costo_unitario) * quantita
+    stat_costo, quantita = _stat_e_quantita_proposta(
+        proposta,
+        livello_finale,
+        {
+            TIPO_PROPOSTA_INFUSIONE: "stat_costo_creazione_infusione",
+            TIPO_PROPOSTA_TESSITURA: "stat_costo_creazione_tessitura",
+            TIPO_PROPOSTA_CERIMONIALE: "stat_costo_creazione_cerimoniale",
+        },
+    )
+    costo_unitario = costo_unitario_stat_personaggio(personaggio, stat_costo, fallback=0)
+    costo_pieno = int(costo_unitario) * int(quantita)
     costo_effettivo = applica_sconto_rct_tecnica(personaggio, costo_pieno)
     return costo_pieno, costo_effettivo
 

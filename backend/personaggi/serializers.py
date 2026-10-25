@@ -1188,6 +1188,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     configurazione_livelli = ConfigurazioneLivelloAuraSerializer(many=True, read_only=True)
     tratti_disponibili = serializers.SerializerMethodField()
     formula = serializers.SerializerMethodField()
+    costi_stat_meta = serializers.SerializerMethodField()
 
     class Meta:
         model = Punteggio
@@ -1209,6 +1210,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'stat_costo_acquisto_infusione', 'stat_costo_acquisto_tessitura', 'stat_costo_acquisto_cerimoniale',
             'stat_costo_invio_proposta_infusione', 'stat_costo_invio_proposta_tessitura', 'stat_costo_invio_proposta_cerimoniale',
             'stat_costo_forgiatura', 'stat_tempo_forgiatura',
+            'costi_stat_meta',
             
             # --- CAMPI AGGIORNATI (Nuova struttura) ---
             'produce_aumenti', 
@@ -1226,6 +1228,39 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             return bool(obj.statistica.formula)
         except Exception:
             return False
+
+    def get_costi_stat_meta(self, obj):
+        """Sigla e nome delle statistiche di costo agganciate all'aura (per il listino giocatore)."""
+        if getattr(obj, "tipo", None) != AURA:
+            return None
+        from .models import statistica_chiave_modificatore
+
+        campi = (
+            "stat_costo_invio_proposta_cerimoniale",
+            "stat_costo_creazione_cerimoniale",
+            "stat_costo_acquisto_cerimoniale",
+            "stat_costo_invio_proposta_infusione",
+            "stat_costo_invio_proposta_tessitura",
+            "stat_costo_creazione_infusione",
+            "stat_costo_creazione_tessitura",
+            "stat_costo_acquisto_infusione",
+            "stat_costo_acquisto_tessitura",
+            "stat_costo_forgiatura",
+        )
+        out = {}
+        for campo in campi:
+            stat = getattr(obj, campo, None)
+            if stat is None:
+                out[campo] = None
+                continue
+            out[campo] = {
+                "id": stat.id,
+                "sigla": stat.sigla,
+                "nome": stat.nome,
+                "parametro": statistica_chiave_modificatore(stat),
+                "valore_base_predefinito": int(stat.valore_base_predefinito or 0),
+            }
+        return out
         
     def get_produce_mod(self, obj):
         # Logica: È un mod se produce potenziamenti ed è tecnologico (es. nome='Mod' o spegne a zero cariche)
@@ -2397,6 +2432,8 @@ class CerimonialeSerializer(serializers.ModelSerializer):
     componenti = serializers.SerializerMethodField()
     TestoFormattato = serializers.CharField(read_only=True)
     costo_crediti = serializers.SerializerMethodField()
+    costo_pieno = serializers.SerializerMethodField()
+    costo_effettivo = serializers.SerializerMethodField()
     totale_mattoni_minimi = serializers.SerializerMethodField()
     livello_suggerito = serializers.IntegerField(read_only=True)
 
@@ -2407,7 +2444,8 @@ class CerimonialeSerializer(serializers.ModelSerializer):
             'mattoni_generici', 'totale_mattoni_minimi',
             'aura_richiesta',
             'prerequisiti', 'svolgimento', 'effetto',
-            'TestoFormattato', 'costo_crediti', 'componenti', 'non_acquistabile'
+            'TestoFormattato', 'costo_crediti', 'costo_pieno', 'costo_effettivo',
+            'componenti', 'non_acquistabile'
         )
 
     def get_componenti(self, obj):
@@ -2417,11 +2455,22 @@ class CerimonialeSerializer(serializers.ModelSerializer):
         return obj.totale_mattoni_minimi()
 
     def get_costo_crediti(self, obj):
+        return self.get_costo_pieno(obj)
+
+    def get_costo_pieno(self, obj):
         from personaggi.acquisto_costi import calcola_costo_pieno_tecnica_acquisto
 
         personaggio = self.context.get('personaggio')
         if personaggio:
             return calcola_costo_pieno_tecnica_acquisto(personaggio, obj)
+        return obj.costo_crediti
+
+    def get_costo_effettivo(self, obj):
+        from personaggi.acquisto_costi import calcola_costo_tecnica_acquisto
+
+        personaggio = self.context.get('personaggio')
+        if personaggio:
+            return calcola_costo_tecnica_acquisto(personaggio, obj)
         return obj.costo_crediti
 
 def _qr_fields_for_avista(instance):

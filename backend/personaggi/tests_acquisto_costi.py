@@ -11,6 +11,8 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from personaggi.acquisto_costi import (
+    calcola_costo_creazione_proposta,
+    calcola_costo_invio_proposta,
     calcola_costo_pieno_tecnica_acquisto,
     calcola_costo_tecnica_acquisto,
     rimborso_crediti_da_pivot,
@@ -306,3 +308,152 @@ class InfusioneSerializerRealizzazioneTest(SimpleTestCase):
             self.assertIsNone(serializer.get_costo_realizzazione(infusione))
             self.assertIsNone(serializer.get_tempo_realizzazione_secondi(infusione))
             mock_calcolo.assert_not_called()
+
+
+class CostiCerimonialeDaStatisticaAuraTest(TestCase):
+    """
+    Invio, creazione e acquisto di un cerimoniale usano la statistica
+    indicata sull'aura (valore di scheda), non 100 crediti a mattone.
+    """
+
+    def setUp(self):
+        from personaggi.models import (
+            Cerimoniale,
+            CerimonialeCaratteristica,
+            PropostaTecnica,
+            PropostaTecnicaCaratteristica,
+            TIPO_PROPOSTA_CERIMONIALE,
+        )
+
+        self.user = User.objects.create_user(username="pg_cer_costi", password="x")
+        self.tipologia = TipologiaPersonaggio.objects.create(
+            nome="Std cer costi",
+            crediti_iniziali=Decimal("1000"),
+            caratteristiche_iniziali=20,
+        )
+        self.campagna = Campagna.objects.create(nome="Camp cer costi", slug="camp-cer-costi")
+        self.personaggio = Personaggio.objects.create(
+            nome="EdwinTest",
+            proprietario=self.user,
+            tipologia=self.tipologia,
+            campagna=self.campagna,
+        )
+        self.stat_invio = Statistica.objects.create(
+            nome="costo invio cerimoniale",
+            sigla="CIC",
+            parametro="invio_cer",
+            tipo="ST",
+            is_costo=True,
+            valore_base_predefinito=100,
+        )
+        self.stat_creazione = Statistica.objects.create(
+            nome="costo creazione cerimoniale",
+            sigla="CCC",
+            parametro="creaz_cer",
+            tipo="ST",
+            is_costo=True,
+            valore_base_predefinito=100,
+        )
+        self.stat_acquisto = Statistica.objects.create(
+            nome="costo acquisto cerimoniale",
+            sigla="CAC",
+            parametro="acq_cer",
+            tipo="ST",
+            is_costo=True,
+            valore_base_predefinito=100,
+        )
+        PersonaggioStatisticaBase.objects.create(
+            personaggio=self.personaggio, statistica=self.stat_invio, valore_base=2
+        )
+        PersonaggioStatisticaBase.objects.create(
+            personaggio=self.personaggio, statistica=self.stat_creazione, valore_base=8
+        )
+        PersonaggioStatisticaBase.objects.create(
+            personaggio=self.personaggio, statistica=self.stat_acquisto, valore_base=10
+        )
+        self.aura = Punteggio.objects.create(
+            nome="Aura Arcana Test",
+            sigla="AAR",
+            tipo=AURA,
+            permette_cerimoniali=True,
+            stat_costo_invio_proposta_cerimoniale=self.stat_invio,
+            stat_costo_creazione_cerimoniale=self.stat_creazione,
+            stat_costo_acquisto_cerimoniale=self.stat_acquisto,
+        )
+        self.car = Punteggio.objects.create(nome="Forza Test", sigla="FOR", tipo=CARATTERISTICA)
+        self.proposta = PropostaTecnica.objects.create(
+            personaggio=self.personaggio,
+            tipo=TIPO_PROPOSTA_CERIMONIALE,
+            nome="Marchio di guerra",
+            descrizione="x",
+            aura=self.aura,
+            livello_proposto=2,
+            mattoni_generici=3,
+        )
+        PropostaTecnicaCaratteristica.objects.create(
+            proposta=self.proposta, caratteristica=self.car, valore=2
+        )
+        self.cerimoniale = Cerimoniale.objects.create(
+            nome="Marchio pubblicato",
+            aura_richiesta=self.aura,
+            campagna=self.campagna,
+            liv=2,
+            mattoni_generici=3,
+        )
+        CerimonialeCaratteristica.objects.create(
+            cerimoniale=self.cerimoniale, caratteristica=self.car, valore=2
+        )
+
+    def test_invio_e_creazione_e_acquisto_non_usano_cento_a_mattone(self):
+        self.assertEqual(self.proposta.totale_mattoni_minimi(), 5)
+        # 5 × valore di scheda, non 5 × 100
+        self.assertEqual(calcola_costo_invio_proposta(self.personaggio, self.proposta), 10)
+        pieno, effettivo = calcola_costo_creazione_proposta(self.personaggio, self.proposta)
+        self.assertEqual(pieno, 40)
+        self.assertEqual(effettivo, 40)
+        self.assertEqual(self.cerimoniale.costo_crediti, 500)
+        self.assertEqual(
+            calcola_costo_pieno_tecnica_acquisto(self.personaggio, self.cerimoniale),
+            50,
+        )
+
+    def test_rinvio_addebita_solo_la_differenza(self):
+        from personaggi.models import STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE
+
+        self.personaggio.modifica_crediti(Decimal("100"), "Fondo test")
+        self.client.force_login(self.user)
+        self.proposta.mattoni_generici = 0
+        self.proposta.save(update_fields=["mattoni_generici", "updated_at"])
+        saldo_iniziale = Personaggio.objects.get(pk=self.personaggio.pk).crediti
+
+        with patch.object(Personaggio, "get_valore_aura_effettivo", return_value=5), \
+             patch.object(Personaggio, "max_livello_creazione", return_value=5), \
+             patch.object(Personaggio, "get_valore_statistica", side_effect=lambda sigla: {
+                 "CIC": 2, "CCO": 9, "RCT": 0,
+             }.get(sigla, 0)):
+            primo = self.client.post(
+                f"/api/personaggi/api/proposte/{self.proposta.pk}/invia_proposta/",
+            )
+        self.assertEqual(primo.status_code, 200, primo.content)
+        self.proposta.refresh_from_db()
+        self.assertEqual(self.proposta.stato, STATO_PROPOSTA_IN_VALUTAZIONE)
+        self.assertEqual(self.proposta.costo_invio_pagato, 4)
+        self.assertEqual(Personaggio.objects.get(pk=self.personaggio.pk).crediti, saldo_iniziale - 4)
+
+        self.proposta.stato = STATO_PROPOSTA_BOZZA
+        self.proposta.mattoni_generici = 3
+        self.proposta.save(update_fields=["stato", "mattoni_generici", "updated_at"])
+
+        with patch.object(Personaggio, "get_valore_aura_effettivo", return_value=5), \
+             patch.object(Personaggio, "max_livello_creazione", return_value=5), \
+             patch.object(Personaggio, "get_valore_statistica", side_effect=lambda sigla: {
+                 "CIC": 2, "CCO": 9, "RCT": 0,
+             }.get(sigla, 0)):
+            secondo = self.client.post(
+                f"/api/personaggi/api/proposte/{self.proposta.pk}/invia_proposta/",
+            )
+        self.assertEqual(secondo.status_code, 200, secondo.content)
+        self.proposta.refresh_from_db()
+        self.personaggio.refresh_from_db()
+        self.assertEqual(self.proposta.costo_invio_pagato, 10)
+        self.assertEqual(Personaggio.objects.get(pk=self.personaggio.pk).crediti, saldo_iniziale - 10)

@@ -18,6 +18,7 @@ from asgiref.sync import async_to_sync
 # --- IMPORT MODELLI AGGIORNATI ---
 from .acquisto_costi import (
     calcola_costi_abilita_acquisto,
+    calcola_costo_invio_proposta,
     calcola_costo_tecnica_acquisto,
     rimborso_crediti_da_pivot,
     rimborso_pc_da_pivot,
@@ -43,8 +44,7 @@ from .models import (
     abilita_tier, abilita_requisito, abilita_sbloccata, 
     abilita_punteggio, abilita_prerequisito,
     # Costanti
-    COSTO_PER_MATTONE_CREAZIONE, 
-    COSTO_DEFAULT_INVIO_PROPOSTA,
+    COSTO_PER_MATTONE_CREAZIONE,
     RichiestaAssemblaggio, STATO_RICHIESTA_PENDENTE,
     ClasseOggetto, Statistica,
     ConfigurazioneLivelloAura, Cerimoniale,
@@ -983,7 +983,8 @@ class CerimonialiAcquistabiliView(generics.GenericAPIView):
         possedute_ids = personaggio.cerimoniali_posseduti.values_list('id', flat=True)
         
         tutti_cerimoniali = _campaign_feature_filter(request, Cerimoniale.objects.exclude(id__in=possedute_ids), FEATURE_CERIMONIALI).select_related(
-            'aura_richiesta'
+            'aura_richiesta',
+            'aura_richiesta__stat_costo_acquisto_cerimoniale',
         ).prefetch_related(
             'componenti__caratteristica'
         ).order_by('liv', 'nome')
@@ -999,7 +1000,11 @@ class CerimonialiAcquistabiliView(generics.GenericAPIView):
             if is_valid:
                 acquistabili.append(cer)
 
-        serializer = CerimonialeSerializer(acquistabili, many=True)
+        serializer = CerimonialeSerializer(
+            acquistabili,
+            many=True,
+            context={"request": request, "personaggio": personaggio},
+        )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -2572,7 +2577,18 @@ def _gioco_live_bloccato_response(request, campagna=None):
 class PunteggiListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PunteggioDetailSerializer
-    queryset = Punteggio.objects.all().order_by('tipo','ordine', 'nome')
+    queryset = Punteggio.objects.select_related(
+        "stat_costo_invio_proposta_cerimoniale",
+        "stat_costo_creazione_cerimoniale",
+        "stat_costo_acquisto_cerimoniale",
+        "stat_costo_invio_proposta_infusione",
+        "stat_costo_invio_proposta_tessitura",
+        "stat_costo_creazione_infusione",
+        "stat_costo_creazione_tessitura",
+        "stat_costo_acquisto_infusione",
+        "stat_costo_acquisto_tessitura",
+        "stat_costo_forgiatura",
+    ).order_by('tipo','ordine', 'nome')
 
     def list(self, request, *args, **kwargs):
         response = super().list(request, *args, **kwargs)
@@ -3392,34 +3408,16 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
         if livello == 0:
             return Response({"error": "La proposta deve avere almeno un componente / livello valido."}, status=status.HTTP_400_BAD_REQUEST)
 
-# --- CALCOLO COSTO INVIO (BUROCRAZIA) ---
-        costo_base = COSTO_DEFAULT_INVIO_PROPOSTA # Default 10
-        
-        if proposta.tipo == 'INF':
-             # Cerca la statistica specifica per l'invio proposta INF
-             if proposta.aura.stat_costo_invio_proposta_infusione:
-                 val = proposta.aura.stat_costo_invio_proposta_infusione.valore_base_predefinito
-                 if val > 0: costo_base = val
-        elif proposta.tipo == 'TES':
-             # Cerca la statistica specifica per l'invio proposta TES
-             if proposta.aura.stat_costo_invio_proposta_tessitura:
-                 val = proposta.aura.stat_costo_invio_proposta_tessitura.valore_base_predefinito
-                 if val > 0: costo_base = val
-        elif proposta.tipo == 'CER':
-             # Cerca la statistica specifica per l'invio proposta CER
-             if proposta.aura.stat_costo_invio_proposta_cerimoniale:
-                 val = proposta.aura.stat_costo_invio_proposta_cerimoniale.valore_base_predefinito
-                 if val > 0: costo_base = val
-        
-                 
-        # Cerimoniali: costo = totale mattoni minimi (specifici + generici) × stat invio
-        if proposta.tipo == 'CER':
-            costo_invio = int(proposta.totale_mattoni_minimi() or 0) * costo_base
-        else:
-            costo_invio = livello * costo_base
-
-        if personaggio.crediti < costo_invio: 
-            return Response({"error": f"Crediti insufficienti. Richiesti: {costo_invio} CR."}, status=status.HTTP_400_BAD_REQUEST)
+        # Costo = quantità × statistica dell'aura (valore di scheda, non una costante).
+        # Un rinvio addebita solo la differenza rispetto a costo_invio_pagato.
+        costo_invio = calcola_costo_invio_proposta(personaggio, proposta)
+        gia_pagato = int(proposta.costo_invio_pagato or 0)
+        delta_crediti = costo_invio - gia_pagato
+        if delta_crediti > 0 and personaggio.crediti < delta_crediti:
+            return Response(
+                {"error": f"Crediti insufficienti. Richiesti: {delta_crediti} CR."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         val_aura = personaggio.get_valore_aura_effettivo(proposta.aura)
         if val_aura < 1: return Response({"error": "Non possiedi l'aura selezionata."}, status=status.HTTP_400_BAD_REQUEST)
@@ -3512,7 +3510,15 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
                                 status=status.HTTP_400_BAD_REQUEST,
                             )
 
-        personaggio.modifica_crediti(-costo_invio, f"Invio proposta {proposta.tipo}: {proposta.nome}")
+        if delta_crediti > 0:
+            personaggio.modifica_crediti(
+                -delta_crediti, f"Invio proposta {proposta.tipo}: {proposta.nome}"
+            )
+        elif delta_crediti < 0:
+            personaggio.modifica_crediti(
+                -delta_crediti,
+                f"Rettifica invio proposta {proposta.tipo}: {proposta.nome}",
+            )
         inviata_il = timezone.now()
         proposta.costo_invio_pagato = costo_invio
         proposta.stato = STATO_PROPOSTA_IN_VALUTAZIONE
