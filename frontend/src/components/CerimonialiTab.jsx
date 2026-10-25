@@ -50,10 +50,13 @@ const CerimonialiTab = ({ onLogout }) => {
     });
   }, [acquirableCerimoniali, char, ccoValue]);
 
+  const costoAcquisto = (item) => Number(item?.costo_effettivo ?? item?.costo_crediti ?? 0);
+
   const handleAcquire = useCallback(async (item, e) => {
     e.stopPropagation();
     if (acquireMutation.isPending || !selectedCharacterId) return;
-    if (!window.confirm(`Apprendere il Cerimoniale "${item.nome}" per ${item.costo_crediti} Crediti?`)) return;
+    const costo = costoAcquisto(item);
+    if (!window.confirm(`Apprendere il Cerimoniale "${item.nome}" per ${costo} Crediti?`)) return;
     
     try {
       await acquireMutation.mutateAsync({ 
@@ -116,14 +119,14 @@ const CerimonialiTab = ({ onLogout }) => {
           </div>
           <div className="flex flex-col min-w-0">
             <span className="font-bold text-gray-200 truncate">{item.nome}</span>
-            {!isOwned && <span className="text-xs text-yellow-500 font-mono">{item.costo_crediti} CR</span>}
+            {!isOwned && <span className="text-xs text-yellow-500 font-mono">{costoAcquisto(item)} CR</span>}
           </div>
       </div>
       <div className="flex items-center gap-2 justify-end shrink-0 touch-manipulation">
         {!isOwned && (
           <button
             onClick={(e) => handleAcquire(item, e)}
-            disabled={char.crediti < item.costo_crediti || acquireMutation.isPending}
+            disabled={char.crediti < costoAcquisto(item) || acquireMutation.isPending}
             className="p-2 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 text-white rounded-lg transition-all"
           >
             {acquireMutation.isPending ? <Loader2 size={16} className="animate-spin"/> : <ShoppingCart size={16} />}

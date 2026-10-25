@@ -16,6 +16,7 @@ import { caratteristichePersonaggio } from '../lib/caratteristicheScheda';
 import { auraDelegaMattoni, etichettaMattone, paletteAuraId } from '../lib/paletteMattoni';
 import { propostaModificabile } from '../lib/propostaTecnicaStato';
 import { sommaBonus } from '../lib/bonusContesto';
+import { costoInvioStimato } from '../lib/costoProposta';
 import NotePropostaElenco from './NotePropostaElenco';
 import { MattoneInfoButton } from './MattoneDescrizioneModal';
 import { haNoteStaff } from '../lib/propostaTecnicaStato';
@@ -232,9 +233,12 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
         return Math.min(auraLimit, ccoVal);
     }, [isCerimoniale, auraLimit, char]);
 
-    const estimatedCost = isCerimoniale
-        ? totaleMattoniMinimi * 100
-        : currentTotalCount * 10;
+    const estimatedCost = costoInvioStimato({
+        tipo: isCerimoniale ? 'CER' : isInfusion ? 'INF' : 'TES',
+        aura: primariaSelezionata,
+        char,
+        quantita: isCerimoniale ? totaleMattoniMinimi : currentTotalCount,
+    });
 
     const paletteAuraNumericId = auraIdForBricks ? Number(auraIdForBricks) : null;
     const paletteAuraMeta =
