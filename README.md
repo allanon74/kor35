@@ -271,11 +271,12 @@ Note:
 
 ## Backup DB (produzione)
 
-Nel monorepo è disponibile un dump giornaliero PostgreSQL su file con rotazione **bisettimanale** (14 giorni).
+Dump giornaliero PostgreSQL su file con retention tipo logrotate: **ultimi 10 dump** (più archivio mensile opzionale).
 
 - **Script**: `scripts/backup_db_daily.sh`
 - **Make target**: `make backup-db ENV=prod`
-- **systemd**: `config/systemd/kor35-db-backup.service` + `config/systemd/kor35-db-backup.timer`
+- **Install timer**: `sudo make install-prod-db-backup ENV=prod`
+- **systemd**: `config/systemd/kor35-db-backup.service` + `config/systemd/kor35-db-backup.timer` (06:00 ora locale Europe/Rome)
 
 Esecuzione manuale:
 
@@ -286,23 +287,25 @@ make backup-db ENV=prod
 
 Directory e retention configurabili:
 - `KOR35_DB_BACKUP_DIR` (default: `/var/backups/kor35/db`)
-- `KOR35_DB_BACKUP_RETENTION_DAYS` (default: `14`)
+- `KOR35_DB_BACKUP_KEEP` (default: `10` — conserva solo gli ultimi N dump)
+- `KOR35_DB_BACKUP_RETENTION_DAYS` (default: `0` — usato solo se `KEEP=0`)
 
-Installazione timer systemd (sul server):
+Installazione timer systemd (sul server prod):
 
 ```bash
-sudo mkdir -p /var/backups/kor35/db
-sudo chmod 700 /var/backups/kor35/db
-
-sudo cp /srv/kor35/config/systemd/kor35-db-backup.* /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now kor35-db-backup.timer
+cd /srv/kor35
+sudo make install-prod-db-backup ENV=prod RUN_NOW=1
+# oppure (se il Makefile non ha ancora il target, es. prima del deploy):
+sudo ./scripts/install_prod_db_backup.sh --keep 10 --calendar '*-*-* 06:00:00' --run-now
 ```
+
+Dopo l’install lo script imposta `/var/backups/kor35/db` come `root:deploy` mode `770`, così anche `make backup-db ENV=prod` (utente `deploy`) può scrivere senza sudo.
 
 Log ultimo run:
 
 ```bash
 sudo journalctl -u kor35-db-backup.service -n 200 --no-pager
+sudo systemctl list-timers | grep kor35-db-backup
 ```
 
 ## Transizione post-merge (docker → main)
